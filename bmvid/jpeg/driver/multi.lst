@@ -1,0 +1,40 @@
+3  100
+circle_1024x768_400.jpg 1  0
+circle_1024x768_444.jpg 1  0
+circle_1024x768_422v.jpg 1  0
+
+..\jpgcfg\seattle_1280x720_420.cfg 0  0
+..\jpgcfg\seattle_1024x768_422.cfg 0  0
+..\jpgcfg\seattle_1280x720_420.cfg 0  0
+
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_422v.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\32size1_32x32_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_444.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_422v.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\32size1_32x32_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_444.jpg 1
+
+
+..\jpgcfg\temple_2048x1536_422.cfg 0
+..\jpgcfg\seattle_1280x720_422v.cfg 0
+..\jpgcfg\blue_800x600_420.cfg 0
+..\jpgcfg\cirlces_1024x768_422.cfg 0
+..\jpgcfg\colorbar_1024x768_422.cfg 0
+..\jpgcfg\eia1956_1440x1086_422.cfg 0
+..\jpgcfg\flower_600x800_422.cfg 0
+
+..\jpgcfg\seattle_640x480_422.cfg 0
+..\jpgcfg\temple_2048x1536_422.cfg 0
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_422v.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\32size1_32x32_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_400.jpg 1
+\\52.2.12.200\jpg\original\enc.jpu\circle_1024x768_444.jpg 1
+..\jpgcfg\32size2_32x32_400.cfg 0
+..\jpgcfg\bars_322x242_444_pRGB.cfg 0
+..\jpgcfg\cirlces_1024x768_422h.cfg 0
+..\jpgcfg\foreman_176x144_420.cfg 0
+/sdcad/vpu/test.jpg					                     1
+/sdcad/vpu/rand50fr_1920x1088_420.cfg						 0
+/sdcad/vpu/test2.jpg					                   1

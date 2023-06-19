@@ -1,0 +1,737 @@
+;CVD64  Wednesday, October 18, 2017  18:49:37
+;OPTION SET START
+
+;Interface Option
+
+;SYSTEM Setting
+CPUTYPE CORTEXA53
+OPTION.JTAGCLOCK 10.000000Mhz
+OPTION.EnReset ON
+OPTION.TRST ON
+OPTION.ResBreak OFF
+OPTION.WaitReset ON
+OPTION.WaitResetTime 10ms
+OPTION.CR OFF
+OPTION.RegisterInit OFF
+OPTION.PCZero OFF
+OPTION.RTCK OFF
+OPTION.DACR OFF
+OPTION.BigEndian OFF
+OPTION.SerialWire OFF
+OPTION.Update ON
+OPTION.DevName Example
+OPTION.DisMode ARCH64
+OPTION.SpeedUp OFF
+OPTION.InterruptRESet
+
+;JTAG Setting
+MULtiCore.IRPOST 0.
+MULtiCore.DRPost 0.
+MULtiCore.IRPRE 0.
+MULtiCore.DRPre 0.
+MULtiCore.DAPIRPOST 0.
+MULtiCore.DAPDRPOST 0.
+MULtiCore.DAPIRPRE 0.
+MULtiCore.DAPDRPRE 0.
+MULtiCore.ETBIRPOST 0.
+MULtiCore.ETBDRPOST 0.
+MULtiCore.ETBIRPRE 0.
+MULtiCore.ETBDRPRE 0.
+
+;CORESIGHT Setting
+MULtiCore.DEBUGACCESSPORT 0.
+MULtiCore.JTAGACCESSPORT 0.
+MULtiCore.MEMORYACCESSPORT 0.
+MULtiCore.COREJTAGPORT 0.
+MULtiCore.AHBACCESSPORT 0.
+MULtiCore.APBACCESSPORT 0.
+MULtiCore.AXIACCESSPORT 0.
+MULtiCore.COUNT 4.
+MULtiCore.COREBASE 0x81010000 0x80110000 0x80210000 0x80310000 
+MULtiCore.CTIBASE 0x81020000 0x80120000 0x80220000 0x80320000 
+MULtiCore.ETMBASE 0x80040000 0x80140000 0x80240000 0x80340000 
+//MULtiCore.ETBBASE 
+MULtiCore.TPIUBASE 0xFFFFFFFFFFFFFFFF
+MULtiCore.FUNNELBASE 0xFFFFFFFFFFFFFFFF
+//MULtiCore.ETMFUNNELPORT 
+
+;Debugger Setting
+DEBUG.InternallyUsedHWBreakpoint ON
+DEBUG.HideDebugWindow ON
+DEBUG.ResetAllOption OFF
+DEBUG.ShowDebugWindowTop OFF
+DEBUG.SetNTRSTLow OFF
+DEBUG.RecordRegister OFF
+DEBUG.RecordElapsedTimes OFF
+DEBUG.LoadAsyncMode ON
+DEBUG.ShowSourceLineInCallStack OFF
+DEBUG.AutoCompletedisable OFF
+DEBUG.CHeckTarGetSleepMode OFF
+DEBUG.VarToolTipRESet
+DEBUG.VarToolTipFormat HEX
+DEBUG.DownLoadBuffer 2048.
+DEBUG.MemorySegmentSize S512
+DEBUG.ElapsedTimeMaxCount 50.
+DEBUG.ResponseTimeOut 3000ms
+DEBUG.ReferenceVoltage V33
+DEBUG.PollingTime 20ms
+DEBUG.GostopBPTime 0ms
+DEBUG.RefreshInterval 500ms
+
+;Vector Catch Setting
+VectorCatch.RESET OFF
+VectorCatch.NONSECUREEL1 OFF
+VectorCatch.NONSECUREEL2 OFF
+VectorCatch.SECUREEL1 OFF
+VectorCatch.SECUREEL3 OFF
+VectorCatch.OSUNLOCK OFF
+
+;Semihosting Setting
+TermSet.SemiHost.Vector 0x0000000000000008
+TermSet.SemiHost.Heapinfo 0x0000000000080000 0x00001000
+TermSet.SemiHost.Stackinfo 0x0000000000080000 0x00001000
+TermSet.SemiHost.Args ""
+
+;Terminal Setting
+TermSet.TERM.METHOD Serial
+TermSet.TERM.Mode VT100
+
+;Serialport Setting
+TermSet.SERialport COM1 115200 8 NONE 1STOP NONE
+
+;Memory Map Setting
+CFlash.Device Am29LV800BB
+CFlash.DownLoad OFF
+CFlash.ERASEtype CHIP
+CFlash.DataWidth W16
+CFlash.Base 0x0000000000000000
+CFlash.Size 0x00000000
+CFlash.BaseTwo 0x00000000
+CFlash.SizeTwo 0x00000000
+CFlash.RamBase 0x0000000000000000
+CFlash.RamSize 0x00000000
+CFlash.BLANKCheck OFF
+CFlash.Verify OFF
+CFlash.UserOption OFF
+CFlash.KeepFlashLoaderMemory OFF
+CFlash.SectorRESET
+MemMap.MemRangeRESET
+MemMap.MemBufMode MIX
+MemMap.MemBufSaveoption OFF
+MemMap.MemBufRangeRESET
+
+;VArFormat Setting
+VArFormat.Radix 
+VArFormat.Format.Fixed OFF
+VArFormat.Format.Open OFF
+VArFormat.Display 
+
+;Source Path Setting
+SourcePathReset
+AddSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684
+AddSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\test\wave
+AddSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\boot
+AddSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\common
+AddSourcePath Z:\middleware-soc\bmvid\cnm\driver
+AddSourcePath Z:\middleware-soc\bmvid\cnm\driver\vdi\nonos
+AddSourcePath Z:\middleware-soc\bmvid\cnm\driver\sample
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\test\wave
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\boot
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\test\bm1684\common
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\driver
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\driver\vdi\nonos
+SetDirSourcePath Z:\middleware-soc\bmvid\cnm\driver\sample
+;OPTION SET END
+
+ConnectAttach
+
+IF ISCONNECT()
+	PRINT "Connected to target"
+ELSE
+	PRINT "Not connect"
+
+IF ISRUN()
+	BREAK
+
+winpos 20% 0% 20% 100%
+AREA
+AREA.Clear
+
+;MWriteS48 PM:0x500081C0 0
+;MWriteS32 PM:0x50008008 0x10000
+
+;&stream_path="Z:\stream"
+;&case_path="Z:\middleware-soc\bmvid\cnm\test\bm1684\run\core0"
+&firmware_path="Z:\middleware-soc\bmvid\cnm"
+&stream_path="E:\stream"
+;&case_path="Z:\middleware-soc\bmvid\cnm\test\bm1684\run\core0"
+&case_path="E:\run\core0"
+
+
+
+&stream_addr="0x150600000"
+&yum_addr="0x151000000"
+
+&stream_max_len="0xa00000"
+&yum_max_len="0x5eec000"
+
+LCOAL &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case0,1,2,3
+&num=0.
+LoadBinary &stream_path\h264\test_h264_hd_20m.264 &stream_addr++0xa00000
+LoadBinary &stream_path\h264\test_h264_hd_20m_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case0.elf %include %gnu %trim 3. %path &firmware_path
+WAIT 5.S
+IF ISRUN()
+	BREAK
+	
+LoadImage &case_path\test_case0.elf %include %gnu %trim 3. %path &firmware_path	
+Gofunc TestDecoder &num
+
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_hd_20m.264 &stream_addr++0xa00000
+LoadBinary &stream_path\h264\test_h264_hd_20m_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case1.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_hd_20m.264 &stream_addr++0xa00000
+LoadBinary &stream_path\h264\test_h264_hd_20m_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case2.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_hd_20m.264 &stream_addr++0xa00000
+LoadBinary &stream_path\h264\test_h264_hd_20m_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case3.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+
+
+;case4,5,6,7
+&num=4.
+LoadBinary &stream_path\h264\test_h264_main10.264 &stream_addr++0xc8000
+LoadBinary &stream_path\h264\test_h264_main10_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case4.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10.264 &stream_addr++0xc8000
+LoadBinary &stream_path\h264\test_h264_main10_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case5.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10.264 &stream_addr++0xc8000
+LoadBinary &stream_path\h264\test_h264_main10_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case6.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10.264 &stream_addr++0xc8000
+LoadBinary &stream_path\h264\test_h264_main10_nocrop.yuv &yum_addr++0x1de2000
+LoadImage &case_path\test_case7.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+
+;case8,9,10,11
+&num=8.
+LoadBinary &stream_path\h264\test_h264_4k.264 &stream_addr++0x22b000 
+LoadBinary &stream_path\h264\test_h264_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case8.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_4k.264 &stream_addr++0x22b000 
+LoadBinary &stream_path\h264\test_h264_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case9.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_4k.264 &stream_addr++0x22b000 
+LoadBinary &stream_path\h264\test_h264_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case10.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_4k.264 &stream_addr++0x22b000 
+LoadBinary &stream_path\h264\test_h264_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case11.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case12,13,14,15
+&num=12.
+LoadBinary &stream_path\h264\test_h264_main10_4k.264 &stream_addr++0x2212b0 
+LoadBinary &stream_path\h264\test_h264_main10_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case12.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10_4k.264 &stream_addr++0x2212b0 
+LoadBinary &stream_path\h264\test_h264_main10_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case13.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10_4k.264 &stream_addr++0x2212b0 
+LoadBinary &stream_path\h264\test_h264_main10_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case14.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\h264\test_h264_main10_4k.264 &stream_addr++0x2212b0 
+LoadBinary &stream_path\h264\test_h264_main10_4k.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case15.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case58,60,62,64
+&num=58.
+LoadBinary &stream_path\hevc\test_h265_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case58.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case60.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case62.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case64.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case59,61,63,65
+&num=59.
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.265 &stream_addr++0x3b7400 
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case59.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.265 &stream_addr++0x3b7400 
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case61.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.265 &stream_addr++0x3b7400 
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case63.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.265 &stream_addr++0x3b7400 
+LoadBinary &stream_path\hevc\test_h265_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case65.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case66,68,70,72
+&num=66.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case66.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case68.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case70.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_20m.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case72.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case67,69,71,73
+&num=67.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.265 &stream_addr++0x406800 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case67.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.265 &stream_addr++0x406800 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case69.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.265 &stream_addr++0x406800 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case71.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.265 &stream_addr++0x406800 
+LoadBinary &stream_path\hevc\test_h265_main10_hd_interlace.yuv &yum_addr++0x1da9c00
+LoadImage &case_path\test_case73.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case74,76,78,80
+&num=74.
+LoadBinary &stream_path\hevc\test_h265_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case74.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case76.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case78.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case80.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case82,84,86,88
+&num=82.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case82.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case84.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case86.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.yuv &yum_addr++0x7da7000
+LoadImage &case_path\test_case88.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+;case90,91,92,93
+&num=&num+2.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m_16msb.yuv &yum_addr++0xf84a800
+LoadImage &case_path\test_case90.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m_16msb.yuv &yum_addr++0xf84a800
+LoadImage &case_path\test_case91.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m_16msb.yuv &yum_addr++0xf84a800
+LoadImage &case_path\test_case92.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+&num=&num+1.
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m.265 &stream_addr++0xa00000 
+LoadBinary &stream_path\hevc\test_h265_main10_4k_20m_16msb.yuv &yum_addr++0xf84a800
+LoadImage &case_path\test_case93.elf %include %gnu %trim 3. %path &firmware_path
+Gofunc TestDecoder &num
+
+MWriteS32 0x50010c00 0xfffffe01
+WAIT 10.S
+MWriteS32 0x50010c00 0xfffffffd
+WAIT 10.S
+
+END
+
+
+TestDecoder:
+pop &arg1
+WAIT 3.S   //wait for 3 seconds
+
+SetBREAK SYMBOLEND(TestDecoder)-7 %HW		//breakpoint at return value of testDecoder
+
+;Excute
+GO
+WAIT !ISRUN()  //wait until target stop
+
+WAIT 3.S   //wait for 3 seconds
+
+;save result
+FILEOpen 23 "result_fpga_wave.txt" //create ; open file result.txt , if not exist, create it.
+FileWrite 23 "case" &arg1 " testing"
+
+LCOAL &decret
+&decret=REGISTER(X0)
+
+IF &decret!=0x00000001
+(
+	FileWrite 23 "testing failed!"
+	print &arg1
+	print "testing failed!"
+)
+ELSE
+(
+	FileWrite 23 "testing passed"
+	print &arg1
+	print "testing passed!"
+)
+
+FILECLose 23.
+
+SetBREAK SYMBOLEND(testcase_main)-7 %HW   //breakpoint at main
+GO
+WAIT !ISRUN()  //wait until target stop
+
+DELB  //delete all breakpoint
+
+Return
+
+

@@ -1,0 +1,14 @@
+install:
+cmake -B build .
+make install -C build
+
+run:
+install/TpuIndexFlatdemo
+if failed becase not find library,you can export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$PWD/install:$PWD
+
+
+attention:
+1.index is 32bit, not 64 bit
+2.database memory now is limited to 2GB, later can be changed
+3.if transpose is set to 0, random data is made in transpose mode.
+

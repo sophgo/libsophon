@@ -1,0 +1,95 @@
+#ifndef __GDMA_REG_VALUE_H__
+#define __GDMA_REG_VALUE_H__
+
+////////////////////// descriptor value //////////////////////////
+#define GDMA_VALUE_DIR_S2L  0
+#define GDMA_VALUE_DIR_L2S  1
+#define GDMA_VALUE_DIR_S2S  2
+#define GDMA_VALUE_DIR_L2L  3
+#define GDMA_VAULE_DIR_NUM  4
+
+#define GDMA_VALUE_FUNC_NONE       0
+#define GDMA_VALUE_FUNC_TRANS      1
+#define GDMA_VALUE_FUNC_LRN_SHIFT  2
+#define GDMA_VALUE_FUNC_FORMAT     3
+#define GDMA_VALUE_FUNC_CONSTANT   4
+#define GDMA_VALUE_FUNC_CW_TRANS   5
+#define GDMA_VALUE_FUNC_WINOGRAD   6
+#define GDMA_VALUE_FUNC_FILTER     7
+#define GDMA_VALUE_FUNC_FILTER_RES_COUNTER 8
+
+#define GDMA_VALUE_FORMAT_FLOAT32  0
+#define GDMA_VALUE_FORMAT_INT16    1
+#define GDMA_VALUE_FORMAT_UINT8    2
+#define GDMA_VALUE_FORMAT_INT8     3
+#define GDMA_VALUE_FORMAT_FLOAT16  4
+#define GDMA_VALUE_FORMAT_NUM 5
+
+#define GDMA_VALUE_FORMAT_INT32_TVGEN  8  // just use in tv_gen fill mem
+
+#define GDMA_VALUE_SYS_NEURON     0
+#define GDMA_VALUE_SYS_MATRIX      1
+
+#define GDMA_VALUE_LRN_SHIFT_LEFT  0
+#define GDMA_VALUE_LRN_SHIFT_RIGHT 1
+
+#define SRC_IS_LOCAL(direction) \
+    ((direction) == GDMA_VALUE_DIR_L2L || (direction) == GDMA_VALUE_DIR_L2S)
+#define DST_IS_LOCAL(direction) \
+    ((direction) == GDMA_VALUE_DIR_S2L || (direction) == GDMA_VALUE_DIR_L2L)
+
+#define FORMAT_IS_FLOAT(format) \
+    ((format) == GDMA_VALUE_FORMAT_FLOAT32 || (format) == GDMA_VALUE_FORMAT_FLOAT16)
+
+static inline int get_type_len(int t) {
+  switch (t) {
+    case GDMA_VALUE_FORMAT_INT8:
+    case GDMA_VALUE_FORMAT_UINT8:
+      return 1;
+    case GDMA_VALUE_FORMAT_FLOAT16:
+    case GDMA_VALUE_FORMAT_INT16:
+      return 2;
+    case GDMA_VALUE_FORMAT_FLOAT32:
+    case GDMA_VALUE_FORMAT_INT32_TVGEN:
+      return 4;
+  }
+  return 0;
+}
+
+// for winograd calculate, (1<<GDMA_WINOGRAD_SHIFT) as divider for slope0, slope1, etc.
+#define GDMA_WINOGRAD_SHIFT 3
+#define GDMA_WINOGRAD_X_WIDTH  8
+#define GDMA_WINOGRAD_Y_WIDTH  10
+#define GDMA_WINOGRAD_SLOPE0_WIDTH  6
+#define GDMA_WINOGRAD_SLOPE1_WIDTH  9
+#define GDMA_WINOGRAD_COEF_WIDTH  5
+
+#define GDMA_WINOGRAD_TOTAL_SHIFT (GDMA_WINOGRAD_SHIFT+GDMA_WINOGRAD_Y_WIDTH-GDMA_WINOGRAD_X_WIDTH)
+
+#define GDMA_WINOGRAD_COEF_MIN 4
+#define GDMA_WINOGRAD_COEF_MAX 8
+
+#define GDMA_WINOGRAD_SLOPE0_MIN 1
+#define GDMA_WINOGRAD_SLOPE0_MAX 32
+
+#define GDMA_WINOGRAD_SLOPE1_MIN 1
+#define GDMA_WINOGRAD_SLOPE1_MAX 511
+
+#define GDMA_WINOGRAD_X_MIN 0
+#define GDMA_WINOGRAD_X_MAX 127
+
+#define VALUE_MASK(width) ((1 << (width))-1)
+#define GDMA_WINOGRAD_X_MASK      VALUE_MASK(GDMA_WINOGRAD_X_WIDTH)
+#define GDMA_WINOGRAD_SLOPE0_MASK VALUE_MASK(GDMA_WINOGRAD_SLOPE0_WIDTH)
+#define GDMA_WINOGRAD_SLOPE1_MASK VALUE_MASK(GDMA_WINOGRAD_SLOPE1_WIDTH)
+#define GDMA_WINOGRAD_COEF_MASK   VALUE_MASK(GDMA_WINOGRAD_COEF_WIDTH)
+
+#define GDMA_WINOGRAD_X_END  (1 << (GDMA_WINOGRAD_X_WIDTH-1))
+#define GDMA_WINOGRAD_Y_END  (1 << (GDMA_WINOGRAD_Y_WIDTH-1))
+
+#define VALUE_SHIFT_ROUND(val, width) (((val)+(1 << ((width)-1)))>>(width))
+#define GDMA_WINOGRAD_SHIFT_ROUND(val) VALUE_SHIFT_ROUND(val, GDMA_WINOGRAD_SHIFT)
+#define SIGNED_MAX(width) ((1 << ((width)-1))-1)
+#define SIGNED_MIN(width) (-(1 << ((width)-1)))
+
+#endif  // __GDMA_REG_VALUE_H__

@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 2.80)
+project(tpu-runtime)
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+include(old.cmake)
+else()
+include(new.cmake)
+endif()

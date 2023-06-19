@@ -1,0 +1,76 @@
+##############################################################################
+#
+#    Copyright (c) 2016-2022 by Bitmain Technologies Inc. All rights reserved.
+#
+#    The material in this file is confidential and contains trade secrets
+#    of Bitmain Technologies Inc. This is proprietary information owned by
+#    Bitmain Technologies Inc. No part of this work may be disclosed,
+#    reproduced, copied, transmitted, or used in any way for any purpose,
+#    without the express written permission of Bitmain Technologies Inc.
+#
+##############################################################################
+
+##############################################################################
+# If you want to use gdb debug, this should be set to 1
+# User should revise the following
+############################################################################## 
+DEBUG                    ?= 1
+INSTALL_LIB_PATH         ?= $(CPU_ROOT)/../lib/bmcpu
+INSTALL_INCLUDE_PATH     ?= $(CPU_ROOT)/../include/bmcpu
+
+##############################################################################
+# General Configuration
+##############################################################################
+CROSS_COMPILE  ?=
+  CC     := $(CROSS_COMPILE)gcc
+  CXX    := $(CROSS_COMPILE)g++
+  AR     := $(CROSS_COMPILE)ar
+  AS     := $(CROSS_COMPILE)as
+  LD     := $(CROSS_COMPILE)ld
+  RANLIB := $(CROSS_COMPILE)ranlib
+  STRIP  := $(CROSS_COMPILE)strip
+
+RM     := rm -rf
+CP     := cp -rf
+MV     := mv
+MKDIR  := mkdir -p
+
+##############################################################################
+# Global flags.
+##############################################################################
+
+ifeq ($(CONFIG_FLAGS), )
+  CONFIG_FLAGS  =
+endif
+
+CFLAGS          = -Wall -Werror $(CONFIG_FLAGS)
+CXXFLAGS        = -Wall -Werror $(CONFIG_FLAGS)
+CFLAGS          += -ffunction-sections -fdata-sections
+CXXFLAGS        += -ffunction-sections -fdata-sections -fno-strict-aliasing
+CXXFLAGS        += -std=c++11
+
+CFLAGS          += -fPIC
+CXXFLAGS        += -fPIC
+
+LDFLAGS         += -pthread
+LDFLAGS         += -Wl,--check-sections \
+                   -Wl,--gc-sections \
+                   -Wl,--unresolved-symbols=report-all
+
+ifeq ($(DEBUG),1)
+CFLAGS          += -g -DDEBUG
+CXXFLAGS        += -g -DDEBUG
+LDFLAGS         += -rdynamic
+else
+CFLAGS          += -O3
+CXXFLAGS        += -O3
+endif
+
+#ifneq (,$(CROSS_COMPILE))
+#CFLAGS          += -fno-unwind-tables -fno-short-enums
+#CXXFLAGS        += -fexceptions -fno-rtti -fno-unwind-tables -fno-short-enums
+#else
+CFLAGS          += -funwind-tables -fno-short-enums
+CXXFLAGS        += -funwind-tables -fno-short-enums
+#endif
+

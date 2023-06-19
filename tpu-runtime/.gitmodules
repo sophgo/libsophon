@@ -1,0 +1,3 @@
+[submodule "tpu-common"]
+	path = tpu-common
+	url = ssh://jufa.wen@gerrit-ai.sophgo.vip:29418/tpu-common

@@ -1,0 +1,45 @@
+palladium_mem_tool共有四个用法
+usage: %s <load/dump> infile size outfile address dir_prefix [interleave]\n", argv[0]);
+        printf("                <load/dump> 0 - load 1 - dump 2 - create load.tcl 3 - dump.tcl only\n");
+说明： interleave是可选选项，0为不交织，1-1k交织 2-2k交织 4-4k交织 8-8k交织等
+		
+1. 生成load二进制文件到palladium内存指定地址中的内存文件和load.tcl脚本
+
+	./palladium_mem_tool 0 <in_file_name> <size> <out_file_batch_name(不需要后缀)> <address> <执行时存放文件的目录前缀>
+	说明：
+		a) in_file_name为二进制文件
+		b) 因为IC服务器的限制，编译路径不是执行路径，dir_prefix是执行时内存文件的存放目录前缀。可以通过查看生成的load.tcl来检查。
+		c) 执行完会生成一堆的mem.h和load.tcl脚本
+	
+	./palladium_mem_tool 0 NULL <size> <out_file_batch_name(不需要后缀)> <address> <执行时存放文件的目录前缀>
+	说明：当infile为NULL时，生成的内存文件内容为0，一般用于初始化内存
+	
+2. 生成dump palladium内存到文件的脚本dump.tcl
+	
+	./palladium_mem_tool 3 <in_file_name> <size> <out_file_batch_name(不需要后缀)> <address> <执行时存放文件的目录前缀>
+	说明：a)这种情况下<in_file_name>没有用到，随便写
+		  b) size是要dump的地址空间大小
+		  c) <out_file_batch_name>是palladium执行后生成的mem文件的名字
+		  d) <执行时存放文件的目录前缀>是存放mem文件的目录prefix
+	
+3. 只生成load文件到palladium内存的脚本
+
+	./palladium_mem_tool 2 <in_file_name> <size> <out_file_batch_name(不需要后缀)> <address> <执行时存放文件的目录前缀>
+	说明：
+		这个命令一般用不到，因为在第一个命令中也会同时生成load.tcl
+	
+4. 把dump出来的内存文件转换成二进制文件
+	
+	./palladium_mem_tool 1 <in_mem_batch_name> <size> <out_bin_name(不需要后缀)> <address> <执行时存放文件的目录前缀>
+	说明：
+		a)<in_mem_batch_name>是palladium生成的mem批文件，只要输入前面公有部分就可以。一般格式为xxxxx_ba??_mem?.h, 此时输入ba前面的部分就可以
+	
+举例说明：
+	比如要将当前的内核在palladium上启动起来，共需要加载fip.bin到0x110000000, ramboot_mini.itb到0x110080000 (这里以ramdisk作为根文件系统为例，
+	其他的雷同)，那么需要做一下操作（下面以1k交织DDR布局为例，如果不交织则interleave可以为0）：
+	a） ./palladium_mem_tool 0 fip.bin 0x80000 fip  0x110000000 [执行时相对于palladium的文件夹，比如./kernel_mem/] 1 
+	b） mv load.tcl fip_load.tcl
+	c)  ./palladium_mem_tool 0 ramboot_mini.itb 0x2400000 ramboot 0x110080000 ./kernel_mem 1    (假定ramboot_mini.itb小于36M)
+	d)  mv load.tcl ramboot_load.tcl
+	e) 然后将kernel_mem目录请IC人员拷贝到palladium目录下，然后source fip_load.tcl  source ramboot_load.tcl就可以将kernel加载到内存中
+	f) 在CVD中load bl1.elf，就可以按次序启动到linux界面下

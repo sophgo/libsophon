@@ -1,0 +1,12 @@
+compile for amrv8 bootloader
+    make all PLAT=bm1682_qemu : for bootloader on qemu simulator
+
+
+compile for test application(using bl31.elf as test entrypoint)
+    make all TEST_APP=wave  PLAT=bm1682_fvp RESET_TO_BL31=1 DEBUG=1: for HEVC chipmedia testcase on arm FVP model
+    make all TEST_APP=boda  PLAT=bm1682_fvp RESET_TO_BL31=1 DEBUG=1: for coda chipmedia testcase on arm FVP model 
+    make all TEST_APP=jpeg  PLAT=bm1682_fvp RESET_TO_BL31=1 DEBUG=1: for jpeg testcase on arm FVP model and FPGA
+
+    DEBUG=1 for debug if gdb or ds5 tracing is used
+
+    make clean TEST_APP=boda

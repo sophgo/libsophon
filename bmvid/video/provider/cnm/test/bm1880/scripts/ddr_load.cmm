@@ -1,0 +1,66 @@
+&app_elf="..\out\bm1880_uart.elf"
+&ddr_init=".\bm1880_ddr_init.bin"
+
+winclear
+system.reset
+translation.reset
+symbol.reset
+map.reset
+
+sys.cpu cortexa53
+sys.config corenumber 1
+
+sys.config debugaccessport    0
+sys.config corebase 0x80010000 0x80110000 0x80210000 0x80310000
+sys.config ctibase  0x80020000 0x80120000 0x80220000 0x80320000
+sys.config etmbase  0x80040000 0x80140000 0x80240000 0x80340000
+sys.jc    30mhz
+
+
+//jtag.pin nreset 0
+//jtag.pin nreset 1
+//wait 10.ms
+system.option enreset on
+system.option trst    on
+system.option resetbreak off
+system.option waitreset  150.ms
+
+winpos 20% 0% 20% 100%
+AREA
+AREA.Clear
+
+sys.down
+sys.up
+
+if system.up()
+(
+	data.list
+)
+else
+(
+	dialog.ok "system.up failed"
+)
+
+winpos 50% 0% 50% 100%
+register
+
+LoadBINARY &ddr_init PM:0x04000000
+SetPC 0x04000000
+PRINT "Current PC value is " REGISTER(PC)
+GO
+
+wait 100.ms
+break
+
+LoadImage &app_elf
+
+gotostart
+
+go
+
+wait !isrun()
+
+print "loading complete..."
+END
+
+

@@ -1,0 +1,43 @@
+FROM ubuntu:18.04
+ARG DEBIAN_FRONTEND=nointeractive
+ENV DEBCONF_NOWARNINGS="yes"
+ENV TZ=Asia/Shanghai
+ENV PIP_ROOT_USER_ACTION=ignore
+RUN apt-get update && apt-get install -y apt-transport-https ca-certificates && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic main restricted universe multiverse" > /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-proposed main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-proposed main restricted universe multiverse" >> /etc/apt/sources.list && \
+    apt-get update
+RUN apt-get install -y dkms dpkg dpkg-dev git git-lfs wget sudo curl && \
+    apt-get install -y libhdf5-dev libatlas-base-dev libgl1-mesa-glx \
+        libboost-system-dev python3.7-dev python3-pip python3.7-venv && \
+    apt-get install -y python3-pytest python3-wheel python3-pretty-yaml python3-wget \
+        python3-requests python3-setuptools \
+        vim unzip && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 0
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python3.7 get-pip.py
+RUN apt-get install locales -y && \
+    sudo locale-gen en_US.UTF-8 && \
+    sudo locale-gen zh_CN.UTF-8
+
+ENV CMAKE_VERSION 3.20.0
+RUN wget https://github.com/Kitware/CMake/releases/download/v$CMAKE_VERSION/cmake-$CMAKE_VERSION-Linux-x86_64.sh \
+        --no-check-certificate \
+        -q -O /tmp/cmake-install.sh \
+        && chmod u+x /tmp/cmake-install.sh \
+        && /tmp/cmake-install.sh --skip-license --prefix=/usr/local \
+        && rm /tmp/cmake-install.sh
+
+RUN pip3 install opencv-python \
+        pycocotools \
+        onnx-simplifier \
+        openpyxl \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple

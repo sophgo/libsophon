@@ -1,0 +1,430 @@
+/*
+ * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+#include <arch.h>
+#include <arch_helpers.h>
+#include <assert.h>
+#include <bl_common.h>
+#include <bl31.h>
+#include <console.h>
+#include <context_mgmt.h>
+#include <debug.h>
+#include <platform.h>
+#include <pmf.h>
+#include <runtime_instr.h>
+#include <runtime_svc.h>
+#include <string.h>
+#include <generic_delay_timer.h>
+
+#if CNM_APP_SIM
+#include "dec_test.h"
+#endif
+
+#if defined(JPEG)
+void test_cnm(void)
+{
+#if CNM_APP_SIM
+
+    DecConfigParam  decConfig;
+    MultiConfigParam multiConfig;
+    EncConfigParam  encConfig;
+    int i;
+
+    /* decoder config */
+    decConfig.bitstreamFileName = NULL;  //jpeg file
+    decConfig.roiEnable = 0;
+    if (decConfig.roiEnable)
+    {
+        decConfig.roiHeight = 100;
+        decConfig.roiWidth = 100;
+        decConfig.roiOffsetX = 50;
+        decConfig.roiOffsetY = 50;
+    }
+    decConfig.packedFormat = 0; // Packed stream format output [0](PLANAR) [1](YUYV) [2](UYVY) [3](YVYU) [4](VYUY) [5](YUV_444 PACKED)
+
+    decConfig.usePartialMode = 0;
+    decConfig.partialBufNum = 4;
+
+    decConfig.mirDir = 0;
+    decConfig.rotAngle = 0;
+
+    decConfig.yuvFileName = NULL;
+    decConfig.outNum = 10;        // Number of Images that you want to decode(0: decode continue, -1: loop)
+
+    /* encoder config */
+
+    encConfig.yuvFileName = NULL;
+    encConfig.picWidth = 176;
+    encConfig.picHeight = 144;
+
+    encConfig.bitstreamFileName = NULL;
+
+    encConfig.huffFileName = NULL;
+    encConfig.qMatFileName = NULL;
+    encConfig.qpFileName = NULL;
+    encConfig.cfgFileName = NULL;
+
+    encConfig.packedFormat = 0; //Frame Format [0](PLANAR) [1](YUYV) [2](UYVY) [3](YVYU) [4](VYUY) [5](YUV_444 PACKED)
+    encConfig.mjpgChromaFormat = 0; // Source Chroma Format 0 (4:2:0) / 1 (4:2:2) / 2 (2:2:4 4:2:2 rotated) / 3 (4:4:4) / 4 (4:0:0)
+
+    encConfig.usePartialMode = 0;    //(0: OFF 1: ON)
+    encConfig.partialBufNum = 4;
+
+    encConfig.mirDir = 0;
+    encConfig.rotAngle = 0;
+
+    /* init mulitConfig */
+    multiConfig.numMulti = 3;        // multi number
+    for (i = 0; i < multiConfig.numMulti; i++)
+    {
+        multiConfig.multiFileName[i] = NULL;
+        multiConfig.multiMode[i] = 0;
+
+        if (multiConfig.multiMode[i])   // decoder
+        {
+            multiConfig.decConfig[i].bitstreamFileName = NULL;
+            multiConfig.decConfig[i].yuvFileName = NULL;
+        }
+        else
+        {
+            multiConfig.encConfig[i].cfgFileName = NULL;
+            multiConfig.encConfig[i].bitstreamFileName = NULL;
+        }
+    }
+
+#ifndef UNREFERENCED_PARAMETER
+#define UNREFERENCED_PARAMETER(P)          \
+        /*lint -save -e527 -e530 */ \
+    { \
+        (P) = (P); \
+    } \
+        /*lint -restore */
+#endif
+
+    UNREFERENCED_PARAMETER(encConfig);
+    UNREFERENCED_PARAMETER(multiConfig);
+
+    if( !jpeg_main(&decConfig, NULL, NULL) ){
+        printf("verification failed!\n");
+    }
+    else
+        printf("verfication pass!\n");
+
+    while(1);
+
+#endif
+    return;
+}
+#else
+void test_cnm(void)
+{
+/*
+    int i, j;
+    unsigned long addr = 0x100000000;
+
+    for (i = 0x10500000; i < 0x40000000; i+=0x100000)
+    {
+        volatile unsigned int *p = (unsigned int *)(addr + i);
+
+        for (j = 0; j < 0x100000; j+=sizeof(unsigned int))
+            *p++ = i + j;
+
+        p = (unsigned int *)(addr + i);
+        for (j = 0; j < 0x100000; j+=sizeof(unsigned int))
+            if (*p++ != i + j)
+                printf("memory failed, addr 0x%08x = 0x%08x\n", i+j, *(p-1));
+
+        printf("[0x%09lx - 1M] passed!\n", addr + i);
+    }
+
+    for (i = 0x10500000; i < 0x40000000; i+=0x100000)
+    {
+        volatile unsigned char *p = (unsigned char *)(addr + i);
+
+        for (j = 0; j < 0x100000; j+=4){
+           *p++ = 0xDE;
+           *p++ = 0xAD;
+           *p++ = 0xBE;
+           *p++ = 0xAF;
+        }
+
+        p = (unsigned char *)(addr + i);
+        for (j = 0; j < 0x100000; j+=4){
+            if (*p++ != 0xDE)
+                printf("memory failed, addr 0x%08x = 0x%08x\n", i+j, *(p-1));
+            if (*p++ != 0xAD)
+                printf("memory failed, addr 0x%08x = 0x%08x\n", i+j+1, *(p-1));
+            if (*p++ != 0xBE)
+                printf("memory failed, addr 0x%08x = 0x%08x\n", i+j+2, *(p-1));
+            if (*p++ != 0xAF)
+                printf("memory failed, addr 0x%08x = 0x%08x\n", i+j+3, *(p-1));
+       }
+
+       printf("[0x%09lx - 1M] passed!\n", addr + i);
+   }
+
+   return;
+*/
+
+#if CNM_APP_SIM
+
+    TestDecConfig param;
+    char *p;
+
+    /* init para */
+    param.instIdx = 0;
+
+    param.bitstreamMode = 0;        //BS_MODE_INTERRUPT
+#if defined(CODA960)
+    param.bitFormat = 12;            //STD_AVC H264 standard
+    param.coreIdx = 0;             // core 0 for boda960
+    param.enableWTL = 1;
+    param.frameEndian = 0;
+    param.streamEndian = 0;         // VDI_LITTLE_ENDIAN
+    param.mapType = COMPRESSED_FRAME_MAP;    //TILED_FRAME_V_MAP; //LINEAR_FRAME_MAP;      // TILED_FRAME_MB_RASTER_MAP;
+    param.cbcrInterleave = 1;
+#elif defined(WAVE512)
+    param.bitFormat = 12;           // STD_HEVC standard
+    param.coreIdx = 0;             // core 1 for wave512
+    param.enableWTL = 1;
+    param.streamEndian = 16;
+    param.frameEndian = VDI_128BIT_LITTLE_ENDIAN;         // VDI_128BIT_LITTLE_ENDIAN
+    param.mapType = COMPRESSED_FRAME_MAP;
+    param.cbcrInterleave = 0;
+#endif
+    param.coda9.enableMvc = 0;      // disable MVC
+    param.coda9.enableTiled2Linear = 0; // enable tiled to linear mapping for display
+    param.coda9.tiled2LinearMode = 1;    // frame map
+    if (param.coda9.enableTiled2Linear)
+        param.coda9.enableBWB = 0;
+    else
+        param.coda9.enableBWB = 1;          // enable 8 burst in linear mode, disable it when enableTiled2Linear=1 for performance
+    param.coda9.enableDeblock = 0;      // not available for AVC
+    param.coda9.mp4class = 0;            // not available for mpeg4
+    param.coda9.frameCacheBypass = 3;   // MC/ME cache enable (To be optimized)
+    param.coda9.frameCacheBurst = 0;    // burst 4 / 8 selection (to be opitmized)
+    param.coda9.frameCacheMerge = 0;     // horizontal without merge (to be optimized)
+    param.coda9.frameCacheWayShape = 0;  // chroma cache way/luma cache way
+    param.coda9.rotate = 0;
+    param.coda9.mirror = 0;
+    param.coda9.enableDering = 0;
+
+    param.wave.fbcMode = 0x0;           // best for bandwidth
+    param.wave.bwOptimization = 1;     // only valid for WTL enable case
+    param.wave.numVCores = 1;
+
+    param.wtlMode = 1;                  // frame linear map mode
+    param.wtlFormat = 0;                // FORMAT_420
+
+    param.nv21 = 0;                     // nv12
+
+    param.secondaryAXI = 0xf;           // enable secondary AXI for H264
+
+    param.inputPath[0] = '\0';      // feed data into 0xF0000000 in advanced.
+    param.enableUserData = 0;       // no user data reported
+    param.renderType = RENDER_DEVICE_NULL;      // no display output
+
+    param.bsSize = 0xA00000;        // 4M for ES buffer
+    param.bsBlockSize = 0x20000;
+    param.feedingMode = 0;          // fixed size feeding
+
+#if (SIM_PLAT == IS_FPGA) || (SIM_PLAT == IS_ASIC)
+    param.compareType = 1; // 1 - YUV compare (param.refYuvPath to be set), 0 - NO compare 2 - MD5
+    param.refYuvPath[0] = '\0';
+    param.md5Path[0] = '\0';
+    p = "\0";         // "dump.yuv"
+#elif (SIM_PLAT == IS_PALLADIUM)
+    param.compareType = 0; // 1 - YUV compare (param.refYuvPath to be set), 0 - NO compare 2 - MD5
+    param.refYuvPath[0] = '\0';
+    param.md5Path[0] = '\0';
+    p = "\0";
+#endif
+    if (param.compareType == 0)     // if no compare, dump file out
+        memcpy(param.outputPath, (void *)p, strlen(p));    // no output
+    else
+        param.outputPath[0] = '\0';
+
+    param.forceOutNum = 10; // output 50 frames
+    param.enableLog = 0;
+
+
+    if (!TestDecoder(&param)){
+        printf("verification failed!\n");
+    }
+    else
+        printf("verfication pass!\n");
+
+    while(1);
+
+#endif
+    return;
+}
+#endif
+
+#if ENABLE_RUNTIME_INSTRUMENTATION
+PMF_REGISTER_SERVICE_SMC(rt_instr_svc, PMF_RT_INSTR_SVC_ID,
+    RT_INSTR_TOTAL_IDS, PMF_STORE_ENABLE)
+#endif
+
+/*******************************************************************************
+ * This function pointer is used to initialise the BL32 image. It's initialized
+ * by SPD calling bl31_register_bl32_init after setting up all things necessary
+ * for SP execution. In cases where both SPD and SP are absent, or when SPD
+ * finds it impossible to execute SP, this pointer is left as NULL
+ ******************************************************************************/
+static int32_t (*bl32_init)(void);
+
+/*******************************************************************************
+ * Variable to indicate whether next image to execute after BL31 is BL33
+ * (non-secure & default) or BL32 (secure).
+ ******************************************************************************/
+static uint32_t next_image_type = NON_SECURE;
+
+/*
+ * Implement the ARM Standard Service function to get arguments for a
+ * particular service.
+ */
+uintptr_t get_arm_std_svc_args(unsigned int svc_mask)
+{
+    /* Setup the arguments for PSCI Library */
+    DEFINE_STATIC_PSCI_LIB_ARGS_V1(psci_args, bl31_warm_entrypoint);
+
+    /* PSCI is the only ARM Standard Service implemented */
+    assert(svc_mask == PSCI_FID_MASK);
+
+    return (uintptr_t)&psci_args;
+}
+
+/*******************************************************************************
+ * Simple function to initialise all BL31 helper libraries.
+ ******************************************************************************/
+void bl31_lib_init(void)
+{
+    cm_init();
+}
+
+/*******************************************************************************
+ * BL31 is responsible for setting up the runtime services for the primary cpu
+ * before passing control to the bootloader or an Operating System. This
+ * function calls runtime_svc_init() which initializes all registered runtime
+ * services. The run time services would setup enough context for the core to
+ * swtich to the next exception level. When this function returns, the core will
+ * switch to the programmed exception level via. an ERET.
+ ******************************************************************************/
+void bl31_main(void)
+{
+#if CNM_APP_SIM
+        test_cnm();
+    return;
+#endif
+    NOTICE("BL31: %s\n", version_string);
+    NOTICE("BL31: %s\n", build_message);
+
+    /* Perform platform setup in BL31 */
+    bl31_platform_setup();
+
+    /* Initialise helper libraries */
+    bl31_lib_init();
+
+    /* Initialize the runtime services e.g. psci. */
+    INFO("BL31: Initializing runtime services\n");
+    runtime_svc_init();
+
+    /*
+     * All the cold boot actions on the primary cpu are done. We now need to
+     * decide which is the next image (BL32 or BL33) and how to execute it.
+     * If the SPD runtime service is present, it would want to pass control
+     * to BL32 first in S-EL1. In that case, SPD would have registered a
+     * function to intialize bl32 where it takes responsibility of entering
+     * S-EL1 and returning control back to bl31_main. Once this is done we
+     * can prepare entry into BL33 as normal.
+     */
+
+    /*
+     * If SPD had registerd an init hook, invoke it.
+     */
+    if (bl32_init) {
+        INFO("BL31: Initializing BL32\n");
+        (*bl32_init)();
+    }
+    /*
+     * We are ready to enter the next EL. Prepare entry into the image
+     * corresponding to the desired security state after the next ERET.
+     */
+    bl31_prepare_next_image_entry();
+
+    console_flush();
+
+    /*
+     * Perform any platform specific runtime setup prior to cold boot exit
+     * from BL31
+     */
+    bl31_plat_runtime_setup();
+}
+
+/*******************************************************************************
+ * Accessor functions to help runtime services decide which image should be
+ * executed after BL31. This is BL33 or the non-secure bootloader image by
+ * default but the Secure payload dispatcher could override this by requesting
+ * an entry into BL32 (Secure payload) first. If it does so then it should use
+ * the same API to program an entry into BL33 once BL32 initialisation is
+ * complete.
+ ******************************************************************************/
+void bl31_set_next_image_type(uint32_t security_state)
+{
+    assert(sec_state_is_valid(security_state));
+    next_image_type = security_state;
+}
+
+uint32_t bl31_get_next_image_type(void)
+{
+    return next_image_type;
+}
+
+/*******************************************************************************
+ * This function programs EL3 registers and performs other setup to enable entry
+ * into the next image after BL31 at the next ERET.
+ ******************************************************************************/
+void bl31_prepare_next_image_entry(void)
+{
+    entry_point_info_t *next_image_info;
+    uint32_t image_type;
+
+#if CTX_INCLUDE_AARCH32_REGS
+    /*
+     * Ensure that the build flag to save AArch32 system registers in CPU
+     * context is not set for AArch64-only platforms.
+     */
+    if (EL_IMPLEMENTED(1) == EL_IMPL_A64ONLY) {
+        ERROR("EL1 supports AArch64-only. Please set build flag "
+                "CTX_INCLUDE_AARCH32_REGS = 0");
+        panic();
+    }
+#endif
+
+    /* Determine which image to execute next */
+    image_type = bl31_get_next_image_type();
+
+    /* Program EL3 registers to enable entry into the next EL */
+    next_image_info = bl31_plat_get_next_image_ep_info(image_type);
+    assert(next_image_info);
+    assert(image_type == GET_SECURITY_STATE(next_image_info->h.attr));
+
+    INFO("BL31: Preparing for EL3 exit to %s world\n",
+        (image_type == SECURE) ? "secure" : "normal");
+    print_entry_point_info(next_image_info);
+    cm_init_my_context(next_image_info);
+    cm_prepare_el3_exit(image_type);
+}
+
+/*******************************************************************************
+ * This function initializes the pointer to BL32 init function. This is expected
+ * to be called by the SPD after it finishes all its initialization
+ ******************************************************************************/
+void bl31_register_bl32_init(int32_t (*func)(void))
+{
+    bl32_init = func;
+}

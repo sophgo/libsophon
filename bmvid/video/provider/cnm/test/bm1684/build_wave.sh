@@ -1,0 +1,7 @@
+#!/bin/bash
+make clean
+rm test/wave/libbmvideo.a
+#run on FPGA
+make TEST_CASE=wave NPU_EN=0 RUN_ENV=DDR DEBUG=1 PLATFORM=ASIC CHIP=BM1684
+#run on PALLADIUM
+#make TEST_CASE=wave NPU_EN=0 RUN_ENV=DDR DEBUG=1 PLATFORM=PALLADIUM CHIP=BM1684

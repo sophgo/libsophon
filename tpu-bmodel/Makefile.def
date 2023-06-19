@@ -1,0 +1,106 @@
+##############################################################################
+#
+#    Copyright (c) 2016-2022 by Bitmain Technologies Inc. All rights reserved.
+#
+#    The material in this file is confidential and contains trade secrets
+#    of Bitmain Technologies Inc. This is proprietary information owned by
+#    Bitmain Technologies Inc. No part of this work may be disclosed,
+#    reproduced, copied, transmitted, or used in any way for any purpose,
+#    without the express written permission of Bitmain Technologies Inc.
+#
+##############################################################################
+
+#If you want to use gdb debug, this should be set to 1 (needed in soc version)
+DEBUG          ?= 0
+
+#in mips-loongson server
+MIPS                     ?= 0
+
+#in shenwei server
+SW64                     ?= 0
+
+#in loongson-arch64 server
+LOONGARCH64              ?= 0
+
+CROSS_COMPILE  ?=
+ifneq ("$(CROSS_COMPILE)","")
+CC     := $(CROSS_COMPILE)gcc
+CXX    := $(CROSS_COMPILE)g++
+AR     := $(CROSS_COMPILE)ar
+AS     := $(CROSS_COMPILE)as
+LD     := $(CROSS_COMPILE)ld
+RANLIB := $(CROSS_COMPILE)ranlib
+STRIP  := $(CROSS_COMPILE)strip
+else
+CC     := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-gcc
+CXX    := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-g++
+AS     := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-as
+AR     := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-ar
+LD     := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-ld
+RANLIB := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-ranlib
+STRIP  := $(NETCOMPILER_TOP)/../bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin/x86_64-linux-strip
+endif
+RM     := rm -rf
+CP     := cp -rf
+MV     := mv
+MKDIR  := mkdir -p
+
+ifneq ($(shell which ccache),)
+    CC := ccache $(CC)
+    CXX := ccache $(CXX)
+endif
+
+##############################################################################
+# Global flags.
+##############################################################################
+
+USING_CXX11_ABI ?= 1
+ifeq ($(CONFIG_FLAGS), )
+  CONFIG_FLAGS  =
+endif
+
+CFLAGS          = -Wall -Werror $(CONFIG_FLAGS) -ffunction-sections -fdata-sections -fno-short-enums -fPIC
+CXXFLAGS        = -Wall -Werror $(CONFIG_FLAGS) -ffunction-sections -fdata-sections -fno-short-enums -fPIC
+CXXFLAGS        += -std=c++11 -fno-strict-aliasing
+
+ifeq ($(MIPS), 1)
+CFLAGS          += -mips64r2 -mabi=64 -march=gs464e
+CXXFLAGS        += -mips64r2 -mabi=64 -march=gs464e
+endif
+
+ifeq ($(SW64), 1)
+CFLAGS          += --machine=sw6b
+CXXFLAGS        += --machine=sw6b
+endif
+
+ifeq ($(LOONGARCH64), 1)
+LDFLAGS         += -Wl,-melf64loongarch
+endif
+
+ifeq ($(USING_CXX11_ABI), 1)
+  CXXFLAGS      += -D_GLIBCXX_USE_CXX11_ABI=1
+endif
+ifeq ($(USING_CXX11_ABI), 0)
+  CXXFLAGS      += -D_GLIBCXX_USE_CXX11_ABI=0
+endif
+
+LDFLAGS         += -Wl,--check-sections \
+                   -Wl,--gc-sections \
+                   -Wl,--unresolved-symbols=report-all
+
+ifeq ($(DEBUG),1)
+CFLAGS          += -g -DDEBUG
+CXXFLAGS        += -g -DDEBUG
+LDFLAGS         += -rdynamic
+else
+CFLAGS          += -O3
+CXXFLAGS        += -O3
+endif
+
+ifneq (,$(CROSS_COMPILE))
+CFLAGS          += -fno-unwind-tables
+CXXFLAGS        += -fno-unwind-tables -fexceptions -fno-rtti
+else
+CFLAGS          += -funwind-tables
+CXXFLAGS        += -funwind-tables
+endif

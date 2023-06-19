@@ -1,0 +1,96 @@
+#
+name: "mixcpu_test"
+layer {
+  name: "dummydata"
+  type: "DummyData"
+  top: "data"
+  dummy_data_param {
+    data_filler {
+      type: "gaussian"
+    }
+    shape {
+      dim: 1
+      dim: 3
+      dim: 200
+      dim: 200
+    }
+  }
+}
+
+layer {
+  name: "exp_tpu"
+  type: "Exp"
+  bottom: "data"
+  top: "exp_tpu"
+  exp_param {
+    base: 2
+  }
+}
+
+layer {
+  name: "log_before_cpu"
+  type: "Log"
+  bottom: "exp_tpu"
+  top: "log_before_cpu"
+  log_param {
+    base: 2
+  }
+}
+
+layer {
+  name: "exp_cpu"
+  type: "UserExp"
+  bottom: "log_before_cpu"
+  top: "exp_cpu"
+  cpu_mode: true
+  exp_param {
+    base: 2
+    scale: 2
+    shift: 3
+  }
+}
+layer {
+  name: "power"
+  type: "Power"
+  bottom: "exp_cpu"
+  top: "power"
+  power_param {
+    power: 2
+    scale: 2
+    shift: 3
+  }
+}
+layer {
+  name: "log"
+  type: "Log"
+  bottom: "power"
+  top: "log"
+  log_param {
+    base: 2
+    scale: 2
+    shift: 3
+  }
+}
+layer {
+  name: "userdefine"
+  type: "UserDefined"
+  bottom: "log"
+  top: "usr"
+  user_defined_param {
+    float_value: 2
+    float_value: 3
+    float_value: 2
+  }
+}
+layer {
+  name: "reduce"
+  type: "Reduction"
+  bottom: "usr"
+  top: "reduction"
+  reduction_param {
+    operation: 1
+    axis: 2
+    coeff: 1
+  }
+}
+

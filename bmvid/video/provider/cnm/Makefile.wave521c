@@ -1,0 +1,198 @@
+#
+# PRODUCTFORM:
+#     soc, pcie, pcie_arm64
+# SUBTYPE:
+#     palladium, fpga, asic
+#
+# Examples for soc mode, ION case
+#   make -f Makefile.wave521c PRODUCTFORM=soc SUBTYPE=palladium ION=1 INSTALL_DIR=/ion/path/install/soc_bm1684_palladium/decode
+#   make -f Makefile.wave521c PRODUCTFORM=soc SUBTYPE=asic ION=1 INSTALL_DIR=/ion/path/install/soc_bm1684_asic/decode
+#   make -f Makefile.wave521c ION=1 INSTALL_DIR=/ion/path/install/soc_bm1684_asic/decode
+#
+# Examples for pcie mode, non-ION case
+#   make -f Makefile.wave521c PRODUCTFORM=pcie SUBTYPE=palladium
+#   make -f Makefile.wave521c PRODUCTFORM=pcie SUBTYPE=asic
+#   make -f Makefile.wave521c PRODUCTFORM=pcie
+#
+
+.PHONY: CREATE_DIR clean all
+
+PRODUCT := WAVE521
+PRODUCTFORM ?= soc
+SUBTYPE ?= asic
+BUILD_CONFIGURATION ?= EmbeddedLinux
+ION ?= 0
+ION_DIR ?= ./release
+INSTALL_DIR ?= ./release
+BMVID_TOP_DIR ?= ../../../
+
+$(shell cp $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_list_encoder.h $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component/component_list.h)
+
+USE_PTHREAD = yes
+LINT_HOME   = etc/lint
+
+CROSS_CC_PREFIX =
+VDI_C           = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/linux/vdi.c
+VDI_OSAL_C      = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/linux/vdi_osal.c
+MM_C            =
+PLATFORM_FLAGS  =
+
+VDI_VPATH       = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/linux
+ifeq ("$(BUILD_CONFIGURATION)", "NonOS")
+    CROSS_CC_PREFIX = arm-none-eabi-
+    VDI_C           = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/nonos/vdi.c
+    VDI_OSAL_C      = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/nonos/vdi_osal.c
+    MM_C            = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/mm.c
+    USE_PTHREAD     = no
+    DEFINES         = -DLIB_C_STUB
+    PLATFORM_FLAGS  =
+    VDI_VPATH       = $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi/nonos
+    NONOS_RULE      = options_nonos.lnt
+endif
+ifeq ("$(BUILD_CONFIGURATION)", "EmbeddedLinux")
+    ifeq ($(PRODUCTFORM),pcie)
+        CROSS_CC_PREFIX =
+    else
+        CROSS_CC_PREFIX = aarch64-linux-gnu-
+    endif
+    ifneq ($(PRODUCTFORM),soc)
+        CFLAGS += -DBM_PCIE_MODE
+    endif
+endif
+
+ifeq ($(SUBTYPE), palladium)
+    BM_SUB_TYPE = PALLADIUM_SIM
+else ifeq ($(SUBTYPE), fpga)
+    BM_SUB_TYPE = FPGA_SIM
+else ifeq ($(SUBTYPE), asic)
+    BM_SUB_TYPE = BM_ASIC
+else
+    $(error Only palladium/fpga/asic are valid sub-types)
+endif
+
+CC  = $(CROSS_CC_PREFIX)gcc
+CXX = $(CROSS_CC_PREFIX)g++
+LINKER=$(CC)
+AR  = $(CROSS_CC_PREFIX)ar
+
+INCLUDES = -I$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi  -I$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi -I$(BMVID_TOP_DIR)/video/driver -I$(BMVID_TOP_DIR)/video/driver -I$(BMVID_TOP_DIR)/3rdparty/libbmcv/include
+INCLUDES += -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_encoder -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper
+INCLUDES += -I$(BMVID_TOP_DIR)/video/provider/cnm/ffmpeg/include
+DEFINES += -D$(PRODUCT) -DCHIP_BM1684 -D$(BM_SUB_TYPE)
+
+CFLAGS  += -g -I. -Wall -Wl,--fatal-warning $(INCLUDES) $(DEFINES) $(PLATFORM_FLAGS)
+ARFLAGS += cru
+LDFLAGS += $(PLATFORM_FLAGS)
+
+LDFLAGS += -L$(BMVID_TOP_DIR)/3rdparty/libbmcv/lib/$(PRODUCTFORM)
+LDLIBS  += -lbmlib
+
+LDLIBS  += -lm
+ifeq ($(USE_PTHREAD), yes)
+    LDLIBS  += -lpthread -ldl
+endif
+
+ifeq ($(ION), 1)
+    CFLAGS  += -DBM_ION_MEM -I$(INSTALL_DIR)/include -I$(ION_DIR)/include
+    LDFLAGS += -L$(INSTALL_DIR)/lib -L$(ION_DIR)/lib
+    LDLIBS  += -lbmion
+endif
+
+TARGET=w5_enc_test
+MAKEFILE=Makefile.wave521c
+OBJDIR=obj
+ALLOBJS=*.o
+ALLDEPS=*.dep
+ALLLIBS=*.a
+RM=rm -f
+MKDIR=mkdir -p
+
+SOURCES = main_enc_test.c              \
+          component_enc_encoder.c      \
+          component_enc_feeder.c       \
+          component_enc_reader.c       \
+          encoder_listener.c           \
+          component_dec_decoder.c      \
+          component_dec_feeder.c       \
+          component_dec_renderer.c     \
+          decoder_listener.c           \
+          cnm_app.c                    \
+          cnm_task.c                   \
+          component.c                  \
+          main_helper.c                \
+          vpuhelper.c                  \
+          bitstreamfeeder.c            \
+          bsfeeder_fixedsize_impl.c    \
+          bsfeeder_framesize_impl.c    \
+          bsfeeder_size_plus_es_impl.c \
+          bitstreamreader.c            \
+          bin_comparator_impl.c        \
+          comparator.c                 \
+          md5_comparator_impl.c        \
+          yuv_comparator_impl.c        \
+          cfgParser.c                  \
+          cnm_video_helper.c           \
+          container.c                  \
+          datastructure.c              \
+          debug.c                      \
+          yuvfeeder.c                  \
+          yuvLoaderfeeder.c            \
+          yuvCfbcfeeder.c              \
+          bw_monitor.c                 \
+          pf_monitor.c
+
+SOURCES += $(VDI_C)                    \
+          $(VDI_OSAL_C)                \
+          $(MM_C)                      \
+          $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/product.c             \
+          $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/vpuapifunc.c          \
+          $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/vpuapi.c              \
+          $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/coda9/coda9.c         \
+          $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/wave/wave5.c
+
+VPATH  = $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_encoder:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_decoder:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper/bitstream:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper/comparator:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper/misc:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper/yuv:
+VPATH += $(BMVID_TOP_DIR)/video/driver:
+VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi:
+VPATH += $(VDI_VPATH):$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi:$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/coda9:$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi/wave
+
+OBJECTNAMES=$(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(SOURCES)))
+OBJECTPATHS=$(addprefix $(OBJDIR)/,$(notdir $(OBJECTNAMES)))
+
+LINT_SRC_INCLUDES = -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2 -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_decoder -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_encoder
+LINT_SRC_INCLUDES += -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper -I$(BMVID_TOP_DIR)/video/driver
+
+all: CREATE_DIR $(OBJECTPATHS)
+	$(LINKER) -o $(TARGET) $(LDFLAGS) -Wl,-gc-section -Wl,--start-group $(OBJECTPATHS) $(LDLIBS) -Wl,--end-group
+
+-include $(OBJECTPATHS:.o=.dep)
+
+clean:
+	$(RM) $(TARGET)
+	$(RM) $(OBJDIR)/$(ALLOBJS)
+	$(RM) $(OBJDIR)/$(ALLDEPS)
+
+install: $(TARGET)
+	install -d $(INSTALL_DIR)/bin
+	install $(TARGET) $(INSTALL_DIR)/bin
+
+uninstall:
+	$(RM) $(INSTALL_DIR)/bin/$(TARGET)
+
+CREATE_DIR:
+	-mkdir -p $(OBJDIR)
+
+obj/%.o: %.c $(MAKEFILE)
+	$(CC) $(CFLAGS) -Wall -Werror -c $< -o $@ -MD -MF $(@:.o=.dep)
+
+
+lint:
+	"$(LINT_HOME)/flint" -i"$(LINT_HOME)" $(DEFINES) $(INCLUDES) $(LINT_SRC_INCLUDES) linux_std.lnt $(HAPS_RULE) $(NONOS_RULE)  $(SOURCES)
+
