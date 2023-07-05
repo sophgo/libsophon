@@ -107,38 +107,46 @@ static bm_status_t bmcv_convert_check(
 
     switch(expected_input_image_format)
     {
-      case FORMAT_YUV444_PACKED:
-      case FORMAT_YVU444_PACKED:
-      case FORMAT_YUV422_YUYV:
-      case FORMAT_YUV422_YVYU:
-      case FORMAT_YUV422_UYVY:
-      case FORMAT_YUV422_VYUY:
-      case FORMAT_RGBYP_PLANAR:
-      case FORMAT_HSV180_PACKED:
-      case FORMAT_HSV256_PACKED:
+      case FORMAT_YUV420P:
+      case FORMAT_YUV444P:
+      case FORMAT_NV12:
+      case FORMAT_NV21:
+      case FORMAT_NV16:
+      case FORMAT_NV61:
+      case FORMAT_GRAY:
+      case FORMAT_RGB_PLANAR:
+      case FORMAT_BGR_PLANAR:
+      case FORMAT_RGB_PACKED:
+      case FORMAT_BGR_PACKED:
+      case FORMAT_RGBP_SEPARATE:
+      case FORMAT_BGRP_SEPARATE:
+        break;
+      default:
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input image format, %s: %s: %d\n",
           filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
-      default:
-        break;
     }
 
     switch(expected_output_image_format)
     {
-      case FORMAT_YUV444_PACKED:
-      case FORMAT_YVU444_PACKED:
-      case FORMAT_YUV422_YUYV:
-      case FORMAT_YUV422_YVYU:
-      case FORMAT_YUV422_UYVY:
-      case FORMAT_YUV422_VYUY:
-      case FORMAT_RGBYP_PLANAR:
-      case FORMAT_HSV180_PACKED:
-      case FORMAT_HSV256_PACKED:
-        bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support output image format, %s: %s: %d\n",
+      case FORMAT_YUV420P:
+      case FORMAT_YUV444P:
+      case FORMAT_NV12:
+      case FORMAT_NV21:
+      case FORMAT_NV16:
+      case FORMAT_NV61:
+      case FORMAT_GRAY:
+      case FORMAT_RGB_PLANAR:
+      case FORMAT_BGR_PLANAR:
+      case FORMAT_RGB_PACKED:
+      case FORMAT_BGR_PACKED:
+      case FORMAT_RGBP_SEPARATE:
+      case FORMAT_BGRP_SEPARATE:
+        break;
+      default:
+        bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input image format, %s: %s: %d\n",
           filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
-      default:
-        break;
     }
 
     if (expected_input_data_format == DATA_TYPE_EXT_1N_BYTE_SIGNED \
@@ -237,6 +245,50 @@ static void get_op_list(
     return;
 }
 
+bm_status_t gray_to_yuv(bm_handle_t handle, bm_image input, bm_image output){
+    bm_status_t ret = BM_SUCCESS;
+    csc_matrix_t matrix;
+    bm_image input_inner, output_inner;
+    int pitch_stride[3];
+    int plane_height;
+    memset(&matrix, 0, sizeof(matrix));
+    matrix.csc_add0 = 128 << 10;
+    matrix.csc_add1 = 128 << 10;
+    matrix.csc_add2 = 128 << 10;
+    bm_image_get_stride(output, pitch_stride);
+    bm_image_create(handle, input.height, input.width / 3, FORMAT_RGB_PACKED, input.data_type, &input_inner, &input.image_private->memory_layout[0].pitch_stride);
+    bm_device_mem_t input_mem = input.image_private->data[0];
+    bm_image_attach(input_inner, &input_mem);
+    for(int i = 0; i < output.image_private->plane_num; i++){
+        plane_height = output.height >> (i && (output.image_format == FORMAT_YUV420P || output.image_format == FORMAT_NV12 || output.image_format == FORMAT_NV21));
+        bm_image_create(handle, plane_height, pitch_stride[i], FORMAT_GRAY, output.data_type, &output_inner, &pitch_stride[i]);
+        bm_device_mem_t output_mem = output.image_private->data[i];
+        bm_image_attach(output_inner, &output_mem);
+        if(i == 0)
+            ret = bmcv_image_vpp_csc_matrix_convert(handle, 1, input, &output_inner, CSC_MAX_ENUM);
+        else
+            ret = bmcv_image_vpp_csc_matrix_convert(handle, 1, input_inner, &output_inner, CSC_USER_DEFINED_MATRIX, &matrix);
+        if (ret != BM_SUCCESS)
+            bmlib_log("STORAGE_CONVERT", BMLIB_LOG_ERROR, "bmcv_image_vpp_csc_matrix_convert fail!\r\n");
+        bm_image_destroy(output_inner);
+        if (ret != BM_SUCCESS) break;
+    }
+    bm_image_destroy(input_inner);
+    return ret;
+}
+
+bm_status_t yuv_to_gray(bm_handle_t handle, bm_image input, bm_image output){
+    bm_status_t ret = BM_SUCCESS;
+    bm_image input_inner;
+    bm_image_create(handle, input.height, input.width, FORMAT_GRAY, input.data_type, &input_inner, &input.image_private->memory_layout[0].pitch_stride);
+    bm_device_mem_t input_mem = input.image_private->data[0];
+    bm_image_attach(input_inner, &input_mem);
+    ret = bmcv_image_vpp_csc_matrix_convert(handle, 1, input_inner, &output, CSC_MAX_ENUM);
+    if(ret != BM_SUCCESS)
+        bmlib_log("STORAGE_CONVERT", BMLIB_LOG_ERROR, "bmcv_image_vpp_csc_matrix_convert fail\n");
+    bm_image_destroy(input_inner);
+    return ret;
+}
 
 bm_status_t bmcv_image_storage_convert_(
     bm_handle_t      handle,
@@ -279,10 +331,6 @@ bm_status_t bmcv_image_storage_convert_(
                 || input_[i].data_type == DATA_TYPE_EXT_FLOAT32) {
             try_use_vpp = false;
         }
-
-        if (input_[i].image_format == FORMAT_NV16 \
-                || input_[i].image_format == FORMAT_YUV422P)
-            try_use_vpp = false;
 #endif
     }
     #ifdef __linux__
@@ -312,8 +360,6 @@ bm_status_t bmcv_image_storage_convert_(
                 || output_[i].data_type == DATA_TYPE_EXT_FLOAT32) {
             try_use_vpp = false;
         }
-        if (output_[i].image_format == FORMAT_NV16)
-            try_use_vpp = false;
 #endif
     }
 
@@ -321,7 +367,32 @@ bm_status_t bmcv_image_storage_convert_(
     if (try_use_vpp) {
         bool success = true;
         bmcv_rect_t rect = {0, 0, input_[0].width, input_[0].height};
+        vpp_limitation limitation;
         for (int i = 0; i < image_num; i++) {
+            if((bm_vpp_query_limitation(input_[i].image_format, output_[i].image_format, limitation) != BM_SUCCESS)
+                && input_[i].image_format != FORMAT_GRAY && output_[i].image_format != FORMAT_GRAY){
+                    bmlib_log("BMCV", BMLIB_LOG_INFO, "can't use vpp,  go through tpu path\n");
+                    success = false;
+                    break;
+            }
+            if (input_[i].image_format == FORMAT_GRAY && IS_CS_YUV(output_[i].image_format)){
+                ret = gray_to_yuv(handle, input_[i], output_[i]);
+                if(ret != BM_SUCCESS){
+                    bmlib_log("BMCV", BMLIB_LOG_INFO, "can't use vpp,  go through tpu path\n");
+                    success = false;
+                    break;
+                }
+                continue;
+            }
+            if (IS_CS_YUV(input_[i].image_format) && output_[i].image_format == FORMAT_GRAY){
+                ret = yuv_to_gray(handle, input_[i], output_[i]);
+                if(ret != BM_SUCCESS){
+                    bmlib_log("BMCV", BMLIB_LOG_INFO, "can't use vpp,  go through tpu path\n");
+                    success = false;
+                    break;
+                }
+                continue;
+            }
             if (bmcv_image_vpp_csc_matrix_convert(handle, 1,
                                                   input_[i], output_ + i,
                                                   csc_type, nullptr,

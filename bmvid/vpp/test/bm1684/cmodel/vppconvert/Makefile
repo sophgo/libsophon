@@ -14,11 +14,15 @@ CROSS_CC_PREFIX = $(CROSS_COMPILE)
 CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
-LDFLAGS := -L$(VPP_LIB_DIR)/release -L$(VPP_LIB_DIR)/lib
-LIBS    := -lvpp -static -lm
-INCLUDE := -I$(VPP_LIB_DIR)/include/
+LDFLAGS := -L$(VPP_LIB_DIR)/release -L$(VPP_LIB_DIR)/lib -L$(VPP_LIB_DIR)/../../3rdparty/libbmcv/lib/pcie/
+LIBS    := -lvpp_cmodel -lvpp -lm
+INCLUDE += -I$(VPP_LIB_DIR)/include/
 INCLUDE += -I$(VPP_LIB_DIR)/include/$(CHIP)
 DEFINES :=
+
+$(warning ####################)
+$(warning $(INCLUDE))
+$(warning ####################)
 
 #DEFINES :=
 CFLAGS  :=

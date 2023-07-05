@@ -19,6 +19,7 @@ INCLUDE_DIR += -I$(TEST_BMCV_DIR)
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
 TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
                      $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_bayer2rgb.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_add_weighted.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_axpy.cpp   \
 					 $(TEST_BMCV_DIR)/test_cv_bitwise.cpp  \
@@ -71,7 +72,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_affine.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_bilinear.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_perspective.cpp  \
-                                         $(TEST_BMCV_DIR)/test_cv_warp_perspective_bilinear.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_warp_perspective_bilinear.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_width_align.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_yuv2hsv.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_yuv2rgb.cpp  \
@@ -114,6 +115,7 @@ INSTALL_EXES += $(TEST_BMCV_CXX_EXE)
 DAILY_TEST_EXES += $(TEST_BMCV_CXX_EXE)
 
 BMLIB_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libbmlib.so
+VPP_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libvpp_cmodel.so
 
 $(TEST_BMCV_OBJ_DIR):
 	@$(MKDIR) $@
@@ -129,7 +131,7 @@ TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(BMCV_DIR)/lib/cmodel/ \
  -L$(BMVID_ROOT)/3rdparty/libbmcv/lib/pcie/pcie_cmodel/ \
 -ldl
 
-$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(TEST_BMCV_OBJ_DIR)
+$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(VPP_DYN) | $(TEST_BMCV_OBJ_DIR)
 	@echo cc -o $@ $<
 	@$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) -Wextra -o $@ $< $(TEST_BMCV_LDFLAGS) -std=c++0x -pthread
 
@@ -145,7 +147,7 @@ INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include \
 TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(JPU_DIR)/lib/ -L$(BMION_DIR)/lib/ \
 					-L$(OUT_DIR)/lib/ -L$(BMCV_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
-					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -ldl\
+					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp_cmodel -ldl\
 
 TEST_MISC_CXX = $(TEST_BMCV_DIR)/test_misc.cpp $(TEST_BMCV_DIR)/md5.cpp
 

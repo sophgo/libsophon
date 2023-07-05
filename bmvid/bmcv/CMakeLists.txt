@@ -102,8 +102,8 @@ if(WIN32)
         src/bmcv_api_hm_distance.cpp
         src/bmcv_api_csc_convert_to.cpp
         src/bm1684/bmcv_1684_vpp_internal.cpp
-        src/bm1684x/bmcv_1684x_vpp_cmodel.cpp
         src/bm1684x/bmcv_1684x_vpp_internal.cpp
+        src/bmcv_api_bayer2rgb.cpp
         # src/md5.cpp
     )
 endif()
@@ -111,7 +111,7 @@ endif()
 add_library(libbmcv SHARED ${SRCS})
 
 if(WIN32)
-    target_link_libraries(libbmcv libvpp libbmjpuapi libbmjpulite libbmion libbmlib turbojpeg-static)#common#libbmlib
+    target_link_libraries(libbmcv libvpp_cmodel libvpp libbmjpuapi libbmjpulite libbmion libbmlib turbojpeg-static)#common#libbmlib
 elseif(LINUX)
     target_link_libraries(libbmcv libbmlib)
 endif()
@@ -126,8 +126,9 @@ if(WIN32)
     add_custom_command(TARGET libbmcv-static POST_BUILD
         COMMAND ${LIB_EXE} /out:tmp.lib ${CMAKE_INSTALL_PREFIX}/lib/libbmcv-static.lib ${LIB_TURBO_JPEG_STATIC}
         COMMAND ${CMAKE_COMMAND} -E rename tmp.lib ${CMAKE_INSTALL_PREFIX}/lib/libbmcv-static.lib)
+
 elseif(LINUX)
-    target_link_libraries(libbmcv-static libbmlib-static libcommon-static)
+    target_link_libraries(libbmcv-static libvpp_cmodel-static libbmlib-static libcommon-static)
 endif()
 
 install(TARGETS libbmcv libbmcv-static DESTINATION lib)
@@ -138,5 +139,12 @@ file(
          ./include/bmcv_api_ext.h
          ./include/bmcv_api_ext_c.h
     DESTINATION ${CMAKE_INSTALL_PREFIX}/include
+
+)
+file(
+    COPY ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.dll
+         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.lib
+         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel-static.lib
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
 )
 endif()

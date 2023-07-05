@@ -14,11 +14,11 @@ BMCV_PATH ?= ${OPENCV_PATH}/3rdparty/libbmcv
 CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
-LDFLAGS := -L$(VPP_LIB_DIR)/release -L$(VPP_LIB_DIR)/lib
-LIBS    := -lvpp -lpthread
+LDFLAGS := -L$(VPP_LIB_DIR)/release  -L$(VPP_LIB_DIR)/lib -L$(VPP_LIB_DIR)/../../3rdparty/libbmcv/lib/pcie/
+LIBS    := -lvpp_cmodel -lvpp
 INCLUDE := -I$(VPP_LIB_DIR)/include/
 INCLUDE += -I$(VPP_LIB_DIR)/include/$(CHIP)
-
+INCLUDE += -I$(VPP_LIB_DIR)/../..//3rdparty/libbmcv/include/
 DEFINES :=
 
 ifeq ($(patsubst pcie%,pcie,$(productform)),pcie)

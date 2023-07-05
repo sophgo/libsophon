@@ -144,6 +144,7 @@ typedef enum bm_image_format_ext_ {
     FORMAT_RGBYP_PLANAR,
     FORMAT_HSV180_PACKED,
     FORMAT_HSV256_PACKED,
+    FORMAT_BAYER,
 } bm_image_format_ext;
 
 typedef enum bmcv_resize_algorithm_ {
@@ -844,6 +845,41 @@ DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_ADC(
         int             IP_metric);
 
 /**
+ * @brief: PQ Asymmetric Distance Computation, output the topK distance and label of x and q(ny), return BM_SUCCESS if succeed.
+ * @param handle                         [in]: the device handle.
+ * @param centroids_input_dev            [in]: device addr information of the centroids.
+ * @param nxquery_input_dev              [in]: device addr information of the query.
+ * @param nycodes_input_dev,             [in]: PQcodes of database.
+ * @param distance_output_dev            [out]: output topK distance
+ * @param index_output_dev               [out]: output topK label
+ * @param vec_dims              [in]: vector dimension.
+ * @param slice_num             [in]: the num of sliced vector.
+ * @param centroids_num         [in]: the num of centroids num.
+ * @param database_num          [in]: the num of database vectors.
+ * @param query_num             [in]: the num of query vectors.
+ * @param sort_cnt              [in]: get top sort_cnt values.
+ * @param IP_metric             [in]: metrics 0:L2_matric; 1:IP_matric.
+ * @param in_dtype              [in]: input data type, support DT_FP32/DTfp16.
+ * @param out_dtype             [in]: output data type, support DT_FP32/DTfp16.
+ */
+DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_ADC_ext(
+        bm_handle_t     handle,
+        bm_device_mem_t centroids_input_dev,
+        bm_device_mem_t nxquery_input_dev,
+        bm_device_mem_t nycodes_input_dev,
+        bm_device_mem_t distance_output_dev,
+        bm_device_mem_t index_output_dev,
+        int             vec_dims,
+        int             slice_num,
+        int             centroids_num,
+        int             database_num,
+        int             query_num,
+        int             sort_cnt,
+        int             IP_metric,
+        int             in_dtype,
+        int             out_dtype);
+
+/**
  * @brief: PQ Symmetric Distance Computation, output the topK distance and label of q(x) and q(ny), return BM_SUCCESS if succeed.
  * @param handle                         [in]: the device handle.
  * @param sdc_table_input_dev            [in]: device addr information of the sdc_table.
@@ -873,6 +909,39 @@ DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_SDC(
         int             IP_metric);
 
 /**
+ * @brief: PQ Symmetric Distance Computation, output the topK distance and label of q(x) and q(ny), return BM_SUCCESS if succeed.
+ * @param handle                         [in]: the device handle.
+ * @param sdc_table_input_dev            [in]: device addr information of the sdc_table.
+ * @param nxcodes_input_dev,             [in]: PQcodes of query.
+ * @param nycodes_input_dev,             [in]: PQcodes of database.
+ * @param distance_output_dev            [out]: output topK distance.
+ * @param index_output_dev               [out]: output topK label.
+ * @param slice_num             [in]: the num of sliced vector.
+ * @param centroids_num         [in]: the num of centroids num.
+ * @param database_num          [in]: the num of database vectors.
+ * @param query_num             [in]: the num of query vectors.
+ * @param sort_cnt              [in]: get top sort_cnt values.
+ * @param IP_metric             [in]: metrics 0:L2_matric; 1:IP_matric.
+ * @param in_dtype              [in]: input data type, support DT_FP32/DTfp16.
+ * @param out_dtype             [in]: output data type, support DT_FP32/DTfp16.
+ */
+DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_SDC_ext(
+        bm_handle_t     handle,
+        bm_device_mem_t sdc_table_input_dev,
+        bm_device_mem_t nxcodes_input_dev,
+        bm_device_mem_t nycodes_input_dev,
+        bm_device_mem_t distance_output_dev,
+        bm_device_mem_t index_output_dev,
+        int             slice_num,
+        int             centroids_num,
+        int             database_num,
+        int             query_num,
+        int             sort_cnt,
+        int             IP_metric,
+        int             in_dtype,
+        int             out_dtype);
+
+/**
  * @brief: encode D-dims vectors into m*int8 PQcodes , return BM_SUCCESS if succeed.
  * @param handle                         [in]: the device handle.
  * @param vector_input_dev               [in]: device addr information of the D-dims vectors
@@ -895,6 +964,34 @@ DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_encode(
         int             slice_num,
         int             centroids_num,
         int             IP_metric);
+
+/**
+ * @brief: encode D-dims vectors into m*int8 PQcodes , return BM_SUCCESS if succeed.
+ * @param handle                         [in]: the device handle.
+ * @param vector_input_dev               [in]: device addr information of the D-dims vectors
+ * @param centroids_input_dev            [in]: device addr information of the centroids.
+ * @param buffer_table_dev,              [in]: distance table stored in the buffer,size=nv*m*ksub*dtype.
+ * @param codes_output_dev               [out]: output PQcodes, size = nv * m * int8.
+ * @param encode_vecs_num   [in]: the num of input vectors.
+ * @param vec_dims          [in]: vector dimension.
+ * @param slice_num         [in]: the num of sliced vector.
+ * @param centroids_num     [in]: the num of centroids.
+ * @param in_dtype              [in]: input data type, support DT_FP32/DTfp16.
+ * @param out_dtype             [in]: output data type, support DT_FP32/DTfp16.
+ */
+DECL_EXPORT bm_status_t bmcv_faiss_indexPQ_encode_ext(
+        bm_handle_t     handle,
+        bm_device_mem_t vector_input_dev,
+        bm_device_mem_t centroids_input_dev,
+        bm_device_mem_t buffer_table_dev,
+        bm_device_mem_t codes_output_dev,
+        int             encode_vec_num,
+        int             vec_dims,
+        int             slice_num,
+        int             centroids_num,
+        int             IP_metric,
+        int             input_dtype,
+        int             output_dtype);
 
 DECL_EXPORT bm_status_t bmcv_debug_savedata(bm_image image, const char *name);
 
@@ -1097,6 +1194,12 @@ DECL_EXPORT bm_status_t bmcv_image_absdiff(
         bm_handle_t handle,
         bm_image input1,
         bm_image input2,
+        bm_image output);
+
+DECL_EXPORT bm_status_t bmcv_image_bayer2rgb(
+        bm_handle_t handle,
+        unsigned char* convd_kernel,
+        bm_image input,
         bm_image output);
 
 DECL_EXPORT bm_status_t bmcv_image_threshold(

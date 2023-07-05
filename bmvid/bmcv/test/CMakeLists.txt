@@ -84,7 +84,7 @@ function(test_bmcv)
   foreach(src IN LISTS ARGN)
     get_filename_component(target ${src} NAME_WE)
     add_executable(${target} ${src})
-    target_link_libraries(${target} libbmlib libbmcv pthread bmopenblas)
+    target_link_libraries(${target} libvpp_cmodel libbmlib libbmcv pthread bmopenblas)
     install(TARGETS ${target} DESTINATION bmcv/test/)
   endforeach()
 endfunction()
@@ -148,6 +148,7 @@ test_bmcv(
     test_cv_laplacian.cpp
     test_cv_axpy.cpp
     test_bm1686_vpp_convert.cpp
+    test_cv_bayer2rgb.cpp
 )
 elseif(WINDOWS)
 
@@ -157,9 +158,9 @@ function(test_bmcv)
         add_executable(${target} ${src} test_misc.cpp md5.cpp)
         #add_dependencies(${target} libbmcv-static libbmlib-static)
         if(TARGET_TYPE STREQUAL "release")
-            target_link_libraries(${target} libbmcv-static libvpp-static libbmjpuapi-static libbmjpulite-static libbmion-static libbmlib-static opencv_world410 openblas-VS2019 ${PTHREADS_LIB})
+            target_link_libraries(${target} libvpp_cmodel-static libbmcv-static libvpp-static libbmjpuapi-static libbmjpulite-static libbmion-static libbmlib-static opencv_world410 openblas-VS2019 ${PTHREADS_LIB})
         else()
-            target_link_libraries(${target} libbmcv-static libvpp-static libbmjpuapi-static libbmjpulite-static libbmion-static libbmlib-static opencv_world410d openblas-VS2019 ${PTHREADS_LIB})
+            target_link_libraries(${target} libvpp_cmodel-static libbmcv-static libvpp-static libbmjpuapi-static libbmjpulite-static libbmion-static libbmlib-static opencv_world410d openblas-VS2019 ${PTHREADS_LIB})
         endif()
         install(TARGETS ${target} DESTINATION bmcv/test)
     endforeach()
@@ -223,6 +224,7 @@ test_bmcv(
     test_resize.cpp
     test_cv_laplacian.cpp
     test_cv_axpy.cpp
+    test_cv_bayer2rgb.cpp
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_INSTALL_PREFIX}/bin/bm1684x)

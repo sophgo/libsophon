@@ -44,55 +44,61 @@ bmcv_image_storage_convert
 
 **注意事项**
 
-1. bm1684 下该 API 支持以下所有格式的两两相互转换：
+1. bm1684 下该 API 支持以下格式的两两相互转换：
 
-* (FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_NV21, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_NV16, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_NV61, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_YUV444P, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_RGB_PLANAR, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_RGB_PLANAR, DATA_TYPE_EXT_FLOAT32)
-
-* (FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_BGR_PLANAR, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_BGR_PLANAR, DATA_TYPE_EXT_FLOAT32)
-
-* (FORMAT_RGB_PACKED, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_RGB_PACKED, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_RGB_PACKED, DATA_TYPE_EXT_FLOAT32)
-
-* (FORMAT_BGR_PACKED, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_BGR_PACKED, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_BGR_PACKED, DATA_TYPE_EXT_FLOAT32)
-
-* (FORMAT_RGBP_SEPARATE, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_RGBP_SEPARATE, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_RGBP_SEPARATE, DATA_TYPE_EXT_FLOAT32)
-
-* (FORMAT_BGRP_SEPARATE, DATA_TYPE_EXT_1N_BYTE)
-
-* (FORMAT_BGRP_SEPARATE, DATA_TYPE_EXT_4N_BYTE)
-
-* (FORMAT_BGRP_SEPARATE, DATA_TYPE_EXT_FLOAT32)。
++-----+------------------------+-------------------------------+
+| num | image_format           | data type                     |
++=====+========================+===============================+
+|  1  |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  2  | FORMAT_RGB_PLANAR      | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  3  |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  4  |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  5  | FORMAT_BGR_PLANAR      | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  6  |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  7  |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  8  | FORMAT_RGB_PACKED      | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  9  |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  10 |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  11 | FORMAT_BGR_PACKED      | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  12 |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  13 |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  14 | FORMAT_RGBP_SEPARATE   | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  15 |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  16 |                        | DATA_TYPE_EXT_FLOAT32         |
++-----+                        +-------------------------------+
+|  17 | FORMAT_BGRP_SEPARATE   | DATA_TYPE_EXT_1N_BYTE         |
++-----+                        +-------------------------------+
+|  18 |                        | DATA_TYPE_EXT_4N_BYTE         |
++-----+------------------------+-------------------------------+
+|  19 | FORMAT_NV12            | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  20 | FORMAT_NV21            | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  21 | FORMAT_NV16            | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  22 | FORMAT_NV61            | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  23 | FORMAT_YUV420P         | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  24 | FORMAT_YUV444P         | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
+|  25 | FORMAT_GRAY            | DATA_TYPE_EXT_1N_BYTE         |
++-----+------------------------+-------------------------------+
 
 如果输入输出 image 对象不在以上格式中，则返回失败。
 

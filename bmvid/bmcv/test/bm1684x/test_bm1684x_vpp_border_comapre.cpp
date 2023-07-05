@@ -145,8 +145,8 @@ int test_vpp_draw_rectangle(void)
   else
     printf("test_vpp_draw_rectangle failed\n");
 
-  delete [] dst_input_ptr;
-  delete [] dst_input_ptr_cmodel;
+  free(dst_input_ptr);
+  free(dst_input_ptr_cmodel);
 
   bm_image_destroy(dst_cmodel);
   bm_image_destroy(src_cmodel);

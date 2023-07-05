@@ -87,6 +87,15 @@ The interface can decode multiple  JPEG  images.
    +------------------+------------------------+
 
 
+  The interface supports the following data_type:
+
+   +------------------+------------------------+
+   |       num        |     data_type          |
+   +==================+========================+
+   |        1         |  DATA_TYPE_EXT_1N_BYTE |
+   +------------------+------------------------+
+
+
 **Sample code**
 
 

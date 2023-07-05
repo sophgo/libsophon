@@ -33,7 +33,6 @@ message(STATUS "CMAKE_CURRENT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(UNIX)
     set(SRCS
-        src/bm1684/1684vppcmodel.c
         src/bm1684/vpplib.c
         src/vppion.c)
 elseif(WIN32)
@@ -43,17 +42,16 @@ elseif(WIN32)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_INSTALL_PREFIX}/lib)
 
     set(SRCS
-        src/bm1684/vpplib.c
-        src/bm1684/1684vppcmodel.c)
+        src/bm1684/vpplib.c)
 endif()
 
 add_definitions(-DPCIE_MODE)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 add_library(libvpp SHARED ${SRCS})
-target_link_libraries(libvpp libbmlib)
+target_link_libraries(libvpp libvpp_cmodel libbmlib)
 
 add_library(libvpp-static STATIC ${SRCS})
-target_link_libraries(libvpp-static libbmlib-static)
+target_link_libraries(libvpp-static libvpp_cmodel-static libbmlib-static)
 
 install(TARGETS libvpp libvpp-static DESTINATION lib)
 

@@ -172,9 +172,9 @@ int main(int argc, char **argv) {
 
 
 
-  delete [] src_input_ptr;
-  delete [] dst_input_ptr;
-  delete [] dst_input_ptr_cmodel;
+  free(src_input_ptr);
+  free(dst_input_ptr);
+  free(dst_input_ptr_cmodel);
 
   bm_image_destroy(dst_cmodel);
   bm_image_destroy(src_cmodel);

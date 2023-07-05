@@ -6,7 +6,9 @@
 #include "bmcv_internal.h"
 #include "bmcv_api.h"
 #include "bmcv_common_bm1684.h"
-
+#ifdef __riscv
+#include <string>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -176,6 +178,12 @@ static bm_status_t fill_image_private(bm_image *res, int *stride) {
             image_private->plane_num = 1;
             image_private->memory_layout[0] =
                 layout::plane_layout(1, 1, H, W * 2, data_size);
+            break;
+        }
+        case FORMAT_BAYER: {
+            image_private->plane_num = 1;
+            image_private->memory_layout[0] =
+                layout::plane_layout(1, 1, H, W, data_size);
             break;
         }
     }

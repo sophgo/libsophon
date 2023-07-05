@@ -64,7 +64,8 @@ This API can be used for JPEG encoding of multiple bm_image.
      | FORMAT_NV61
      | FORMAT_GRAY
 
-
+    The interface supports the following data_type:
+     | DATA_TYPE_EXT_1N_BYTE
 
 **Sample code**
 

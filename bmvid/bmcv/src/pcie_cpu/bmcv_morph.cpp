@@ -8,7 +8,9 @@
 #include <math.h>
 #include <float.h>
 #include <thread>
+#ifndef __riscv
 #include <arm_neon.h>
+#endif
 #include "bmcv_cpu_func.h"
 #include "bmcv_util.h"
 
@@ -27,6 +29,7 @@ static void pad_const(
         int pad_h_b,
         unsigned char val
         ) {
+#ifndef __riscv
     auto PAD = [&](int start, int lines) {
         for (int i = start; i < start + lines; i++) {
             for (int j = 0; j < pad_w_l * c; j++) {
@@ -72,6 +75,7 @@ static void pad_const(
     }
     for (auto &it : threads)
         it.join();
+#endif
 }
 
 static void get_kernel_coord(

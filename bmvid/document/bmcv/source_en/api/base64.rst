@@ -57,7 +57,7 @@ A common encoding method in base64 network transmission, which uses 64 common ch
         char *src = (char *)malloc((original_len + 3) * sizeof(char));
         char *dst = (char *)malloc((encoded_len + 3) * sizeof(char));
         for (j = 0; j < original_len; j++)
-            a[j] = (char)((rand() % 100) + 1);
+            src[j] = (char)((rand() % 100) + 1);
 
         bm_handle_t handle;
         ret = bm_dev_request(&handle, 0);
