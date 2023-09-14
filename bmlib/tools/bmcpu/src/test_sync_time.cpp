@@ -2,9 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
-#include <sys/syscall.h>
 #include <bmlib_runtime.h>
-
+#ifdef __linux__
+#include <sys/syscall.h>
+#else
+#include <windows.h>
+#endif
 
 int main(int argc, char *argv[]) {
 #if !defined(USING_CMODEL) && !defined(SOC_MODE)

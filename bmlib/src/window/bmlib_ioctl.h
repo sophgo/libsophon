@@ -10,6 +10,9 @@
  */
 #define BMDEV_MEMCPY                                                           \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x00, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define BMDEV_MEMCPY_P2P                                                       \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x01, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 #define BMDEV_ALLOC_GMEM                                                       \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x10, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BMDEV_FREE_GMEM                                                        \
@@ -169,6 +172,13 @@
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x92, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BMDEV_CHANGE_DYNFREQ_STATUS                                            \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x93, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define BMDEV_GET_VERSION                                                      \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x94, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define BMDEV_LOADED_LIB                                                      \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x95, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define BMDEV_GET_SMI_ATTR                                                      \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x96, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 #define BMCTL_GET_DEV_CNT                                                      \
     CTL_CODE(FILE_DEVICE_BEEP, 0x0, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BMCTL_GET_SMI_ATTR                                                     \

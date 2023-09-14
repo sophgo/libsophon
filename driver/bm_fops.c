@@ -338,23 +338,19 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_RMDRV_VETH:
 	{
-		if (bmdi->eth_state == true) {
-			bmdi->eth_state = false;
-			bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
-		} else {
-			ret = -EEXIST;
-			pr_info("bmsophon%d veth do not exit!\n", bmdi->dev_index);
-			pr_info("no need to remove the veth%d\n", bmdi->dev_index);
-		}
 		break;
 	}
 
 	case BMDEV_SET_IP:
 	{
-		u32 ip;
+		struct bm_veth_ip {
+			u32 ip;
+			u32 mask;
+		} ip_mask;
 
-		ret = copy_from_user(&ip, (void *)arg, sizeof(u32));
-		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, ip);
+		ret = copy_from_user(&ip_mask, (void *)arg, sizeof(struct bm_veth_ip));
+		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, ip_mask.ip);
+		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, ip_mask.mask);
 		break;
 	};
 
@@ -383,7 +379,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		bm_arm9_fw_mode mode;
 
 		ret = copy_from_user(&mode, (void *)arg, sizeof(bm_arm9_fw_mode));
-		pr_info("set arm9 fw mode %d\n", mode);
+		pr_info("bmsophon%d set arm9 fw mode %d\n", bmdi->dev_index, mode);
 		if (ret != 0)
 		{
 			pr_err("BMDEV_SET_FW_MODE copy_from_user wrong, ret is %d\n", ret);
@@ -565,6 +561,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_I2C_SMBUS_ACCESS:
 		ret = bm_i2c_smbus_access(bmdi, arg);
+		break;
+
+	case BMDEV_MEMCPY_P2P :
+		ret = bmdev_memcpy_p2p(bmdi, file, arg);
 		break;
 #endif
 	case BMDEV_MEMCPY:

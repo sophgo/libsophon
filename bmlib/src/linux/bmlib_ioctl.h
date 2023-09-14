@@ -7,6 +7,7 @@
  * IOCTL definations, sync with driver/bm_uapi.h
  */
 #define BMDEV_MEMCPY                  _IOW('p', 0x00, unsigned long)
+#define BMDEV_MEMCPY_P2P              _IOW('p', 0x01, unsigned long)
 
 #define BMDEV_ALLOC_GMEM              _IOWR('p', 0x10, unsigned long)
 #define BMDEV_FREE_GMEM               _IOW('p', 0x11, unsigned long)

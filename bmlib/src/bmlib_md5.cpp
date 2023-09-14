@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "bmlib_md5.h"
 #include <string.h>
+#ifdef WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 unsigned char PADDING[] = {
     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

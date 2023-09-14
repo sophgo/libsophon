@@ -192,7 +192,7 @@ if (CHIP_NAME STREQUAL bm1684)
         file(COPY
             video/driver/linux/chagall.bin
             video/driver/linux/chagall_dec.bin
-            DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/vpu_firmware
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/vpu_firmware
         )
 
         # vpp_lib

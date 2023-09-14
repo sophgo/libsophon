@@ -125,7 +125,9 @@ int bm_vdi_init(uint32_t core_idx)
     }
 
     if (vdi->vpu_fd >= 0) {
+        bm_vdi_lock(core_idx);
         vdi->task_num++;
+        bm_vdi_unlock(core_idx);
         return 0;
     }
 
@@ -144,6 +146,7 @@ int bm_vdi_init(uint32_t core_idx)
         goto ERR_VDI_INIT0;
     }
     vdi->vpu_fd = open(vpu_dev_name, O_RDWR);
+
     if (vdi->vpu_fd < 0) {
 #ifndef BM_PCIE_MODE
         VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load vpu.ko again\n", strerror(errno));
@@ -153,7 +156,9 @@ int bm_vdi_init(uint32_t core_idx)
         goto ERR_VDI_INIT0;
     }
 
-    VLOG(ERR,"[VDI] Open device %s, fd=%d\n", vpu_dev_name, vdi->vpu_fd);
+    VLOG(INFO,"[VDI] Open device %s, fd=%d\n", vpu_dev_name, vdi->vpu_fd);
+    vdi->pid    = getpid();
+    bm_vdi_disable_kernel_reset(core_idx);
 
     memset(&vdi->buffer_pool, 0, sizeof(vpudrv_buffer_pool_t)*MAX_VPU_BUFFER_POOL);
 
@@ -337,6 +342,10 @@ int bm_vdi_release(uint32_t core_idx)
         }
     }
 
+    vdi->task_num--;
+    bm_vdi_get_kernel_reset(core_idx);
+    if(vdi->reset_core_flag.reset_core_disable!=0)
+        bm_vdi_resume_kernel_reset(core_idx);
     bm_vdi_unlock(core_idx);
 
     if (vdb.size > 0) {
@@ -348,7 +357,6 @@ int bm_vdi_release(uint32_t core_idx)
         munmap((void *)vdi->inst_memory_va, vdi->inst_memory_size);
     }
 
-    vdi->task_num--;
 
     if (vdi->vpu_fd >= 0)
         close(vdi->vpu_fd);
@@ -704,6 +712,31 @@ int bm_vdi_disable_kernel_reset(uint32_t core_idx){
     ret = ioctl(vdi->vpu_fd, VDI_IOCTL_CTRL_KERNEL_RESET, &(vdi->reset_core_flag));
     if (ret < 0) {
         VLOG(ERR, "[VDI] encoder fail to disable kernel_reset with ioctl()\n");
+        return -1;
+    }
+    return 0;
+}
+// get the kernel reset status
+int bm_vdi_get_kernel_reset(uint32_t core_idx){
+    int ret = 0;
+    int chip_core_idx = core_idx;
+    bm_vdi_info_t* vdi = bm_vdi_get_info_ptr(core_idx);
+    if (!vdi) {
+        VLOG(ERR, "vdi is null, encoder fail to get vpu_reset status in kernel\n");
+        return -1;
+    }
+    if (vdi->vpu_fd < 0) {
+        VLOG(ERR, "fd is invalid, encoder fail  to get vpu_reset status in kernel\n");
+        return -1;
+    }
+
+#if defined(BM_PCIE_MODE)
+    chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#endif
+    vdi->reset_core_flag.core_idx = chip_core_idx;
+    ret = ioctl(vdi->vpu_fd, VDI_IOCTL_GET_KERNEL_RESET_STATUS, &(vdi->reset_core_flag));
+    if (ret < 0) {
+        VLOG(ERR, "[VDI] encoder fail to get vpu_reset status with ioctl()\n");
         return -1;
     }
     return 0;

@@ -60,7 +60,6 @@ static void bmdrv_do_irq(struct bm_device_info *bmdi)
 	int i = 0;
 	int bitnum = 0;
 	u32 status[4] = {0};
-	int val=0;
 	enum arm9_fw_mode mode;
 
 	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
@@ -69,10 +68,6 @@ static void bmdrv_do_irq(struct bm_device_info *bmdi)
 		if ((status[1] >> (VETH_IRQ_ID - 32)) & 0x1) {
 			bmdi->cinfo.irq_id = VETH_IRQ_ID;
 			bmdi->cinfo.bmdrv_module_irq_handler[VETH_IRQ_ID](bmdi);
-
-			val = intc_reg_read(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_H_OFFSET);
-			val &= ~(1 << (VETH_IRQ_ID - 32));
-			intc_reg_write(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_H_OFFSET, val);
 		}
 	} else {
 		for (i = 0; i < 4; i++) {

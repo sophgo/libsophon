@@ -21,6 +21,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <fcntl.h>
 #elif _WIN32
 #include <windows.h>
 #include  < MMSystem.h >
@@ -28,12 +29,10 @@
 #endif
 
 #include <signal.h>     /* SIG_SETMASK */
-
 #include "bmvpu.h"
 
 #include "bmvpuapi.h"
 #include "bmvpuapi_internal.h"
-
 #define MAX_SOC_NUM 64
 typedef struct _G_bm_handle{
     bm_handle_t bm_handle;
@@ -69,12 +68,14 @@ enum {
     BM_VPU_ENC_REC_IDX_HEADER_ONLY   = -3,
     BM_VPU_ENC_REC_IDX_CHANGE_PARAM  = -4
 };
+#define VID_OPEN_ENC_FLOCK_NAME "/tmp/vid_open_enc_global_flock"
 #ifdef __linux__
-// static atomic_flag bmve_atomic_lock = ATOMIC_FLAG_INIT;
-// static atomic_flag bmhandle_atomic_lock = ATOMIC_FLAG_INIT; /* atomic lock for bmlib_handle */
-static int bmve_atomic_lock = 0;
+
 static int bmhandle_atomic_lock = 0; /* atomic lock for bmlib_handle */
+static int bmve_atomic_lock = 0;
+static __thread int s_vid_enc_open_flock_fd[MAX_SOC_NUM] = {[0 ... (MAX_SOC_NUM-1)] = -1};
 #elif _WIN32
+static  __declspec(thread) HANDLE s_vid_enc_open_flock_fd[MAX_SOC_NUM] = {  NULL };
 static  volatile long bmve_atomic_lock = 0;
 static  volatile long bmhandle_atomic_lock = 0;
 #endif
@@ -84,7 +85,58 @@ static __thread sigset_t oldmask[128];
 static __thread sigset_t newmask[128];
 #endif
 
-/* atomic lock for bmlib_handle operations*/
+#define TRY_OPEN_SEM_TIMEOUT 20
+void get_lock_timeout(int sec,int soc_idx)
+{
+    char flock_name[255];
+#ifdef __linux__
+    if(s_vid_enc_open_flock_fd[soc_idx] == -1) {
+        sprintf(flock_name, "%s%d", VID_OPEN_ENC_FLOCK_NAME, soc_idx);
+        BM_VPU_LOG("flock_name : .. %s\n", flock_name);
+        umask(0000);
+        if (access(flock_name, F_OK) != 0) {
+            s_vid_enc_open_flock_fd[soc_idx] = open(flock_name, O_WRONLY | O_CREAT | O_APPEND, 0666);
+        }else {
+            s_vid_enc_open_flock_fd[soc_idx] = open(flock_name, O_WRONLY );
+        }
+    }
+    flock(s_vid_enc_open_flock_fd[soc_idx], LOCK_EX);
+#elif _WIN32
+    if (s_vid_enc_open_flock_fd[soc_idx] == NULL) {
+        sprintf(flock_name, "%s%d", VID_OPEN_ENC_FLOCK_NAME, soc_idx);
+        BM_VPU_LOG("flock_name : .. %s\n", flock_name);
+        umask(0000);
+        s_vid_enc_open_flock_fd[soc_idx] = CreateMutex(NULL, FALSE, flock_name);
+    }
+    WaitForSingleObject(s_vid_enc_open_flock_fd[soc_idx], INFINITE);
+#endif
+}
+void unlock_flock(int soc_idx)
+{
+#ifdef __linux__
+    if(s_vid_enc_open_flock_fd[soc_idx] == -1) {
+#elif _WIN32
+    if (s_vid_enc_open_flock_fd[soc_idx] == NULL) {
+#endif
+        printf("vid unlock flock failed....\n");
+     }
+     else {
+#ifdef __linux__
+        flock(s_vid_enc_open_flock_fd[soc_idx], LOCK_UN);
+        close(s_vid_enc_open_flock_fd[soc_idx]);
+        s_vid_enc_open_flock_fd[soc_idx] = -1;
+#elif _WIN32
+        ReleaseMutex(s_vid_enc_open_flock_fd[soc_idx]);
+        CloseHandle(s_vid_enc_open_flock_fd[soc_idx]);
+        s_vid_enc_open_flock_fd[soc_idx] = NULL;
+#endif
+
+
+     }
+}
+
+
+
 static void bm_handle_lock()
 {
 #ifdef __linux__
@@ -100,6 +152,7 @@ static void bm_handle_lock()
     }
 #endif
 }
+
 
 static void bm_handle_unlock()
 {
@@ -267,18 +320,9 @@ int bmvpu_enc_load(int soc_idx)
     int ret = BM_VPU_ENC_RETURN_CODE_OK;
 
     /* Enter critical region */
-#ifdef __linux__
-//    while (atomic_flag_test_and_set(&bmve_atomic_lock))
-    while (__atomic_test_and_set(&bmve_atomic_lock, __ATOMIC_SEQ_CST))
-    {
-        sleep(1);
-    }
-#endif
-#ifdef _WIN32
-    while (InterlockedCompareExchange(&bmve_atomic_lock, 1, 0)) {
-        Sleep(1000);
-    }
-#endif
+
+   get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
+
 
     BM_VPU_LOG("VPU at Sophon device [%d] init", soc_idx);
 
@@ -289,6 +333,7 @@ int bmvpu_enc_load(int soc_idx)
     {
         BM_VPU_ERROR("loading VPU failed");
         ret = BM_VPU_ENC_RETURN_CODE_ERROR;
+        unlock_flock(soc_idx);
         goto cleanup;
     }
 
@@ -301,13 +346,6 @@ int bmvpu_enc_load(int soc_idx)
 
 cleanup:
     /* Leave critical region */
-#ifdef __linux__
-//    atomic_flag_clear(&bmve_atomic_lock);
-    __atomic_clear(&bmve_atomic_lock, __ATOMIC_SEQ_CST);
-#endif
-#ifdef _WIN32
-    InterlockedExchange(&bmve_atomic_lock,0);
-#endif
 
     return ret;
 }
@@ -317,20 +355,10 @@ int bmvpu_enc_unload(int soc_idx)
     int ret = BM_VPU_ENC_RETURN_CODE_OK;
 
     /* Enter critical region */
-#ifdef __linux__
-//    while (atomic_flag_test_and_set(&bmve_atomic_lock))
-    while (__atomic_test_and_set(&bmve_atomic_lock, __ATOMIC_SEQ_CST))
-    {
-        sleep(1);
-    }
-#endif
-#ifdef _WIN32
 
-    timeEndPeriod(1);
-    while (InterlockedCompareExchange(&bmve_atomic_lock, 1, 0)) {// linux initial value false
-        Sleep(1000);
-    }
-#endif
+    get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
+
+
 
     BM_VPU_LOG("VPU at Sophon device [%d] deinit", soc_idx);
 
@@ -341,13 +369,8 @@ int bmvpu_enc_unload(int soc_idx)
     bmvpu_enc_unload_bmlib_handle(soc_idx);
 
     /* Leave critical region */
-#ifdef __linux__
 //    atomic_flag_clear(&bmve_atomic_lock);
-    __atomic_clear(&bmve_atomic_lock, __ATOMIC_SEQ_CST);
-#endif
-#ifdef _WIN32
-    InterlockedExchange(&bmve_atomic_lock,0);
-#endif
+    unlock_flock(soc_idx);
 
     return ret;
 }
@@ -601,6 +624,7 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
 
     if((encoder == NULL) || (open_params == NULL) || (bs_dmabuffer == NULL)){
         BM_VPU_ERROR("bmvpu_enc_open params err: encoder(0X%x), open_params(0X%x), bs_dmabuffer(0X%x)", encoder, open_params, bs_dmabuffer);
+        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
     }
 
@@ -608,6 +632,7 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     int size = bs_dmabuffer->size;
     if (size < VPU_ENC_BITSTREAM_BUFFER_SIZE) {
         BM_VPU_ERROR("Get bs_dmabuffer buffer size failed: size=%d",size);
+        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
 
@@ -620,13 +645,17 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
 #endif
     ret = bmvpu_enc_check_open_params(open_params);
     if (ret != BM_VPU_ENC_RETURN_CODE_OK)
+    {
+        unlock_flock(soc_idx);
         return ret;
+    }
 
     /* Allocate encoder instance */
     *encoder = malloc(sizeof(BmVpuEncoder));
     if ((*encoder) == NULL)
     {
         BM_VPU_ERROR("allocating memory for encoder object failed");
+        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
 
@@ -817,12 +846,14 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     (*encoder)->cqp          = open_params->cqp;
 
 finish:
+    unlock_flock(soc_idx);
     if (ret == BM_VPU_ENC_RETURN_CODE_OK)
         BM_VPU_DEBUG("successfully opened encoder");
 
     return ret;
 
 cleanup:
+    unlock_flock(soc_idx);
 #ifndef BM_PCIE_MODE
     bm_mem_unmap_device_mem(bmvpu_enc_get_bmlib_handle((*encoder)->soc_idx), (void *)((*encoder)->bs_virt_addr), bm_mem_get_device_size(*bs_dmabuffer)); 
 #endif

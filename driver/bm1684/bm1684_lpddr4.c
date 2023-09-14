@@ -164,9 +164,46 @@ static inline void dwc_exec_fw(struct bm_device_info *bmdi, int cfg_base, u32 tr
 	dwc_phy_apb_write16(bmdi, cfg_base, 0xd0099, 0x1); // DWC_DDRPHYA_APBONLY0_MicroReset
 	// [dwc_ddrphy_phyinit_G_execFW] End of dwc_ddrphy_phyinit_G_execFW ()
 }
+
+/*
+ * flag != 0, the chip is the chip of sc5+ v2, overide MR11 from 14 to 23
+ * flag = 0, ddr data write done, roll back the data from 23 to 14 to avoid the influence of this change for other card type
+*/
+static void ddr_change_sc5v2(int flag)
+{
+	if (flag){
+		lpddr4x_train1d_dmem[27] = 0x1b23;
+		lpddr4x_train1d_dmem[33] = 0x1b23;
+		lpddr4x_train1d_dmem[52] = 0x2300;
+		lpddr4x_train1d_dmem[58] = 0x2300;
+
+		lpddr4x_train2d_dmem[27] = 0x1b23;
+		lpddr4x_train2d_dmem[33] = 0x1b23;
+		lpddr4x_train2d_dmem[52] = 0x2300;
+		lpddr4x_train2d_dmem[58] = 0x2300;
+	} else {
+		lpddr4x_train1d_dmem[27] = 0x1b14;
+		lpddr4x_train1d_dmem[33] = 0x1b14;
+		lpddr4x_train1d_dmem[52] = 0x1400;
+		lpddr4x_train1d_dmem[58] = 0x1400;
+
+		lpddr4x_train2d_dmem[27] = 0x1b14;
+		lpddr4x_train2d_dmem[33] = 0x1b14;
+		lpddr4x_train2d_dmem[52] = 0x1400;
+		lpddr4x_train2d_dmem[58] = 0x1400;
+	}
+}
+
 static int ddr_training(struct bm_device_info *bmdi, u32 cfg_base, u32 train)
 {
 	u32 i, train_addr;
+
+#define change 		1
+#define roll_back 	0
+	// change MR11=14 to MR11=23 if the card type is SC5+ V2
+	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS && BM1684_HW_VERSION(bmdi) == 0x3){
+		ddr_change_sc5v2(change);
+	}
 
 	if (train == T1D) {
 		//2 load 1d-imem
@@ -218,6 +255,11 @@ static int ddr_training(struct bm_device_info *bmdi, u32 cfg_base, u32 train)
 		: "2");
 
 		dwc_exec_fw(bmdi, cfg_base, T2D);
+	}
+
+	// make sure that only current chip's MR11=14 has been changed
+	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS && BM1684_HW_VERSION(bmdi) == 0x3){
+		ddr_change_sc5v2(roll_back);
 	}
 
 	return 0;

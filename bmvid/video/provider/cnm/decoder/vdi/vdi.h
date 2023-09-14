@@ -257,7 +257,7 @@ extern "C" {
 
     int vdi_resume_kernel_reset(u64 core_idx);
     int vdi_disable_kernel_reset(u64 core_idx);
-
+    int vdi_get_kernel_reset(u64 coreIdx);
 #if defined(SUPPORT_SW_UART) || defined(SUPPORT_SW_UART_V2)
     int vdi_get_task_num(u64 core_idx);
 #endif

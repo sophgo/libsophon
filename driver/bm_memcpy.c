@@ -10,6 +10,7 @@
 #include "vpu/vpu.h"
 #include "bm_gmem.h"
 #include "bm1684/bm1684_jpu.h"
+#include "bm1684/bm1684_pcie.h"
 
 int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 {
@@ -18,6 +19,7 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 
 	init_completion(&memcpy_info->cdma_done);
 	mutex_init(&memcpy_info->cdma_mutex);
+	mutex_init(&memcpy_info->p2p_mutex);
 
 	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_s2d);
 	if (ret < 0)
@@ -538,3 +540,56 @@ int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long a
 	}
 	return ret;
 }
+
+#ifndef SOC_MODE
+int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
+{
+	int ret = 0;
+	struct bm_memcpy_p2p_param memcpy_param;
+	u64 bar4_addr;
+	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
+	bm_cdma_arg cdma_arg;
+	struct bm_device_info *chip_bmdi = NULL;
+	int bar4_size = 0x100000;
+	int trans_over = 0;
+	int i;
+	int size, trans_size;
+	int init_index;
+
+	ret = copy_from_user(&memcpy_param, (const struct bm_memcpy_p2p_param __user *)arg,
+			sizeof(memcpy_param));
+	if (ret) {
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+		return ret;
+	}
+
+	init_index = bmdi->bmcd->card_bmdi[0]->dev_index;
+
+	chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
+	bar4_addr = chip_bmdi->cinfo.bar_info.bar4_start;
+	size = memcpy_param.size;
+
+	mutex_lock(&chip_bmdi->memcpy_info.p2p_mutex);
+	for(i=0; trans_over == 0; i++) {
+		if (size > bar4_size) {
+			size -= bar4_size;
+			trans_size = bar4_size;
+		} else {
+			trans_size = size;
+			trans_over = 1;
+		}
+
+		bm1684_map_bar_p2p(chip_bmdi, memcpy_param.dst_device_addr + i*bar4_size);
+
+		bmdev_construct_cdma_arg(&cdma_arg, memcpy_param.src_device_addr + i*bar4_size,
+			bar4_addr, trans_size, CHIP2HOST, memcpy_param.intr, false);
+		if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+			pr_info("bm_cdma_transfer error\n");
+			return -EBUSY;
+		}
+	}
+	mutex_unlock(&chip_bmdi->memcpy_info.p2p_mutex);
+
+	return ret;
+}
+#endif

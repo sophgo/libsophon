@@ -73,7 +73,7 @@ VPU as an address on physical address space.
 */
 #ifdef  __aarch64__
 typedef Uint64 PhysicalAddress;
-#elif defined (__sw_64__) || defined(__loongarch64)
+#elif defined (__sw_64__) || defined(__loongarch64) || defined(__riscv)
 typedef Uint64 PhysicalAddress;
 #else // level2
   #if defined(__amd64__) || defined(__x86_64__) || (defined(__mips__) && (__mips == 64))

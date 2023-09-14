@@ -126,6 +126,11 @@ typedef struct bm_api_get_log {
     u64 reserve;
 } bm_api_get_log_t;
 
+typedef struct bm_veth_ip {
+    u32 ip;
+    u32 mask;
+} bm_veth_ip_t;
+
 #pragma pack()
 #ifdef __linux__
 bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
@@ -134,6 +139,8 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
 bm_status_t bm_setup_veth(bm_handle_t handle);
 bm_status_t bm_remove_veth(bm_handle_t handle);
 bm_status_t bm_force_reset_bmcpu(bm_handle_t handle);
+bm_status_t bm_set_ip(bm_handle_t handle, struct bm_veth_ip ip_mask);
+bm_status_t bm_set_gate(bm_handle_t handle, unsigned int gate);
 bm_status_t bmcpu_set_arm9_fw_mode(bm_handle_t handle, bm_arm9_fw_mode mode);
 bm_status_t bmcpu_load_boot(bm_handle_t handle, char *boot_file);
 bm_status_t bmcpu_load_kernel(bm_handle_t handle, char *kernel_file);

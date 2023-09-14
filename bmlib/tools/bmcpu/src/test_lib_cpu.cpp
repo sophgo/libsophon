@@ -2,9 +2,35 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
-#include <sys/syscall.h>
-#include <sys/time.h>
 #include <bmlib_runtime.h>
+
+#ifdef __linux__
+#include <sys/time.h>
+#include <sys/syscall.h>
+#else
+#include <windows.h>
+
+int gettimeofday(struct timeval * tp, struct timezone * tzp)
+{
+    // Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970
+    static const unsigned long int EPOCH = ((unsigned long int) 116444736000000000ULL);
+
+    SYSTEMTIME  system_time;
+    FILETIME    file_time;
+    unsigned long int    time;
+
+    GetSystemTime( &system_time );
+    SystemTimeToFileTime( &system_time, &file_time );
+    time =  ((unsigned long int)file_time.dwLowDateTime )      ;
+    time += ((unsigned long int)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec  = (long) ((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long) (system_time.wMilliseconds * 1000);
+    return 0;
+}
+#endif
 
 int g_devid = 0;
 char g_library_file[100];

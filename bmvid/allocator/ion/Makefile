@@ -14,6 +14,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64)
 CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
 CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_riscv64)
+CROSS_CC_PREFIX =
 else
 CROSS_CC_PREFIX = aarch64-linux-gnu-
 endif

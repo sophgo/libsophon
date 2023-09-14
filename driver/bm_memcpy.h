@@ -43,6 +43,7 @@ struct bm_memcpy_info {
 
 	struct completion cdma_done;
 	struct mutex cdma_mutex;
+	struct mutex p2p_mutex;
 	int cdma_max_payload;
 
 	struct iommu_ctrl iommuctl;
@@ -63,6 +64,15 @@ struct bm_memcpy_param {
 	bm_cdma_iommu_mode cdma_iommu_mode;
 };
 
+struct bm_memcpy_p2p_param {
+    u64 src_device_addr;
+    u64 dst_device_addr;
+    u64 dst_num;
+    u32 size;
+    bool intr;
+    bm_cdma_iommu_mode cdma_iommu_mode;
+};
+
 void bmdev_construct_cdma_arg(pbm_cdma_arg parg, u64 src, u64 dst, u64 size, MEMCPY_DIR dir,
 		bool intr, bool use_iommu);
 int bmdrv_memcpy_init(struct bm_device_info *bmdi);
@@ -73,6 +83,7 @@ int bmdrv_stagemem_release(struct bm_device_info *bmdi, struct bm_stagemem *stag
 int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppaddr, void **pvaddr);
 int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size);
 int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
+int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size);
 int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size);
 int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,

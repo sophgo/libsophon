@@ -7,10 +7,10 @@
 #include "bmlib_runtime.h"
 #include "bmlib_internal.h"
 #include "gflags/gflags.h"
+#include <pthread.h>
 #ifdef __linux__
 #include <sys/time.h>
 #include <unistd.h>
-#include <pthread.h>
 #else
 #undef false
 #undef true
@@ -560,7 +560,12 @@ static int validate_firmware_and_board_type(bm_handle_t handle, Bin_buffer *bin_
     free(board_type);
     return -1;
   }
+
+  if (strcmp(board_type, "SC5R") == 0) {
+	  strcpy(board_type, "SC5+");
+  }
   printf("board type=%s\n", board_type);
+
   for (j = 0; strcmp(firmware_table[i].type[j], "Error") != 0; j++) {
     if (strcmp(board_type, firmware_table[i].type[j]) == 0) {
       free(board_name);

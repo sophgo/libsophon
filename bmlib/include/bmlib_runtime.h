@@ -216,6 +216,18 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
 bm_status_t tpu_kernel_unload_module(bm_handle_t handle, tpu_kernel_module_t p_module);
 
 /**
+ * @name    tpu_kernel_free_module
+ * @brief   To free p_module when not use
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  p_module        dyn lib ptr
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_module);
+
+/**
  * @name    tpu_kernel_load_module
  * @brief   To load dyn module
  * @ingroup bmlib_runtime
@@ -768,6 +780,21 @@ DECL_EXPORT void bm_gmem_arm_reserved_release(bm_handle_t handle);
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src);
+
+/**
+ * @name    bm_memcpy_p2p
+ * @brief   To copy data from one chip to another chip
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle_src The source device handle
+ * @param [in] src        The source memory (device memory descriptor )
+ * @param [in] handle_dst The destination device handle
+ * @param [in] dst        The destination memory (device memory descriptor )
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_p2p(bm_handle_t handle_src, bm_device_mem_t src, bm_handle_t handle_dst,bm_device_mem_t dst);
 
 /**
  * @name    sg_memcpy_s2d
@@ -1914,30 +1941,6 @@ DECL_EXPORT bm_status_t bmcpu_close_process(bm_handle_t handle, int process_hand
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bmcpu_reset_cpu(bm_handle_t handle);
-
-/**
- * @name    bm_set_ip
- * @brief   set ip in mix mode
- * @ingroup bmlib_log
- *
- * @param [in]  handle          The device handle
- * @param [in]  ip   The ip of mximode device
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_set_ip(bm_handle_t handle, unsigned int ip);
-
-/**
- * @name    bm_set_gate
- * @brief   set default gateway in mix mode
- * @ingroup bmlib_log
- *
- * @param [in]  handle          The device handle
- * @param [in]  ip   The gateway of mximode device
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_set_gate(bm_handle_t handle, unsigned int gate);
 
 /**
  * @name    bm_enable_perf_monitor

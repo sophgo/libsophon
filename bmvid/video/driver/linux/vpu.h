@@ -56,7 +56,7 @@
 #define VDI_IOCTL_GET_CHIP_ID                    _IO(VDI_IOCTL_MAGIC, 32)
 #define VDI_IOCTL_GET_MAX_CORE_NUM               _IO(VDI_IOCTL_MAGIC, 33)
 #define VDI_IOCTL_CTRL_KERNEL_RESET              _IO(VDI_IOCTL_MAGIC, 34)
-
+#define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
 typedef struct vpudrv_syscxt_info_s {
     unsigned int core_idx;
     unsigned int inst_idx;
