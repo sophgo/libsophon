@@ -15,6 +15,9 @@
 #include <windows.h>
 #include "time.h"
 #endif
+#ifdef __riscv
+#include <cstdint>
+#endif
 
 using namespace std;
 
@@ -571,6 +574,8 @@ DWORD WINAPI test_bmblas_gemm_random(LPVOID args) {
             beta  = (rand() % 100) * 0.05;
         }
 #endif
+        unsigned int chipid = BM1684X;
+        bm_get_chipid(handle, &chipid);
         for (int i = 0; i < 4; i++)
         { // traverse all cominations of trans params
             is_A_trans = i % 2;
@@ -581,7 +586,8 @@ DWORD WINAPI test_bmblas_gemm_random(LPVOID args) {
                 alpha *= (j % 2) * 2 - 1;
                 beta *= (j / 2) * 2 - 1;
                 test_bmblas_gemm(handle, M, N, K, alpha, beta, is_A_trans, is_B_trans);
-                test_bmblas_gemm_ext(handle, M, N, K, alpha, beta, is_A_trans, is_B_trans);
+                if(chipid == BM1684X)
+                    test_bmblas_gemm_ext(handle, M, N, K, alpha, beta, is_A_trans, is_B_trans);
             }
         }
     }

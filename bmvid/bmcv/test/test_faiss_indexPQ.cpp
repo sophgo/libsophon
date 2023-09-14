@@ -1,4 +1,5 @@
 #include "bmcv_api_ext.h"
+#include "test_misc.h"
 #include <iostream>
 #include <random>
 #include <memory>
@@ -365,7 +366,9 @@ bm_status_t faiss_indexPQ_ADC_test(
     int k,
     int seed,
     int IP_metric,
-    int show_result)
+    int show_result,
+    int input_dtype,
+    int output_dtype)
 {
     bm_handle_t handle;
     bm_status_t ret = BM_SUCCESS;
@@ -383,10 +386,14 @@ bm_status_t faiss_indexPQ_ADC_test(
     std::uniform_int_distribution<int> dist_index(0, 255);
 
     std::cout << "------------set input-----------" << std::endl;
-    float *centroids_input_sys = new float[m * ks * ds];
-    float *nxquery_input_sys = new float[nx * d];
+    int round = 1;
+    fp16 *centroids_input_sys_fp16 = new fp16[m * ks * ds];
+    fp16 *nxquery_input_sys_fp16 = new fp16[nx * d];
+    float *centroids_input_sys_fp32 = new float[m * ks * ds];
+    float *nxquery_input_sys_fp32 = new float[nx * d];
+
     unsigned char *nycodes_input_sys = new unsigned char[ny * m];
-    float *distance_output_sys = new float[nx * ny];
+    unsigned char *distance_output_sys = new unsigned char[nx * ny * dtype_size((data_type_t)output_dtype)];
     int *index_output_sys = new int[nx * ny];
 
     for (int i = 0; i < m; i++)
@@ -395,7 +402,8 @@ bm_status_t faiss_indexPQ_ADC_test(
         {
             for (int k = 0; k < ds; k++)
             {
-                centroids_input_sys[i * ds * ks + j * ds + k] = dist_value(rng);
+                centroids_input_sys_fp32[i * ds * ks + j * ds + k] = dist_value(rng);
+                centroids_input_sys_fp16[i * ds * ks + j * ds + k] = fp32tofp16(centroids_input_sys_fp32[i * ds * ks + j * ds + k], round);
             }
         }
     }
@@ -403,7 +411,8 @@ bm_status_t faiss_indexPQ_ADC_test(
     {
         for (int j = 0; j < d; j++)
         {
-            nxquery_input_sys[i * d + j] = dist_value(rng);
+            nxquery_input_sys_fp32[i * d + j] = dist_value(rng);
+            nxquery_input_sys_fp16[i * d + j] = fp32tofp16(nxquery_input_sys_fp32[i * d + j], round);
         }
     }
     for (int i = 0; i < ny; i++)
@@ -420,11 +429,11 @@ bm_status_t faiss_indexPQ_ADC_test(
     bm_device_mem_t nycodes_input_dev;
     bm_device_mem_t distance_output_dev;
     bm_device_mem_t index_output_dev;
+    int centroids_size = m * ks * ds * dtype_size((data_type_t)input_dtype);
+    int nxquery_size = nx * d * dtype_size((data_type_t)input_dtype);
 
-    int centroids_size = m * ks * ds * sizeof(float);
-    int nxquery_size = nx * d * sizeof(float);
     int nycodes_size = ny * m * sizeof(char);
-    int distance_size = nx * ny * sizeof(float);
+    int distance_size = nx * ny * dtype_size((data_type_t)output_dtype);
     int index_size = nx * ny * sizeof(int);
 
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &centroids_input_dev, centroids_size));
@@ -432,20 +441,24 @@ bm_status_t faiss_indexPQ_ADC_test(
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &nycodes_input_dev, nycodes_size));
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &distance_output_dev, distance_size));
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &index_output_dev, index_size));
-
-    BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, centroids_input_dev, centroids_input_sys));
-    BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nxquery_input_dev, nxquery_input_sys));
+    if (input_dtype == DT_FP16) {
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, centroids_input_dev, centroids_input_sys_fp16));
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nxquery_input_dev, nxquery_input_sys_fp16));
+    } else {
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, centroids_input_dev, centroids_input_sys_fp32));
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nxquery_input_dev, nxquery_input_sys_fp32));
+    }
     BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nycodes_input_dev, nycodes_input_sys));
 
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
-    ret = bmcv_faiss_indexPQ_ADC(handle,
+    ret = bmcv_faiss_indexPQ_ADC_ext(handle,
                            centroids_input_dev,
                            nxquery_input_dev,
                            nycodes_input_dev,
                            distance_output_dev,
                            index_output_dev,
-                           d, m, ks, ny, nx, k, IP_metric);
+                           d, m, ks, ny, nx, k, IP_metric, input_dtype, output_dtype);
     gettimeofday(&t2, NULL);
     std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
     std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
@@ -457,8 +470,10 @@ bm_status_t faiss_indexPQ_ADC_test(
         bm_free_device(handle, distance_output_dev);
         bm_free_device(handle, index_output_dev);
 
-        delete[] centroids_input_sys;
-        delete[] nxquery_input_sys;
+        delete[] centroids_input_sys_fp32;
+        delete[] centroids_input_sys_fp16;
+        delete[] nxquery_input_sys_fp32;
+        delete[] nxquery_input_sys_fp16;
         delete[] nycodes_input_sys;
         delete[] distance_output_sys;
         delete[] index_output_sys;
@@ -477,7 +492,11 @@ bm_status_t faiss_indexPQ_ADC_test(
         {
             std::cout << "top:" << i + 1 << std::endl;
             std::cout << "index:" << index_output_sys[i] << "\t";
-            std::cout << "distance:" << distance_output_sys[i];
+            if (output_dtype == DT_FP16) {
+                std::cout << "distance:" << fp16tofp32(((fp16*)distance_output_sys)[i]);
+            } else {
+                std::cout << "distance:" << ((float*)distance_output_sys)[i];
+            }
             std::cout << std::endl;
         }
     }
@@ -488,8 +507,10 @@ bm_status_t faiss_indexPQ_ADC_test(
     bm_free_device(handle, distance_output_dev);
     bm_free_device(handle, index_output_dev);
 
-    delete[] centroids_input_sys;
-    delete[] nxquery_input_sys;
+    delete[] centroids_input_sys_fp32;
+    delete[] centroids_input_sys_fp16;
+    delete[] nxquery_input_sys_fp32;
+    delete[] nxquery_input_sys_fp16;
     delete[] nycodes_input_sys;
     delete[] distance_output_sys;
     delete[] index_output_sys;
@@ -506,7 +527,9 @@ bm_status_t faiss_indexPQ_SDC_test(
     int k,
     int seed,
     int IP_metric,
-    int show_result)
+    int show_result,
+    int input_dtype,
+    int output_dtype)
 {
     bm_handle_t handle;
     bm_status_t ret = BM_SUCCESS;
@@ -523,10 +546,13 @@ bm_status_t faiss_indexPQ_SDC_test(
     std::uniform_real_distribution<float> dist_value(0, 20);
     std::uniform_int_distribution<int> dist_index(0, 255);
 
-    float *sdc_table_input_sys = new float[m * ks * ks];
+    int round = 1;
+    fp16 *sdc_table_input_sys_fp16 = new fp16[m * ks * ks];
+    float *sdc_table_input_sys_fp32 = new float[m * ks * ks];
+
     unsigned char *nxcodes_input_sys = new unsigned char[nx * m];
     unsigned char *nycodes_input_sys = new unsigned char[ny * m];
-    float *distance_output_sys = new float[nx * ny];
+    unsigned char *distance_output_sys = new unsigned char[nx * ny * dtype_size((data_type_t)output_dtype)];
     int *index_output_sys = new int[nx * ny];
 
     for (int i = 0; i < m; i++)
@@ -537,15 +563,18 @@ bm_status_t faiss_indexPQ_SDC_test(
             {
                 if (k > j)
                 {
-                    sdc_table_input_sys[i * ks * ks + j * ks + k] = dist_value(rng);
+                    sdc_table_input_sys_fp32[i * ks * ks + j * ks + k] = dist_value(rng);
+                    sdc_table_input_sys_fp16[i * ks * ks + j * ks + k] = fp32tofp16(sdc_table_input_sys_fp32[i * ks * ks + j * ks + k], round);
                 }
                 else if (k < j)
                 {
-                    sdc_table_input_sys[i * ks * ks + j * ks + k] =  sdc_table_input_sys[i * ks * ks + k * ks + j];
+                    sdc_table_input_sys_fp32[i * ks * ks + j * ks + k] =  sdc_table_input_sys_fp32[i * ks * ks + k * ks + j];
+                    sdc_table_input_sys_fp16[i * ks * ks + j * ks + k] =  sdc_table_input_sys_fp16[i * ks * ks + k * ks + j];
                 }
                 else
                 {
-                    sdc_table_input_sys[i * ks * ks + j * ks + k] =  0;
+                    sdc_table_input_sys_fp32[i * ks * ks + j * ks + k] =  0;
+                    sdc_table_input_sys_fp16[i * ks * ks + j * ks + k] =  fp32tofp16(0, round);
                 }
             }
         }
@@ -565,11 +594,12 @@ bm_status_t faiss_indexPQ_SDC_test(
         }
     }
 
-    int sdc_table_size = m * ks * ks * sizeof(float);
+    int sdc_table_size = m * ks * ks * dtype_size((data_type_t)input_dtype);
+
     int nxcodes_size = nx * m * sizeof(char);
     int nycodes_size = ny * m * sizeof(char);
-    int output_distance_size = nx * ny * sizeof(float);
-    int output_index_size = nx * ny * sizeof(int);
+    int output_distance_size = nx * ny * dtype_size((data_type_t)output_dtype);
+    int output_index_size = nx * ny * dtype_size((data_type_t)output_dtype);
 
     bm_device_mem_t sdc_table_input_dev;
     bm_device_mem_t nxcodes_input_dev;
@@ -583,19 +613,23 @@ bm_status_t faiss_indexPQ_SDC_test(
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &distance_output_dev, output_distance_size));
     BMLIB_SAFE_CALL(bm_malloc_device_byte(handle, &index_output_dev, output_index_size));
 
-    BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, sdc_table_input_dev, sdc_table_input_sys));
+    if (input_dtype == DT_FP16) {
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, sdc_table_input_dev, sdc_table_input_sys_fp16));
+    } else {
+        BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, sdc_table_input_dev, sdc_table_input_sys_fp32));
+    }
     BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nxcodes_input_dev, nxcodes_input_sys));
     BMLIB_SAFE_CALL(bm_memcpy_s2d(handle, nycodes_input_dev, nycodes_input_sys));
 
     struct timeval t1, t2;
     gettimeofday(&t1, NULL);
-    ret = bmcv_faiss_indexPQ_SDC(handle,
+    ret = bmcv_faiss_indexPQ_SDC_ext(handle,
                            sdc_table_input_dev,
                            nxcodes_input_dev,
                            nycodes_input_dev,
                            distance_output_dev,
                            index_output_dev,
-                           m, ks, ny, nx, k, IP_metric);
+                           m, ks, ny, nx, k, IP_metric, input_dtype, output_dtype);
     gettimeofday(&t2, NULL);
     std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
     std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
@@ -607,7 +641,8 @@ bm_status_t faiss_indexPQ_SDC_test(
         bm_free_device(handle, distance_output_dev);
         bm_free_device(handle, index_output_dev);
 
-        delete[] sdc_table_input_sys;
+        delete[] sdc_table_input_sys_fp32;
+        delete[] sdc_table_input_sys_fp16;
         delete[] nxcodes_input_sys;
         delete[] nycodes_input_sys;
         delete[] distance_output_sys;
@@ -626,8 +661,12 @@ bm_status_t faiss_indexPQ_SDC_test(
         for (int i = 0; i < k; i++)
         {
             std::cout << "top:" << i + 1 << std::endl;
-            std::cout << "index:" << index_output_sys[i] << "\t";
-            std::cout << "distance:" << distance_output_sys[i];
+            std::cout << "index:" << ((int*)index_output_sys)[i] << "\t";
+            if (output_dtype == DT_FP16) {
+                std::cout << "distance:" << fp16tofp32(((fp16*)distance_output_sys)[i]);
+            } else {
+                std::cout << "distance:" << ((float*)distance_output_sys)[i];
+            }
             std::cout << std::endl;
         }
     }
@@ -638,7 +677,8 @@ bm_status_t faiss_indexPQ_SDC_test(
     bm_free_device(handle, distance_output_dev);
     bm_free_device(handle, index_output_dev);
 
-    delete[] sdc_table_input_sys;
+    delete[] sdc_table_input_sys_fp32;
+    delete[] sdc_table_input_sys_fp16;
     delete[] nxcodes_input_sys;
     delete[] nycodes_input_sys;
     delete[] distance_output_sys;
@@ -662,6 +702,8 @@ int main(int argc, char *args[])
     int is_sdc = 0;
     int IP_metric = 0;
     int show_result = 0;
+    int idtype = DT_FP32;
+    int odtype = DT_FP32;
 
     int nbits = 8;
     int ksub = 1 << nbits;
@@ -674,6 +716,8 @@ int main(int argc, char *args[])
     if (argc > 6) is_sdc = atoi(args[6]);
     if (argc > 7) IP_metric = atoi(args[7]);
     if (argc > 8) show_result = atoi(args[8]);
+    if (argc > 7) idtype = atoi(args[9]);
+    if (argc > 8) odtype = atoi(args[10]);
 
     std::cout << "------------parameter------------" << std::endl;
     std::cout << "database_num: " << ny << std::endl;
@@ -685,7 +729,8 @@ int main(int argc, char *args[])
     std::cout << "ip_metric:    " << IP_metric << std::endl;
     std::cout << "show_result:  " << show_result << std::endl;
     std::cout << "random_seed:  " << seed << std::endl;
-
+	std::cout << "input dtype:  " << (idtype == DT_FP32?"fp32":"fp16") << std::endl;
+    std::cout << "output dtype: " << (odtype == DT_FP32?"fp32":"fp16") << std::endl;
 #if TEST_WITH_FAISS
     if (is_sdc)
     {
@@ -707,7 +752,7 @@ int main(int argc, char *args[])
 
     if (is_sdc)
     {
-        if (BM_SUCCESS != faiss_indexPQ_SDC_test(ny, nx, m, ksub, k, seed, IP_metric, show_result))
+        if (BM_SUCCESS != faiss_indexPQ_SDC_test(ny, nx, m, ksub, k, seed, IP_metric, show_result, idtype, odtype))
         {
             printf("test faiss_indexPQ_SDC failed! \n");
             return -1;
@@ -717,7 +762,7 @@ int main(int argc, char *args[])
     }
     else
     {
-        if (BM_SUCCESS != faiss_indexPQ_ADC_test(ny, nx, d, m, ksub, d/m, k, seed, IP_metric, show_result))
+        if (BM_SUCCESS != faiss_indexPQ_ADC_test(ny, nx, d, m, ksub, d/m, k, seed, IP_metric, show_result, idtype, odtype))
         {
             printf("test faiss_indexPQ_ADC failed \n");
             return -1;

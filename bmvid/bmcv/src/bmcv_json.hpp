@@ -263,7 +263,7 @@ shared_ptr<JsonBase> JsonParser::parse_object(CCharArray &s) {
         return shared_ptr<JsonBase>(res);
     }
 
-    while (current_char != EOF) {
+    while (current_char != static_cast<char>(EOF)) {
         assert(current_char == '\"');
         string key = (dynamic_cast<JsonString *>(parse_string(s).get()))->value;
         shared_ptr<JsonBase> value;
@@ -350,7 +350,7 @@ shared_ptr<JsonBase> JsonParser::parse_number(CCharArray &s) {
     assert(current_char == '-' || isdigit(current_char));
     set<char> special = {'+', '-', '.', 'e'};
     // we do not check whether the number is illegal here
-    while (current_char != EOF &&
+    while (current_char != static_cast<char>(EOF) &&
            (isdigit(current_char) ||
             (special.find(current_char) != special.end()))) {
         os << current_char;

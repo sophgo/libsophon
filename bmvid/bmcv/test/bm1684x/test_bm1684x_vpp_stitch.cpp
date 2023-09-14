@@ -152,7 +152,7 @@ static int check_file_size(char *file_name, FILE **fp, int length) {
 }
 
 int vpp_read_file_pcie(bm_handle_t handle, bm_image* img, void** img_buf_va, char *file_name = NULL) {
-    FILE *fp;
+    FILE *fp = NULL;
     int ret = 0;
     int size = 0, idx = 0, i = 0, rows = 0, cols = 0;
 
@@ -182,8 +182,8 @@ int vpp_read_file_pcie(bm_handle_t handle, bm_image* img, void** img_buf_va, cha
         }
 
         if (check_file_size(file_name, &fp, size) < 0) {
-            fclose(fp);
-            return -1;
+            ret = -1;
+            goto fail;
         }
 
         switch (img->image_format) {
@@ -283,8 +283,6 @@ int vpp_read_file_pcie(bm_handle_t handle, bm_image* img, void** img_buf_va, cha
                   __FILE__, __func__, __LINE__);
                 break;
         }
-
-        fclose(fp);
     }
 
     if (img->image_format == FORMAT_COMPRESSED) {
@@ -321,7 +319,9 @@ int vpp_read_file_pcie(bm_handle_t handle, bm_image* img, void** img_buf_va, cha
 
         }
     }
-
+fail:
+    if (img->image_format != FORMAT_COMPRESSED)
+        fclose(fp);
     return ret;
 }
 

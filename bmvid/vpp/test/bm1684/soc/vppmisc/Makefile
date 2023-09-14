@@ -14,10 +14,11 @@ CROSS_CC_PREFIX = $(CROSS_COMPILE)
 CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
-LDFLAGS := -L$(VPP_LIB_DIR)/release -L$(VPP_LIB_DIR)/lib
-LIBS    := -lvpp -static -lm
+LDFLAGS := -L$(VPP_LIB_DIR)/release -L$(VPP_LIB_DIR)/lib -L$(BMVID_TOP_DIR)/3rdparty/libbmcv/lib/soc/
+LIBS    := -lvpp_cmodel -lvpp
 INCLUDE := -I$(VPP_LIB_DIR)/include/
 INCLUDE += -I$(VPP_LIB_DIR)/include/$(CHIP)
+INCLUDE += -I$(VPP_LIB_DIR)/../..//3rdparty/libbmcv/include/
 DEFINES :=
 
 #DEFINES :=
@@ -33,11 +34,11 @@ endif
 
 # link
 $(TARGET):
-	$(CC) $(DEFINES) -o $@  $(SOURCES) $(LDFLAGS) $(LIBS) $(INCLUDE)
+	$(CXX) $(DEFINES) -o $@  $(SOURCES) $(LDFLAGS) $(LIBS) $(INCLUDE)
 
 #compile
 $(OBJ):$(SOURCES)
-	$(CC) $(INCLUDE) -c $^
+	$(CXX) $(INCLUDE) -c $^
 
 clean:
 	rm -fr *.o

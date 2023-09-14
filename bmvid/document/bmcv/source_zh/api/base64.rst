@@ -57,7 +57,7 @@ base64 网络传输中常用的编码方式，利用64个常用字符来对6位�
         char *src = (char *)malloc((original_len + 3) * sizeof(char));
         char *dst = (char *)malloc((encoded_len + 3) * sizeof(char));
         for (j = 0; j < original_len; j++)
-            a[j] = (char)((rand() % 100) + 1);
+            src[j] = (char)((rand() % 100) + 1);
 
         bm_handle_t handle;
         ret = bm_dev_request(&handle, 0);

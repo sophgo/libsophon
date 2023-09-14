@@ -541,6 +541,8 @@ function build_vpp_lib()
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=loongLinux
     elif [ ${PRODUCTFORM} = "pcie_arm64" ]; then
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=arm64Linux
+    elif [ ${PRODUCTFORM} = "pcie_riscv64" ]; then
+        make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=riscv64Linux
     else
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=x86Linux
     fi
@@ -1003,6 +1005,48 @@ function build_bmcv_test()
     return 0
 }
 
+function build_vpp_cmodel()
+{
+    if [ $CHIP != bm1684 -a $CHIP != bm1686 ]; then
+        echo "For ${CHIP}, ignore build_bmcv_lib()"
+        return 0
+    fi
+
+#    better to execute those dependency manually
+#    build_ion_lib || return $?
+#    build_jpu_lib || return $?
+#    build_vpp_lib || return $?
+
+    if [ -n "$1" ]; then
+        BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
+        MAKE_OPT="USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
+
+    else
+        BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
+        MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
+    fi
+
+    BMCPU_TOOLCHAIN_PATH=$(dirname `which aarch64-linux-gnu-g++`) || {
+            ret=$?
+            echo "Add aarch64 linux toolchain to PATH!"
+            return $ret
+        }
+    BMCPU_CROSS_COMPILE=${BMCPU_TOOLCHAIN_PATH}/aarch64-linux-gnu-g++
+
+    MAKE_OPT="$MAKE_OPT CHIP=$CHIP PRODUCTFORM=$PRODUCTFORM SUBTYPE=$SUBTYPE DEBUG=$DEBUG BMCV_ROOT=${BMVID_TOP_DIR}"
+
+    pushd ${BMVID_TOP_DIR}/bmcv/vpp_cmodel
+    make cmodel_bmcv ${MAKE_OPT} BMCPU_CROSS_COMPILE=$BMCPU_CROSS_COMPILE -j`nproc`
+
+    if [ $? -ne 0 ]; then
+        popd
+        return -1
+    fi
+    popd
+
+    return 0
+}
+
 function clean_bmcv_test()
 {
     if [ $CHIP != bm1684 -a $CHIP != bm1686 ]; then
@@ -1191,6 +1235,11 @@ if [ "$1" = "clean_bmcv_test" ]; then
     exit $?
 fi
 
+if [ "$1" = "build_vpp_cmodel" ]; then
+    build_vpp_cmodel
+    exit $?
+fi
+
 echo "Usage:"
 echo "  $0 build_jpu_driver     -- build jpu driver"
 echo "  $0 clean_jpu_driver     -- clean jpu driver"
@@ -1225,3 +1274,4 @@ echo "  $0 clean_bmcv_lib       -- clean bmcv lib"
 echo "  $0 clean_bmcv_cmode     -- clean bmcv lib for cmodel"
 echo "  $0 build_bmcv_test      -- build bmcv test case"
 echo "  $0 clean_bmcv_test      -- clean bmcv test case"
+echo "  $0 build_vpp_cmodel      -- build bmcv vpp cmodel"

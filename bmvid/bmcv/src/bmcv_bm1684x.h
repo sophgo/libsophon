@@ -210,6 +210,19 @@ typedef struct bm_api_cv_feature_match_fix8b_1684x_st {
   int rshiftbits;
 } bm_api_cv_feature_match_fix8b_1684x_t;
 
+typedef struct bm_api_cv_bayer2rgb {
+    int width;
+    int height;
+    u64 input_addr;
+    u64 output_addr;
+    u64 sys_mem_addr_temp_ul;
+    u64 sys_mem_addr_temp_br;
+    u64 sys_mem_addr_temp_g;
+    u64 input_addr_padding_up_left;
+    u64 input_addr_padding_bottom_right;
+    u64 kernel_addr;
+} bm_api_cv_bayer2rgb_t;
+
 #pragma pack(pop)
 
 }

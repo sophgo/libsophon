@@ -509,7 +509,7 @@ int32_t cv_nms_test_rand(bm_handle_t handle, int box_num) {
 
             if (false == result_compare(nms_proposal, output_proposal)) {
                 delete[] proposal_rand;
-                delete[] output_proposal;
+                delete output_proposal;
                 printf("nms test error !\r\n");
                 exit(-1);
             }

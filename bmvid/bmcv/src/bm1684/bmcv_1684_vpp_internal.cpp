@@ -10,6 +10,9 @@
 #include <memory>
 #include <functional>
 #include "bmcv_common_bm1684.h"
+#ifdef __riscv
+#include <cstdlib>
+#endif
 
 extern void format_to_str(bm_image_format_ext format, char* res);
 static int bm_image_to_vpp_mat(bm_handle_t handle, bm_image image,
@@ -44,7 +47,7 @@ static int bm_image_to_vpp_mat(bm_handle_t handle, bm_image image,
     {
         global_address[i] = bm_mem_get_device_addr(mem[i]);
         if (global_address[i] == 0){
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "no device memory in bmimage %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "no device memory in bmimage %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             return -1;
         }
@@ -202,7 +205,7 @@ static int bm_image_to_vpp_mat(bm_handle_t handle, bm_image image,
             break;
         default:
             ret = -1;
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             break;
     }
@@ -234,7 +237,7 @@ static bool check_address_align(bm_image image, int address_align)
         if(bm_mem_get_device_addr(src_mem[k]) % address_align != 0)
         {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp src addr not aligned, src_addr:%lx, %s: %s: %d\n",
                       bm_mem_get_device_addr(src_mem[k]),
                       filename(__FILE__),
@@ -268,7 +271,7 @@ static bm_status_t bm_image_vpp_check_format_single(
 
     if(bm_image_get_stride(input, input_stride) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -280,7 +283,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         char dst_format[30];
         format_to_str(input.image_format, src_format);
         format_to_str(output_ptr[0][0].image_format, dst_format);
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, \
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
                   "vpp not support conversion from %s to %s %s: %s: %d\n", src_format, dst_format,
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
@@ -288,21 +291,21 @@ static bm_status_t bm_image_vpp_check_format_single(
 
     if(input.width > limitation.width_max || input.width < limitation.width_min)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp src width size not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src width size not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
 
     if(input.height > limitation.height_max || input.height < limitation.height_min)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp src height size not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src height size not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
 
     if(!check_stride(input_stride, input.image_private->plane_num, limitation.src_stride_align))
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp src stride not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src stride not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
 
         return BM_NOT_SUPPORTED;
@@ -310,7 +313,7 @@ static bm_status_t bm_image_vpp_check_format_single(
 
     if(check_address_align(input, limitation.src_address_align) != true)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp src image address not aligned %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src image address not aligned %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
 
         return BM_NOT_SUPPORTED;
@@ -320,7 +323,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (output_ptr[i]->width > limitation.width_max ||
             output_ptr[i]->width < limitation.width_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp dst width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -331,7 +334,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (output_ptr[i]->height > limitation.height_max ||
             output_ptr[i]->height < limitation.height_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp dst height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -342,7 +345,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].crop_w > limitation.width_max ||
             crop_rect[i].crop_w < limitation.width_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp crop_rect width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -353,7 +356,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].crop_h > limitation.height_max ||
             crop_rect[i].crop_h < limitation.height_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp crop_rect height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -364,7 +367,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].start_x < 0 || crop_rect[i].crop_w <= 0 ||
             (crop_rect[i].start_x + crop_rect[i].crop_w > input.width)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp crop_rect width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -375,7 +378,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].start_y < 0 || crop_rect[i].crop_h <= 0 ||
             (crop_rect[i].start_y + crop_rect[i].crop_h > input.height)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp crop_rect height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -388,7 +391,7 @@ static bm_status_t bm_image_vpp_check_format_single(
                 crop_rect[i].crop_w != input.width ||
                 crop_rect[i].crop_h != input.height) {
                 bmlib_log(BMCV_LOG_TAG,
-                          BMLIB_LOG_WARNING,
+                          BMLIB_LOG_ERROR,
                           "vpp not support crop on this format conversion "
                           "situation %s: %s: %d\n",
                           filename(__FILE__),
@@ -401,7 +404,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             if (crop_rect[i].crop_w != output_ptr[i]->width ||
                 crop_rect[i].crop_h != output_ptr[i]->height) {
                 bmlib_log(BMCV_LOG_TAG,
-                          BMLIB_LOG_WARNING,
+                          BMLIB_LOG_ERROR,
                           "vpp not support scale on this format conversion "
                           "situation %s: %s: %d\n",
                           filename(__FILE__),
@@ -416,7 +419,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             (crop_rect[i].crop_h * limitation.zoom_limitation_max <
              output_ptr[i]->height)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp zoom up too much %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -429,7 +432,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             (output_ptr[i]->height * limitation.zoom_limitation_min <
              crop_rect[i].crop_h)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_WARNING,
+                      BMLIB_LOG_ERROR,
                       "vpp zoom down too much %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -445,7 +448,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             output_ptr[i]->height % limitation.dst_height_align != 0) {
             bmlib_log(
                 BMCV_LOG_TAG,
-                BMLIB_LOG_WARNING,
+                BMLIB_LOG_ERROR,
                 "vpp offset / width / height align not match %s: %s: %d\n",
                 filename(__FILE__),
                 __func__,
@@ -473,7 +476,7 @@ bm_status_t pre_process_for_vpp_input(
     int stride[4];
     if(bm_image_get_stride(input, stride) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -486,7 +489,7 @@ bm_status_t pre_process_for_vpp_input(
     if(input.image_format == FORMAT_COMPRESSED && \
          (input.width % limitation.src_width_align !=0 || input.height % limitation.src_height_align !=0))
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "Compressed format could not do any preprocess %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "Compressed format could not do any preprocess %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
         return BM_ERR_PARAM;
     }
@@ -513,7 +516,7 @@ bm_status_t pre_process_for_vpp_input(
     bm_device_mem_t mem[4];
     if(plane_num == 0 || bm_image_get_device_mem(input, mem) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -548,7 +551,7 @@ bm_status_t pre_process_for_vpp_input(
     {
         if(input.image_format == FORMAT_COMPRESSED)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "illegal compressed format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "illegal compressed format %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
             return BM_ERR_PARAM;
         }
@@ -573,7 +576,7 @@ bm_status_t pre_process_for_vpp_input(
 
             if(bm_image_alloc_dev_mem_heap_mask(output->inner[0], 6) != BM_SUCCESS)
             {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "preprocess alloc fail %s: %s: %d\n",
+                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "preprocess alloc fail %s: %s: %d\n",
                         filename(__FILE__), __func__, __LINE__);
                 return BM_ERR_FAILURE;
             }
@@ -813,7 +816,7 @@ bm_status_t pre_process_for_vpp_output_(
     bm_device_mem_t mem[4];
     if(plane_num == 0 || bm_image_get_device_mem(output, mem) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -830,7 +833,7 @@ bm_status_t pre_process_for_vpp_output_(
     int stride[4] = {0};
     if(bm_image_get_stride(output, stride) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -863,7 +866,7 @@ bm_status_t pre_process_for_vpp_output_(
 
         if(bm_image_alloc_dev_mem(dst->inner[0], BMCV_HEAP_ANY) != BM_SUCCESS)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "preprocess alloc fail %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "preprocess alloc fail %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
             return BM_ERR_FAILURE;
         }
@@ -1004,7 +1007,7 @@ bm_status_t check_vpp_output_param(
         if (!limitation.support_scale) {
             if (crop_rect[output_idx].crop_w != dst_crop.crop_w ||
                 crop_rect[output_idx].crop_h != dst_crop.crop_h) {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING,
+                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                           "vpp not support scale on this format conversion "
                           "situation %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
@@ -1159,7 +1162,7 @@ bm_status_t pre_process_for_vpp_output(
         std::shared_ptr<image_warpper> dst;
         if(pre_process_for_vpp_output_(handle, output[k], preprocess, dst, limitation) != BM_SUCCESS)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "preprocess dst fail %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "preprocess dst fail %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
             return BM_ERR_FAILURE;
         }
@@ -1247,7 +1250,7 @@ static bm_status_t bmcv_image_resize_cpu(bm_handle_t handle,
 
     if (bm_vpp_query_limitation(input.image_format, output.image_format,
           limitation) != BM_SUCCESS){
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, \
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
                   "vpp not support format conversion: %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
@@ -1258,7 +1261,7 @@ static bm_status_t bmcv_image_resize_cpu(bm_handle_t handle,
     if (pre_process_for_vpp_input(
             handle, input, pre_processed_input, preprocessed_input,
             limitation, expand_height, expand_width, false) != BM_SUCCESS) {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp process for input failed %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp process for input failed %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -1403,7 +1406,7 @@ static bm_status_t bmcv_image_resize_cpu(bm_handle_t handle,
             dst.format = FMT_NV12;
             break;
         default:
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "resize not support this format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "resize not support this format %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             for (int i = 0; i < plane_num; i++) {
                 free(src_data[i]);
@@ -1427,7 +1430,7 @@ static bm_status_t bmcv_image_resize_cpu(bm_handle_t handle,
             vpp_algorithm = VPP_SCALE_NEAREST;
             break;
         default:
-          bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp cmodel resize only support NEAREST and BILINEAR%s: %s: %d\n",
+          bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp cmodel resize only support NEAREST and BILINEAR%s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
           for (int i = 0; i < plane_num; i++) {
               free(src_data[i]);
@@ -1485,7 +1488,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
 {
     if(input.data_type != DATA_TYPE_EXT_1N_BYTE)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1496,14 +1499,14 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     {
         if(output[i].data_type != DATA_TYPE_EXT_1N_BYTE)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             return BM_NOT_SUPPORTED;
         }
 
         if(data_type != output[i].data_type || image_format != output[i].image_format)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "expected consistant output image format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "expected consistant output image format %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             return BM_NOT_SUPPORTED;
         }
@@ -1537,7 +1540,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
         char dst_format[30];
         format_to_str(input.image_format, src_format);
         format_to_str(output[0].image_format, dst_format);
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, \
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
                   "vpp not support conversion from %s to %s %s: %s: %d\n", src_format, dst_format,
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
@@ -1565,7 +1568,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     if (pre_process_for_vpp_input(
             handle, input, pre_processed_input, preprocessed_input, limitation, expand_height, expand_width) !=
         BM_SUCCESS) {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp process for input failed %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp process for input failed %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -1595,7 +1598,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
 
     if (bm_image_vpp_check_format_single(
             *input_ptr, output_num, crop_rect, output_ptr) != BM_SUCCESS) {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this conversion %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this conversion %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1689,7 +1692,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     int ret = bm_image_to_vpp_mat(handle, input_ptr[0], src);
     if(ret != 0)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this format %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1707,7 +1710,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
             ret = bm_image_to_vpp_mat(handle, output_ptr[16 * loop + k][0], &dst[k]);
             if(ret != 0)
             {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this format %s: %s: %d\n",
+                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
                 return BM_NOT_SUPPORTED;
             }
@@ -2336,7 +2339,7 @@ bm_status_t bm1684_vpp_cvt_padding(
             ret = bm_image_to_vpp_mat(handle, output[16 * loop + k], &dst[k],
               &dst_crop_rect[16 * loop + k]);
             if (ret != 0) {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this format %s: %s: %d\n",
+                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
                 free_dmem();
                 return BM_NOT_SUPPORTED;
@@ -2560,7 +2563,7 @@ bm_status_t bm1684_vpp_stitch(
 
         ret = bm_image_to_vpp_mat(handle, output, &dst_mat[input_idx], &dst_crop_rect[input_idx]);
         if (ret != 0) {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support this format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
             if (output_alloc_flag)
                 bm_image_detach(output);

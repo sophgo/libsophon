@@ -382,6 +382,8 @@ function(ADD_TARGET_YUV_LIB target_name platform debug component yuv_abs_path)
             set(CMAKE_TOOLCHAIN_FILE ../sunway_toolchain/sw_64.toolchain.cmake)
         elseif(${platform} STREQUAL "pcie_loongarch64")
             set(CMAKE_TOOLCHAIN_FILE ../loongarch_toolchain/loongarch64.toolchain.cmake)
+        elseif(${platform} STREQUAL "pcie_riscv64")
+            set(CMAKE_TOOLCHAIN_FILE ../riscv_toolchain/riscv64.toolchain.cmake)
         else()
             set(CMAKE_TOOLCHAIN_FILE ../toolchain/aarch64-gnu.toolchain.cmake)
         endif()
@@ -451,6 +453,8 @@ function(ADD_TARGET_VPP_LIB target_name chip_name platform subtype debug ion com
         set(CONFIG EmbeddedLinux)
     elseif(${platform} STREQUAL "pcie_arm64")
         set(CONFIG arm64Linux)
+    elseif(${platform} STREQUAL "pcie_riscv64")
+	set(CONFIG riscv64Linux)
     else()
         set(CONFIG x86Linux)
     endif()
@@ -557,6 +561,7 @@ function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion co
         set(BMCV_HEADER_TARGET ${out_abs_path}/include)
         set(BMCV_APP_TARGET ${out_abs_path}/bin)
         set(BMCV_CPU_LIB_TARGET ${out_abs_path}/lib/libbmcv_cpu_func.so)
+        set(BMCV_VPP_CMODEL_LIB_TARGET ${out_abs_path}/lib/libvpp_cmodel.so)
 
         SET(BMCV_LIBS_TARGET ${BMCV_LIB_TARGET})
         if(NOT ${platform} STREQUAL "soc")
@@ -572,12 +577,10 @@ function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion co
         if(${subtype} STREQUAL "cmodel")
             set(MAKE_OPT ${MAKE_OPT} USING_CMODEL=1)
         endif()
-
         find_program(BMCPU_CROSS_COMPILE aarch64-linux-gnu-g++)
         if(BMCPU_CROSS_COMPILE STREQUAL "BMCPU_CROSS_COMPILE-NOTFOUND")
             message(ERROR "Add aarch64 linux toolchain to PATH! BMCV function on bmcpu requires it.")
-        endif()
-
+    endif()
         add_custom_command(OUTPUT ${BMCV_LIBS_TARGET} ${BMCV_ALIB_TARGET}
             COMMAND make clean ${MAKE_OPT}
                 BMCPU_CROSS_COMPILE=${BMCPU_CROSS_COMPILE}
@@ -614,12 +617,14 @@ function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion co
         add_custom_target (${target_name} ALL
             DEPENDS ${BMCV_LIBS_TARGET} ${BMCV_ALIB_TARGET} ${BMCV_APP_TARGET}/test_cv_vpp)
         get_filename_component(BMCV_LIB_FILENAME ${BMCV_LIB_TARGET} NAME)
+        get_filename_component(BMCV_VPP_CMODEL_FILENAME ${BMCV_VPP_CMODEL_LIB_TARGET} NAME)
         install(DIRECTORY ${out_abs_path}/lib/
             DESTINATION lib
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT ${component}
             FILES_MATCHING
-            PATTERN ${BMCV_LIB_FILENAME}*)
+            PATTERN ${BMCV_LIB_FILENAME}*
+            PATTERN ${BMCV_VPP_CMODEL_FILENAME}*)
         if(NOT ${platform} STREQUAL "soc")
             get_filename_component(BMCV_CPU_LIB_FILENAME ${BMCV_CPU_LIB_TARGET} NAME)
             install(DIRECTORY ${out_abs_path}/lib/

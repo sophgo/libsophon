@@ -439,7 +439,11 @@ int find_tpufirmaware_path(char fw_path[512], const char* path){
     strcat(fw_path, path);
 
     free(strDLLPath1);
-    return ret;
+    ret = _access(fw_path, 0);
+    if (ret == 0){
+        return ret;
+    }
+    return -1;
 #endif
 }
 

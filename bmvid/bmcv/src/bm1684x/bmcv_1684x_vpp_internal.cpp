@@ -9,6 +9,9 @@
 #ifdef __linux__
 #include <sys/ioctl.h>
 #endif
+#ifdef __riscv
+#include <cstdlib>
+#endif
 
 float bm1684x_csc_matrix[12][12] = {
   /*YUV2RGB 601 NOT FULL RANGE    3   YCbCr2RGB_BT601*/

@@ -1006,6 +1006,7 @@ INLINE static int ceiling_func_shift(int numerator, int shift) { return (numerat
 #define  BM_API_ID_CV_AXPY                   532
 #define  BM_API_ID_CV_FUSION                 533
 #define  BM_API_ID_CV_BITWISE                534
+#define  BM_API_ID_CV_BAYER2RGB              535
 
 /******************bmlib*********************/
 

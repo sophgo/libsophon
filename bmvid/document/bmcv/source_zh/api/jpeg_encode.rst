@@ -64,6 +64,9 @@ bmcv_image_jpeg_enc
      | FORMAT_NV61
      | FORMAT_GRAY
 
+    目前编码支持的数据格式如下：
+     | DATA_TYPE_EXT_1N_BYTE
+
 
 
 **示例代码**

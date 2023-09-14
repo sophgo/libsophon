@@ -14,15 +14,23 @@ DEBUG ?= 0
 BMVID_ROOT ?= $(BMVID_TOP_DIR)
 
 ifeq ("$(BUILD_CONFIGURATION)", "x86Linux") # pcie mode
-    CROSS_CC_PREFIX = 
+    CROSS_CC_PREFIX =
+	productform=pcie
 else ifeq ("$(BUILD_CONFIGURATION)", "mipsLinux") # mips_pcie mode
     CROSS_CC_PREFIX = mips-linux-gnu-
+	productform=pcie_mips64
 else ifeq ("$(BUILD_CONFIGURATION)", "sunwayLinux") # sw64_pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
+	productform=pcie_sw64
 else ifeq ("$(BUILD_CONFIGURATION)", "loongLinux") # loong_pcie mode
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
+	productform=pcie_loongarch64
+else ifeq ("$(BUILD_CONFIGURATION)", "riscv64Linux") # riscv_pcie mode
+    CROSS_CC_PREFIX =
+	productform=pcie_riscv64
 else # pcie_arm64 and soc mode
     CROSS_CC_PREFIX = aarch64-linux-gnu-
+	productform=pcie_arm64
 endif
 
 ifeq ("$(BUILD_CONFIGURATION)", "NonOS")
@@ -48,9 +56,14 @@ endif
 
 ifeq ("$(BUILD_CONFIGURATION)", "x86Linux")
     PLATFORM        = x86linux
+	productform=pcie
 ifeq ($(SUBTYPE), cmodel)
     DEFINES += -DUSING_CMODEL
 endif
+endif
+
+ifeq ("$(BUILD_CONFIGURATION)", "riscvlinux")
+    PLATFORM        = riscvlinux
 endif
 
 ifeq ($(CHIP), bm1682)
@@ -63,7 +76,6 @@ ifeq ($(CHIP), bm1684)
 header = bmvpp.h
 chip_type = CHIP_BM1684
 DEFINES += -DVPP_BM1684
-SOURCES += 1684vppcmodel.c
 endif
 DEFINES += -DION_CACHE
 
@@ -76,6 +88,7 @@ INCLUDES += -I./src/$(CHIP)
 DEFINES += -D$(chip_type) -D_GNU_SOURCE
 CFLAGS  += -I. -fPIC -Wno-implicit-function-declaration -Wno-unused-result -Wno-format -Wl,--fatal-warning $(INCLUDES) $(DEFINES) -std=c99
 ARFLAGS = cr
+LDFLAGS = -L../../3rdparty/libbmcv/lib/$(productform)/ -lvpp_cmodel
 
 ifeq ($(DEBUG), 0)
 CFLAGS +=
@@ -131,7 +144,7 @@ $(TARGET): $(OBJECTPATHS)
 	cp -f include/vppion.h $(INSTALL_DIR)
 	cp -f include/$(CHIP)/vpplib.h $(INSTALL_DIR)
 	cp -f include/$(CHIP)/$(header) $(INSTALL_DIR)
-	$(CC) $(OBJECTPATHS) $(CFLAGS) -Wall -fPIC -shared -Wl,-soname,$(TARGET2_NAME)$(SO_NAME) -o $(TARGET2)
+	$(CC) $(OBJECTPATHS) $(CFLAGS) $(LDFLAGS) -Wall -fPIC -shared -Wl,-soname,$(TARGET2_NAME)$(SO_NAME) -o $(TARGET2)
 ifneq ($(TARGET2_SOVERSION), )
 	mv $(TARGET2) $(TARGET2_SOVERSION)
 	ln -sf $(TARGET2_NAME)$(SO_VERSION) $(TARGET2_SONAME)
@@ -164,9 +177,6 @@ endif
 
 
 $(OBJDIR)/vppion.o : src/vppion.c $(MAKEFILE)
-	$(CC) $(CFLAGS) -Wall -c $< -o $@ -MD -MF $(@:.o=.dep)
-
-$(OBJDIR)/1684vppcmodel.o : src/bm1684/1684vppcmodel.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -Wall -c $< -o $@ -MD -MF $(@:.o=.dep)
 
 $(OBJDIR)/vpplib.o : src/$(CHIP)/vpplib.c $(MAKEFILE)

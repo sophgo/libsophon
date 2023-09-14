@@ -8,7 +8,9 @@
 #include <math.h>
 #include <float.h>
 #include <thread>
+#ifndef __riscv
 #include <arm_neon.h>
+#endif
 #include "bmcv_cpu_func.h"
 #include "bmcv_util.h"
 

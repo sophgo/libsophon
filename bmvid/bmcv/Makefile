@@ -41,6 +41,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_COMPILE = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
     CROSS_COMPILE = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_riscv64)
+    CROSS_COMPILE =
 else # pcie_arm64 and soc mode
     CROSS_COMPILE = aarch64-linux-gnu-
 endif
@@ -92,7 +94,7 @@ DYN_LDFLAGS     +=  -L$(JPU_DIR)/lib/ \
 					-L$(BMION_DIR)/lib \
 					-L$(OUT_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
-					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl
+					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl -lvpp_cmodel
 
 ifeq ($(DEBUG),1)
 CFLAGS          += -g -DDEBUG
@@ -154,6 +156,7 @@ INSTALL_LIBS += $(BMCV_DYN)
 RELEASE_LIBS += $(BMCV_DYN)
 RELEASE_HEADERS += $(BMCV_SRC_DIR)/include/bmcv_api_ext.h $(BMCV_SRC_DIR)/include/bmcv_api.h $(BMCV_SRC_DIR)/include/bmcv_api_ext_c.h
 DYNAMIC_LIBRARYS = $(BMVID_ROOT)/3rdparty/tpu_kernel_module/libbm1684x_kernel_module.so
+VPP_CMODEL_DYN_LIB = $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libvpp_cmodel.so
 
 -include $(BMVID_ROOT)/build/version.mak
 ifneq ($(SO_NAME),)
@@ -171,6 +174,8 @@ else ifeq ($(PRODUCTFORM), pcie_loongarch64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/libturbojpeg.a
 else ifeq ($(PRODUCTFORM), pcie_sw64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/libturbojpeg.a
+else ifeq ($(PRODUCTFORM), pcie_riscv64)
+LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/riscv64/libturbojpeg.a
 else  # pcie_x86
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/pcie/libturbojpeg.a
 endif
@@ -227,7 +232,7 @@ ifneq ($(BMCV_DYN_SOVERSION), )
 endif
 
 endif
-
+ifneq ($(PRODUCTFORM), pcie_riscv64)
 ifneq ($(USING_CMODEL),1)
 ifneq ($(SOC_MODE),1)
 BMCV_CPU_LIB = $(OUT_DIR)/bmcv/lib/libbmcv_cpu_func.so
@@ -255,6 +260,7 @@ endif
 
 endif
 endif
+endif
 
 ifeq ($(CHIP), bm1682)
 bmcv:
@@ -271,6 +277,7 @@ bmcv: $(BMCV_DYN) $(BMCV_CPU_LIB) $(BMCV_STATIC)
 	@mkdir -p $(OUT_DIR)/bmcv/lib/tpu_module
 	@cp -f $(RELEASE_HEADERS)  $(OUT_DIR)/bmcv/include
 	@cp -f $(DYNAMIC_LIBRARYS) $(OUT_DIR)/bmcv/lib/tpu_module
+	@cp -f $(VPP_CMODEL_DYN_LIB) $(OUT_DIR)/bmcv/lib/
 
 clean:
 	@echo rm -rf $(OUT_DIR)/bmcv/lib

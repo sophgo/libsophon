@@ -55,12 +55,25 @@ static void finish_output_buffer(void *context, void *acquired_handle)
 }
 
 
-static bm_status_t bmcv_jpeg_enc_check(bm_image *src,
-                                       int image_num) {
+static bm_status_t bmcv_jpeg_enc_check(bm_image *src, int image_num, int quality_factor) {
     if (NULL == src) {
         bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR,
                   "bm_image is nullptr %s: %s: %d\n",
                    filename(filename(__FILE__)), __func__, __LINE__);
+        return BM_NOT_SUPPORTED;
+    }
+
+    if(image_num < 1 || image_num > 4){
+        bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR,
+                  "image_num(%d) should be between 1 and 4 %s: %s: %d\n",
+                   image_num, filename(filename(__FILE__)), __func__, __LINE__);
+        return BM_ERR_PARAM;
+    }
+
+    if (quality_factor < 0 || quality_factor > 100) {
+        bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR,
+                  "quality_factor(%d) should be between 0 and 100 %s: %s: %d\n",
+                   quality_factor, filename(filename(__FILE__)), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
 
@@ -207,6 +220,10 @@ static bm_status_t bmcv_jpeg_enc_check(bm_image *src,
                 }
                 case FORMAT_HSV256_PACKED: {
                     printf(" ---> FORMAT_HSV256_PACKED\n\n");
+                    break;
+                }
+                case FORMAT_BAYER: {
+                    printf(" ---> FORMAT_BAYER\n\n");
                     break;
                 }
             }
@@ -476,7 +493,7 @@ bm_status_t bmcv_image_jpeg_enc(bm_handle_t  handle,
                                 void**       p_jpeg_data,
                                 size_t*      out_size,
                                 int          quality_factor) {
-    if(BM_SUCCESS != bmcv_jpeg_enc_check(src, image_num)) {
+    if(BM_SUCCESS != bmcv_jpeg_enc_check(src, image_num, quality_factor)) {
         BMCV_ERR_LOG("bmcv_jpeg_enc_check error\r\n");
         return BM_ERR_FAILURE;
     }

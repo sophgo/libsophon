@@ -17,6 +17,7 @@
 #chip=bm1880
 #subtype=asic
 vpp_dir = $(PWD)/$(CHIP)
+BMVID_TOP_DIR ?= $(BMVID_ROOT)
 
 productform ?= soc
 
@@ -32,6 +33,8 @@ else ifeq ($(productform),pcie_sw64) # pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(productform),pcie_loongarch64)
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(productform),pcie_riscv64)
+    CROSS_CC_PREFIX =
 else # pcie_arm64 and soc mode
     CROSS_CC_PREFIX = aarch64-linux-gnu-
 endif
@@ -54,11 +57,11 @@ dirs := $(shell ls $(vpp_dir)/${productform_mode})
 dirs := $(filter-out $(exclude_dirs),$(dirs))
 
 all:
-	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} productform=${productform} -C $(vpp_dir)/${productform_mode}/$(N);)
-clean:	
-	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} -C $(vpp_dir)/${productform_mode}/$(N) clean;)
+	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) productform=${productform} -C $(vpp_dir)/${productform_mode}/$(N);)
+clean:
+	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) -C $(vpp_dir)/${productform_mode}/$(N) clean;)
 install:
-	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} -C $(vpp_dir)/${productform_mode}/$(N) install;)
+	$(foreach N,$(dirs),make CROSS_CC_PREFIX=${CROSS_CC_PREFIX} DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) -C $(vpp_dir)/${productform_mode}/$(N) install;)
 endif
 
 
@@ -68,9 +71,9 @@ exclude_dirs += vppwithOpencvVideoDecode vppwithOpencvImageDecode
 dirs := $(filter-out $(exclude_dirs),$(dirs))
 
 all:
-	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} productform=${productform} -C $(vpp_dir)/$(N);)
-clean:	
-	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} -C $(vpp_dir)/$(N) clean;)
+	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) productform=${productform} -C $(vpp_dir)/$(N);)
+clean:
+	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) -C $(vpp_dir)/$(N) clean;)
 install:
-	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} -C $(vpp_dir)/$(N) install;)
+	$(foreach N,$(dirs),make DEBUG=${DEBUG} DESTDIR=${DESTDIR} VPP_LIB_DIR=${VPP_LIB_DIR} BMVID_TOP_DIR=$(BMVID_TOP_DIR) -C $(vpp_dir)/$(N) install;)
 endif

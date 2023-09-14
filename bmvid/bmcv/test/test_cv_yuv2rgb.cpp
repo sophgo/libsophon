@@ -511,7 +511,7 @@ static void test_cv_yuv2rgb_single_case() {
 
     if (ret != BM_SUCCESS) {
         printf("run bm_yuv2rgb failed ret = %d\n", ret);
-        free(input_ptr);
+        delete[] input_ptr;
         free(output_ptr);
         free(reference_ptr);
         exit(-1);
@@ -569,7 +569,7 @@ static void test_cv_yuv2rgb_single_case() {
     for (int i = 0; i < output_image_num; i++) {
         bm_image_destroy(dst_image[i]);
     }
-    free(input_ptr);
+    delete[] input_ptr;
     free(output_ptr);
     free(reference_ptr);
 }
