@@ -59,6 +59,9 @@ endif
 ifeq ("$(BUILD_CONFIGURATION)", "EmbeddedLinux")
     CROSS_CC_PREFIX = aarch64-linux-gnu-
     PLATFORM        = armlinux
+elif (("$(BUILD_CONFIGURATION)", "RiscvLinux")
+    CROSS_CC_PREFIX =
+    PLATFORM        = risvclinux
 else
     CROSS_CC_PREFIX =
     PLATFORM        = x86linux

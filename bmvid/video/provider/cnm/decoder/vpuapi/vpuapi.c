@@ -252,7 +252,6 @@ static RetCode InitializeVPU(Uint32 coreIdx, const Uint16* code, Uint32 size)
         }
     }
 
-    vdi_disable_kernel_reset(coreIdx);
 #ifdef SUPPORT_SW_UART
     create_sw_uart_thread(coreIdx);
     vdi_delay_ms(500);

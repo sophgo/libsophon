@@ -304,3 +304,28 @@ libsophon目前包含如下组件：
     make package
 
 最后用exit命令就可以退出qemu环境了。
+
+**在 windows 下编译**
+
+1. 安装 Visual Studio 并将其加入 PATH;
+
+2. 安装 xxd 并将其加入 PATH;
+
+3. 拉取 bm_prebuilt_toolchains_win 至 libsophon 同级目录下，目录结构如下:
+
+::
+    .
+    ├── bm_prebuilt_toolchains_win
+    └── libsophon
+
+3. 在 CMD 中进入 libsophon 目录下进行编译:
+
+::
+    call build.bat release MT
+
+生成文件在 libsophon/release/libsophon 下，可使用以下命令对其进行打包:
+
+::
+    call build.bat release MT pack
+
+最后在 libsophon/release 下可获取 libsophon_win_x.x.x_arch.zip 形式的压缩包文件。

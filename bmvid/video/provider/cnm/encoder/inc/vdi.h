@@ -225,6 +225,6 @@ int bm_vdi_get_firmware_status(uint32_t core_idx);
 
 int bm_vdi_resume_kernel_reset(uint32_t core_idx);
 int bm_vdi_disable_kernel_reset(uint32_t core_idx);
-
+int bm_vdi_get_kernel_reset(uint32_t core_idx);
 #endif //#ifndef _VDI_H_
 

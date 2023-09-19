@@ -178,7 +178,6 @@ RetCode GetCodecInstance(Uint32 coreIdx, CodecInst ** ppInst)
 
 void FreeCodecInstance(CodecInst * pCodecInst)
 {
-    pCodecInst->inUse = 0;
     pCodecInst->codecMode    = -1;
     pCodecInst->codecModeAux = -1;
 
@@ -186,6 +185,7 @@ void FreeCodecInstance(CodecInst * pCodecInst)
 
     osal_free(pCodecInst->CodecInfo);
     pCodecInst->CodecInfo = NULL;
+    pCodecInst->inUse = 0;
 }
 
 RetCode CheckInstanceValidity(CodecInst * pCodecInst)

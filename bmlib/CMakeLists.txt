@@ -7,6 +7,12 @@ set(TARGET_NAME "bmlib")
 
 project(${TARGET_NAME} C CXX)
 
+if(WIN32)
+
+include(windows.cmake)
+
+else()
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/linux)
 
@@ -41,8 +47,6 @@ add_custom_command(OUTPUT ${DEB_SCRIPT_TARGET}
     COMMAND echo "rm -f /etc/profile.d/libsophon-bin-path.sh" >> prerm
     # post-remove
     COMMAND echo "rm -f /opt/sophon/libsophon-current" > postrm
-    COMMAND echo "latest=$(ls -dr /opt/sophon/libsophon-* 2>/dev/null | head -n 1)" >> postrm VERBATIM
-    COMMAND echo "if [ -n \"$latest\" ]; then ln -s $latest /opt/sophon/libsophon-current; fi" >> postrm VERBATIM
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/debian-lib
 )
 add_custom_target(libsophon_deb_script ALL DEPENDS ${DEB_SCRIPT_TARGET})
@@ -84,3 +88,5 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
             PATTERN "*.h")
 
 add_subdirectory(tools)
+
+endif()

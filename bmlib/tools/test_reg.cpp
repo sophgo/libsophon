@@ -2,14 +2,19 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/time.h>
-#include <time.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <time.h>
 #include "bmlib_runtime.h"
 #include "bmlib_internal.h"
 #include "string.h"
+
+#ifdef WIN32
+#include <io.h>
+#include <time.h>
+#else
+#include <unistd.h>
+#include <sys/time.h>
+#endif
+
 
 int main(int argc, char *argv[])
 {

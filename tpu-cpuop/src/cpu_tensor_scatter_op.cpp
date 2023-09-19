@@ -93,7 +93,7 @@ int cpu_tensor_scatter_oplayer::process(void *param, int param_size)
      */
     CPU_ASSERT_LE(index_depth, tensor_shape.size());
     CPU_ASSERT_GE(index_shape.size(),2);
-    CPU_ASSERT(length == 1 && index_depth == tensor_shape.size());
+    CPU_ASSERT(length == 1 ? index_depth == tensor_shape.size() : index_depth < tensor_shape.size());
     CPU_ASSERT_EQ(tensor_shape.size() + index_shape.size() - index_depth - 1, data_shape.size());
 
     size_t elem_num = 1;

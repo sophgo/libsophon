@@ -2,8 +2,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
-#include <sys/syscall.h>
 #include <bmlib_runtime.h>
+
+#ifdef __linux__
+#include <sys/syscall.h>
+#else
+#include <windows.h>
+#endif
+
 
 #define BM_LOGLEVEL_DEBUG  0
 #define BM_LOGLEVEL_INFO   1

@@ -28,6 +28,7 @@
 #define VETH_A53_STATE_REG 0x48
 #define VETH_GATE_ADDRESS_REG 0x4c
 #define VETH_RESET_REG 0x50
+#define VETH_MASK_REG 0x54
 
 #define VETH_SHM_START_ADDR_1684 0x0201be80
 #define VETH_SHM_START_ADDR_1684X 0x101fb400
@@ -64,4 +65,5 @@ void bm_eth_request_irq(struct bm_device_info *bmdi);
 void bm_eth_free_irq(struct bm_device_info *bmdi);
 int bmdrv_veth_init(struct bm_device_info *bmdi, struct pci_dev *pdev);
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev);
+void bmdrv_veth_early_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev);
 #endif

@@ -1315,7 +1315,6 @@ int vpu_InitWithBitcode(uint32_t coreIdx, const uint16_t* code, uint32_t size)
 
     EnterLock(coreIdx);
 
-    bm_vdi_disable_kernel_reset(coreIdx);
     ret = bm_vdi_get_instance_num(coreIdx);
     if (ret < 0) {
         return VPU_RET_FAILURE;
@@ -4785,7 +4784,6 @@ static int FreeCodecInstance(EncHandle handle)
 {
     int ret;
 
-    handle->inUse = 0;
     handle->codecMode = -1;
 
     free(handle->encInfo);
@@ -4794,10 +4792,12 @@ static int FreeCodecInstance(EncHandle handle)
     ret = bm_vdi_close_instance(handle->coreIdx, handle->instIndex);
     if (ret < 0)
     {
+        handle->inUse = 0;
         VLOG(ERR, "bm_vdi_close_instance failed\n");
         return VPU_RET_FAILURE;
     }
 
+    handle->inUse = 0;
     return VPU_RET_SUCCESS;
 }
 

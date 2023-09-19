@@ -3,11 +3,55 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <errno.h>
 #include "bmlib_runtime.h"
+
+#ifdef WIN32
+#include <io.h>
+#include <windows.h>
+#else
+#include <unistd.h>
+#include <sys/time.h>
+#endif
+
+#ifdef WIN32
+int gettimeofday(struct timeval * tp, struct timezone * tzp)
+{
+    // Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970
+    static const unsigned long int EPOCH = ((unsigned long int) 116444736000000000ULL);
+
+    SYSTEMTIME  system_time;
+    FILETIME    file_time;
+    unsigned long int    time;
+
+    GetSystemTime( &system_time );
+    SystemTimeToFileTime( &system_time, &file_time );
+    time =  ((unsigned long int)file_time.dwLowDateTime )      ;
+    time += ((unsigned long int)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec  = (long) ((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long) (system_time.wMilliseconds * 1000);
+    return 0;
+}
+
+void timersub(struct timeval *endPre, struct timeval *beginPre, struct timeval *result)
+{
+	do
+	{
+		(result)->tv_sec = (endPre)->tv_sec - (beginPre)->tv_sec;
+		(result)->tv_usec = (endPre)->tv_usec - (beginPre)->tv_usec;
+		if ((result)->tv_usec < 0)
+		{
+			--(result)->tv_sec;
+			(result)->tv_usec += 1000000;
+		}
+	}
+	while (0);
+}
+#endif
 
 #define BLOCK_SIZE 1024
 

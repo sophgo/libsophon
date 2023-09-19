@@ -183,7 +183,9 @@ int vdi_init(u64 core_idx)
 
     if (vdi->vpu_fd != -1 && vdi->vpu_fd != 0x00)
     {
+        vdi_lock(core_idx);
         vdi->task_num++;
+        vdi_unlock(core_idx);
         return 0;
     }
 
@@ -203,7 +205,8 @@ int vdi_init(u64 core_idx)
         VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to run vdi/linux/driver/load.sh script \n", strerror(errno));
         return -1;
     }
-
+    vdi->pid    = getpid();
+    vdi_disable_kernel_reset(core_idx);
     if (ioctl(vdi->vpu_fd, VDI_IOCTL_GET_CHIP_ID, &(vdi->chip_id)) < 0){
         VLOG(INFO, "[VDI] fail to get chip id \n");
         goto ERR_VDI_INIT;
@@ -430,6 +433,12 @@ int vdi_release(u64 core_idx)
         }
     }
 
+    vdi->task_num--;
+
+    vdi_get_kernel_reset(core_idx);
+    if(vdi->reset_core_flag.reset_core_disable!=0)
+        vdi_resume_kernel_reset(core_idx);
+
     vdi_unlock(core_idx);
 
     if (vdb.size > 0)
@@ -446,7 +455,6 @@ int vdi_release(u64 core_idx)
         munmap((void *)vdi->vpu_dump_flag.virt_addr, vdi->vpu_dump_flag.size);
         vdi->vpu_dump_flag.virt_addr = 0;
     }
-    vdi->task_num--;
 
 
     if (vdi->vpu_fd != -1 && vdi->vpu_fd != 0x00)
@@ -2523,7 +2531,7 @@ int bm_vdi_memcpy_s2d(bm_handle_t bm_handle, int coreIdx,bm_device_mem_t dst, vo
     swap_endian(coreIdx, src,dst.size,endian);
     if(bm_memcpy_s2d(bm_handle, dst,src)!=BM_SUCCESS)
         {
-            VLOG(ERR,"system to device memcpy failed!");
+            VLOG(ERR,"system to device memcpy failed!\n");
             return BM_ERR_FAILURE;
         }
         return BM_SUCCESS;
@@ -2532,7 +2540,7 @@ int bm_vdi_memcpy_d2s(bm_handle_t bm_handle, int coreIdx, void *dst,bm_device_me
 {
     if(bm_memcpy_d2s(bm_handle, dst,src)!=BM_SUCCESS)
         {
-            VLOG(ERR,"system to device memcpy failed!");
+            VLOG(ERR,"system to device memcpy failed!\n");
             return BM_ERR_FAILURE;
         }
     swap_endian(coreIdx, dst,src.size,endian);
@@ -2588,6 +2596,31 @@ int vdi_resume_kernel_reset(u64 coreIdx){
         return -1;
     }
 
+    return 0;
+}
+int vdi_get_kernel_reset(u64 coreIdx){
+    int ret = 0;
+    int chip_core_idx = coreIdx;
+    vdi_info_t* vdi;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE){
+        VLOG(ERR, "coreIdx is invalid, decoder fail get vpu_reset status in kernel\n");
+        return -1;
+    }
+    vdi = &s_vdi_info[coreIdx];
+    if(!vdi || vdi->vpu_fd < 0 || vdi->vpu_fd == 0x00){
+        VLOG(ERR, "vpu_fd is invalid, decoder fail get vpu_reset status in kernel\n");
+        return -1;
+    }
+#if defined(BM_PCIE_MODE)
+    chip_core_idx = coreIdx%MAX_NUM_VPU_CORE_CHIP;
+#endif
+    vdi->reset_core_flag.core_idx = chip_core_idx;
+    ret = ioctl(vdi->vpu_fd, VDI_IOCTL_GET_KERNEL_RESET_STATUS, &(vdi->reset_core_flag));
+    if (ret < 0) {
+        VLOG(ERR, "decoder fail to get  vpu_reset status with ioctl()\n");
+        return -1;
+    }
     return 0;
 }
 

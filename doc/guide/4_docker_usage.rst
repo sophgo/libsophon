@@ -53,7 +53,7 @@ Docker 测试环境搭建
 
 .. code-block:: shell
 
-    # 替换以下 path/to/libsophon 为实际 libsohon 路径
+    # 替换以下 path/to/libsophon 为实际 libsophon 路径
     cd path/to/libsophon
     sudo docker build -t image_name:image_version -f libsophon_dockerfile .
 

@@ -243,9 +243,9 @@ bm_status_t bm_remove_veth(bm_handle_t handle){
     }
 }
 
-bm_status_t bm_set_ip(bm_handle_t handle, u32 ip) {
+bm_status_t bm_set_ip(bm_handle_t handle, bm_veth_ip_t ip_mask) {
 
-    if(0 == platform_ioctl(handle, BMDEV_SET_IP, &ip)){
+    if(0 == platform_ioctl(handle, BMDEV_SET_IP, &ip_mask)){
         return BM_SUCCESS;
     } else {
         return BM_ERR_FAILURE;

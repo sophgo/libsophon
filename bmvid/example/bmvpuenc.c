@@ -594,10 +594,12 @@ static int run_once(InputParameter* par)
 
             /* Read uncompressed pixels into the input DMA buffer */
 #ifdef BM_PCIE_MODE
-            read_yuv_source(host_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
-                            &fin, enc_par->y_stride, enc_par->c_stride, enc_par->aligned_height,
-                            eop->chroma_interleave,
-                            enc_par->crop_w, enc_par->crop_h);
+            ret = read_yuv_source(host_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
+                                &fin, enc_par->y_stride, enc_par->c_stride, enc_par->aligned_height,
+                                eop->chroma_interleave,
+                                enc_par->crop_w, enc_par->crop_h);
+            if (ret < 0)
+                break;
 
             // TODO
             // u64 vpu_pa = bm_mem_get_device_addr(*(ctx->src_fb->dma_buffer));
@@ -615,12 +617,14 @@ static int run_once(InputParameter* par)
             unsigned long long tmp_va;
             bm_mem_mmap_device_mem_no_cache(ctx->bm_handle, ctx->src_fb->dma_buffer, &tmp_va);
 
-            read_yuv_source((uint8_t*)tmp_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
+            ret = read_yuv_source((uint8_t*)tmp_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
                             &fin, enc_par->y_stride, enc_par->c_stride, enc_par->aligned_height,
                             eop->chroma_interleave,
                             enc_par->crop_w, enc_par->crop_h);
 
             bm_mem_unmap_device_mem(ctx->bm_handle, (void*)tmp_va, frame_size);
+            if (ret < 0)
+                break;
 
 #endif
 
@@ -1171,7 +1175,7 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
         dst_height   == src_height)
     {
         if ( dst_frame_size >  fread(dst_va, sizeof(uint8_t), dst_frame_size, *src_file)){
-            printf("failed to read in dst frame\n");
+            printf("eof when read in dst frame...\n");
             return -1;
         }
 
@@ -1189,7 +1193,7 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
     }
 
     if ( src_frame_size > fread(tmp_buffer, sizeof(uint8_t), src_frame_size, *src_file) ){
-        printf("failed to read in source frame\n");
+        printf("eof when read in source frame...\n");
         free(tmp_buffer);
         return -1;
     }

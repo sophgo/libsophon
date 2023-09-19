@@ -37,6 +37,11 @@ typedef struct {
   t_bmcpu_user_dtype   bmcpu_user_dtype_;
 } bmcpu_handle_t;
 
+#ifndef __linux__
+bool windows_support(int idx) {
+    return idx < 46;
+}
+#endif
 /* instance all cpu layer */
 void* bmcpu_init()
 {
@@ -45,7 +50,11 @@ void* bmcpu_init()
 
     cpu_layers_.clear();
     for (int layer_idx = 0; layer_idx < CPU_LAYER_NUM; layer_idx++) {
-
+        #ifndef __linux__
+        if (!windows_support(layer_idx)) {
+            continue;
+        }
+        #endif
         if (layer_idx != CPU_USER_DEFINED) {
             cpu_layers_[layer_idx] = CpuLayerRegistry::createlayer(layer_idx);
         } else {

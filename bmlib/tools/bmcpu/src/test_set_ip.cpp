@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 #if !defined(USING_CMODEL) && !defined(SOC_MODE)
     bm_handle_t handle;
     bm_status_t ret;
-    u32 ip;
+    bm_veth_ip_t ip_mask;
 
     if (argc < 3) {
         printf("Usage: test_set_ip dev_id ip\n");
@@ -68,8 +68,13 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    ip = ipstr2num(argv[2]);
-    ret = bm_set_ip(handle, ip);
+    ip_mask.ip = ipstr2num(argv[2]);
+    if (argc == 4)
+        ip_mask.mask = ipstr2num(argv[3]);
+    else
+        ip_mask.mask = 0xFFFFFF00;
+
+    ret = bm_set_ip(handle, ip_mask);
     if (ret != BM_SUCCESS)
     {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,

@@ -1480,6 +1480,52 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
 #endif
 }
 
+bm_status_t bm_memcpy_p2p(bm_handle_t handle_src, bm_device_mem_t src, bm_handle_t handle_dst,bm_device_mem_t dst) {
+#ifdef USING_CMODEL
+  return BM_SUCCESS;
+#else
+  int src_num, dst_num;
+  bm_memcpy_p2p_info_t bm_mem_p2p;
+
+  if (handle_src == nullptr || handle_dst == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  if (!bm_device_mem_range_valid(handle_src, src)) {
+    return BM_ERR_PARAM;
+  }
+
+  if (!bm_device_mem_range_valid(handle_dst, dst)) {
+    return BM_ERR_PARAM;
+  }
+  src_num = bm_get_devid(handle_src);
+  dst_num = bm_get_devid(handle_dst);
+
+  if (src_num == dst_num) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "src chip and dst chip is the same\n");
+    return BM_ERR_FAILURE;
+  }
+
+  #ifdef USING_INT_CDMA
+    bm_mem_p2p.intr = true;
+  #else
+    bm_mem_p2p.intr = false;
+  #endif
+  bm_mem_p2p.src_device_addr = bm_mem_get_device_addr(src);
+  bm_mem_p2p.dst_device_addr = bm_mem_get_device_addr(dst);
+  bm_mem_p2p.dst_num = dst_num;
+  bm_mem_p2p.size = bm_mem_get_size(dst);
+  bm_mem_p2p.cdma_iommu_mode = handle_src->cdma_iommu_mode;
+
+  auto res = platform_ioctl(handle_src, BMDEV_MEMCPY_P2P, &bm_mem_p2p);
+
+  return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
+#endif
+}
+
 bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
 #ifdef USING_CMODEL
   return BM_SUCCESS;

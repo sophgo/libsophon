@@ -626,7 +626,13 @@ PCIe模式各个设备的详细信息
 
    读写属性：读写
 
-   含义：tpu的工作频率，可通过写入参数来改变频率，写入前应向dynfreq写入0来关闭动态tpu调频
+   含义：tpu的工作频率，可通过写入参数来改变频率，写入前应向dynfreq写入0来关闭动态tpu调频,示例如下：
+
+   ::
+
+    sudo -s
+    echo 0 > /proc/bmsophon/card0/bmsophon0/dynfreq
+    echo 750 > /proc/bmsophon/card0/bmsophon0/tpu_freq
 
 -  tpu_power
 

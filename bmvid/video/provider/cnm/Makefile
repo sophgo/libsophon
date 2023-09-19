@@ -67,6 +67,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64)
 BUILD_CONFIGURATION = SunwayLinux
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
 BUILD_CONFIGURATION = LoongLinux
+else ifeq ($(PRODUCTFORM),pcie_riscv64)
+BUILD_CONFIGURATION = RiscvLinux
 else # pcie_arm64 and soc
 BUILD_CONFIGURATION = EmbeddedLinux
 endif
@@ -142,6 +144,11 @@ endif
 ifeq ("$(BUILD_CONFIGURATION)", "EmbeddedLinux")
     CROSS_CC_PREFIX = aarch64-linux-gnu-
     PLATFORM        = armlinux
+    SLIBNAME        = libbmvideo.so
+endif
+ifeq ("$(BUILD_CONFIGURATION)", "RiscvLinux")
+    CROSS_CC_PREFIX =
+    PLATFORM        = risvclinux
     SLIBNAME        = libbmvideo.so
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "NativeLinux")
@@ -254,6 +261,11 @@ endif
 ifeq ("$(BUILD_CONFIGURATION)", "SunwayLinux")
 BUILDLIST += $(VPUCHECK) $(VPUINFO)
 endif
+ifeq ("$(BUILD_CONFIGURATION)", "RiscvLinux")
+BUILDLIST += $(VPUCHECK) $(VPUINFO)
+endif
+
+
 
 ifeq ("$(BUILD_ORG_TEST)", "yes")
 ifeq ("$(PRODUCT)", "boda")
@@ -319,6 +331,11 @@ ifeq ("$(BUILD_CONFIGURATION)", "SunwayLinux")
 SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
                   $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
 endif
+ifeq ("$(BUILD_CONFIGURATION)", "RiscvLinux")
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
+                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+endif
+
 
 VPATH  = $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2:
 VPATH += $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component:

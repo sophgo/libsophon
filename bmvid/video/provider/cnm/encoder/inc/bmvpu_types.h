@@ -19,7 +19,7 @@
 #include <stddef.h>
 
 #ifndef bm_pa_t
-# if defined(__aarch64__) || defined(__amd64__) || defined(__x86_64__) || defined(__sw_64__) || defined(__loongarch64) || (defined(__mips__) &&(__mips == 64))
+# if defined(__aarch64__) || defined(__amd64__) || defined(__x86_64__) || defined(__sw_64__) || defined(__loongarch64) || (defined(__mips__) &&(__mips == 64)) ||  defined(__riscv)
 typedef uint64_t bm_pa_t;
 # elif _WIN32
 typedef unsigned long long  bm_pa_t;

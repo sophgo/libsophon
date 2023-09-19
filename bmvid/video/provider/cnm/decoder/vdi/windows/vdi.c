@@ -2878,5 +2878,31 @@ int vdi_disable_kernel_reset(u64 coreIdx){
     return 0;
 }
 
+/* if windows want to add this, need fix sg_lib_driver, and cancel following annotate*/
+int vdi_get_kernel_reset(u64 coreIdx){
+    // int ret = 0;
+    // vdi_info_t *vdi;
+    // int chip_core_idx = coreIdx;
+    // if (coreIdx >= MAX_NUM_VPU_CORE){
+    //     VLOG(ERR, "coreIdx is invalid, decoder fail to disable vpu_reset in kernel\n");
+    //     return -1;
+    // }
+
+    // vdi = &s_vdi_info[coreIdx];
+    // if(!vdi || vdi->hDevice == INVALID_HANDLE_VALUE || !(vdi->hDevice)){
+    //     VLOG(ERR, "vpu_fd is invalid, decoder fail to disable vpu_reset in kernel\n");
+    //     return -1;
+    // }
+// #if defined(BM_PCIE_MODE)
+//     chip_core_idx = coreIdx%MAX_NUM_VPU_CORE_CHIP;
+// #endif
+//     vdi->reset_core_flag.core_idx = chip_core_idx;
+//     if (winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_KERNEL_RESET_STATUS, &(vdi->reset_core_flag)) == -1) {
+//         VLOG(ERR, "decoder fail to disable vpu_reset with ioctl()\n");
+//         return -1;
+//     }
+    return 0;
+}
+
 #endif    //#ifdef _WIN32
 

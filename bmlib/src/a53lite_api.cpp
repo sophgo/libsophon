@@ -2,12 +2,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
-#include <dlfcn.h>
-#include <unistd.h>
-#include <sys/time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <map>
+
+#ifdef WIN32
+#include <io.h>
+#include <time.h>
+#else
+#include <dlfcn.h>
+#include <unistd.h>
+#include <sys/time.h>
+#endif
 
 #include "api.h"
 #include "bmlib_internal.h"
@@ -311,14 +317,19 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
     p_module = (tpu_kernel_module_t)malloc(sizeof(struct bm_module));
     if (p_module == nullptr)
     {
-        printf("can not alloc memory for module: %s\n", module_file);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "can not alloc memory for module: %s\n", module_file);
         return nullptr;
     }
 
     memset(&api_load_lib, 0, sizeof(api_load_lib));
     if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
     {
-        printf("%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        free(p_module);
         return nullptr;
     }
 
@@ -326,7 +337,10 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
     ret = a53lite_load_file(handle, module_file, &dev_mem, &file_size);
     if (ret != BM_SUCCESS)
     {
-        printf("%s %d: laod file failed!\n", __FILE__, __LINE__);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s %d: laod file failed!\n", __FILE__, __LINE__);
+        free(p_module);
         return nullptr;
     }
 
@@ -342,6 +356,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
                   BMLIB_LOG_ERROR,
                   "%s send api error, ret %d, library name len %d too long\n",
                   __func__, ret, strlen(tmp));
+        free(p_module);
         return NULL;
     }
     strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
@@ -359,6 +374,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
                   BMLIB_LOG_ERROR,
                   "load library send api error, ret %d\n",
                   ret);
+        free(p_module);
         return NULL;
     }
 
@@ -369,6 +385,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
                   BMLIB_LOG_ERROR,
                   "load module file sync api error, ret %d\n",
                   ret);
+        free(p_module);
         return nullptr;
     }
     strncpy(p_module->lib_name, tmp, strlen(tmp));
@@ -409,7 +426,9 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
     p_module = (tpu_kernel_module_t)malloc(sizeof(struct bm_module));
     if (p_module == nullptr)
     {
-        printf("can not alloc memory for module: %s\n", module_file);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "can not alloc memory for module: %s\n", module_file);
         return nullptr;
     }
 
@@ -425,6 +444,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
                   BMLIB_LOG_ERROR,
                   "%s send api error, ret %d, library name len %d too long\n",
                   __func__, ret, strlen(tmp));
+        free(p_module);
         return NULL;
     }
 
@@ -438,7 +458,10 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
     memset(&api_load_lib, 0, sizeof(api_load_lib));
     if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
     {
-        printf("%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        free(p_module);
         return nullptr;
     }
 
@@ -446,7 +469,10 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
     ret = a53lite_load_file(handle, module_file, &dev_mem, &file_size);
     if (ret != BM_SUCCESS)
     {
-        printf("%s %d: load file failed!\n", __FILE__, __LINE__);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s %d: load file failed!\n", __FILE__, __LINE__);
+        free(p_module);
         return nullptr;
     }
 
@@ -465,6 +491,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
                   BMLIB_LOG_ERROR,
                   "load library send api error, ret %d\n",
                   ret);
+        free(p_module);
         return NULL;
     }
 
@@ -475,6 +502,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
                   BMLIB_LOG_ERROR,
                   "load module file sync api error, ret %d\n",
                   ret);
+        free(p_module);
         return nullptr;
     }
     strncpy(p_module->lib_name, tmp, strlen(tmp));
@@ -507,13 +535,18 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
     p_module = (tpu_kernel_module_t)malloc(sizeof(struct bm_module));
     if (p_module == nullptr)
     {
-        printf("can not alloc memory for module: %s\n", lib_name);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "can not alloc memory for module: %s\n", lib_name);
         return nullptr;
     }
 
     if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
     {
-        printf("%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+        free(p_module);
         return nullptr;
     }
 
@@ -521,7 +554,10 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
     ret = a53lite_load_module(handle, lib_name, data, length, &dev_mem);
     if (ret != BM_SUCCESS)
     {
-        printf("%s %d: laod file failed!\n", __FILE__, __LINE__);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s %d: laod file failed!\n", __FILE__, __LINE__);
+        free(p_module);
         return nullptr;
     }
 
@@ -539,6 +575,7 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
                   BMLIB_LOG_ERROR,
                   "load library send api error, ret %d\n",
                   ret);
+        free(p_module);
         return NULL;
     }
 
@@ -549,6 +586,7 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
                   BMLIB_LOG_ERROR,
                   "load module file sync api error, ret %d\n",
                   ret);
+        free(p_module);
         return nullptr;
     }
     strncpy(p_module->lib_name, lib_name, LIB_MAX_NAME_LEN);
@@ -586,7 +624,9 @@ tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_mod
 
     if (!module)
     {
-        printf("%s %d: null ptr input!\n", __FILE__, __LINE__);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s %d: null ptr input!\n", __FILE__, __LINE__);
         return -1;
     }
 
@@ -724,5 +764,24 @@ bm_status_t tpu_kernel_unload_module(bm_handle_t handle, tpu_kernel_module_t p_m
     ret = bm_sync_api(handle);
     free(p_module);
     return ret;
+#endif
+}
+
+bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_module)
+{
+#ifdef USING_CMODEL
+    return BM_SUCCESS;
+#else
+
+    if (!p_module)
+    {
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "%s %d: null ptr input!\n", __FILE__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    free(p_module);
+    return BM_SUCCESS;
 #endif
 }

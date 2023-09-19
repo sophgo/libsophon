@@ -26,6 +26,8 @@ else ifeq ($(PRODUCTFORM),pcie_loongarch64) # pcie mode
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
 else ifeq ($(PRODUCTFORM), pcie_sw64) # pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
+else ifeq ($(PRODUCTFORM), pcie_riscv64) # pcie mode
+    CROSS_CC_PREFIX =
 else # pcie_arm64 and soc mode
     CROSS_CC_PREFIX = aarch64-linux-gnu-
 endif

@@ -75,19 +75,6 @@ static int ring_buffer_send(struct net_device *ndev, struct sk_buff *skb) {
         return -ENOMEM;
 
     pt_store_tx(info->ring_buffer);
-    value = top_reg_read(bmdi, TOP_MISC_GP_REG15_STS_OFFSET);
-
-    while ((value & (1<<15)) != 0)
-    {
-        value = top_reg_read(bmdi, TOP_MISC_GP_REG15_STS_OFFSET);
-    }
-
-    value = top_reg_read(bmdi, TOP_MISC_GP_REG15_STS_OFFSET);
-
-    while ((value & 0x1) != 0)
-    {
-        value = top_reg_read(bmdi, TOP_MISC_GP_REG15_STS_OFFSET);
-    }
 
     value = (1 << 15);
     top_reg_write(bmdi, TOP_MISC_GP_REG15_SET_OFFSET, value);
@@ -129,18 +116,11 @@ exit:
 }
 
 int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
-    int irq_status = 0;
+    u32 value;
 
-    irq_status = top_reg_read(bmdi, TOP_MISC_GP_REG14_STS_OFFSET);
-
-    if ((irq_status & 0x4) == 0x4) {
-        u32 value = top_reg_read(bmdi, TOP_MISC_GP_REG14_CLR_OFFSET);
-        value |= (1 << 2);
-        top_reg_write(bmdi, TOP_MISC_GP_REG14_CLR_OFFSET, value);
-        return 0;
-    } else {
-        return -1;
-    }
+    value = (1 << 2);
+    top_reg_write(bmdi, TOP_MISC_GP_REG14_CLR_OFFSET, value);
+    return 0;
 }
 
 void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
@@ -232,12 +212,12 @@ static int eth_ndo_napi_poll(struct napi_struct *napi, int budget) {
 
         count++;
         if (count >= budget) {
-            dev_info(&info->pci_dev->dev, "NAPI poll continue %d\n", count);
+            // dev_info(&info->pci_dev->dev, "NAPI poll continue %d\n", count);
             goto next;
         }
 
         skb = ring_buffer_recv(info->ndev);
-    };
+    }
 done:
     napi_complete(&info->napi);
 next:
@@ -272,6 +252,7 @@ static void eth_set_a53ipaddress(struct eth_dev_info *info) {
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_IPADDRESS_REG, bmdi->dev_index);
     else if (bmdi->cinfo.chip_id == 0x1686) {
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, 0xc0c00002);
+        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, 0xffffff00);
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, 0);
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
     }
@@ -387,7 +368,7 @@ void eth_unregister_napi(struct eth_dev_info *info) {
     struct bm_device_info *bmdi =
         container_of(info, struct bm_device_info, vir_eth);
 
-    if (bmdi->status_bmcpu != BMCPU_IDLE)
+    if (bmdi->status_bmcpu == BMCPU_RUNNING)
         pt_uninit(info->ring_buffer);
 
     kthread_stop(info->cd_task);
@@ -415,13 +396,16 @@ int bmdrv_veth_init(struct bm_device_info *bmdi, struct pci_dev *pdev) {
     return ret;
 }
 
-void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {
-    u32 value;
+void bmdrv_veth_early_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {
     struct eth_dev_info *veth = &bmdi->vir_eth;
 
     netif_carrier_off(veth->ndev);
     atomic_set(&veth->buffer_ready, 0);
-    msleep(5000);
+}
+
+void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {
+    u32 value;
+    struct eth_dev_info *veth = &bmdi->vir_eth;
 
     bm_eth_free_irq(bmdi);
     eth_unregister_napi(veth);

@@ -7,10 +7,10 @@
 #include "bmlib_runtime.h"
 #include "bmlib_internal.h"
 #include "string.h"
+#include <pthread.h>
 #ifdef __linux
 #include <sys/time.h>
 #include <unistd.h>
-#include <pthread.h>
 #else
 #pragma comment(lib, "libbmlib-static.lib")
 #endif
@@ -434,11 +434,11 @@ int test_cmda_perf_mutithread(int thread_num, int dir, int size, int launch_num)
         CreateThread(NULL,                  // default security attributes
                      0,                     // use default stack size
                      test_cdma_thread,      // thread function name
-                     &para,                 // argument to thread function
+                     &para_array[i],                 // argument to thread function
                      0,                     // use default creation flags
                      &dwThreadIdArray[i]);  // returns the thread identifier
     if (hThreadArray[i] == NULL) {
-        printf("creatthread %d and thread_id 0x%08lx failed\n", i, dwThreadIdArray[i]);
+        printf("creat thread %d and thread_id 0x%08lx failed\n", i, dwThreadIdArray[i]);
         return -1;
     }
     #endif

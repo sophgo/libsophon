@@ -652,6 +652,10 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	int                  retry = 3;
 	u32 value = 0;
 
+	if (bmdi->eth_state == true) {
+		bmdrv_veth_early_deinit(bmdi, bmdi->cinfo.pcidev);
+	}
+
 	bmdi->status_reset = A53_RESET_STATUS_TRUE;
 	bmdrv_set_a53_boot_args(bmdi);
 
@@ -698,6 +702,14 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 		bmdi->status_bmcpu = 0;
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 	}
+
+	if (bmdi->eth_state == true) {
+		bmdi->eth_state = false;
+		bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
+	}
+
+	bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
+
 	return ret;
 }
 
@@ -722,17 +734,17 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		} bm_arm9_fw_mode;
 	bm_arm9_fw_mode mode;
 
-	if (bmdi->eth_state == true) {
-		bmdi->eth_state = false;
-		bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
-	}
-
-	if (bmdi->status_bmcpu == BMCPU_IDLE)
+	if (bmdi->status_bmcpu == BMCPU_IDLE) {
+		if (bmdi->eth_state == true) {
+			bmdi->eth_state = false;
+			bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
+		}
 		return 0;
+	}
 
 	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
 	if (mode == FW_MIX_MODE && bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
-		pr_info("mix mode force reset bmcpu!\n");
+		pr_info("bmsophon%d mix mode force reset bmcpu!\n", bmdi->dev_index);
 		bmdrv_fw_unload(bmdi);
 		return bmdrv_force_reset_bmcpu(bmdi);
 	}

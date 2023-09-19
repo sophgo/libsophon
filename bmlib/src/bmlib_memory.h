@@ -40,6 +40,15 @@ typedef struct bm_memcpy_info {
     bm_cdma_iommu_mode cdma_iommu_mode;
 } bm_memcpy_info_t;
 
+typedef struct bm_memcpy_p2p_info {
+    u64                src_device_addr;
+    u64                dst_device_addr;
+    u64                dst_num;
+    u32                size;
+    bool               intr;
+    bm_cdma_iommu_mode cdma_iommu_mode;
+} bm_memcpy_p2p_info_t;
+
 struct bm_gmem_addr {
 	u64 vir_addr;
 	u64 phy_addr;

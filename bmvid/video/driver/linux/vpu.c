@@ -1698,6 +1698,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
             u32 intr_inst_index;
             u32 intr_reason_in_q;
             u32 interrupt_flag_in_q;
+            u32 got_fifo_out = 0;
 #endif
             u32 core_idx;
 
@@ -1749,7 +1750,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
             }
 #endif
             if (signal_pending(current)) {
-                printk(KERN_ERR "[VPUDRV] signal_pending failed\n");
+                //printk(KERN_ERR "[VPUDRV] signal_pending failed\n");
                 ret = -ERESTARTSYS;
                 atomic_dec(&s_vpu_usage_info.vpu_busy_status[core_idx]);
                 break;
@@ -1760,6 +1761,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
             interrupt_flag_in_q = kfifo_out(&s_interrupt_pending_q[core_idx*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason_in_q, sizeof(u32));
             if (interrupt_flag_in_q > 0) {
                 dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = intr_reason_in_q;
+                got_fifo_out = 1;
             }
             else {
                 dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = 0;
@@ -1776,7 +1778,8 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 
 #ifdef SUPPORT_MULTI_INST_INTR
             info.intr_reason = dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index];
-            s_interrupt_flag[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = 0;
+            if (got_fifo_out)
+                s_interrupt_flag[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = 0;
             dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = 0;
 #else
             info.intr_reason = dev->interrupt_reason[core_idx];
@@ -2125,6 +2128,23 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
             DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET\n");
         }
         break;
+		case VDI_IOCTL_GET_KERNEL_RESET_STATUS:
+			{
+				vpudrv_reset_flag reset_flag;
+				DPRINTK("[VPUDRV][+]VDI_IOCTL_GET_KERNEL_RESET_STATUS\n");
+				ret = copy_from_user(&reset_flag, (vpudrv_reset_flag *)arg, sizeof(vpudrv_reset_flag));
+				if (ret != 0)
+					return -EFAULT;
+
+				if (reset_flag.core_idx < 0 || reset_flag.core_idx >= get_vpu_core_num(chip_id, video_cap))
+					return -EFAULT;
+				reset_flag.reset_core_disable =s_vpu_drv_context.reset_vpu_core_disable[reset_flag.core_idx];
+				ret = copy_to_user((void __user *)arg, &reset_flag, sizeof(vpudrv_reset_flag));
+				if (ret != 0)
+					return -EFAULT;
+				DPRINTK("[VPUDRV][-]VDI_IOCTL_GET_KERNEL_RESET_STATUS\n");
+			}
+			break;
     default:
         {
             printk(KERN_ERR "[VPUDRV] No such IOCTL, cmd is %d\n", cmd);
@@ -2431,13 +2451,13 @@ static int vpu_release(struct inode *inode, struct file *filp)
 #if 1
 #if defined(CHIP_BM1682)
         if(ret > 0 && s_vpu_usage_info.vpu_open_ref_count[ret-1] == 0) {
-            printk(KERN_INFO "exception will reset the vpu core: %d\n", ret - 1);
+            //printk(KERN_INFO "exception will reset the vpu core: %d\n", ret - 1);
             s_init_flag[ret-1] = 0;
 //            msleep(200); //waiting the decoder stoping maybe......
         }
 #elif defined(CHIP_BM1684)
         if(ret > 0 && s_vpu_usage_info.vpu_open_ref_count[ret-1] == 0 && s_vpu_drv_context.reset_vpu_core_disable[ret-1]==0) {
-            printk(KERN_INFO "exception will reset the vpu core: %d\n", ret - 1);
+            //printk(KERN_INFO "exception will reset the vpu core: %d\n", ret - 1);
             s_init_flag[ret-1] = 0;
         }
 #endif
