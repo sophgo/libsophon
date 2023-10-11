@@ -1313,4 +1313,4 @@ module_exit(bmdrv_module_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("xiao.wang@sophgo.com");
 MODULE_DESCRIPTION("Sophon Series Deep Learning Accelerator Driver");
-MODULE_VERSION(PROJECT_VER);
+MODULE_VERSION("0.4.9 LTS");

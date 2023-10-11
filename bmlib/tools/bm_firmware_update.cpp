@@ -76,6 +76,7 @@ SM5MA	13
 #define BM1684X_EVB "BM1684X_EVB"
 #define SC7P "SC7P"
 #define SC7PLUS "SC7+"
+#define SM7M_V1_0 "SM7"
 
 DEFINE_int32(dev, 0, "device id");
 DEFINE_string(file, "", "bin file with pathname");
@@ -110,7 +111,10 @@ struct {
     {"SM5MINI", {10, -1}, {SM5ME, SM5MP, SM5MS, SM5MA, "Error"}},
     {"BM1684X_EVB", {32, -1}, {EVB, "Error"}},
     {"SC7P", {33, -1}, {SC7P, "Error"}},
-    {"SC7+", {34, -1}, {SC7PLUS, "Error"}}
+    {"SC7+", {34, -1}, {SC7PLUS, "Error"}},
+    {"SM7_V0_0",{48,-1},{SM7M_V1_0, "Error"}},
+    {"SM7_MP1_1",{54,-1},{SM7M_V1_0, "Error"}}
+
 };
 
 #pragma pack(push, 1)

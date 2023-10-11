@@ -35,6 +35,13 @@ extern "C" {
 #define MAX_BATCH_SIZE (32)
 #define MOSAIC_SIZE 8
 #define VPPALIGN(x, mask)  (((x) + ((mask)-1)) & ~((mask)-1))
+
+struct sg_device_mem_st
+{
+    bool flag = 0;
+    bm_device_mem_t bm_device_mem;
+};
+
 typedef struct bmcv_shape_st {
     int n;
     int c;
@@ -384,6 +391,10 @@ int is_yuv_or_rgb(bm_image_format_ext fmt);
 void calculate_yuv(unsigned char r, unsigned char g, unsigned char b, unsigned char* y_, unsigned char* u_, unsigned char* v_);
 
 void bmcv_err_log_internal(char *log_buf, size_t string_sz, const char *frmt, ...);
+void sg_free_device_mem(bm_handle_t handle, sg_device_mem_st mem);
+bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size);
+bm_status_t sg_image_alloc_dev_mem(bm_image image, int heap_id);
+
 #ifdef __linux__
 #define BMCV_ERR_LOG(frmt, args...)                                            \
     do {                                                                       \

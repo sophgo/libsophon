@@ -1109,7 +1109,7 @@ DECL_EXPORT bm_status_t bmcv_distance_ext(bm_handle_t handle,
                           bm_device_mem_t input,
                           bm_device_mem_t output,
                           int dim,
-                          bm_device_mem_t pnt,
+                          const void * pnt,
                           int len,
 			  int dtyte);
 

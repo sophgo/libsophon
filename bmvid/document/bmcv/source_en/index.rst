@@ -121,6 +121,7 @@ BMCV API
    api/hm_distance
    api/axpy
    api/pyramid
+   api/bayer2rgb
 
 PCIe CPU
 --------

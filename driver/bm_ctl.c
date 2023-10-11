@@ -268,7 +268,10 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
 		} else {
 			pattr->tpu_min_clock = 75;
-			pattr->tpu_max_clock = 1000;
+			if (bm_read32(bmdi, 0x5001021C) == BM1684X_SM7M_V1_0)
+				pattr->tpu_max_clock = 950;
+			else
+				pattr->tpu_max_clock = 750;
 		}
 		pattr->tpu_current_clock = c_attr->tpu_current_clock;
 		if (pattr->tpu_current_clock < pattr->tpu_min_clock

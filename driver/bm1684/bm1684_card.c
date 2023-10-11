@@ -252,6 +252,12 @@ int bm1684_get_board_type_by_id(struct bm_device_info *bmdi, char *s_board_type,
 	case BOARD_TYPE_SC7_PLUS:
 		strncpy(s_board_type, "SC7+", 10);
 		break;
+	case BOARD_TYPE_SM7_V0_0:
+		strncpy(s_board_type, "SM7", 10);
+		break;
+	case BOARD_TYPE_SM7_MP1_1:
+		strncpy(s_board_type, "SM7", 10);
+		break;
 	default:
 		strncpy(s_board_type, "Error", 10);
 		pr_info("Ivalid board type %d\n", id);
@@ -344,6 +350,12 @@ int bm1684_get_board_version_by_id(struct bm_device_info *bmdi, char *s_board_ve
 			strncpy(s_board_version, "V1_0", 10);
 		else
 			snprintf(s_board_version, 10, "V1_%d", board_version);
+		break;
+	case BOARD_TYPE_SM7_V0_0:
+		strncpy(s_board_version, "V0_0",10);
+		break;
+	case BOARD_TYPE_SM7_MP1_1:
+		strncpy(s_board_version, "V1_0", 10);
 		break;
 	default:
 		strncpy(s_board_version, "invalid", 10);

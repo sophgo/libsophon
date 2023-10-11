@@ -302,6 +302,7 @@ static vpudrv_buffer_t s_vpu_register[MAX_NUM_VPU_CORE] = {0};
 static int               s_interrupt_flag[MAX_NUM_INSTANCE*MAX_NUM_VPU_CORE] = {0};
 static wait_queue_head_t s_interrupt_wait_q[MAX_NUM_INSTANCE*MAX_NUM_VPU_CORE];
 static struct kfifo      s_interrupt_pending_q[MAX_NUM_INSTANCE*MAX_NUM_VPU_CORE];
+static spinlock_t        s_kfifo_lock[MAX_NUM_INSTANCE*MAX_NUM_VPU_CORE];
 #else
 static int               s_interrupt_flag[MAX_NUM_VPU_CORE];
 static wait_queue_head_t s_interrupt_wait_q[MAX_NUM_VPU_CORE];
@@ -683,7 +684,7 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
             if(WAVE521C_CODE != product_code) {
                 Wave5VpuDecSetBitstreamFlag(core, instanceIndex);
 
-                interrupt_flag_in_q = kfifo_out(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+instanceIndex], &i, sizeof(u32));
+                interrupt_flag_in_q = kfifo_out_spinlocked(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+instanceIndex], &i, sizeof(u32), &s_kfifo_lock[core*MAX_NUM_INSTANCE+instanceIndex]);
                 if (interrupt_flag_in_q > 0) {
                     //FlushDecResult(core, instanceIndex);
                     pr_info("interrupt flag : %d\n", interrupt_flag_in_q);
@@ -1238,10 +1239,10 @@ static irqreturn_t vpu_irq_handler(int irq, void *dev_id)
                 if (!kfifo_is_full(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index])) {
                     if (intr_reason == ((1 << INT_WAVE5_DEC_PIC) | (1 << INT_WAVE5_ENC_LOW_LATENCY))) {
                         u32 ll_intr_reason = (1 << INT_WAVE5_DEC_PIC);
-                        kfifo_in(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &ll_intr_reason, sizeof(u32));
+                        kfifo_in_spinlocked(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &ll_intr_reason, sizeof(u32), &s_kfifo_lock[core*MAX_NUM_INSTANCE+intr_inst_index]);
                     }
                     else
-                        kfifo_in(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason, sizeof(u32));
+                        kfifo_in_spinlocked(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason, sizeof(u32), &s_kfifo_lock[core*MAX_NUM_INSTANCE+intr_inst_index]);
                 }
                 else {
                     printk(KERN_ERR "[VPUDRV] :  kfifo_is_full kfifo_count=%d \n", kfifo_len(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index]));
@@ -1268,7 +1269,7 @@ static irqreturn_t vpu_irq_handler(int irq, void *dev_id)
             if(intr_inst_index >= MAX_NUM_INSTANCE)
                 pr_err(">>>> core: %d, intr_inst_index: %d, %08x, %08x\n", core, intr_inst_index, intr_reason, BIT_RET_RUN_INDEX);
             else
-                kfifo_in(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason, sizeof(u32));
+                kfifo_in_spinlocked(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason, sizeof(u32), &s_kfifo_lock[core*MAX_NUM_INSTANCE+intr_inst_index]);
 #else
             dev->interrupt_reason[core] = ReadVpuRegister(BIT_INT_REASON);
 #endif
@@ -1758,7 +1759,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 
 #ifdef SUPPORT_MULTI_INST_INTR
             intr_reason_in_q = 0;
-            interrupt_flag_in_q = kfifo_out(&s_interrupt_pending_q[core_idx*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason_in_q, sizeof(u32));
+            interrupt_flag_in_q = kfifo_out_spinlocked(&s_interrupt_pending_q[core_idx*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason_in_q, sizeof(u32), &s_kfifo_lock[core_idx*MAX_NUM_INSTANCE+intr_inst_index]);
             if (interrupt_flag_in_q > 0) {
                 dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = intr_reason_in_q;
                 got_fifo_out = 1;
@@ -3799,6 +3800,7 @@ static int __init vpu_init(void)
 #ifdef SUPPORT_MULTI_INST_INTR
     for (i=0; i<MAX_NUM_INSTANCE* get_vpu_core_num(chip_id, video_cap); i++) {
         init_waitqueue_head(&s_interrupt_wait_q[i]);
+        spin_lock_init(&s_kfifo_lock[i]);
     }
 
     for (i=0; i<MAX_NUM_INSTANCE* get_vpu_core_num(chip_id, video_cap); i++) {

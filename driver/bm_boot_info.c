@@ -356,11 +356,11 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 				bmdi->boot_info.fan_exist != 0 ||
 				bmdi->boot_info.max_board_power != 75 ||
 				bmdi->boot_info.tpu_min_clk != 25 ||
-				bmdi->boot_info.tpu_max_clk != 1000) {
+				bmdi->boot_info.tpu_max_clk != 750) {
 				bmdi->boot_info.board_power_sensor_exist = 1;
 				bmdi->boot_info.max_board_power = 75;
 				bmdi->boot_info.tpu_min_clk = 25;
-				bmdi->boot_info.tpu_max_clk = 1000;
+				bmdi->boot_info.tpu_max_clk = 750;
 				bmdi->boot_info.fan_exist = 0;
 				need_update = 1;
 			}
@@ -374,6 +374,10 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 				need_update = 1;
 			}
 			break;
+		case BOARD_TYPE_SM7_V0_0:
+		case BOARD_TYPE_SM7_MP1_1:
+			bmdi->boot_info.board_power_sensor_exist = 1;
+			bmdi->boot_info.max_board_power = 45;
 		default:
 			pr_info("unknow board type = %d \n", board_type);
 			return -1;
