@@ -47,25 +47,33 @@ void FreeWrap(bm_handle_t& bm_handle, bm_device_mem_t* dev_mem, void* host_mem) 
 
 void matrix_gen_data(float* data, u32 len) {
     for (u32 i = 0; i < len; i++) {
-        data[i] = ((float)rand() / (float)RAND_MAX) * 3.3;
+        data[i] = ((float)rand() / (float)RAND_MAX);
     }
 }
 
-void matrix_gen_data(fp16* data, u32 len) {
-    for (u32 i = 0; i < len; i++) {
-        data[i] = fp32tofp16(((float)rand() / (float)RAND_MAX) * 3.3, 1);
-    }
-}
 void fvec_norm_L2sqr_ref(float* vec, float* matrix, int row_num, int col_num) {
     for (int i = 0; i < row_num; i++)
-        for (int j = 0; j < col_num; j++)
+        for (int j = 0; j < col_num; j++) {
             vec[i] += matrix[i * col_num + j] * matrix[i * col_num + j];
+        }
 }
 
-void fvec_norm_L2sqr_ref(fp16* vec, fp16* matrix, int row_num, int col_num) {
-    for (int i = 0; i < row_num; i++)
-        for (int j = 0; j < col_num; j++)
-            vec[i] = fp32tofp16(fp16tofp32(vec[i]) + (fp16tofp32(matrix[i * col_num + j]) * fp16tofp32(matrix[i * col_num + j])), 1);
+void matrix_gen_data_norm(fp16* data, fp16* vec, int row_num, int col_num){
+    for (int i = 0; i < row_num; i++){
+        // rand gen data & L2 norm
+        float data_tmp[col_num];
+        float l2_norm = 0.0;
+        for (int j = 0; j < col_num; j++) {
+            data_tmp[j] = ((float)rand() / (float)RAND_MAX);
+            l2_norm += data_tmp[j] * data_tmp[j];
+        }
+
+        // get L2 norm array
+        for (int j = 0; j < col_num; j++) {
+            data[i * col_num + j] = fp32tofp16(data_tmp[j] / l2_norm, 1);
+        }
+        vec[i] = fp32tofp16(sqrt(l2_norm), 1);
+    }
 }
 
 void matrix_trans(void* src, void* dst, int row_num, int col_num, data_type_t dtype) {
@@ -198,6 +206,7 @@ static int result_compare(fp16* tpu_result_similarity,
                           int* ref_index,
                           int sort_cnt,
                           int query_vecs_num) {
+
     for (int query_cnt = 0; query_cnt < query_vecs_num; query_cnt++) {
         for (int sort_indx = 0; sort_indx < sort_cnt; sort_indx++) {
             if (fabs(fp16tofp32(tpu_result_similarity[query_cnt * sort_cnt + sort_indx]) - fp16tofp32(ref_similarity[query_cnt * sort_cnt + sort_indx])) > (3*1e-1)) {
@@ -214,6 +223,7 @@ static int result_compare(fp16* tpu_result_similarity,
             }
         }
     }
+
     return 0;
 }
 
@@ -223,6 +233,7 @@ static int result_compare(float* tpu_result_similarity,
                           int* ref_index,
                           int sort_cnt,
                           int query_vecs_num) {
+
     for (int query_cnt = 0; query_cnt < query_vecs_num; query_cnt++) {
         // std::cout << "\n ==> query_cnt = [" << query_cnt << "]" << std::endl;
         for (int sort_indx = 0; sort_indx < sort_cnt; sort_indx++) {
@@ -244,6 +255,7 @@ static int result_compare(float* tpu_result_similarity,
             }
         }
     }
+
     return 0;
 }
 
@@ -276,12 +288,9 @@ bm_status_t test_faiss_indexflatL2_fp16(int vec_dims,
     MallocWrap(handle, &db_L2norm_dev_mem, (unsigned long long*)&vec_db, 1 * database_vecs_num * dtype_size((data_type_t)input_dtype));
     fp16* blob_R_trans = new fp16[vec_dims * database_vecs_num];
 
-    matrix_gen_data(blob_L, query_vecs_num * vec_dims);
-    matrix_gen_data(blob_R, vec_dims * database_vecs_num);
+    matrix_gen_data_norm(blob_L, vec_query, query_vecs_num, vec_dims);
+    matrix_gen_data_norm(blob_R, vec_db, database_vecs_num, vec_dims);
     matrix_trans(blob_R, blob_R_trans, database_vecs_num, vec_dims, (data_type_t)input_dtype);
-
-    fvec_norm_L2sqr_ref(vec_query, blob_L, query_vecs_num, vec_dims);
-    fvec_norm_L2sqr_ref(vec_db, blob_R, database_vecs_num, vec_dims);
 
     bm_memcpy_s2d(handle, query_data_dev_mem, blob_L);
     bm_memcpy_s2d(handle, db_data_dev_mem, blob_R);
@@ -498,14 +507,23 @@ int main(int argc, char *argv[]) {
     // int is_transpose = 1;
     // int input_dtype = DT_FP32;
     // int output_dtype = DT_FP32;
+
     int sort_cnt = rand() % 100 + 1;
-    int vec_dims = rand() % 256 + 1;
-    int query_vecs_num = rand() % 64 + 1;
     int database_vecs_num = rand() % 10000 + 1 + sort_cnt;
+    int query_vecs_num = rand() % 64 + 1;
+    int vec_dims = rand() % 256 + 1;
     int is_transpose = rand() % 2;
     int input_dtype = rand() % 2 == 0? DT_FP32 : DT_FP16;
     int output_dtype = rand() % 2 == 0? DT_FP32 : DT_FP16;
 
+    if (argc > 1) database_vecs_num = atoi(argv[1]);
+    if (argc > 2) query_vecs_num = atoi(argv[2]);
+    if (argc > 3) sort_cnt = atoi(argv[3]);
+    if (argc > 4) vec_dims = atoi(argv[4]);
+    if (argc > 5) is_transpose = atoi(argv[5]);
+    if (argc > 6) input_dtype = atoi(argv[6]);
+    if (argc > 7) output_dtype = atoi(argv[7]);
+    
     std::cout << "------------parameter------------" << std::endl;
     std::cout << "database_num: " << database_vecs_num << std::endl;
     std::cout << "query_num:    " << query_vecs_num << std::endl;
@@ -514,14 +532,6 @@ int main(int argc, char *argv[]) {
     std::cout << "transpose:    " << is_transpose << std::endl;
     std::cout << "input_dtype:  " << (input_dtype == DT_FP32?"fp32":"fp16") << std::endl;
     std::cout << "output_dtype: " << (output_dtype == DT_FP32?"fp32":"fp16") << std::endl;
-
-    if (argc > 1) vec_dims = atoi(argv[1]);
-    if (argc > 2) query_vecs_num = atoi(argv[2]);
-    if (argc > 3) database_vecs_num = atoi(argv[3]);
-    if (argc > 4) sort_cnt = atoi(argv[4]);
-    if (argc > 5) input_dtype = atoi(argv[5]);
-    if (argc > 6) output_dtype = atoi(argv[6]);
-    if (argc > 7) is_transpose = atoi(argv[7]);
 
     if (input_dtype == DT_FP32) {
         if (BM_SUCCESS != test_faiss_indexflatL2_fp32(vec_dims, query_vecs_num, database_vecs_num, sort_cnt, is_transpose, input_dtype, output_dtype)) {

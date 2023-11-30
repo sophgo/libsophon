@@ -83,6 +83,10 @@
 #define UBOOT_VERSION_BASE		(BL31_VERSION_BASE + BL31_VERSION_SIZE) // 0x101fb2c0
 #define UBOOT_VERSION_SIZE		0x50
 
+// after kernel 5.17, PDE_DATA() has been deleted
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    #define PDE_DATA pde_data
+#endif
 
 typedef enum {
 	DEVICE,

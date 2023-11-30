@@ -340,3 +340,68 @@ bm_status_t bmcv_image_watermark_repeat_superpose(bm_handle_t         handle,
     delete [] mem_inner;
     return ret;
 }
+
+bm_status_t bmcv_image_draw_point(bm_handle_t handle,
+                                bm_image      image,
+                                int           point_num,
+                                bmcv_point_t *coord,
+                                int           length,
+                                unsigned char r,
+                                unsigned char g,
+                                unsigned char b) {
+    if(point_num == 0)
+        return BM_SUCCESS;
+    if(point_num < 0) {
+        BMCV_ERR_LOG("rect num less than 0\n");
+        return BM_ERR_PARAM;
+    }
+    if(!image.image_private) {
+        BMCV_ERR_LOG("invalidate image, not created\n");
+        return BM_ERR_PARAM;
+    }
+    if(image.data_type != DATA_TYPE_EXT_1N_BYTE) {
+        BMCV_ERR_LOG("invalidate image, data type should be DATA_TYPE_EXT_1N_BYTE\n");
+        return BM_ERR_PARAM;
+    }
+    if(!bm_image_is_attached(image)) {
+        BMCV_ERR_LOG("invalidate image, please attach device memory\n");
+        return BM_ERR_PARAM;
+    }
+    if(image.height >= (1 << 16) || image.width >= (1 << 16)) {
+        BMCV_ERR_LOG("Not support such big size image\n");
+        return BM_NOT_SUPPORTED;
+    }
+
+    if(length > 510){
+        BMCV_ERR_LOG("Not support such big length(%d) point\n", length);
+        return BM_NOT_SUPPORTED;
+    }
+
+    bm_status_t ret = BM_SUCCESS;
+    unsigned int chipid = BM1684X;
+    unsigned char fill_val[3] = {r, g, b};
+
+    ret = bm_get_chipid(handle, &chipid);
+    if (BM_SUCCESS != ret)
+      return ret;
+
+    switch(chipid)
+    {
+      case BM1684X:
+      {
+        if(is_yuv_or_rgb(image.image_format) == COLOR_SPACE_YUV)
+            calculate_yuv(r, g, b, fill_val, fill_val + 1, fill_val + 2);
+        ret = bm1684x_vpp_point(handle, image, point_num, coord, length, fill_val[0], fill_val[1], fill_val[2]);
+        if(ret!=BM_SUCCESS){
+            BMCV_ERR_LOG("error 1684x draw point\n");
+        }
+        break;
+      }
+      default:
+      {
+        return BM_NOT_SUPPORTED;
+      }
+    }
+    return ret;
+}
+

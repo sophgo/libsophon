@@ -33,6 +33,28 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #include <map>
 #define FIRMWARE_NAME "libbm1684x_kernel_module.so"
 
+bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size) {
+    if (BM_SUCCESS != bm_malloc_device_byte(handle, &(pmem->bm_device_mem), size)) {
+        pmem->flag = 0;
+        return BM_ERR_DEVNOTREADY;
+    }
+    pmem->flag = 1;
+    return BM_SUCCESS;
+}
+
+bm_status_t sg_image_alloc_dev_mem(bm_image image, int heap_id) {
+    if (BM_SUCCESS != bm_image_alloc_dev_mem(image, heap_id)) {
+        return BM_ERR_DEVNOTREADY;
+    }
+    return BM_SUCCESS;
+}
+
+void sg_free_device_mem(bm_handle_t handle, sg_device_mem_st mem) {
+    if (mem.flag == 1)
+        bm_free_device(handle, mem.bm_device_mem);
+}
+
+
 static std::map<std::pair<bm_image_format_ext, bm_image_format_ext>, vpp_limitation> vpp_format_allowed_map = {
     /* RGBP_SEPERATE i.e RGB_PALANAR with seperate address for each plane */
     {std::pair<bm_image_format_ext, bm_image_format_ext>(FORMAT_RGB_PACKED, FORMAT_RGB_PACKED), {32, 32, {STRIDE_ALIGN, 1, 1, 1}, {STRIDE_ALIGN, 1, 1, 1}, 4096, 16, 4096, 16, 32, 32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}},
@@ -463,6 +485,10 @@ bm_status_t bm_load_tpu_module(bm_handle_t handle, tpu_kernel_module_t *tpu_modu
                                                  fw_path,
                                                  FIRMWARE_NAME,
                                                  key_size);
+    if(*tpu_module == NULL){
+        printf("tpu_module is null\n");
+        return BM_ERR_FAILURE;
+    }
     return BM_SUCCESS;
 }
 
@@ -480,6 +506,10 @@ bm_status_t bm_tpu_kernel_launch(bm_handle_t handle,
     }
     func_id = tpu_kernel_get_function(handle, tpu_module, (char*)func_name);
     ret = tpu_kernel_launch(handle, func_id, param, size);
+    if(BM_SUCCESS != tpu_kernel_free_module(handle, tpu_module)){
+        printf("tpu module unload failed \n");
+        return BM_ERR_FAILURE;
+    }
     return ret;
 }
 
@@ -502,6 +532,11 @@ bm_status_t bm_kernel_main_launch(bm_handle_t handle, int api_id, void *param, s
     }
     func_id = tpu_kernel_get_function(handle, tpu_module, "tpu_kernel_main");
     ret = tpu_kernel_launch(handle, func_id, full_param, full_size);
+    if(BM_SUCCESS != tpu_kernel_free_module(handle, tpu_module)){
+        printf("tpu module unload failed \n");
+        delete [] full_param;
+        return BM_ERR_FAILURE;
+    }
     delete [] full_param;
     return ret;
 }
@@ -1896,3 +1931,31 @@ void calculate_yuv(u8 r, u8 g, u8 b, u8* y_, u8* u_, u8* v_)
     *u_ = (u8)u;
     *v_ = (u8)v;
 }
+
+void data_type_conversion(bm_image_data_format_ext bmcv_data_type, int *tpu_data_type)
+{
+  switch(bmcv_data_type)
+  {
+    case DATA_TYPE_EXT_FLOAT32:
+      *tpu_data_type = DT_FP32;
+      break;
+    case DATA_TYPE_EXT_1N_BYTE:
+      *tpu_data_type = DT_UINT8;
+      break;
+    case DATA_TYPE_EXT_1N_BYTE_SIGNED:
+      *tpu_data_type = DT_INT8;
+      break;
+    case DATA_TYPE_EXT_FP16:
+      *tpu_data_type = DT_FP16;
+      break;
+    case DATA_TYPE_EXT_BF16:
+      *tpu_data_type = DT_BFP16;
+      break;
+    default:
+      bmlib_log("BMCV", BMLIB_LOG_ERROR, "1684x bmcv_data_type not support %s: %s: %d\n",
+        __FILE__, __func__, __LINE__);
+      break;
+    }
+}
+
+

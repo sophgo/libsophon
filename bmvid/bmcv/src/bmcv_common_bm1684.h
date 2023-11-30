@@ -827,7 +827,6 @@ typedef struct bm_api_cv_distance {
   int dim;
   float pnt[8];
   int len;
-  int dtype;
 } bm_api_cv_distance_t;
 
 typedef struct bm_api_cv_yuv2rgb {

@@ -19,6 +19,8 @@ typedef struct bmcv_jpeg_encoder_output_buffer_struct {
     void    *buffer;
     size_t  buffer_size;
     void    *opaque;   // reserved for extension
+    int     bs_in_device;
+    int     soc_idx;
 } bmcv_jpeg_buffer_t;
 
 static void* acquire_output_buffer(void *context, size_t size, void **acquired_handle)
@@ -36,13 +38,25 @@ static void* acquire_output_buffer(void *context, size_t size, void **acquired_h
         *acquired_handle = mem;
         return mem;
     } else {
+
+        if(p_encoded->bs_in_device == 1)
+        {
+            bm_handle_t handle;
+            bm_dev_request(&handle, p_encoded->soc_idx);
+            bm_device_mem_t *bs_device_mem  = (bm_device_mem_t *)malloc(sizeof(bm_device_mem_t));
+            //only vpp
+            bm_malloc_device_byte_heap(handle, bs_device_mem, 1,size);
+            *acquired_handle = bs_device_mem;
+            bm_dev_free(handle);
+            return (void *)bs_device_mem;
+        }
+
         if (p_encoded->buffer_size < size){
             bmlib_log("JPEG-ENC", BMLIB_LOG_WARNING,
                     "Pre-allocated encoded output buffer is less than encoded JPEG size! Reallocate it.\n");
             p_encoded->buffer = realloc(p_encoded->buffer, size);
             p_encoded->buffer_size = size;
         }
-
         *acquired_handle = p_encoded->buffer;
         return *acquired_handle;
     }
@@ -358,7 +372,8 @@ bm_status_t bmcv_jpeg_enc_one_image(bmcv_jpeg_encoder_t  *jpeg_enc,
                                     bm_image*            src,
                                     void**               p_jpeg_data,
                                     size_t*              out_size,
-                                    int                  quality_factor){
+                                    int                  quality_factor,
+                                    int                  bs_in_device){
     BmJpuEncReturnCodes ret;
     BmJpuJPEGEncParams enc_params;
     BmJpuFramebuffer framebuffer;
@@ -382,23 +397,29 @@ bm_status_t bmcv_jpeg_enc_one_image(bmcv_jpeg_encoder_t  *jpeg_enc,
     encoded_buffer.buffer = *p_jpeg_data;
     encoded_buffer.buffer_size = *out_size;
     encoded_buffer.opaque = NULL;
+    encoded_buffer.soc_idx = 0;
+    if(bs_in_device == 1){
+        encoded_buffer.soc_idx = bm_get_devid(bm_image_get_handle(src));
+        encoded_buffer.bs_in_device = bs_in_device;
+    }
+
     switch (src_image_format)
     {
         case FORMAT_YUV420P:
             out_pixformat = BM_JPU_COLOR_FORMAT_YUV420;
-            c_size = info.stride[1] * (height + 1) / 2;
+            c_size = info.stride[1] * ((height + 1) / 2);
             total_size = y_size + c_size * 2;
             interleave = 0;
             break;
         case FORMAT_NV12:
             out_pixformat = BM_JPU_COLOR_FORMAT_YUV420;
-            c_size = info.stride[1] * (height + 1) / 2;
+            c_size = info.stride[1] * ((height + 1) / 2);
             total_size = y_size + c_size;
             interleave = 1;
             break;
         case FORMAT_NV21:
             out_pixformat = BM_JPU_COLOR_FORMAT_YUV420;
-            c_size = info.stride[1] * (height + 1) / 2;
+            c_size = info.stride[1] * ((height + 1) / 2);
             total_size = y_size + c_size;
             interleave = 2;
             break;
@@ -469,8 +490,10 @@ bm_status_t bmcv_jpeg_enc_one_image(bmcv_jpeg_encoder_t  *jpeg_enc,
     enc_params.packed_format  = packed_format;
     enc_params.chroma_interleave     = interleave;
     enc_params.output_buffer_context = (void*)&encoded_buffer;
+
     enc_params.acquire_output_buffer = acquire_output_buffer;
     enc_params.finish_output_buffer  = finish_output_buffer;
+    enc_params.bs_in_device          = bs_in_device;
 
 
     /* Do the actual encoding */
@@ -492,7 +515,8 @@ bm_status_t bmcv_image_jpeg_enc(bm_handle_t  handle,
                                 bm_image*    src,
                                 void**       p_jpeg_data,
                                 size_t*      out_size,
-                                int          quality_factor) {
+                                int          quality_factor,
+                                int          bs_in_device) {
     if(BM_SUCCESS != bmcv_jpeg_enc_check(src, image_num, quality_factor)) {
         BMCV_ERR_LOG("bmcv_jpeg_enc_check error\r\n");
         return BM_ERR_FAILURE;
@@ -527,6 +551,7 @@ bm_status_t bmcv_image_jpeg_enc(bm_handle_t  handle,
             if (ret != BM_SUCCESS) {
                 bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR, "internal creat bm_image failed!\n");
                 for (int j = 0; j < i; j++) {
+                    //if(bs_in_device == 0)
                     free(p_jpeg_data[j]);
                     free(out_size);
                 }
@@ -537,6 +562,7 @@ bm_status_t bmcv_image_jpeg_enc(bm_handle_t  handle,
             if (ret != BM_SUCCESS) {
                 bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR, "internal width align failed!\n");
                 for (int j = 0; j < i; j++) {
+                    //if(bs_in_device == 0)
                     free(p_jpeg_data[j]);
                     free(out_size);
                 }
@@ -567,12 +593,13 @@ bm_status_t bmcv_image_jpeg_enc(bm_handle_t  handle,
         fclose(fp);
         free(output_ptr);
 #endif
-        ret = bmcv_jpeg_enc_one_image(jpeg_enc, src_align, &p_jpeg_data[i], &(out_size[i]), quality_factor);
+        ret = bmcv_jpeg_enc_one_image(jpeg_enc, src_align, &p_jpeg_data[i], &(out_size[i]), quality_factor,bs_in_device);
         if (!src_is_align) {
             bm_image_destroy(*src_align);
         }
         if (ret != BM_SUCCESS) {
             for (int j = 0; j < i; j++) {
+                //if(bs_in_device == 0)
                 free(p_jpeg_data[j]);
                 free(out_size);
             }

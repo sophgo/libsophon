@@ -137,8 +137,6 @@ bmcv_affine_matrix 定义了一个坐标变换矩阵，其顺序为 float m[6] =
 
 6. 要求该接口输出 bm_image 的 width、height、image_format、data_type 以及 stride 必须保持一致。
 
-7. bm1684X暂不支持使用 bilinear 进行插值。
-
 
 **代码示例**
 
@@ -161,6 +159,7 @@ bmcv_affine_matrix 定义了一个坐标变换矩阵，其顺序为 float m[6] =
 
             int dst_h = 256;
             int dst_w = 256;
+            int use_bilinear = 0;
             bm_dev_request(&handle, 0);
             bmcv_affine_image_matrix matrix_image;
             matrix_image.matrix_num = 1;
@@ -187,7 +186,7 @@ bmcv_affine_matrix 定义了一个坐标变换矩阵，其顺序为 float m[6] =
             u8 *host_ptr[] = {*src_ptr.get()};
             bm_image_copy_host_to_device(src, (void **)host_ptr);
 
-            bmcv_image_warp_affine(handle, 1, &matrix_image, &src, &dst);
+            bmcv_image_warp_affine(handle, 1, &matrix_image, &src, &dst, use_bilinear);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);

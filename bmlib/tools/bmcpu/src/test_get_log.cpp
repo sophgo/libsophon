@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <bmlib_runtime.h>
+#include <ctype.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
@@ -21,6 +22,19 @@
 #define LOG_TO_CONSOLE_ON  1
 #define LOG_TO_CONSOLE_OFF 0
 
+static int isdigitstr(char *str)
+{
+    int len = strlen(str);
+    int i = 0;
+
+    for (i = 0; i < len; i++)
+    {
+        if (!(isdigit(str[i])))
+            return -1;
+    }
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
 #if !defined(USING_CMODEL) && !defined(SOC_MODE)
     bm_handle_t handle;
@@ -28,6 +42,11 @@ int main(int argc, char *argv[]) {
 
     if (argc < 3) {
         printf("Usage: test_get_log dev_id log_file\n");
+        return -1;
+    }
+
+    if (isdigitstr(argv[1])) {
+        printf("bmcpu_get_log error, dev_id is not number!\n");
         return -1;
     }
 

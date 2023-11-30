@@ -709,7 +709,8 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
                                 void**       p_jpeg_data,
                                 size_t*      in_size,
                                 int          image_num,
-                                bm_image*    dst) {
+                                bm_image*    dst,
+                                int          bs_in_device) {
     if (handle == NULL) {
         bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
         return BM_ERR_FAILURE;
@@ -729,6 +730,22 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
     bmcv_jpeg_decoder_t *jpeg_dec[4];
     int use_soft_jpeg[4];
     for (int i = 0; i < image_num; i++) {
+
+        if(bs_in_device == 1 )
+        {
+            bm_device_mem_t *mem = (bm_device_mem_t *)p_jpeg_data[i];
+            uint8_t* tmp_data = (uint8_t *)malloc(*in_size + 64);
+
+            if(bm_memcpy_d2s(handle, tmp_data, *mem) != BM_SUCCESS)
+            {
+                printf("d2s failed!!! p_jpeg_data_addr=%p\n",p_jpeg_data[i]);
+            }
+
+            bm_free_device(handle, *((bm_device_mem_t *)p_jpeg_data[i]));
+            free(p_jpeg_data[i]);
+            p_jpeg_data[i] = tmp_data;
+        }
+
         use_soft_jpeg[i] = try_soft_decoding(handle, p_jpeg_data[i], in_size[i], dst+i);
 
         if (use_soft_jpeg[i] < 0)

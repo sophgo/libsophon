@@ -104,6 +104,7 @@ if(WIN32)
         src/bm1684/bmcv_1684_vpp_internal.cpp
         src/bm1684x/bmcv_1684x_vpp_internal.cpp
         src/bmcv_api_bayer2rgb.cpp
+	src/bmcv_api_as_strided.cpp
         # src/md5.cpp
     )
 endif()
@@ -142,9 +143,12 @@ file(
 
 )
 file(
-    COPY ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.dll
-         ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.lib
+    COPY ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.lib
          ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel-static.lib
     DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+)
+file(
+    COPY ${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/libbmcv/lib/pcie_windows/libvpp_cmodel.dll
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
 )
 endif()

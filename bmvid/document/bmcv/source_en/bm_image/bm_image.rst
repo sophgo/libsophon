@@ -57,7 +57,8 @@ image_format has the following enumeration types:
            FORMAT_YUV422_VYUY,
            FORMAT_RGBYP_PLANAR,
            FORMAT_HSV180_PACKED,
-           FORMAT_HSV256_PACKED
+           FORMAT_HSV256_PACKED,
+           FORMAT_BAYER
        } bm_image_format_ext;
 
 
@@ -179,6 +180,10 @@ image_format has the following enumeration types:
 * FORMAT_HSV256_PACKED
 
   It means to pre-create a picture in HSV planar format with one plane and staggered sequenced HSV.  The range of H is 0 to 255.
+
+* FORMAT_BAYER
+
+  It means to pre-create a bayer image format picture with a plane. The pixel arrangement is BGGR, RGGB, GRBG or GBRG, and the width and height need to be even.
 
 bm_data_format_ext data_type
 ____________________________

@@ -7,10 +7,12 @@
 #include "bm_common.h"
 #include "bm_memcpy.h"
 #include "bm_cdma.h"
+#include "bm_pcie.h"
 #include "vpu/vpu.h"
 #include "bm_gmem.h"
 #include "bm1684/bm1684_jpu.h"
 #include "bm1684/bm1684_pcie.h"
+#include "bm1684/bm1684_card.h"
 
 int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 {
@@ -589,6 +591,146 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 		}
 	}
 	mutex_unlock(&chip_bmdi->memcpy_info.p2p_mutex);
+
+	return ret;
+}
+
+int bmdev_memcpy_p2p_test(struct bm_device_info *bmdi_src, struct bm_device_info *bmdi_dst)
+{
+	int size = 0x1000;
+	void *vaddr_src = NULL, *vaddr_dst = NULL;
+	u64 paddr_src = 0, paddr_dst = 0;
+	u32 index_src = 0, index_dst = 0;
+	u64 ddr_src = 0x130000000, ddr_dst = 0x140000000;
+	u64 bar4_addr = 0;
+	bm_cdma_arg cdma_arg;
+	struct bm_memcpy_info *memcpy_info = &bmdi_src->memcpy_info;
+	int i = 0;
+
+	bmdrv_get_stagemem(bmdi_src, &paddr_src, &vaddr_src, HOST2CHIP, &index_src);
+	bmdrv_get_stagemem(bmdi_dst, &paddr_dst, &vaddr_dst, CHIP2HOST, &index_dst);
+
+	for (i=0; i<size; i++) {
+		((u8 *)vaddr_src)[i] = 0x12;
+		((u8 *)vaddr_dst)[i] = 0;
+	}
+
+	bar4_addr = bmdi_dst->cinfo.bar_info.bar4_start;
+
+	bmdev_memcpy_s2d_internal(bmdi_src, ddr_src, vaddr_src, size);
+
+	bm1684_map_bar_p2p(bmdi_dst, ddr_dst);
+
+	bmdev_construct_cdma_arg(&cdma_arg, ddr_src,
+		bar4_addr, size, CHIP2HOST, false, false);
+	if (memcpy_info->bm_cdma_transfer(bmdi_src, NULL, &cdma_arg, true)) {
+		pr_info("bm_cdma_transfer error\n");
+		bmdrv_free_stagemem(bmdi_src, HOST2CHIP, index_src);
+		bmdrv_free_stagemem(bmdi_dst, CHIP2HOST, index_dst);
+		return -EBUSY;
+	}
+
+	bmdev_memcpy_d2s_internal(bmdi_dst, vaddr_dst, ddr_dst, size);
+
+	if (memcmp(vaddr_src, vaddr_dst, size)) {
+		bmdrv_free_stagemem(bmdi_src, HOST2CHIP, index_src);
+		bmdrv_free_stagemem(bmdi_dst, CHIP2HOST, index_dst);
+		return -1;
+	}
+
+	bmdrv_free_stagemem(bmdi_src, HOST2CHIP, index_src);
+	bmdrv_free_stagemem(bmdi_dst, CHIP2HOST, index_dst);
+
+	return 0;
+}
+
+int bmdev_test_p2p_available(struct bm_device_info *bmdi)
+{
+	int init_index;
+	struct bm_device_info *chip_bmdi = NULL;
+	int i;
+
+	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO)
+		return -1;
+
+	chip_bmdi = bmdi->bmcd->card_bmdi[0];
+	init_index = chip_bmdi->dev_index;
+
+	if (bmdi->dev_index - init_index != 7)
+		return -1;
+
+	if (bmdev_memcpy_p2p_test(bmdi, chip_bmdi)) {
+		pr_info("p2p is unavailable\n");
+		for (i = 0; i <= 7; i++) {
+			bmdi->bmcd->card_bmdi[i]->memcpy_info.p2p_available = 0;
+		}
+	} else {
+		pr_info("p2p is available\n");
+		for (i = 0; i <= 7; i++) {
+			bmdi->bmcd->card_bmdi[i]->memcpy_info.p2p_available = 1;
+		}
+	}
+
+	return 0;
+}
+
+int bmdev_memcpy_p2p_cdma(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
+{
+	int ret = 0;
+	struct bm_memcpy_p2p_param memcpy_param;
+	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
+	bm_cdma_arg cdma_arg;
+	struct bm_device_info *chip_bmdi = NULL;
+	int size;
+	int init_index;
+	u32 pass_idx = 0;
+	u32 cur_addr_inc = 0;
+	unsigned long size_step;
+	u32 realmem_size = memcpy_info->stagemem_d2s.size / STAGEMEM_SLOT_NUM;
+	u64 src_addr, dst_addr;
+	void *v_addr = NULL;
+	u64 p_addr = 0;
+	int index = 0x0;
+
+	ret = copy_from_user(&memcpy_param, (const struct bm_memcpy_p2p_param __user *)arg,
+			sizeof(memcpy_param));
+	if (ret) {
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+		return ret;
+	}
+
+	init_index = bmdi->bmcd->card_bmdi[0]->dev_index;
+
+	chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
+	size = memcpy_param.size;
+
+	for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
+		if ((pass_idx + 1) * realmem_size < size)
+			size_step = realmem_size;
+		else
+			size_step = size - pass_idx * realmem_size;
+
+		bmdrv_get_stagemem(bmdi, &p_addr, &v_addr, CHIP2HOST, &index);
+
+		src_addr = memcpy_param.src_device_addr + cur_addr_inc;
+		bmdev_construct_cdma_arg(&cdma_arg, src_addr,
+			p_addr & 0xffffffffff, size_step, CHIP2HOST, memcpy_param.intr, false);
+		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
+			return -EBUSY;
+		}
+
+		dst_addr = memcpy_param.dst_device_addr + cur_addr_inc;
+		bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
+			dst_addr, size_step, HOST2CHIP, memcpy_param.intr, false);
+		if (memcpy_info->bm_cdma_transfer(chip_bmdi, NULL, &cdma_arg, true)) {
+			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
+			return -EBUSY;
+		}
+
+		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
+		cur_addr_inc += size_step;
+	}
 
 	return ret;
 }

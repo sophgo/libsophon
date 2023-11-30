@@ -44,6 +44,7 @@ struct bm_memcpy_info {
 	struct completion cdma_done;
 	struct mutex cdma_mutex;
 	struct mutex p2p_mutex;
+	int p2p_available;
 	int cdma_max_payload;
 
 	struct iommu_ctrl iommuctl;
@@ -84,6 +85,8 @@ int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppad
 int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size);
 int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
+int bmdev_memcpy_p2p_cdma(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
+int bmdev_test_p2p_available(struct bm_device_info *bmdi);
 int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size);
 int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size);
 int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,

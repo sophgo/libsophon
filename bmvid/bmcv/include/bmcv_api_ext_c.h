@@ -357,7 +357,7 @@ DECL_EXPORT bm_handle_t bm_image_get_handle(bm_image *image);
  * it's better end with ".bmp" If bm_image_write_to_bmp return BM_SUCCESS, a
  * .bmp file is create in the path filename point to.
  */
-bm_status_t bm_image_write_to_bmp(bm_image    image,
+DECL_EXPORT bm_status_t bm_image_write_to_bmp(bm_image    image,
                                              const char *filename);
 
 DECL_EXPORT bm_status_t bm_image_copy_host_to_device(bm_image image,
@@ -1117,7 +1117,7 @@ DECL_EXPORT bm_status_t bmcv_distance_ext(bm_handle_t handle,
                           bm_device_mem_t input,
                           bm_device_mem_t output,
                           int dim,
-                          bm_device_mem_t pnt,
+                          const void * pnt,
                           int len,
                           int dtyte);
 
@@ -1195,6 +1195,17 @@ DECL_EXPORT bm_status_t bmcv_image_absdiff(
         bm_image input1,
         bm_image input2,
         bm_image output);
+
+DECL_EXPORT bm_status_t bmcv_as_strided(
+        bm_handle_t handle,
+        bm_device_mem_t input,
+        bm_device_mem_t output,
+        int input_row,
+        int input_col,
+        int output_row,
+        int output_col,
+        int row_stride,
+        int col_stride);
 
 DECL_EXPORT bm_status_t bmcv_image_bayer2rgb(
         bm_handle_t handle,
@@ -1513,6 +1524,20 @@ DECL_EXPORT bm_status_t bmcv_image_vpp_basic_v2(
   csc_matrix_t*           matrix,
   bmcv_convert_to_attr*   convert_to_attr);
 
+DECL_EXPORT bm_status_t bmcv_image_draw_point(
+  bm_handle_t   handle,
+  bm_image      image,
+  int           point_num,
+  bmcv_point_t *coord,
+  int           length,
+  unsigned char r,
+  unsigned char g,
+  unsigned char b);
+
+DECL_EXPORT bm_status_t bmcv_matrix_log(
+  bm_handle_t handle,
+  bm_image src,
+  bm_image dst);
 #if defined(__cplusplus)
 }
 #endif

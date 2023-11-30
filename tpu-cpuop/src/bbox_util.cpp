@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 #include <numeric>
+#include <limits>
 
 #include "bbox_util.hpp"
 

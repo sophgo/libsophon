@@ -366,7 +366,13 @@ static void ion_dma_buf_kunmap(struct dma_buf *dmabuf, unsigned long offset,
 			       void *ptr)
 {
 }
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+static int ion_dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map) {
+	return 0;
+}
+static void ion_dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map) {
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 static int ion_dma_buf_vmap(struct dma_buf *dmabuf, struct dma_buf_map *map) {
 	return 0;
 }

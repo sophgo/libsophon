@@ -29,6 +29,12 @@ bm_status_t test(int dim) {
     fp16 *YHost16 = new fp16[L];
     fp16 *pnt16 = new fp16[8];
     data_type_t dtype = rand() % 2 ? DT_FP16 : DT_FP32; // DT_FP32 DT_FP16;
+    bm_handle_t handle = nullptr;
+    BM_CHECK_RET(bm_dev_request(&handle, 0));
+    unsigned int chipid = 0x1686;
+    BM_CHECK_RET(bm_get_chipid(handle, &chipid));
+    if(chipid == 0x1684)
+        dtype = DT_FP32;
     if (dtype == DT_FP16) {
         printf("Data type: DT_FP16\n");
         dsize = 2;
@@ -37,12 +43,10 @@ bm_status_t test(int dim) {
         printf("Data type: DT_FP32\n");
     }
 
-    bm_handle_t handle = nullptr;
-    BM_CHECK_RET(bm_dev_request(&handle, 0));
-    bm_device_mem_t XDev, YDev, pnt;
+    bm_device_mem_t XDev, YDev;
+    void* pnt;
     BM_CHECK_RET(bm_malloc_device_byte(handle, &XDev, L * dim * dsize));
     BM_CHECK_RET(bm_malloc_device_byte(handle, &YDev, L * dsize));
-    BM_CHECK_RET(bm_malloc_device_byte(handle, &pnt, 8 * dsize));
     if (dtype == DT_FP16) {
         for (int i = 0; i < L * dim; ++i)
             XHost16[i] = fp32tofp16(XHost[i], round);
@@ -50,10 +54,10 @@ bm_status_t test(int dim) {
         for (int i = 0; i < dim; ++i){
             pnt16[i] = fp32tofp16(pnt32[i], round);
         }
-        BM_CHECK_RET(bm_memcpy_s2d(handle, pnt, pnt16));
+        pnt = (void*)pnt16;
     } else {
         BM_CHECK_RET(bm_memcpy_s2d(handle, XDev, XHost));
-        BM_CHECK_RET(bm_memcpy_s2d(handle, pnt, pnt32));
+        pnt = (void*)pnt32;
     }
     #ifdef __linux__
         struct timeval t1, t2;
@@ -125,7 +129,6 @@ bm_status_t test(int dim) {
     delete [] YRef;
     bm_free_device(handle, XDev);
     bm_free_device(handle, YDev);
-    bm_free_device(handle, pnt);
     bm_dev_free(handle);
     return BM_SUCCESS;
 }

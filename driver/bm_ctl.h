@@ -5,6 +5,7 @@
 
 #define ATTR_FAULT_VALUE		(int)(0xFFFFFC00)
 #define ATTR_NOTSUPPORTED_VALUE		(int)(0xFFFFFC01)
+#define BM1684X_SM7M_V1_0		139
 
 struct bm_dev_list {
 	struct list_head list;

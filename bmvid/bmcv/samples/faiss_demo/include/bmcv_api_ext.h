@@ -347,7 +347,7 @@ DECL_EXPORT bm_handle_t bm_image_get_handle(bm_image *image);
  * it's better end with ".bmp" If bm_image_write_to_bmp return BM_SUCCESS, a
  * .bmp file is create in the path filename point to.
  */
-bm_status_t bm_image_write_to_bmp(bm_image    image,
+DECL_EXPORT bm_status_t bm_image_write_to_bmp(bm_image    image,
                                              const char *filename);
 
 DECL_EXPORT bm_status_t bm_image_copy_host_to_device(bm_image image,

@@ -82,5 +82,7 @@ int console_cmd_sc7p_set_tpu_vol(struct console_ctx *ctx, char *vol);
 int console_cmd_sc7p_set_vddc_vol(struct console_ctx *ctx, char *vol);
 int console_cmd_sc7p_set_mon_mode(struct console_ctx *ctx, char *mode);
 int console_cmd_sc7p_poweroff(struct console_ctx *ctx, int chip_index);
+int console_cmd_sc7_set_rdrop(struct console_ctx *ctx, int idx, int page, int rdrop);
+int console_cmd_sc7_set_vddc_rdrop(struct console_ctx *ctx, int idx, int page, int rdrop);
 
 #endif

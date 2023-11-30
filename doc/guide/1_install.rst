@@ -1,7 +1,7 @@
 安装libsophon
 --------------
 
-.. |ver| replace:: 0.4.9
+.. |ver| replace:: 0.5.0
 
 libsophon在不同的Linux发行版上提供不同类型的安装方式。请根据您的系统选择对应的方式，不要在一台机器上混用多种安装方式。
 以下描述中“|ver|”仅为示例，视当前实际安装版本会有变化。
@@ -138,9 +138,9 @@ x86_64机器对应的安装包名称为：
 
 .. parsed-literal::
 
-  sudo rpm -e sophon-driver
-  sudo rpm -e sophon-libsophon-dev
-  sudo rpm -e sophon-libsophon
+  sudo rpm -e sophon-driver-\ |ver|\ -1.x86_64
+  sudo rpm -e sophon-libsophon-dev-\ |ver|\ -1.x86_64
+  sudo rpm -e sophon-libsophon-\ |ver|\ -1.x86_64
 
 **如果使用其它Linux系统：**
 

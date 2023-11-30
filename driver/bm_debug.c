@@ -856,6 +856,56 @@ static const struct BM_PROC_FILE_OPS bmdrv_tpu_power_file_ops = {
 	BM_PROC_RELEASE	= single_release,
 };
 
+static int bmdrv_max_tpu_power_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	struct bm_chip_attr *c_attr;
+	int max_tpu_power = 0;
+
+	c_attr = &bmdi->c_attr;
+	if (c_attr->bm_get_tpu_power != NULL) {
+		mutex_lock(&c_attr->attr_mutex);
+		max_tpu_power = c_attr->max_tpu_power;
+		mutex_unlock(&c_attr->attr_mutex);
+		seq_printf(m, "%d W\n", max_tpu_power);
+	} else {
+		seq_printf(m, "N/A\n");
+	}
+	return 0;
+}
+
+static ssize_t bmdrv_max_tpu_power_proc_write(struct file *file, const char __user *buffer,
+                             size_t count, loff_t *f_pos)
+{
+	struct bm_device_info *bmdi;
+	struct bm_chip_attr *c_attr;
+	struct seq_file *s = NULL;
+
+	s = file->private_data;
+	bmdi = s->private;
+	c_attr = &bmdi->c_attr;
+	if (c_attr->bm_get_tpu_power != NULL) {
+		mutex_lock(&c_attr->attr_mutex);
+		c_attr->max_tpu_power = 0;
+		mutex_unlock(&c_attr->attr_mutex);
+	}
+	return count;
+}
+
+static int bmdrv_max_tpu_power_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bmdrv_max_tpu_power_proc_show, PDE_DATA(inode));
+}
+
+static const struct BM_PROC_FILE_OPS bmdrv_max_tpu_power_file_ops = {
+	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OPEN		= bmdrv_max_tpu_power_proc_open,
+	BM_PROC_READ		= seq_read,
+	BM_PROC_LLSEEK		= seq_lseek,
+	BM_PROC_RELEASE		= single_release,
+	BM_PROC_WRITE		= bmdrv_max_tpu_power_proc_write,
+};
+
 static int bmdrv_vddc_power_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
@@ -952,6 +1002,60 @@ static const struct BM_PROC_FILE_OPS bmdrv_chip_power_file_ops = {
 	BM_PROC_RELEASE		= single_release,
 };
 
+static int bmdrv_max_chip_power_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	struct bm_chip_attr *c_attr;
+	int max_chip_power = 0;
+
+	c_attr = &bmdi->c_attr;
+	if ((c_attr->bm_get_vddphy_power != NULL) &&
+		(c_attr->bm_get_tpu_power != NULL) &&
+		(c_attr->bm_get_vddc_power != NULL)) {
+		mutex_lock(&c_attr->attr_mutex);
+		max_chip_power = c_attr->max_chip_power;
+		mutex_unlock(&c_attr->attr_mutex);
+		seq_printf(m, "%d W\n", max_chip_power);
+	} else {
+		seq_printf(m, "N/A\n");
+	}
+	return 0;
+}
+
+static ssize_t bmdrv_max_chip_power_proc_write(struct file *file, const char __user *buffer,
+                             size_t count, loff_t *f_pos)
+{
+	struct bm_device_info *bmdi;
+	struct bm_chip_attr *c_attr;
+	struct seq_file *s = NULL;
+
+	s = file->private_data;
+	bmdi = s->private;
+	c_attr = &bmdi->c_attr;
+	if ((c_attr->bm_get_vddphy_power != NULL) &&
+		(c_attr->bm_get_tpu_power != NULL) &&
+		(c_attr->bm_get_vddc_power != NULL)) {
+		mutex_lock(&c_attr->attr_mutex);
+		c_attr->max_chip_power = 0;
+		mutex_unlock(&c_attr->attr_mutex);
+	}
+	return count;
+}
+
+static int bmdrv_max_chip_power_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bmdrv_max_chip_power_proc_show, PDE_DATA(inode));
+}
+
+static const struct BM_PROC_FILE_OPS bmdrv_max_chip_power_file_ops = {
+	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OPEN		= bmdrv_max_chip_power_proc_open,
+	BM_PROC_READ		= seq_read,
+	BM_PROC_LLSEEK		= seq_lseek,
+	BM_PROC_RELEASE		= single_release,
+	BM_PROC_WRITE		= bmdrv_max_chip_power_proc_write,
+};
+
 static int bmdrv_firmware_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
@@ -1003,6 +1107,56 @@ static const struct BM_PROC_FILE_OPS bmdrv_board_power_file_ops = {
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
 	BM_PROC_RELEASE	= single_release,
+};
+
+static int bmdrv_max_board_power_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	struct bm_chip_attr *c_attr;
+	int max_board_power = 0;
+
+	c_attr = &bmdi->c_attr;
+	if (c_attr->bm_get_board_power != NULL) {
+		mutex_lock(&c_attr->attr_mutex);
+		max_board_power = c_attr->max_board_power;
+		mutex_unlock(&c_attr->attr_mutex);
+		seq_printf(m, "%d W\n", max_board_power);
+	} else {
+		seq_printf(m, "N/A\n");
+	}
+	return 0;
+}
+
+static ssize_t bmdrv_max_board_power_proc_write(struct file *file, const char __user *buffer,
+                             size_t count, loff_t *f_pos)
+{
+	struct bm_device_info *bmdi;
+	struct bm_chip_attr *c_attr;
+	struct seq_file *s = NULL;
+
+	s = file->private_data;
+	bmdi = s->private;
+	c_attr = &bmdi->c_attr;
+	if (c_attr->bm_get_board_power != NULL) {
+		mutex_lock(&c_attr->attr_mutex);
+		c_attr->max_board_power = 0;
+		mutex_unlock(&c_attr->attr_mutex);
+	}
+	return count;
+}
+
+static int bmdrv_max_board_power_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bmdrv_max_board_power_proc_show, PDE_DATA(inode));
+}
+
+static const struct BM_PROC_FILE_OPS bmdrv_max_board_power_file_ops = {
+	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OPEN		= bmdrv_max_board_power_proc_open,
+	BM_PROC_READ		= seq_read,
+	BM_PROC_LLSEEK		= seq_lseek,
+	BM_PROC_RELEASE		= single_release,
+	BM_PROC_WRITE		= bmdrv_max_board_power_proc_write,
 };
 
 static int bmdrv_chip_temp_proc_show(struct seq_file *m, void *v)
@@ -1076,6 +1230,7 @@ static int bmdrv_board_sn_proc_show(struct seq_file *m, void *v)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if ((bmdi->bmcd->sc5p_mcu_bmdi) != NULL && (bmdi->bmcd != NULL))
 			tmp_bmdi = bmdi->bmcd->sc5p_mcu_bmdi;
@@ -1451,7 +1606,10 @@ static int bmdrv_versions_proc_show(struct seq_file *m, void *v)
 		j = 0;
 		for (i = bmdi->bmcd->dev_start_index; i < bmdi->bmcd->chip_num + bmdi->bmcd->dev_start_index; i++) {
 			seq_printf(m, "card%d bmsophon%d boot_loader_version:", bmdi->bmcd->card_index, i);
-			bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
+			if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
+				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[0], m, v);
+			else
+				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			seq_printf(m, "card%d bmsophon%d mcu_version:", bmdi->bmcd->card_index, i);
 			bmdrv_mcu_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			j++;
@@ -1704,6 +1862,7 @@ static int bmdrv_location_proc_show(struct seq_file *m, void *v)
 	if (bmdi->cinfo.chip_id != 0x1682) {
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 			value = gpio_reg_read(bmdi, 0x50);
 			value = value >> 0x5;
@@ -1984,6 +2143,8 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 			(void *)bmdi);
 		proc_create_data("board_power", 0444, bmdi->card_proc_dir, &bmdrv_board_power_file_ops,
 			(void *)bmdi);
+		proc_create_data("max_board_power", 0444, bmdi->card_proc_dir, &bmdrv_max_board_power_file_ops,
+			(void *)bmdi);
 		proc_create_data("fan_speed", 0644, bmdi->card_proc_dir, &bmdrv_fan_speed_file_ops,
 			(void *)bmdi);
 		proc_create_data("board_temp", 0444, bmdi->card_proc_dir, &bmdrv_board_temp_file_ops,
@@ -2037,6 +2198,8 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 		(void *)bmdi);
 	proc_create_data("tpu_power", 0444, bmdi->proc_dir, &bmdrv_tpu_power_file_ops,
 		(void *)bmdi);
+	proc_create_data("max_tpu_power", 0444, bmdi->proc_dir, &bmdrv_max_tpu_power_file_ops,
+		(void *)bmdi);
 	proc_create_data("firmware_info", 0444, bmdi->proc_dir, &bmdrv_firmware_file_ops,
 			(void *)bmdi);
 	proc_create_data("tpu_cur", 0444, bmdi->proc_dir, &bmdrv_tpu_cur_file_ops,
@@ -2054,6 +2217,8 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 	proc_create_data("vddphy_power", 0444, bmdi->proc_dir, &bmdrv_vddphy_power_file_ops,
 		(void *)bmdi);
 	proc_create_data("chip_power", 0444, bmdi->proc_dir, &bmdrv_chip_power_file_ops,
+		(void *)bmdi);
+	proc_create_data("max_chip_power", 0444, bmdi->proc_dir, &bmdrv_max_chip_power_file_ops,
 		(void *)bmdi);
 	if (bmdi->bmcd->chip_num != 8) {
 		proc_create_data("mcu_version", 0444, bmdi->proc_dir, &bmdrv_mcu_version_file_ops,
@@ -2118,6 +2283,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("pcie_cap_width", bmdi->proc_dir);
 	remove_proc_entry("pcie_region", bmdi->proc_dir);
 	remove_proc_entry("tpu_power", bmdi->proc_dir);
+	remove_proc_entry("max_tpu_power", bmdi->proc_dir);
 	remove_proc_entry("firmware_info", bmdi->proc_dir);
 	remove_proc_entry("tpu_cur", bmdi->proc_dir);
 	remove_proc_entry("tpu_volt", bmdi->proc_dir);
@@ -2126,6 +2292,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("vddc_power", bmdi->proc_dir);
 	remove_proc_entry("vddphy_power", bmdi->proc_dir);
 	remove_proc_entry("chip_power", bmdi->proc_dir);
+	remove_proc_entry("max_chip_power", bmdi->proc_dir);
 	remove_proc_entry("boot_loader_version", bmdi->proc_dir);
 	remove_proc_entry("clk", bmdi->proc_dir);
 	remove_proc_entry("pmu_infos", bmdi->proc_dir);
@@ -2156,6 +2323,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 		remove_proc_entry("maxboardp", bmsophon_card_proc_dir);
 		remove_proc_entry("fan_speed", bmsophon_card_proc_dir);
 		remove_proc_entry("board_power", bmsophon_card_proc_dir);
+		remove_proc_entry("max_board_power", bmsophon_card_proc_dir);
 		remove_proc_entry("board_temp", bmsophon_card_proc_dir);
 		remove_proc_entry("sn", bmsophon_card_proc_dir);
 		remove_proc_entry("board_type", bmsophon_card_proc_dir);

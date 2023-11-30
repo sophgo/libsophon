@@ -2746,6 +2746,53 @@ bm_status_t bm1684x_vpp_yuv_resize(
 
 }
 
+bm_status_t bm1684x_vpp_point(
+    bm_handle_t   handle,
+    bm_image      image,
+    int           point_num,
+    bmcv_point_t *coord,
+    int           length,
+    unsigned char r,
+    unsigned char g,
+    unsigned char b){
+  bm_status_t ret = BM_SUCCESS;
+  bm_image *input = new bm_image [point_num];
+  bm_image *output = new bm_image [point_num];
+  bmcv_rect_t *input_crop_rect = new bmcv_rect_t [point_num];
+  border_t *border_param = new border_t [point_num];
+  bmcv_padding_atrr_t *padding_attr = new bmcv_padding_atrr_t [point_num];
+  for(int i = 0; i < point_num; i++){
+    input[i] = image;
+    output[i] = image;
+    input_crop_rect[i].start_x = coord[i].x;
+    input_crop_rect[i].start_y = coord[i].y;
+    input_crop_rect[i].crop_w = bm_max(8, length);
+    input_crop_rect[i].crop_h = bm_max(8, length);
+    border_param[i].st_x = (length > 255) ? (length - 255) : 0;
+    border_param[i].st_y = (length > 255) ? (length - 255) : 0;
+    border_param[i].width = 0;
+    border_param[i].height = 0;
+    border_param[i].thickness = bm_min(length, 255);
+    border_param[i].rect_border_enable = true;
+    border_param[i].value_b = b;
+    border_param[i].value_g = g;
+    border_param[i].value_r = r;
+    padding_attr[i].dst_crop_stx = coord[i].x;
+    padding_attr[i].dst_crop_sty = coord[i].y;
+    padding_attr[i].dst_crop_w = bm_max(8, length);
+    padding_attr[i].dst_crop_h = bm_max(8, length);
+    padding_attr[i].if_memset = 0;
+  }
+  ret = bm1684x_vpp_multi_parameter_processing(
+     handle, point_num, input, output, input_crop_rect, padding_attr, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param, NULL);
+  delete [] input;
+  delete [] output;
+  delete [] input_crop_rect;
+  delete [] padding_attr;
+  delete [] border_param;
+  return ret;
+}
+
 
 bm_status_t bm1684x_vpp_fill_rectangle(
   bm_handle_t          handle,

@@ -47,6 +47,8 @@
 #define SHM_SOC_TX_OFFSET SHM_HOST_RX_OFFSET
 #define SHM_SOC_RX_OFFSET SHM_HOST_TX_OFFSET
 
+// #define VETH_IRQ
+
 static int ring_buffer_init(struct net_device *ndev) {
     struct eth_dev_info *  info = *((struct eth_dev_info **)netdev_priv(ndev));
     struct pt *            pt;
@@ -289,9 +291,15 @@ static int eop_handshake(struct eth_dev_info *info) {
 static int eth_ndo_kthread(void *arg) {
     struct eth_dev_info *info = (struct eth_dev_info *)arg;
     int                  ret  = 0;
+#ifndef VETH_IRQ
+    int val;
+#endif
+    struct bm_device_info *bmdi =
+        container_of(info, struct bm_device_info, vir_eth);
 
     netif_carrier_off(info->ndev);
     eth_set_handshake(info, 0);
+    bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + 0x60, 0);
     while (1) {
         if (kthread_should_stop()) {
             break;
@@ -309,10 +317,20 @@ static int eth_ndo_kthread(void *arg) {
             }
         }
 
-        if (atomic_read(&info->buffer_ready))
+        if (atomic_read(&info->buffer_ready)) {
+#ifdef VETH_IRQ
             msleep(1000);
-        else
+#else
+            msleep(1);
+            val = bm_read32(bmdi, VETH_SHM_START_ADDR_1684X + 0x60);
+            if (val == 0x1) {
+                bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + 0x60, 0);
+                napi_schedule(&info->napi);
+            }
+#endif
+        } else {
             msleep(20);
+        }
     }
 exit:
     dev_info(&info->pci_dev->dev, "kthread exit\n");
@@ -335,7 +353,11 @@ int eth_register_napi(struct eth_dev_info *info) {
     ndev->mtu            = ETH_MTU;
     ndev->watchdog_timeo = 1 * HZ;
     ndev->netdev_ops     = &eth_ndo_netdev_ops;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 16, 0)
+    eth_random_addr((uint8_t *)ndev->dev_addr);
+#else
     random_ether_addr((uint8_t *)ndev->dev_addr);
+#endif
     sprintf(ndev->name, VETH_DEVICE_NAME "%d", info->index);
 
     pinfo      = netdev_priv(ndev);
@@ -401,6 +423,7 @@ void bmdrv_veth_early_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) 
 
     netif_carrier_off(veth->ndev);
     atomic_set(&veth->buffer_ready, 0);
+    msleep(1000);
 }
 
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {
