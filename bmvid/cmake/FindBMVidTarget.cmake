@@ -131,6 +131,12 @@ function(ADD_TARGET_JPU_LIB target_name chip_name platform subtype debug ion com
     set(JPUAPI_LIB_TARGET ${out_abs_path}/lib/libbmjpuapi.so)
     set(JPU_HEADER_TARGET ${out_abs_path}/include)
     set(JPU_APP_TARGET ${out_abs_path}/bin)
+    set(JPU_EXPORT_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpuapi/inc/bmjpuapi_jpeg.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpuapi/inc/bmjpuapi.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpulite/inc/jpu_io.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpulite/inc/jpu_lib.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpulite/inc/jpu_logging.h)
+    set(JPU_EXPORT_BINS ${JPU_APP_TARGET}/bmjpegdec ${JPU_APP_TARGET}/bmjpegenc ${JPU_APP_TARGET}/bmjpegmulti)
 
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpulite)
         add_custom_command(OUTPUT ${JPULITE_LIB_TARGET}
@@ -174,7 +180,6 @@ function(ADD_TARGET_JPU_LIB target_name chip_name platform subtype debug ion com
             COMMAND ${CMAKE_COMMAND} -E chdir .. git checkout -- include/version.h
             DEPENDS ${JPULITE_LIB_TARGET}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpuapi)
-
     else()
         file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/lib/libbmjpulite.so DESTINATION ${out_abs_path}/lib/ FOLLOW_SYMLINK_CHAIN)
         file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/lib/libbmjpuapi.so DESTINATION ${out_abs_path}/lib/ FOLLOW_SYMLINK_CHAIN)
@@ -187,6 +192,16 @@ function(ADD_TARGET_JPU_LIB target_name chip_name platform subtype debug ion com
     endif()
 
     add_custom_target (${target_name} ALL DEPENDS ${JPULITE_LIB_TARGET} ${JPUAPI_LIB_TARGET})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/driver/bmjpulite)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND rm -f ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/include/*
+            COMMAND cp ${JPU_EXPORT_HEADERS} ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/include/
+            COMMAND rm -f ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/lib/*
+            COMMAND cp -d ${JPULITE_LIB_TARGET}* ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/lib/
+            COMMAND cp -d ${JPUAPI_LIB_TARGET}* ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/lib/
+            COMMAND rm -f ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/bin/*
+            COMMAND cp ${JPU_EXPORT_BINS} ${CMAKE_CURRENT_SOURCE_DIR}/jpeg/binary/${platform}/bin/)
+    endif()
 
     get_filename_component(JPUAPI_LIB_FILENAME ${JPUAPI_LIB_TARGET} NAME)
     get_filename_component(JPULITE_LIB_FILENAME ${JPULITE_LIB_TARGET} NAME)

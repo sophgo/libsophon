@@ -40,6 +40,7 @@
 #define BOARD_TYPE_SC7_PLUS  0x22
 #define BOARD_TYPE_SM7_V0_0	 0x30
 #define BOARD_TYPE_SM7_MP1_1	 0x36
+#define BOARD_TYPE_CP24		 0x40
 
 #define DUMMY_PCIDEV_NAME	"dummy-bmcard-pci"
 

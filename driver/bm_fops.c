@@ -563,8 +563,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = bm_i2c_smbus_access(bmdi, arg);
 		break;
 
-	case BMDEV_MEMCPY_P2P :
-		ret = bmdev_memcpy_p2p(bmdi, file, arg);
+	case BMDEV_MEMCPY_P2P:
+		if (bmdi->memcpy_info.p2p_available)
+			ret = bmdev_memcpy_p2p(bmdi, file, arg);
+		else
+			ret = bmdev_memcpy_p2p_cdma(bmdi, file, arg);
 		break;
 #endif
 	case BMDEV_MEMCPY:
@@ -748,6 +751,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				if (bmdi->bmcd->sc5p_mcu_bmdi != NULL && bmdi->bmcd != NULL)
 					ctx.uart.bmdi= bmdi->bmcd->sc5p_mcu_bmdi;
@@ -818,6 +822,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				pr_err("bmsophon %d, sc5p not support mcu sheck sum\n", bmdi->dev_index);
 				return -ENOSYS;

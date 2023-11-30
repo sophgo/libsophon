@@ -225,13 +225,27 @@ long bm_jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				if (ret)
 					ret = -EFAULT;
 			}
-		}
+                        if (signal_pending(current))
+                        {
+                                if (core_idx >= 0) {
+                                        dprintk("signal_pending down_interruptible ret=%d core_idx=%d \n",ret, core_idx);
+                                        break;
+                                } else {
+                                        dprintk("signal_pending down_interruptible->up ret=%d   core_idx=%d \n",ret, core_idx);
+                                        up(&bmdi->jpudrvctx.jpu_sem);
+                                        ret = -ERESTARTSYS;
+                                        break;
+                                }
+                        }
+                } else {
+                    if (signal_pending(current))
+                    {
+                        dprintk("signal_pending down_interruptible failed. ret=%d core_index=%d \n",ret, core_idx);
+                        ret = -ERESTARTSYS;
+                        break;
+                    }
+                }
 
-		if (signal_pending(current)) {
-			pr_err("down_interruptible ret=%d\n", ret);
-			ret = -ERESTARTSYS;
-			break;
-		}
 		break;
 	}
 

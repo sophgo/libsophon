@@ -323,7 +323,8 @@ int test_bayer2rgb_random(bm_handle_t handle, int height, int width, int dst_fmt
     struct timespec tp;
     clock_gettime_(0, &tp);
     bool fixed = false;
-    int seed = (fixed) ? seed : tp.tv_nsec;
+    int seed = 0;
+    seed = (fixed) ? seed : tp.tv_nsec;
     srand(seed);
     printf("seed = %d\n", seed);
 

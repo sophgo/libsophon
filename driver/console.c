@@ -303,3 +303,19 @@ int console_cmd_sc7_set_rdrop(struct console_ctx *ctx, int idx, int page, int rd
 
 	return 0;
 }
+
+int console_cmd_sc7_set_vddc_rdrop(struct console_ctx *ctx, int idx, int page, int rdrop)
+{
+	int err;
+	char cmd[64];
+	char cmdout[64];
+
+	snprintf(cmd, sizeof(cmd), "rdrop %d %d %d", idx, page, rdrop);
+	pr_info("The cmd is: %s\n", cmd);
+
+	err = console_exec(ctx, cmd, cmdout, sizeof(cmdout), 1000);
+	if (err)
+		return -1;
+
+	return 0;
+}

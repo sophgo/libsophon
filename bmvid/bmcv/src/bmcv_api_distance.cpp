@@ -6,18 +6,6 @@
 #include <vector>
 #include <thread>
 
-typedef enum {
-    DT_INT8   = (0 << 1) | 1,
-    DT_UINT8  = (0 << 1) | 0,
-    DT_INT16  = (3 << 1) | 1,
-    DT_UINT16 = (3 << 1) | 0,
-    DT_FP16   = (1 << 1) | 1,
-    DT_BFP16  = (5 << 1) | 1,
-    DT_INT32  = (4 << 1) | 1,
-    DT_UINT32 = (4 << 1) | 0,
-    DT_FP32   = (2 << 1) | 1
-} data_type_t;
-
 typedef data_type_t bm_data_type_t;
 
 typedef struct

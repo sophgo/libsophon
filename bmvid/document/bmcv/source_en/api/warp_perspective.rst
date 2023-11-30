@@ -209,8 +209,6 @@ In order to complete the transmission transformation more conveniently, the libr
 
 7. It is required that the width, height, image_format and data_type of the output bm_image must be consistent.
 
-8. bm1684X currently does not support bilinear interpolation.
-
 
 **Code example**
 
@@ -233,6 +231,7 @@ In order to complete the transmission transformation more conveniently, the libr
 
             int dst_h = 1080;
             int dst_w = 1920;
+            int use_bilinear = 0;
             bm_dev_request(&handle, 0);
             bmcv_perspective_image_matrix matrix_image;
             matrix_image.matrix_num = 1;
@@ -262,7 +261,7 @@ In order to complete the transmission transformation more conveniently, the libr
             u8 *host_ptr[] = {*src_ptr.get()};
             bm_image_copy_host_to_device(src, (void **)host_ptr);
 
-            bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst);
+            bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst, use_bilinear);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);

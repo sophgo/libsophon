@@ -81,6 +81,7 @@ BMCV API
    api/jpeg_decode
    api/copy_to
    api/draw_lines
+   api/draw_point
    api/draw_rectangle
    api/put_text
    api/fill_rectangle
@@ -122,6 +123,7 @@ BMCV API
    api/axpy
    api/pyramid
    api/bayer2rgb
+   api/as_strided
 
 PCIe CPU
 --------

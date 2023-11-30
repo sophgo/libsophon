@@ -233,6 +233,27 @@ typedef struct bm_api_cv_distance_1684x {
   int dtype;
 } bm_api_cv_distance_1684x_t;
 
+typedef struct bm_api_cv_as_strided
+{
+    u64 input_addr;
+    u64 output_addr;
+    int input_row;
+    int input_col;
+    int output_row;
+    int output_col;
+    int row_stride;
+    int col_stride;
+} bm_api_cv_as_strided_t;
+
+typedef struct bm_matrix_log{
+  u64 s_addr;
+  u64 d_addr;
+  int row;
+  int col;
+  int s_dtype;
+  int d_dtype;
+}bm_matrix_log_t;
+
 #pragma pack(pop)
 
 }

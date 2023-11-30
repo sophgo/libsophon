@@ -205,8 +205,10 @@ void bm_npu_utilization_stat(struct bm_device_info *bmdi);
 void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed);
 void bmdrv_fetch_attr_board_power(struct bm_device_info *bmdi, int count);
 int bmdev_ioctl_get_attr(struct bm_device_info *bmdi, void *arg);
-int bm_set_sc7_rdrop(struct bm_device_info *bmdi);
+int bm_set_sc7_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
 int bm_get_sc7_rdrop(struct bm_device_info *bmdi);
+int bm_set_sc7_vddc_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
+int bm_get_sc7_vddc_rdrop(struct bm_device_info *bmdi);
 int bm_set_rdrop(struct bm_device_info *bmdi);
 
 #endif

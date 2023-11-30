@@ -1931,3 +1931,31 @@ void calculate_yuv(u8 r, u8 g, u8 b, u8* y_, u8* u_, u8* v_)
     *u_ = (u8)u;
     *v_ = (u8)v;
 }
+
+void data_type_conversion(bm_image_data_format_ext bmcv_data_type, int *tpu_data_type)
+{
+  switch(bmcv_data_type)
+  {
+    case DATA_TYPE_EXT_FLOAT32:
+      *tpu_data_type = DT_FP32;
+      break;
+    case DATA_TYPE_EXT_1N_BYTE:
+      *tpu_data_type = DT_UINT8;
+      break;
+    case DATA_TYPE_EXT_1N_BYTE_SIGNED:
+      *tpu_data_type = DT_INT8;
+      break;
+    case DATA_TYPE_EXT_FP16:
+      *tpu_data_type = DT_FP16;
+      break;
+    case DATA_TYPE_EXT_BF16:
+      *tpu_data_type = DT_BFP16;
+      break;
+    default:
+      bmlib_log("BMCV", BMLIB_LOG_ERROR, "1684x bmcv_data_type not support %s: %s: %d\n",
+        __FILE__, __func__, __LINE__);
+      break;
+    }
+}
+
+

@@ -1230,6 +1230,7 @@ static int bmdrv_board_sn_proc_show(struct seq_file *m, void *v)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if ((bmdi->bmcd->sc5p_mcu_bmdi) != NULL && (bmdi->bmcd != NULL))
 			tmp_bmdi = bmdi->bmcd->sc5p_mcu_bmdi;
@@ -1605,7 +1606,10 @@ static int bmdrv_versions_proc_show(struct seq_file *m, void *v)
 		j = 0;
 		for (i = bmdi->bmcd->dev_start_index; i < bmdi->bmcd->chip_num + bmdi->bmcd->dev_start_index; i++) {
 			seq_printf(m, "card%d bmsophon%d boot_loader_version:", bmdi->bmcd->card_index, i);
-			bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
+			if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
+				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[0], m, v);
+			else
+				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			seq_printf(m, "card%d bmsophon%d mcu_version:", bmdi->bmcd->card_index, i);
 			bmdrv_mcu_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			j++;
@@ -1858,6 +1862,7 @@ static int bmdrv_location_proc_show(struct seq_file *m, void *v)
 	if (bmdi->cinfo.chip_id != 0x1682) {
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 			value = gpio_reg_read(bmdi, 0x50);
 			value = value >> 0x5;

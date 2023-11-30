@@ -92,7 +92,7 @@ Bm-smi functions mainly include:
      - Supported
      - Supported
 
-   * - SDK Version
+   * - Lib Version
      - Supported
      - Supported
 
@@ -220,7 +220,7 @@ The meaning of each part is introduced one by one below:
 
 -  Fri Aug 7 14:18:57 2020: time and date when bm-smi is executed. This is just an example, and the actual execution may be different from what is shown here.
 
--  SDK Version: 2.3.2: version number of sdk. This is just an example, and the actual execution may be different from what is shown here.
+-  Lib Version: 2.3.2: version number of sdk. This is just an example, and the actual execution may be different from what is shown here.
 
 -  Driver Version: 2.3.2: version number of the driver. This is just an example, and the actual execution may be different from what is shown here.
 

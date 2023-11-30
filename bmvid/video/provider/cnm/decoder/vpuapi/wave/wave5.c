@@ -19,6 +19,8 @@
 #include "wave/wave5.h"
 #include "vpuerror.h"
 #include "wave5_regdefine.h"
+#include "string.h"
+
 #ifdef  _WIN32
 #include <windows.h>
 extern unsigned int* p_vpu_create_inst_flag[MAX_NUM_VPU_CORE];
@@ -1395,6 +1397,12 @@ RetCode Wave5VpuDecode(CodecInst* instance, DecParam* option)
 
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_TEMPORAL_ID_PLUS1, pDecInfo->targetSubLayerId+1);
     VpuWriteReg(instance->coreIdx, W5_CMD_SEQ_CHANGE_ENABLE_FLAG, pDecInfo->seqChangeMask);
+#ifdef  __LINUX__
+    if(getenv("NO_FRAMEBUFFER")!=NULL && strcmp(getenv("NO_FRAMEBUFFER"),"1")==0)
+    {
+        forceLatency = 0;
+    }
+#endif
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_FORCE_FB_LATENCY_PLUS1, forceLatency+1);
     VpuWriteReg(instance->coreIdx, W5_COMMAND_OPTION, modeOption);
 

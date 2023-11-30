@@ -159,4 +159,14 @@ DECL_EXPORT bm_status_t bm1684x_vpp_basic_v2(
     csc_matrix_t*           matrix,
     bmcv_convert_to_attr*   convert_to_attr);
 
+DECL_EXPORT bm_status_t bm1684x_vpp_point(
+    bm_handle_t   handle,
+    bm_image      image,
+    int           point_num,
+    bmcv_point_t *coord,
+    int           length,
+    unsigned char r,
+    unsigned char g,
+    unsigned char b);
+
 #endif
