@@ -35,6 +35,25 @@ extern "C" {
 #define MAX_BATCH_SIZE (32)
 #define MOSAIC_SIZE 8
 #define VPPALIGN(x, mask)  (((x) + ((mask)-1)) & ~((mask)-1))
+
+typedef enum {
+    DT_INT8   = (0 << 1) | 1,
+    DT_UINT8  = (0 << 1) | 0,
+    DT_INT16  = (3 << 1) | 1,
+    DT_UINT16 = (3 << 1) | 0,
+    DT_FP16   = (1 << 1) | 1,
+    DT_BFP16  = (5 << 1) | 1,
+    DT_INT32  = (4 << 1) | 1,
+    DT_UINT32 = (4 << 1) | 0,
+    DT_FP32   = (2 << 1) | 1
+} data_type_t;
+
+struct sg_device_mem_st
+{
+    bool flag = 0;
+    bm_device_mem_t bm_device_mem;
+};
+
 typedef struct bmcv_shape_st {
     int n;
     int c;
@@ -384,6 +403,10 @@ int is_yuv_or_rgb(bm_image_format_ext fmt);
 void calculate_yuv(unsigned char r, unsigned char g, unsigned char b, unsigned char* y_, unsigned char* u_, unsigned char* v_);
 
 void bmcv_err_log_internal(char *log_buf, size_t string_sz, const char *frmt, ...);
+void sg_free_device_mem(bm_handle_t handle, sg_device_mem_st mem);
+bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size);
+bm_status_t sg_image_alloc_dev_mem(bm_image image, int heap_id);
+
 #ifdef __linux__
 #define BMCV_ERR_LOG(frmt, args...)                                            \
     do {                                                                       \
@@ -529,6 +552,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t     handle,
                     );
 
 layout::plane_layout* bm_image_get_layout(bm_image input_image, int plane_idx);
+void data_type_conversion(bm_image_data_format_ext bmcv_data_type, int *tpu_data_type);
 
 ///////////////////////////////////////////////////
 static void str_to_image_format(bm_image_format_ext& format, const char* str)

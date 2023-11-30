@@ -210,8 +210,6 @@ bmcv_image_warp_perspective
 
 7. 要求该接口输出 bm_image 的 width、height、image_format、data_type 以及 stride 必须保持一致。
 
-8. bm1684x暂不支持使用 bilinear 进行插值。
-
 
 **代码示例**
 
@@ -234,6 +232,7 @@ bmcv_image_warp_perspective
 
             int dst_h = 1080;
             int dst_w = 1920;
+            int use_bilinear = 0;
             bm_dev_request(&handle, 0);
             bmcv_perspective_image_matrix matrix_image;
             matrix_image.matrix_num = 1;
@@ -263,7 +262,7 @@ bmcv_image_warp_perspective
             u8 *host_ptr[] = {*src_ptr.get()};
             bm_image_copy_host_to_device(src, (void **)host_ptr);
 
-            bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst);
+            bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst, use_bilinear);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);

@@ -1230,7 +1230,12 @@ void vdi_write_register(u64 core_idx, u64 addr, unsigned int data)
         return;
 
     reg_addr = (volatile unsigned int *)(addr + (unsigned long)vdi->vdb_register.virt_addr);
+#ifdef __riscv
+     *(volatile unsigned int *)reg_addr = data;
+#else
     __atomic_store_n(reg_addr, data, __ATOMIC_SEQ_CST);
+#endif
+
 }
 
 unsigned int vdi_read_register(u64 core_idx, u64 addr)
@@ -1247,7 +1252,11 @@ unsigned int vdi_read_register(u64 core_idx, u64 addr)
         return (unsigned int)-1;
 
     reg_addr = (volatile unsigned int *)(addr + (unsigned long)vdi->vdb_register.virt_addr);
+#ifdef __riscv
+    return *(volatile unsigned int *)reg_addr;
+#else
     return __atomic_load_n(reg_addr, __ATOMIC_SEQ_CST);
+#endif
 }
 
 #define FIO_TIMEOUT         100

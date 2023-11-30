@@ -38,7 +38,7 @@ bool TopK(const T* input_data,
 
 int cpu_topklayer::process(void *param, int param_size) {
     setParam(param, param_size);
-    CPU_ASSERT(output_tensors_.size() >= 2);
+    CPU_ASSERT(output_tensors_.size() >= 1);
     const float* bottom_data = input_tensors_[0];
     int k = k_;
     if(input_tensors_.size()==2)
@@ -46,8 +46,27 @@ int cpu_topklayer::process(void *param, int param_size) {
     int    axis    = axis_==-1 ? input_shapes_[0].size()-1 : axis_;
 
     if(k>0){
-        float* values  = output_tensors_[0];
-        int*   indices = reinterpret_cast<int *>(output_tensors_[1]);
+        float* values;
+        int* indices;
+        float *unused_data;
+        if(output_tensors_.size()==1){
+            unsigned long long output_len = 1;
+            for(int i=0; i<output_shapes_[0][0].size(); i++)
+                output_len *= output_shapes_[0][0][i];
+            unused_data = new float[output_len];
+            if(values_used_only_){
+                values = output_tensors_[0];
+                indices = reinterpret_cast<int *>(unused_data);
+            }
+            else{
+                indices = reinterpret_cast<int *>(output_tensors_[0]);
+                values = unused_data;
+            }
+        }  
+        else{
+            values  = output_tensors_[0];
+            indices = reinterpret_cast<int *>(output_tensors_[1]);
+        }
         if (descending_) {
           TopK<float, int, Descending<float>>(bottom_data,
                                               input_shapes_[0],
@@ -65,7 +84,10 @@ int cpu_topklayer::process(void *param, int param_size) {
               values,
               indices);
         }
+        if(output_tensors_.size()==1)
+            delete [] unused_data;
     }
+
     for(int i=0; i<output_shapes_->size(); i++)
         (*output_shapes_)[i][axis] = k;
     return 0;
@@ -93,6 +115,7 @@ void cpu_topklayer::setParam(void *param, int param_size) {
     k_      = topk_param->k;
     axis_   = topk_param->axis;
     sorted_ = topk_param->sorted;
+    values_used_only_ = topk_param->values_used_only;
 }
 
 REGISTER_CPULAYER_CLASS(CPU_TOPK, cpu_topk)

@@ -188,15 +188,27 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                          "----------------------------------------------+\n");
                 break;
             case 2:
-                snprintf(
-                    line_str,
-                    BUFFER_LEN,
-                    "| SDK Version:%9s             Driver Version:  "
-                    "%1d.%1d.%1d                                         |\n",
-                    bm_smi_version,
-                    g_driver_version >> 16,
-                    (g_driver_version >> 8) & 0xff,
-                    g_driver_version & 0xff);
+                if ((g_driver_version >> 24) == 0x6) {
+                    snprintf(
+                        line_str,
+                        BUFFER_LEN,
+                        "| SDK Version:%9s LTS         Driver Version:  "
+                        "%1d.%1d.%1d LTS                                     |\n",
+                        bm_smi_version,
+                        (g_driver_version >> 16) & 0xff,
+                        (g_driver_version >> 8) & 0xff,
+                        g_driver_version & 0xff);
+                } else {
+                    snprintf(
+                        line_str,
+                        BUFFER_LEN,
+                        "| SDK Version:%9s LTS         Driver Version:  "
+                        "%1d.%1d.%1d                                         |\n",
+                        bm_smi_version,
+                        (g_driver_version >> 16) & 0xff,
+                        (g_driver_version >> 8) & 0xff,
+                        g_driver_version & 0xff);
+                }
                 break;
             case 3:
                 snprintf(line_str,

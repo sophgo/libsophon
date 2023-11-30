@@ -213,6 +213,7 @@ typedef struct bm_api_cv_feature_match_fix8b_1684x_st {
 typedef struct bm_api_cv_bayer2rgb {
     int width;
     int height;
+    int dst_fmt;
     u64 input_addr;
     u64 output_addr;
     u64 sys_mem_addr_temp_ul;
@@ -222,6 +223,36 @@ typedef struct bm_api_cv_bayer2rgb {
     u64 input_addr_padding_bottom_right;
     u64 kernel_addr;
 } bm_api_cv_bayer2rgb_t;
+
+typedef struct bm_api_cv_distance_1684x {
+  u64 Xaddr;
+  u64 Yaddr;
+  int dim;
+  float pnt[8];
+  int len;
+  int dtype;
+} bm_api_cv_distance_1684x_t;
+
+typedef struct bm_api_cv_as_strided
+{
+    u64 input_addr;
+    u64 output_addr;
+    int input_row;
+    int input_col;
+    int output_row;
+    int output_col;
+    int row_stride;
+    int col_stride;
+} bm_api_cv_as_strided_t;
+
+typedef struct bm_matrix_log{
+  u64 s_addr;
+  u64 d_addr;
+  int row;
+  int col;
+  int s_dtype;
+  int d_dtype;
+}bm_matrix_log_t;
 
 #pragma pack(pop)
 

@@ -348,7 +348,7 @@ DECL_EXPORT bm_handle_t bm_image_get_handle(bm_image *image);
  * it's better end with ".bmp" If bm_image_write_to_bmp return BM_SUCCESS, a
  * .bmp file is create in the path filename point to.
  */
-bm_status_t bm_image_write_to_bmp(bm_image    image,
+DECL_EXPORT bm_status_t bm_image_write_to_bmp(bm_image    image,
                                              const char *filename);
 
 DECL_EXPORT bm_status_t bm_image_copy_host_to_device(bm_image image,
@@ -570,13 +570,15 @@ DECL_EXPORT bm_status_t bmcv_image_jpeg_enc(
         bm_image *  src,
         void **     p_jpeg_data,
         size_t *    out_size,
-        int         quality_factor = 85);
+        int         quality_factor = 85,
+        int         bs_in_device = 0);
 DECL_EXPORT bm_status_t bmcv_image_jpeg_dec(
         bm_handle_t handle,
         void **     p_jpeg_data,
         size_t *    in_size,
         int         image_num,
-        bm_image *  dst);
+        bm_image *  dst,
+        int         bs_in_device = 0);
 
 DECL_EXPORT bm_status_t bmcv_nms(
         bm_handle_t     handle,
@@ -1109,7 +1111,7 @@ DECL_EXPORT bm_status_t bmcv_distance_ext(bm_handle_t handle,
                           bm_device_mem_t input,
                           bm_device_mem_t output,
                           int dim,
-                          bm_device_mem_t pnt,
+                          const void * pnt,
                           int len,
 			  int dtyte);
 
@@ -1193,6 +1195,17 @@ DECL_EXPORT bm_status_t bmcv_image_bayer2rgb(
         unsigned char* convd_kernel,
         bm_image input,
         bm_image output);
+
+DECL_EXPORT bm_status_t bmcv_as_strided(
+        bm_handle_t handle,
+        bm_device_mem_t input,
+        bm_device_mem_t output,
+        int input_row,
+        int input_col,
+        int output_row,
+        int output_col,
+        int row_stride,
+        int col_stride);
 
 DECL_EXPORT bm_status_t bmcv_image_threshold(
         bm_handle_t handle,
@@ -1505,6 +1518,20 @@ DECL_EXPORT bm_status_t bmcv_image_vpp_basic_v2(
   csc_matrix_t*           matrix,
   bmcv_convert_to_attr*   convert_to_attr);
 
+DECL_EXPORT bm_status_t bmcv_image_draw_point(
+  bm_handle_t   handle,
+  bm_image      image,
+  int           point_num,
+  bmcv_point_t *coord,
+  int           length,
+  unsigned char r,
+  unsigned char g,
+  unsigned char b);
+
+DECL_EXPORT bm_status_t bmcv_matrix_log(
+  bm_handle_t handle,
+  bm_image src,
+  bm_image dst);
 #if defined(__cplusplus)
 }
 #endif

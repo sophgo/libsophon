@@ -554,12 +554,11 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
            ctx->misc_info.driver_version & 0xff);
     if(0x1686 == ctx->misc_info.chipid){
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-            "the chip id is BM1684X, pcie_soc_mode is %s\n",
+            "the chip name is BM1684X, pcie_soc_mode is %s\n",
             (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
     }else{
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-            "the chip id is 0x%x, pcie_soc_mode is %s\n",
-            ctx->misc_info.chipid,
+            "the chip name is BM1684, pcie_soc_mode is %s\n",
             (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
     }
   } else {

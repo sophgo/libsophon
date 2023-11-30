@@ -108,6 +108,7 @@ static bm_status_t bmcv_convert_check(
     switch(expected_input_image_format)
     {
       case FORMAT_YUV420P:
+      case FORMAT_YUV422P:
       case FORMAT_YUV444P:
       case FORMAT_NV12:
       case FORMAT_NV21:

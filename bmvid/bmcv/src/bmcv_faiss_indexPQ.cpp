@@ -53,18 +53,6 @@ typedef struct
     int output_dtype;
 } faiss_api_indexPQ_encode_t;
 
-typedef enum {
-    DT_INT8   = (0 << 1) | 1,
-    DT_UINT8  = (0 << 1) | 0,
-    DT_INT16  = (3 << 1) | 1,
-    DT_UINT16 = (3 << 1) | 0,
-    DT_FP16   = (1 << 1) | 1,
-    DT_BFP16  = (5 << 1) | 1,
-    DT_INT32  = (4 << 1) | 1,
-    DT_UINT32 = (4 << 1) | 0,
-    DT_FP32   = (2 << 1) | 1
-} data_type_t;
-
 #define UNUSED(x) (void)(x)
 
 static inline int dtype_size(data_type_t data_type) {

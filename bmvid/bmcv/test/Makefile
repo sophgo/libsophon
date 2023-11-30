@@ -19,6 +19,7 @@ INCLUDE_DIR += -I$(TEST_BMCV_DIR)
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
 TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
                      $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_as_strided.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_bayer2rgb.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_add_weighted.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_axpy.cpp   \
@@ -84,6 +85,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_resize.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_hm_distance.cpp  \
 					 $(TEST_BMCV_DIR)/test_yolov3_detect_out.cpp  \
+					 $(TEST_BMCV_DIR)/test_matrix_log.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_fbd.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_slt.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp.cpp   \
@@ -104,6 +106,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_watermask_superpose.cpp     \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_convert_to_comparison.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_mul_crop_resize_haikang.cpp  \
+			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_point.cpp\
 
 TEST_BMCV_CXX_EXE1 = $(patsubst %.cpp,%,$(TEST_BMCV_SRCS_CXX))
 TEST_BMCV_CXX_EXE2 = $(patsubst $(BMVID_ROOT)/%,%,$(TEST_BMCV_CXX_EXE1))

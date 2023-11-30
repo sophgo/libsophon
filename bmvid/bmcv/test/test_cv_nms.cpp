@@ -5,6 +5,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <set>
 #include <string>
 #include <vector>
@@ -451,7 +452,7 @@ static bool generate_random_buf(std::vector<data_type> &random_buffer,
             random_min + (((float)((random_max - random_min) * i)) / scale));
         random_buffer.push_back(data_val);
     }
-    std::random_shuffle(random_buffer.begin(), random_buffer.end());
+    std::shuffle(random_buffer.begin(), random_buffer.end(), std::default_random_engine());
 
     return false;
 }

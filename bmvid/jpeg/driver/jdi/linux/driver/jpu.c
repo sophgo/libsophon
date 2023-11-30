@@ -703,12 +703,25 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
                         ret = -EFAULT;
                     }
                 }
-            }
-            if (signal_pending(current))
-            {
-                printk(KERN_INFO " down_interruptible ret=%d\n",ret);
-                ret = -ERESTARTSYS;
-                break;
+                if (signal_pending(current))
+                {
+                    if (core_index >= 0) {
+                        DPRINTK("signal_pending down_interruptible ret=%d   core_index=%d \n",ret, core_index);
+                        break;
+                    } else {
+                        DPRINTK("signal_pending down_interruptible->up ret=%d   core_index=%d \n",ret, core_index);
+                        up(&s_jpu_core);
+                        ret = -ERESTARTSYS;
+                        break;
+                    }
+                }
+            } else {
+                if (signal_pending(current))
+                {
+                    DPRINTK("signal_pending down_interruptible failed. ret=%d core_index=%d \n",ret, core_index);
+                    ret = -ERESTARTSYS;
+                    break;
+                }
             }
         }
         break;

@@ -268,7 +268,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
 		} else {
 			pattr->tpu_min_clock = 75;
-			pattr->tpu_max_clock = 1000;
+			pattr->tpu_max_clock = 950;
 		}
 		pattr->tpu_current_clock = c_attr->tpu_current_clock;
 		if (pattr->tpu_current_clock < pattr->tpu_min_clock
@@ -525,7 +525,9 @@ int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
 	if (!bmdi)
 		return -ENODEV;
 
-	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) {
+	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		func_num = bmdi->misc_info.domain_bdf&0x7;
 		if (func_num == 0) {
 			bmdi = bmctl_get_bmdi(bmci, dev_id);

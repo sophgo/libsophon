@@ -149,6 +149,8 @@ test_bmcv(
     test_cv_axpy.cpp
     test_bm1686_vpp_convert.cpp
     test_cv_bayer2rgb.cpp
+    test_cv_as_strided.cpp
+
 )
 elseif(WINDOWS)
 
@@ -225,6 +227,7 @@ test_bmcv(
     test_cv_laplacian.cpp
     test_cv_axpy.cpp
     test_cv_bayer2rgb.cpp
+    test_cv_as_strided.cpp
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_INSTALL_PREFIX}/bin/bm1684x)

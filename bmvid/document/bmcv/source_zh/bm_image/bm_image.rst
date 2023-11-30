@@ -57,7 +57,8 @@ ________________________________
            FORMAT_YUV422_VYUY,
            FORMAT_RGBYP_PLANAR,
            FORMAT_HSV180_PACKED,
-           FORMAT_HSV256_PACKED
+           FORMAT_HSV256_PACKED,
+           FORMAT_BAYER
        } bm_image_format_ext;
 
 
@@ -179,6 +180,10 @@ ________________________________
 * FORMAT_HSV256_PACKED
 
   表示预创建一个HSV 格式的图片，H 的范围为 0~255，HSV 交错排列，有一个 plane
+
+* FORMAT_BAYER
+
+  表示预创建一个bayer 格式的图片，有一个 plane，像素排列方式是BGGR，RGGB，GRBG或者GBRG，且宽高需要是偶数
 
 bm_data_format_ext data_type
 ____________________________
