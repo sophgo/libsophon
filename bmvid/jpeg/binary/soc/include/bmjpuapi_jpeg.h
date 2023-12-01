@@ -41,6 +41,9 @@ typedef struct
     BmJpuColorFormat color_format;
 
     int chroma_interleave;
+
+    int framebuffer_recycle;
+    size_t framebuffer_size;
 }
 BmJpuJPEGDecInfo;
 
@@ -64,13 +67,17 @@ typedef struct
     BmJpuRawFrame raw_frame;
     int device_index;
 
-    BmJpuFramebuffer *cur_buffer;
+    BmJpuFramebuffer *cur_framebuffer;
+    bm_device_mem_t *cur_dma_buffer;
     void *opaque;
 
     int rotationEnable;
     int mirrorEnable;
     int mirrorDirection;
     int rotationAngle;
+
+    int framebuffer_recycle;
+    size_t framebuffer_size;
 }
 BmJpuJPEGDecoder;
 
@@ -190,6 +197,7 @@ typedef struct
     int mirrorEnable;
     int mirrorDirection;
     int rotationAngle;
+    int bs_in_device;
 }
 BmJpuJPEGEncParams;
 
