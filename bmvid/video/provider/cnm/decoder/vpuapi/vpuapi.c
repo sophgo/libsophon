@@ -2448,7 +2448,7 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
             {
                 fbInfo->devMemInfoVbFbcYTbl[i] = pDecInfo->vbDevFbcYTbl[i];
                 fbInfo->devMemInfoVbFbcCTbl[i] = pDecInfo->vbDevFbcCTbl[i];
-                fbInfo->devMvCol[i]   = pDecInfo->vbDevMV[i];
+                fbInfo->devMemInfoVbMv[i]   = pDecInfo->vbDevMV[i];
             }
 
             for (i=0; i<MAX_GDI_IDX*2; i++) {
