@@ -1,3 +1,9 @@
+/* This is a convenience interface for simple en- and decoding of JPEG data.
+ * For merely en/decoding JPEGs, having to set up a JPU en/decoder involves
+ * a considerable amount of boilerplate code. This interface takes care of
+ * these details, and presents a much simpler interface focused on this one
+ * task: to en/decode JPEGs. */
+
 #ifndef BMJPUAPI_JPEG_H
 #define BMJPUAPI_JPEG_H
 
