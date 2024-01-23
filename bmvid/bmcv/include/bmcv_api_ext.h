@@ -1099,6 +1099,13 @@ DECL_EXPORT bm_status_t bmcv_calc_hist_with_weight(bm_handle_t handle,
                                        const int *histSizes,
                                        const float *ranges,
                                        int inputDtype);
+DECL_EXPORT bm_status_t bmcv_hist_balance(
+        bm_handle_t handle,
+        bm_device_mem_t input,
+        bm_device_mem_t output,
+        int H,
+        int W,
+        int batch);
 
 DECL_EXPORT bm_status_t bmcv_distance(bm_handle_t handle,
                           bm_device_mem_t input,

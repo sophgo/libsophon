@@ -254,6 +254,14 @@ typedef struct bm_matrix_log{
   int d_dtype;
 }bm_matrix_log_t;
 
+typedef struct bm_api_cv_hist_balance {
+  u64 Xaddr;
+  int len;
+  u64 cdf_addr;
+  u64 cdf_index_addr;
+  u64 Yaddr;
+} bm_api_cv_hist_balance_t;
+
 #pragma pack(pop)
 
 }

@@ -127,6 +127,7 @@ extern "C" {
     int jdi_wait_interrupt(int device_index, Uint32 coreIdx,int timeout);
 
     int jdi_hw_reset();
+    int jdi_hw_reset_all();
 
     int jdi_set_clock_gate(int enable);
     int jdi_get_clock_gate();

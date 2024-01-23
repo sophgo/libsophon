@@ -297,6 +297,7 @@ DECL_EXPORT int jpu_DecGiveCommand(DecHandle handle, CodecCommand cmd, void *par
 DECL_EXPORT int jpu_DecWaitForInt(DecHandle handle, int timeout_in_ms, int timeout_counts);
 
 DECL_EXPORT int jpu_GetDump();
+DECL_EXPORT int jpu_HWReset_All();
 DECL_EXPORT int vpp_Init(int32_t device_index);
 #endif /* __BM_JPU_LIB_H__ */
 

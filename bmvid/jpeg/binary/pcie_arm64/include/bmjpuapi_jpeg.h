@@ -1,3 +1,9 @@
+/* This is a convenience interface for simple en- and decoding of JPEG data.
+ * For merely en/decoding JPEGs, having to set up a JPU en/decoder involves
+ * a considerable amount of boilerplate code. This interface takes care of
+ * these details, and presents a much simpler interface focused on this one
+ * task: to en/decode JPEGs. */
+
 #ifndef BMJPUAPI_JPEG_H
 #define BMJPUAPI_JPEG_H
 
@@ -41,6 +47,9 @@ typedef struct
     BmJpuColorFormat color_format;
 
     int chroma_interleave;
+
+    int framebuffer_recycle;
+    size_t framebuffer_size;
 }
 BmJpuJPEGDecInfo;
 
@@ -64,13 +73,17 @@ typedef struct
     BmJpuRawFrame raw_frame;
     int device_index;
 
-    BmJpuFramebuffer *cur_buffer;
+    BmJpuFramebuffer *cur_framebuffer;
+    bm_device_mem_t *cur_dma_buffer;
     void *opaque;
 
     int rotationEnable;
     int mirrorEnable;
     int mirrorDirection;
     int rotationAngle;
+
+    int framebuffer_recycle;
+    size_t framebuffer_size;
 }
 BmJpuJPEGDecoder;
 
@@ -190,6 +203,7 @@ typedef struct
     int mirrorEnable;
     int mirrorDirection;
     int rotationAngle;
+    int bs_in_device;
 }
 BmJpuJPEGEncParams;
 
@@ -237,6 +251,8 @@ DECL_EXPORT BmJpuEncReturnCodes bm_jpu_jpeg_enc_encode(BmJpuJPEGEncoder *jpeg_en
                                            size_t *output_buffer_size);
 
 DECL_EXPORT int bm_jpu_jpeg_get_dump(void);
+
+DECL_EXPORT int bm_jpu_hw_reset_all();
 
 #ifdef __cplusplus
 }

@@ -18,7 +18,7 @@ typedef struct bm_api_absval_forward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_absval_forward_t;
 #else
 } bm_api_absval_forward_t;
@@ -32,7 +32,7 @@ typedef struct bm_api_absval_backward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_absval_backward_t;
 #else
 } bm_api_absval_backward_t;
@@ -47,7 +47,7 @@ typedef struct bm_api_accuracy_layer {
   int Tensor_Dim;
   int Tensor_N;
   int Top_K;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_accuracy_layer_t;
 #else
 } bm_api_accuracy_layer_t;
@@ -68,7 +68,7 @@ typedef struct bm_api_batchnorm_forward_inference_parallel {
   int need_var;
   int need_calc;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_batchnorm_forward_inference_parallel_t;
 #else
 } bm_api_batchnorm_forward_inference_parallel_t;
@@ -88,7 +88,7 @@ typedef struct bm_api_batchnorm_forward_train_parallel {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_batchnorm_forward_train_parallel_t;
 #else
 } bm_api_batchnorm_forward_train_parallel_t;
@@ -104,7 +104,7 @@ typedef struct bm_api_batchnorm_backward_parallel {
   int input_h;
   int input_w;
   int using_global_stats;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_batchnorm_backward_parallel_t;
 #else
 } bm_api_batchnorm_backward_parallel_t;
@@ -124,7 +124,7 @@ typedef struct bm_api_bilinear_interpolation {
   int output_w;
   int filter_size_h;
   int filter_size_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bilinear_interpolation_t;
 #else
 } bm_api_bilinear_interpolation_t;
@@ -143,7 +143,7 @@ typedef struct bm_api_bilinear_interpolation_parallel {
   int output_w;
   int filter_size_h;
   int filter_size_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bilinear_interpolation_parallel_t;
 #else
 } bm_api_bilinear_interpolation_parallel_t;
@@ -297,7 +297,7 @@ typedef struct bm_api_bnll_forward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bnll_forward_t;
 #else
 } bm_api_bnll_forward_t;
@@ -312,7 +312,7 @@ typedef struct bm_api_bnll_backward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bnll_backward_t;
 #else
 } bm_api_bnll_backward_t;
@@ -326,7 +326,7 @@ typedef struct bm_api_coeff_update_SGD_parallel {
   float base_lr;
   float momentum;
   float weight_decay;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_coeff_update_SGD_parallel_t;
 #else
 } bm_api_coeff_update_SGD_parallel_t;
@@ -346,7 +346,7 @@ typedef struct bm_api_contrastive_loss_forward {
   int Tensor_W;
   float margin;
   int legacy_version;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_contrastive_loss_forward_t;
 #else
 } bm_api_contrastive_loss_forward_t;
@@ -368,7 +368,7 @@ typedef struct bm_api_contrastive_loss_backward {
   float margin;
   int legacy_version;
   int propagate_down_flag;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_contrastive_loss_backward_t;
 #else
 } bm_api_contrastive_loss_backward_t;
@@ -409,7 +409,7 @@ typedef struct bm_api_conv_forward_parallel {
   int nsecs;
   int icsecs;
   int ocsecs;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_forward_parallel_t;
 #else
 } bm_api_conv_forward_parallel_t;
@@ -452,7 +452,7 @@ typedef struct bm_api_conv_forward_parallel_fix8b {
   int opd1_sign;
   int opd2_sign;
   int opd0_short_str;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_forward_parallel_fix8b_t;
 #else
 } bm_api_conv_forward_parallel_fix8b_t;
@@ -475,7 +475,7 @@ typedef struct bm_api_bnscale_forward_parallel_fix8b {
   //    int             hsecs;
   //    int             nsecs;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bnscale_forward_parallel_fix8b_t;
 #else
 } bm_api_bnscale_forward_parallel_fix8b_t;
@@ -560,7 +560,7 @@ typedef struct bm_api_conv_backward_bias_parallel {
   int stride_h;
   int stride_w;
   int result_add;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_backward_bias_parallel_t;
 #else
 } bm_api_conv_backward_bias_parallel_t;
@@ -583,7 +583,7 @@ typedef struct nodechip_winograd_bottom_diff_parallel {
   int kw;
   int pad_h;
   int pad_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) nodechip_winograd_bottom_diff_parallel_t;
 #else
 } nodechip_winograd_bottom_diff_parallel_t;
@@ -610,7 +610,7 @@ typedef struct bm_api_conv_parallel_bank_conflict {
   int stride_w;
   int using_bias;
   int result_add;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_parallel_bank_conflict_t;
 #else
 } bm_api_conv_parallel_bank_conflict_t;
@@ -637,7 +637,7 @@ typedef struct bm_api_conv_parallel_power_evaluation {
   int stride_w;
   int using_bias;
   int result_add;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_parallel_power_evaluation_t;
 #else
 } bm_api_conv_parallel_power_evaluation_t;
@@ -661,7 +661,7 @@ typedef struct bm_api_depthwise_forward {
   int stride_h;
   int stride_w;
   int using_bias;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_depthwise_forward_t;
 #else
 } bm_api_depthwise_forward_t;
@@ -692,7 +692,7 @@ typedef struct bm_api_depthwise_fix8b_forward_parallel {
   int opd2_sign;
   int res0_sign;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_depthwise_fix8b_forward_parallel_t;
 #else
 } bm_api_depthwise_fix8b_forward_parallel_t;
@@ -782,7 +782,7 @@ typedef struct bm_api_dropout_forward {
   float dropout_ratio;
   int input_n;
   int input_dim;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_dropout_forward_t;
 #else
 } bm_api_dropout_forward_t;
@@ -802,7 +802,7 @@ typedef struct bm_api_eltwise_forward {
   int need_mask;
   float mask_index[MAX_ELTWISELAYER_INPUT_NUM];
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_eltwise_forward_t;
 #else
 } bm_api_eltwise_forward_t;
@@ -824,7 +824,7 @@ typedef struct bm_api_eltwise_fix8b_forward {
   int rshift_A;
   int rshift_B;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_eltwise_fix8b_forward_t;
 #else
 } bm_api_eltwise_fix8b_forward_t;
@@ -844,7 +844,7 @@ typedef struct bm_api_eltwise_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_eltwise_backward_t;
 #else
 } bm_api_eltwise_backward_t;
@@ -859,7 +859,7 @@ typedef struct bm_api_elu_forward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_elu_forward_t;
 #else
 } bm_api_elu_forward_t;
@@ -876,7 +876,7 @@ typedef struct bm_api_elu_backward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_elu_backward_t;
 #else
 } bm_api_elu_backward_t;
@@ -892,7 +892,7 @@ typedef struct bm_api_euclidean_loss_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_euclidean_loss_forward_t;
 #else
 } bm_api_euclidean_loss_forward_t;
@@ -906,7 +906,7 @@ typedef struct bm_api_euclidean_loss_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_euclidean_loss_backward_t;
 #else
 } bm_api_euclidean_loss_backward_t;
@@ -922,7 +922,7 @@ typedef struct bm_api_exp_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_exp_forward_t;
 #else
 } bm_api_exp_forward_t;
@@ -939,7 +939,7 @@ typedef struct bm_api_exp_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_exp_backward_t;
 #else
 } bm_api_exp_backward_t;
@@ -962,7 +962,7 @@ typedef struct bm_api_fc_forward_parallel {
   int channel_shared;
   float shared_slope;
   int W_param;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_forward_parallel_t;
 #else
 } bm_api_fc_forward_parallel_t;
@@ -988,7 +988,7 @@ typedef struct bm_api_fc_fix8b_forward_parallel {
   int if_global_out_4N;
   float alpha;
   float beta;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_fix8b_forward_parallel_t;
 #else
 } bm_api_fc_fix8b_forward_parallel_t;
@@ -1001,7 +1001,7 @@ typedef struct bm_api_fc_weight_decompress {
   int index_size;
   int row;
   int col;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_weight_decompress_t;
 #else
 } bm_api_fc_weight_decompress_t;
@@ -1022,7 +1022,7 @@ typedef struct bm_api_fc_backward_parallel {
   int propagate_down_bottom;
   int using_bias;
   int W_param;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_backward_parallel_t;
 #else
 } bm_api_fc_backward_parallel_t;
@@ -1040,7 +1040,7 @@ typedef struct bm_api_fc_forward_parallel_bank_conflict {
   int have_bias;
   int using_relu;
   int W_param;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_forward_parallel_bank_conflict_t;
 #else
 } bm_api_fc_forward_parallel_bank_conflict_t;
@@ -1064,7 +1064,7 @@ typedef struct bm_api_fc_backward_sgd_parallel {
   float base_lr;
   float momentum;
   float weight_decay;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fc_backward_sgd_parallel_t;
 #else
 } bm_api_fc_backward_sgd_parallel_t;
@@ -1079,7 +1079,7 @@ typedef struct bm_api_filter_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_filter_forward_t;
 #else
 } bm_api_filter_forward_t;
@@ -1094,7 +1094,7 @@ typedef struct bm_api_filter_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_filter_backward_t;
 #else
 } bm_api_filter_backward_t;
@@ -1104,7 +1104,7 @@ typedef struct bm_api_fullnet {
   u64 bdc_cmd_offset;
   u64 gdma_cmd_offset;
   u64 cmd_num_offset;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_fullnet_t;
 #else
 } bm_api_fullnet_t;
@@ -1118,7 +1118,7 @@ typedef struct bm_api_img_sum {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_img_sum_t;
 #else
 } bm_api_img_sum_t;
@@ -1131,7 +1131,7 @@ typedef struct bm_api_active_forward {
   int input_dim;
   int active_type;
   void *param;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_active_forward_t;
 #else
 } bm_api_active_forward_t;
@@ -1148,7 +1148,7 @@ typedef struct bm_api_active_forward_fix8b {
   int input_signed;
   int output_signed;
   void *param;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_active_forward_fix8b_t;
 #else
 } bm_api_active_forward_fix8b_t;
@@ -1164,7 +1164,7 @@ typedef struct bm_api_log_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_log_forward_t;
 #else
 } bm_api_log_forward_t;
@@ -1181,7 +1181,7 @@ typedef struct bm_api_log_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_log_backward_t;
 #else
 } bm_api_log_backward_t;
@@ -1198,7 +1198,7 @@ typedef struct bm_api_lrn_forward_parallel {
   int size;
   float beta;
   float k;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lrn_forward_parallel_t;
 #else
 } bm_api_lrn_forward_parallel_t;
@@ -1217,7 +1217,7 @@ typedef struct bm_api_lrn_backward_parallel {
   float alpha;
   float beta;
   float k;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lrn_backward_parallel_t;
 #else
 } bm_api_lrn_backward_parallel_t;
@@ -1237,7 +1237,7 @@ typedef struct bm_api_lrn_fix8b_forward_parallel {
   float k;
   float scale_in;
   float scale_out;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lrn_fix8b_forward_parallel_t;
 #else
 } bm_api_lrn_fix8b_forward_parallel_t;
@@ -1266,7 +1266,7 @@ typedef struct bm_api_lstm_forward {
   int expose_hidden;
   int method;
   int n_slice;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lstm_forward_t;
 #else
 } bm_api_lstm_forward_t;
@@ -1285,7 +1285,7 @@ typedef struct bm_api_lstm_unit_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lstm_unit_forward_t;
 #else
 } bm_api_lstm_unit_forward_t;
@@ -1310,7 +1310,7 @@ typedef struct bm_api_lstm_unit_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_lstm_unit_backward_t;
 #else
 } bm_api_lstm_unit_backward_t;
@@ -1339,7 +1339,7 @@ typedef struct bm_api_nodechip_md_cmp {
   int is_top_1;
   int is_min;
   int is_md_cmp;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_md_cmp_t;
 #else
 } bm_api_nodechip_md_cmp_t;
@@ -1354,7 +1354,7 @@ typedef struct bm_api_nodechip_float2int8 {
   int input_h;
   int input_w;
   int sign_unsign;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_float2int8_t;
 #else
 } bm_api_nodechip_float2int8_t;
@@ -1375,7 +1375,7 @@ typedef struct bm_api_md_linear {
   float B_const_val;
   float S_const_val;
   LINEAR_OP linear_op;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_md_linear_t;
 #else
 } bm_api_md_linear_t;
@@ -1394,7 +1394,7 @@ typedef struct {
   int B_constant_flag;
   float A_constant;
   float B_constant;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_1d_scalar_t;
 #else
 } bm_api_nodechip_1d_scalar_t;
@@ -1417,7 +1417,7 @@ typedef struct bm_api_nodechip_md_scalar {
   float B_constant;
   int B_N_is_1;
   int B_index_is_1;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_md_scalar_t;
 #else
 } bm_api_nodechip_md_scalar_t;
@@ -1434,7 +1434,7 @@ typedef struct {
   int n;
   SFU_OP sfu_op;
   u64 table_start_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_md_sfu_t;
 #else
 } bm_api_nodechip_md_sfu_t;
@@ -1448,7 +1448,7 @@ typedef struct {
   int n;
   SFU_OP sfu_op;
   u64 table_start_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_nodechip_1d_sfu_t;
 #else
 } bm_api_nodechip_1d_sfu_t;
@@ -1462,7 +1462,7 @@ typedef struct bm_api_md_sum {
   int input_h;
   int input_w;
   int result_add;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_md_sum_t;
 #else
 } bm_api_md_sum_t;
@@ -1485,7 +1485,7 @@ typedef struct bm_api_md_ops {
   int B_is_constant;
   int A_const_val;
   int B_const_val;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_md_ops_t;
 #else
 } bm_api_md_ops_t;
@@ -1504,7 +1504,7 @@ typedef struct bm_api_normalize_forward {
   float eps;
   float scale;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_normalize_forward_t;
 #else
 } bm_api_normalize_forward_t;
@@ -1525,7 +1525,7 @@ typedef struct bm_api_normalize_fix8b_forward {
   int if_relu;
   int in_sign;
   int out_sign;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_normalize_fix8b_forward_t;
 #else
 } bm_api_normalize_fix8b_forward_t;
@@ -1538,7 +1538,7 @@ typedef struct bm_api_permute_param {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_permute_param_t;
 #else
 } bm_api_permute_param_t;
@@ -1551,7 +1551,7 @@ typedef struct bm_api_permute_fix8b_param {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_permute_fix8b_param_t;
 #else
 } bm_api_permute_fix8b_param_t;
@@ -1578,7 +1578,7 @@ typedef struct bm_api_pooling_backward_parallel {
   int h_step;
   float Ratio;
   int result;  /* For split result*/
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_backward_parallel_t;
 #else
 } bm_api_pooling_backward_parallel_t;
@@ -1606,7 +1606,7 @@ typedef struct bm_api_pooling_forward_parallel {
   int c_step;
   int h_step;
   float Ratio;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_forward_parallel_t;
 #else
 } bm_api_pooling_forward_parallel_t;
@@ -1640,7 +1640,7 @@ typedef struct bm_api_pooling_fix8b_forward_parallel {
   int c_step;
   int h_step;
   float Ratio;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_fix8b_forward_parallel_t;
 #else
 } bm_api_pooling_fix8b_forward_parallel_t;
@@ -1666,7 +1666,7 @@ typedef struct bm_api_pooling_train_index_forward_parallel {
   int h_step;
   float Ratio;
   int result;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_train_index_forward_parallel_t;
 #else
 } bm_api_pooling_train_index_forward_parallel_t;
@@ -1693,7 +1693,7 @@ typedef struct bm_api_pooling_train_forward_parallel {
   int h_step;
   float Ratio;
   int result;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_train_forward_parallel_t;
 #else
 } bm_api_pooling_train_forward_parallel_t;
@@ -1709,7 +1709,7 @@ typedef struct bm_api_adaptive_pooling_forward {
   int pooled_h;
   int pooled_w;
   int is_avg_pooling;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_adaptive_pooling_forward_t;
 #else
 } bm_api_adaptive_pooling_forward_t;
@@ -1732,7 +1732,7 @@ typedef struct bm_api_adaptive_pooling_fix8b_forward {
   int opd2_sign;
   int res0_sign;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_adaptive_pooling_fix8b_forward_t;
 #else
 } bm_api_adaptive_pooling_fix8b_forward_t;
@@ -1749,7 +1749,7 @@ typedef struct bm_api_upsample_forward_parallel {
   int c_step;
   int h_step;
   float Ratio;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_upsample_forward_parallel_t;
 #else
 } bm_api_upsample_forward_parallel_t;
@@ -1772,7 +1772,7 @@ typedef struct bm_api_pooling_forward_parallel_bank_conflict {
   int c_step;
   int h_step;
   float Ratio;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pooling_forward_parallel_bank_conflict_t;
 #else
 } bm_api_pooling_forward_parallel_bank_conflict_t;
@@ -1788,7 +1788,7 @@ typedef struct bm_api_power_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_power_forward_t;
 #else
 } bm_api_power_forward_t;
@@ -1806,7 +1806,7 @@ typedef struct bm_api_power_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_power_backward_t;
 #else
 } bm_api_power_backward_t;
@@ -1823,7 +1823,7 @@ typedef struct bm_api_prelu_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_prelu_forward_t;
 #else
 } bm_api_prelu_forward_t;
@@ -1842,7 +1842,7 @@ typedef struct bm_api_prelu_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_prelu_backward_t;
 #else
 } bm_api_prelu_backward_t;
@@ -1857,7 +1857,7 @@ typedef struct bm_api_relu_forward_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_relu_forward_parallel_t;
 #else
 } bm_api_relu_forward_parallel_t;
@@ -1873,7 +1873,7 @@ typedef struct bm_api_relu_backward_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_relu_backward_parallel_t;
 #else
 } bm_api_relu_backward_parallel_t;
@@ -1892,7 +1892,7 @@ typedef struct bm_api_roi_pooling_forward {
   int pooled_w;
   int roi_num;
   float spatial_scale;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_roi_pooling_forward_t;
 #else
 } bm_api_roi_pooling_forward_t;
@@ -1913,7 +1913,7 @@ typedef struct bm_api_psroipooling_forward {
   float spatial_scale;
   int input_sign;
   int output_sign;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_psroipooling_forward_t;
 #else
 } bm_api_psroipooling_forward_t;
@@ -1940,7 +1940,7 @@ typedef struct bm_api_rpnproposal_forward_t {
   u64 arm_reserved_global_offset;
   int bottom_prec;  // 0: FP32, 1: INT8, 2: UINT8
   float scale_val;  // only vaid if FIX8B
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_rpnproposal_forward_t;
 #else
 } bm_api_rpnproposal_forward_t;
@@ -1959,7 +1959,7 @@ typedef struct bm_api_scale_forward {
   int shape_axis_num;
   int add_bias;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_scale_forward_t;
 #else
 } bm_api_scale_forward_t;
@@ -1970,7 +1970,7 @@ typedef struct bm_api_sigmoid_forward_parallel {
   u64 top_global_offset;
   int input_n;  // note this is total input_n
   int input_c;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sigmoid_forward_parallel_t;
 #else
 } bm_api_sigmoid_forward_parallel_t;
@@ -1985,7 +1985,7 @@ typedef struct bm_api_sigmoid_forward_parallel_fix8b {
   float output_scale;
   int input_signed;
   int output_signed;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sigmoid_forward_parallel_fix8b_t;
 #else
 } bm_api_sigmoid_forward_parallel_fix8b_t;
@@ -1997,7 +1997,7 @@ typedef struct bm_api_sigmoid_backward_parallel {
   u64 bottom_diff_global_offset;
   int input_n;  // note this is total input_n
   int input_c;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sigmoid_backward_parallel_t;
 #else
 } bm_api_sigmoid_backward_parallel_t;
@@ -2013,7 +2013,7 @@ typedef struct bm_api_sigmoid_cross_entropy_loss_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sigmoid_cross_entropy_loss_forward_t;
 #else
 } bm_api_sigmoid_cross_entropy_loss_forward_t;
@@ -2029,7 +2029,7 @@ typedef struct bm_api_sigmoid_cross_entropy_loss_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sigmoid_cross_entropy_loss_backward_t;
 #else
 } bm_api_sigmoid_cross_entropy_loss_backward_t;
@@ -2041,7 +2041,7 @@ typedef struct bm_api_silence_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_silence_backward_t;
 #else
 } bm_api_silence_backward_t;
@@ -2058,7 +2058,7 @@ typedef struct bm_api_softmax_loss_forward_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_softmax_loss_forward_parallel_t;
 #else
 } bm_api_softmax_loss_forward_parallel_t;
@@ -2075,7 +2075,7 @@ typedef struct bm_api_softmax_loss_backward_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_softmax_loss_backward_parallel_t;
 #else
 } bm_api_softmax_loss_backward_parallel_t;
@@ -2092,7 +2092,7 @@ typedef struct bm_api_softmax_loss_bidirection_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_softmax_loss_bidirection_parallel_t;
 #else
 } bm_api_softmax_loss_forward_parallel_t;
@@ -2109,7 +2109,7 @@ typedef struct bm_api_softmax_forward_parallel {
   float scale_val;
   int in_tensor_global_store_mode;
   u64 global_offset_1N_buf;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_softmax_forward_parallel_t;
 #else
 } bm_api_softmax_forward_parallel_t;
@@ -2123,7 +2123,7 @@ typedef struct bm_api_softmax_backward_parallel {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_softmax_backward_parallel_t;
 #else
 } bm_api_softmax_backward_parallel_t;
@@ -2136,7 +2136,7 @@ typedef struct bm_api_global_memcpy {
   int src_nstride;
   int dst_nstride;
   int count;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_global_memcpy_t;
 #else
 } bm_api_global_memcpy_t;
@@ -2148,7 +2148,7 @@ typedef struct bm_api_crop {
   int offset[4];
   int topshape[4];
   int bottomshape[4];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_crop_t;
 #else
 } bm_api_crop_t;
@@ -2162,7 +2162,7 @@ typedef struct bm_api_concat {
   int st_by_concatway[MAX_CONCATLAYER_INPUT_NUM];
   int bottom_size;
   int concat_axis;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_concat_t;
 #else
 } bm_api_concat_t;
@@ -2180,7 +2180,7 @@ typedef struct bm_api_multiregion_forward_parallel {
   int coords;
   int nums;
   int Activate_parm[4];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_multiregion_forward_parallel_t;
 #else
 } bm_api_multiregion_forward_parallel_t;
@@ -2193,7 +2193,7 @@ typedef struct bm_api_split_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_split_backward_t;
 #else
 } bm_api_split_backward_t;
@@ -2204,7 +2204,7 @@ typedef struct bm_api_tanh_forward_parallel {
   u64 top_global_offset;
   int Tensor_N;
   int Tensor_C;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_tanh_forward_parallel_t;
 #else
 } bm_api_tanh_forward_parallel_t;
@@ -2219,7 +2219,7 @@ typedef struct bm_api_tanh_forward_parallel_fix8b {
   float output_scale;
   int input_signed;
   int output_signed;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_tanh_forward_parallel_fix8b_t;
 #else
 } bm_api_tanh_forward_parallel_fix8b_t;
@@ -2229,7 +2229,7 @@ typedef struct {
   u64 bottom_global_offset;
   u64 top_global_offset;
   u64 length;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sign_t;
 #else
 } bm_api_sign_t;
@@ -2241,7 +2241,7 @@ typedef struct bm_api_tanh_backward_parallel {
   u64 bottom_diff_global_offset;
   int Tensor_N;
   int Tensor_C;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_tanh_backward_parallel_t;
 #else
 } bm_api_tanh_backward_parallel_t;
@@ -2255,7 +2255,7 @@ typedef struct bm_api_threshold_forward {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_threshold_forward_t;
 #else
 } bm_api_threshold_forward_t;
@@ -2269,7 +2269,7 @@ typedef struct bm_api_bias_forward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bias_forward_t;
 #else
 } bm_api_bias_forward_t;
@@ -2286,7 +2286,7 @@ typedef struct bm_api_bias_fix8b_forward {
   int rshift;
   int if_relu;
   int relu_limit;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bias_fix8b_forward_t;
 #else
 } bm_api_bias_fix8b_forward_t;
@@ -2301,7 +2301,7 @@ typedef struct bm_api_bias_backward {
   int Tensor_C;
   int Tensor_H;
   int Tensor_W;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_bias_backward_t;
 #else
 } bm_api_bias_backward_t;
@@ -2321,7 +2321,7 @@ typedef struct bm_api_scale_backward {
   int scale_dim;
   int inner_dim;
   int scale_is_neuron;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_scale_backward_t;
 #else
 } bm_api_scale_backward_t;
@@ -2349,7 +2349,7 @@ typedef struct bm_api_conv_correlation {
   int stride_h;
   int stride_w;
   int add_result;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_conv_correlation_t;
 #else
 } bm_api_conv_correlation_t;
@@ -2363,7 +2363,7 @@ typedef struct bm_api_regularization_l1 {
   int h;
   int w;
   float local_decay;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_regularization_l1_t;
 #else
 } bm_api_regularization_l1_t;
@@ -2377,7 +2377,7 @@ typedef struct bm_api_global_int2float {
   int h;
   int w;
   int sign_unsign;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_global_int2float_t;
 #else
 } bm_api_global_int2float_t;
@@ -2400,7 +2400,7 @@ typedef struct bm_api_cv_warp {
   int blockIdx_x;
   int blockIdx_y;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_warp_t;
 #else
 } bm_api_cv_warp_t;
@@ -2420,7 +2420,7 @@ typedef struct bm_api_cv_warp_bilinear {
   int blockIdx_x;
   int blockIdx_y;
   int src_stride;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_warp_bilinear_t;
 #else
 } bm_api_cv_warp_bilinear_t;
@@ -2440,7 +2440,7 @@ typedef struct bm_api_cv_filter {
   float delta;
   int is_packed;
   int out_type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_filter_t;
 #else
 } bm_api_cv_filter_t;
@@ -2458,7 +2458,7 @@ typedef struct bm_api_cv_canny {
   float low_thresh;
   float high_thresh;
   int l2gradient;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_canny_t;
 #else
 } bm_api_cv_canny_t;
@@ -2477,7 +2477,7 @@ typedef struct bm_api_cv_add_weighted {
   float alpha;
   float beta;
   float gamma;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_add_weighted_t;
 #else
 } bm_api_cv_add_weighted_t;
@@ -2493,7 +2493,7 @@ typedef struct bm_api_cv_absdiff {
   int input1_str[3];
   int input2_str[3];
   int output_str[3];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_absdiff_t;
 #else
 } bm_api_cv_absdiff_t;
@@ -2509,7 +2509,7 @@ typedef struct bm_api_cv_draw_line {
   int rval;
   int gval;
   int bval;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_draw_line_t;
 #else
 } bm_bm_api_cv_draw_line_t;
@@ -2526,7 +2526,7 @@ typedef struct bm_api_cv_threshold {
   int type;
   u32 thresh;
   u32 max_value;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_threshold_t;
 #else
 } bm_api_cv_threshold_t;
@@ -2544,7 +2544,7 @@ typedef struct bm_api_laplacian {
   unsigned int stride_o[3];
   float delta;
   int is_packed;
-#ifndef WIN32
+#ifndef _WIN32
 }  __attribute__((packed)) bm_api_laplacian_t;
 #else
 } bm_api_laplacian_t;
@@ -2559,7 +2559,7 @@ typedef struct bm_api_cv_axpy {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_axpy_t;
 #else
 } bm_api_cv_axpy_t;
@@ -2583,7 +2583,7 @@ typedef struct bm_api_cv_fusion {
   int kw;
   int format;
   // int op;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_fusion_t;
 #else
 } bm_api_cv_fusion_t;
@@ -2599,7 +2599,7 @@ typedef struct {
   int input_format;
   int output_format;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_tile_forward_t;
 #else
 } bm_api_tile_forward_t;
@@ -2615,7 +2615,7 @@ typedef struct {
   int in_store_mode;
   int out_store_mode;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_tile_fix8b_forward_t;
 #else
 } bm_api_tile_fix8b_forward_t;
@@ -2630,7 +2630,7 @@ typedef struct {
   int type_len;
   int store_mode;
   u64 buffer_global_mem_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_transpose_t;
 #else
 } bm_api_transpose_t;
@@ -2645,7 +2645,7 @@ typedef struct {
   int in_store_mode;
   int out_store_mode;
   u64 buffer_global_mem_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_transpose_fix8b_t;
 #else
 } bm_api_transpose_fix8b_t;
@@ -2658,7 +2658,7 @@ typedef struct {
   int height;
   int width;
   int type_len;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_transpose_t;
 #else
 } bm_api_cv_transpose_t;
@@ -2672,7 +2672,7 @@ typedef struct {
   int input_h;
   int input_w;
   int sum_dim;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sum_forward_t;
 #else
 } bm_api_tile_forward_t;
@@ -2692,7 +2692,7 @@ typedef struct bm_api_width_align {
   int dst_c_stride;
   int dst_h_stride;
   int data_size;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_width_align_t;
 #else
 } bm_api_cv_width_align_t;
@@ -2719,7 +2719,7 @@ typedef struct bm_api_cv_resize_st {
   int padding_b;
   int padding_g;
   int padding_r;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_resize_t;
 #else
 } bm_api_cv_resize_t;
@@ -2730,7 +2730,7 @@ typedef struct bm_api_yuv_resize_st {
   u64 output_para_addr;
   int data_type;
   int image_num;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_yuv_resize_t;
 #else
 } bm_api_yuv_resize_t;
@@ -2763,7 +2763,7 @@ typedef struct bm_api_cv_yuv2rgb {
 
   int dst_store_mode;
   int dst_image_format;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_yuv2rgb_t;
 #else
 } bm_api_cv_yuv2rgb_t;
@@ -2779,7 +2779,7 @@ typedef struct bm_api_cv_yuv2hsv {
   unsigned int oh;
   unsigned int src_format;
   unsigned int dst_format;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_yuv2hsv_t;
 #else
 } bm_api_cv_yuv2hsv_t;
@@ -2815,7 +2815,7 @@ typedef struct bm_api_cv_storage_convert {
   int width;
   u32 op;
   u32 csc_type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_storage_convert_t;
 #else
 } bm_api_cv_storage_convert_t;
@@ -2832,7 +2832,7 @@ typedef struct bm_api_compare {
   int B_is_constant;
   float A_constant;
   float B_constant;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_compare_t;
 #else
 } bm_api_compare_t;
@@ -2852,7 +2852,7 @@ typedef struct bm_api_eltwise_binary_fix8b_forward {
   int sign_A;
   int sign_B;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_eltwise_binary_fix8b_forward_t;
 #else
 } bm_api_eltwise_binary_fix8b_forward_t;
@@ -2873,7 +2873,7 @@ typedef struct bm_api_const_binary_fix8b_forward {
   int sign_B;
   int inversed;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_const_binary_fix8b_forward_t;
 #else
 } bm_api_const_binary_fix8b_forward_t;
@@ -2894,7 +2894,7 @@ typedef struct bm_api_broadcast_binary_fix8b_forward {
   int sign_A;
   int sign_B;
   int if_relu;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_broadcast_binary_fix8b_forward_t;
 #else
 } bm_api_broadcast_binary_fix8b_forward_t;
@@ -2922,7 +2922,7 @@ typedef struct bm_api_binary {
   int B_is_constant;
   float B_value;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_binary_t;
 #else
 } bm_api_binary_t;
@@ -2939,7 +2939,7 @@ typedef struct bm_api_simple_binary {
   int B_is_constant;
   float B_value;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_simple_binary_t;
 #else
 } bm_api_simple_binary_t;
@@ -2952,7 +2952,7 @@ typedef struct {
   u64 length;
   int type;
   unsigned char param[UNARY_PARAM_MAX_LEN];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_unary_t;
 #else
 } bm_api_unary_t;
@@ -2969,7 +2969,7 @@ typedef struct bm_api_logical {
   int B_is_constant;
   unsigned int A_constant;
   unsigned int B_constant;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_logical_t;
 #else
 } bm_api_logical_t;
@@ -2986,7 +2986,7 @@ typedef struct bm_api_ternary {
   int B_is_constant;
   float A_constant;
   float B_constant;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_ternary_t;
 #else
 } bm_api_ternary_t;
@@ -3020,7 +3020,7 @@ typedef struct bm_api_select {
   float then_value;
   int else_is_constant;
   float else_value;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_select_t;
 #else
 } bm_api_select_t;
@@ -3039,7 +3039,7 @@ typedef struct bm_api_simple_select {
   float then_value;
   int else_is_constant;
   float else_value;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_simple_select_t;
 #else
 } bm_api_simple_select_t;
@@ -3051,7 +3051,7 @@ typedef struct {
   u64 length;
   int N;  // sum(x^(2^N))
   float multiplier;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_sum_x2n_t;
 #else
 } bm_api_sum_x2n_t;
@@ -3075,7 +3075,7 @@ typedef struct {
   float base_threshold;
   int per_nms_topn;
   u64 output_proposal_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_gen_proposal_t;
 #else
 } bm_api_cv_gen_proposal_t;
@@ -3093,7 +3093,7 @@ typedef struct bm_api_word2vec {
   int example_num;
   int dims;
   int vocab_size;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_word2vec_t;
 #else
 } bm_api_word2vec_t;
@@ -3108,7 +3108,7 @@ typedef struct bm_api_ctcloss {
   int num_classes;
   int lprime_s;
   int seq_l;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_ctcloss_t;
 #else
 } bm_api_ctcloss_t;
@@ -3119,7 +3119,7 @@ typedef struct {
   int proposal_size;
   float nms_threshold;
   u64 output_proposal_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_nms_t;
 #else
 } bm_api_cv_nms_t;
@@ -3130,7 +3130,7 @@ typedef struct {
   u64 output_global_addr;
   u64 length;
   int convert_flag;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_f32_convert_t;
 #else
 } bm_api_f32_convert_t;
@@ -3141,7 +3141,7 @@ typedef struct {
   u64 output_global_addr;
   u64 length;
   int cast_flag;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cast_t;
 #else
 } bm_api_cast_t;
@@ -3152,7 +3152,7 @@ typedef struct {
   u64 output_global_addr;
   u64 length;
   u32 op_code;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_triangle_t;
 #else
 } bm_api_triangle_t;
@@ -3163,7 +3163,7 @@ typedef struct {
   u64 output_global_addr;
   u64 length;
   int what;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_f32_is_t;
 #else
 } bm_api_f32_is_t;
@@ -3178,7 +3178,7 @@ typedef struct {
   int axis_list[FW_MAX_SHAPE_DIMS];
   int axis_number;
   int method;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_reduce_t;
 #else
 } bm_api_reduce_t;
@@ -3197,7 +3197,7 @@ typedef struct {
   int store_mode;
   float bottom_scale_val;
   float top_scale_val;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_reduce_fix8b_t;
 #else
 } bm_api_reduce_fix8b_t;
@@ -3210,7 +3210,7 @@ typedef struct {
   int output_rows;
   int row_size;
   int segment_reduce_flag;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_segment_reduce_t;
 #else
 } bm_api_segment_reduce_t;
@@ -3232,7 +3232,7 @@ typedef struct {
   int input_img_data_type;
   int output_img_data_type;
   u64 output_img_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_convert_to_t;
 #else
 } bm_api_cv_convert_to_t;
@@ -3299,7 +3299,7 @@ typedef struct {
   u64 output_proposal_addr;
   u64 filter_output;
   u64 filter_output_shape_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_gen_proposal_and_nms_t;
 #else
 } bm_api_cv_gen_proposal_and_nms_t;
@@ -3314,7 +3314,7 @@ typedef struct {
   u64 output_img_addr_2;
   u64 convert_to_attr_addr;
   int times;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_convert_to_inter_t;
 #else
 } bm_api_cv_convert_to_inter_t;
@@ -3329,7 +3329,7 @@ typedef struct {
   int location;
   int data_cnt;
   int sort_cnt;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_sort_test_t;
 #else
 } bm_api_cv_sort_test_t;
@@ -3345,7 +3345,7 @@ typedef struct {
   int order;
   int index_enable;
   int auto_index;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_sort_t;
 #else
 } bm_api_cv_sort_t;
@@ -3361,7 +3361,7 @@ typedef struct bm_api_pad {
   int pad[4][2];
   float const_val;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pad_t;
 #else
 } bm_api_pad_t;
@@ -3381,7 +3381,7 @@ typedef struct bm_api_pad_fix8b {
   int pad[4][2];
   int const_val;
   int type;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_pad_fix8b_t;
 #else
 } bm_api_pad_fix8b_t;
@@ -3397,7 +3397,7 @@ typedef struct bm_api_arg {
   int input_w;
   int axis;
   int method;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_arg_t;
 #else
 } bm_api_arg_t;
@@ -3416,7 +3416,7 @@ typedef struct bm_api_arg_fix8b {
   int input_w;
   int axis;
   int method;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_arg_fix8b_t;
 #else
 } bm_api_arg_fix8b_t;
@@ -3430,7 +3430,7 @@ typedef struct bm_api_shuffle_channel_forward {
   int input_h;
   int input_w;
   int group_num;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_shuffle_channel_forward_t;
 #else
 } bm_api_shuffle_channel_forward_t;
@@ -3444,7 +3444,7 @@ typedef struct bm_api_shuffle_channel_fix8b_forward {
   int input_h;
   int input_w;
   int group_num;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_shuffle_channel_fix8b_forward_t;
 #else
 } bm_api_shuffle_channel_fix8b_forward_t;
@@ -3462,7 +3462,7 @@ typedef struct bm_api_split_tf_fix8b {
   int split_size[MAX_SPLIT_TF_OUTPUT_NUM];
   int split_num;
   u64 top_global_offset[MAX_SPLIT_TF_OUTPUT_NUM];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_split_tf_fix8b_t;
 #else
 } bm_api_split_tf_fix8b_t;
@@ -3477,7 +3477,7 @@ typedef struct bm_api_cv_feature_match_t {
   int batch_size;
   int feature_size;
   int db_size;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_feature_match_t;
 #else
 } bm_api_cv_feature_match_t;
@@ -3493,7 +3493,7 @@ typedef struct {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_topk_t;
 #else
 } bm_api_topk_t;
@@ -3513,7 +3513,7 @@ typedef struct {
   int per_batch_size_is_same;
   int batch_stride;
   int descending;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_batch_topk_t;
 #else
 } bm_api_cv_batch_topk_t;
@@ -3528,7 +3528,7 @@ typedef struct {
     int             input_c;
     int             input_h;
     int             input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_where_t;
 #else
 } bm_api_where_t;
@@ -3542,7 +3542,7 @@ typedef struct {
   int input_c;
   int input_h;
   int input_w;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cumsum_t;
 #else
 } bm_api_cumsum_t;
@@ -3561,7 +3561,7 @@ typedef struct {
   int begin_index[FW_MAX_STRIDE_DIMS];
   int end_index[FW_MAX_STRIDE_DIMS];
   int stride[FW_MAX_STRIDE_DIMS];
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_stride_slice_t;
 #else
 } bm_api_stride_slice_t;
@@ -3581,7 +3581,7 @@ typedef struct {
   int *begin_index;
   int *end_index;
   int *stride;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_stride_slice_fix8b_t;
 #else
 } bm_api_stride_slice_fix8b_t;
@@ -3597,7 +3597,7 @@ typedef struct {
   int *begin_index;
   int *end_index;
   int *stride;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_stride_slice_md_t;
 #else
 } bm_api_stride_slice_md_t;
@@ -3615,7 +3615,7 @@ typedef struct bm_api_interp_forward_parallel {
   int output_h;
   int output_w;
   int platform_sp;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_interp_forward_parallel_t;
 #else
 } bm_api_interp_forward_parallel_t;
@@ -3632,7 +3632,7 @@ typedef struct {
   int out_store_mode;
   int block_sizes[2];  // must have 2 elements
   int crop_sizes[4];   // must have 4 elements
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_batch2space_fix8b_forward_t;
 #else
 } bm_api_batch2space_fix8b_forward_t;
@@ -3648,7 +3648,7 @@ typedef struct {
   int out_store_mode;
   int block_sizes[2];  // must have 2 elements
   int pad_sizes[4];    // must have 4 elements
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_space2batch_fix8b_forward_t;
 #else
 } bm_api_space2batch_fix8b_forward_t;
@@ -3666,7 +3666,7 @@ typedef struct {
   int coords;
   int background;
   int softmax;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_yolo_t;
 #else
 } bm_api_yolo_t;
@@ -3690,7 +3690,7 @@ typedef struct {
   float nms_threshold;
   float conf_threshold;
   float eta;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_ssd_detect_out_t;
 #else
 } bm_api_ssd_detect_out_t;
@@ -3714,7 +3714,7 @@ typedef struct bm_api_cv_copy_to_st {
   int padding_g;
   int padding_r;
   int if_padding;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_copy_to_t;
 #else
 } bm_api_cv_copy_to_t;
@@ -3731,7 +3731,7 @@ typedef struct bm_api_cv_feature_match_fix8b_st {
   int db_size;
   int sort_cnt;
   int rshiftbits;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_feature_match_fix8b_t;
 #else
 } bm_api_cv_feature_match_t;
@@ -3744,7 +3744,7 @@ typedef struct {
   float sigma;
   u64   overlap_output_addr;
   u64   weighting_res_output_addr;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_soft_nms_t;
 #else
 } bm_api_cv_soft_nms_t;
@@ -3757,7 +3757,7 @@ typedef struct {
     u32 H;
     u32 W;
     u32 is_inversed;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_dct_coeff_t;
 #else
 } bm_api_dct_coeff_t;
@@ -3775,7 +3775,7 @@ typedef struct {
     u32 W;
     u32 coeff_ready;
     u32 is_inversed;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_dct_t;
 #else
 } bm_api_dct_t;
@@ -3789,7 +3789,7 @@ typedef struct bm_api_cv_calc_hist_index {
   int len;
   int xdtype;
   float upper;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_calc_hist_index_t;
 #else
 } bm_api_cv_calc_hist_index_t;
@@ -3809,7 +3809,7 @@ typedef struct bm_api_cv_fft_1d {
   int forward;
   int inputIsReal;
   int trans;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_fft_1d_t;
 #else
 } bm_api_cv_fft_1d_t;
@@ -3824,7 +3824,7 @@ typedef struct bm_api_cv_cmulp {
   u64 YI;
   int batch;
   int len;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_cmulp_t;
 #else
 } bm_api_cv_cmulp_t;
@@ -3836,7 +3836,7 @@ typedef struct bm_api_cv_distance {
   int dim;
   float pnt[8];
   int len;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_distance_t;
 #else
 } bm_api_cv_distance_t;
@@ -3848,7 +3848,7 @@ typedef struct bm_api_cv_min_max {
   u64 maxAddr;
   int len;
   int mode;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_min_max_t;
 #else
 } bm_api_cv_min_max_t;
@@ -3865,7 +3865,7 @@ typedef struct bm_api_cv_morph {
   int stride_o;
   int format;
   int op;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_morph_t;
 #else
 } bm_api_cv_morph_t;
@@ -3881,7 +3881,7 @@ typedef struct bm_api_cv_pyramid {
   int oh;
   int stride_i;
   int stride_o;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_pyramid_t;
 #else
 } bm_api_cv_pyramid_t;
@@ -3898,7 +3898,7 @@ typedef struct bm_api_cv_lkpyramid {
   int winW;
   int winH;
   int max_level;
-#ifndef WIN32
+#ifndef _WIN32
 } __attribute__((packed)) bm_api_cv_lkpyramid_t;
 #else
 } bm_api_cv_lkpyramid_t;

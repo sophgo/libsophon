@@ -1700,7 +1700,6 @@ static bm_status_t bm1684x_vpp_misc(
 
   UNUSED(cmodel_flag);
 
-#ifdef __linux__
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(vpp_dev_fd);
@@ -1726,7 +1725,7 @@ static bm_status_t bm1684x_vpp_misc(
     }
   } else if(cmodel_flag == 1)
   {
-    bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output,vpp_param);
+    bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output, vpp_param);
   }
 #endif
 
@@ -1738,16 +1737,17 @@ static bm_status_t bm1684x_vpp_misc(
       if(0 != bm_trigger_vpp(handle, &batch))
       {
         printf("1684x vpp pcie run failed\n");
+#ifndef _WIN32
         vpp1684x_dump(&batch);
+#endif
         ret = BM_ERR_FAILURE;
       }
-    }
-    else if(cmodel_flag == 1)
-    {
-      bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output,vpp_param);
+    }else if(cmodel_flag == 1){
+#ifndef _WIN32
+      bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output, vpp_param);
+#endif
     }
 
-#endif
 #endif
 
   delete[] batch.cmd;
@@ -2696,7 +2696,7 @@ void bm1684x_vpp_read_bin(bm_image src, const char *input_name)
                      (void*)((char*)input_ptr + image_byte_size[0] + image_byte_size[1] + image_byte_size[2])};
 
 
-  FILE *fp_src = fopen(input_name, "rb+");
+  FILE *fp_src = fopen(input_name, "rb");
 
   if (fread((void *)input_ptr, 1, byte_size, fp_src) < (unsigned int)byte_size){
       printf("file size is less than %d required bytes\n", byte_size);

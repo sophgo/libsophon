@@ -28,6 +28,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_batch_topk.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_bgrsplit.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_calc_hist.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_hist_balance.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_canny.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_cmulp.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_copy_to.cpp  \

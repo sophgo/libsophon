@@ -3,8 +3,7 @@
 #ifdef __linux__
 #include <sys/ioctl.h>
 #include <unistd.h>
-#endif
-#ifdef _WIN32
+#else
 #include <time.h>
 #include <windows.h>
 #include <io.h>
