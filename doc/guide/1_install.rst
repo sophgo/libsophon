@@ -1,7 +1,7 @@
 安装libsophon
 --------------
 
-.. |ver| replace:: 0.5.0
+.. |ver| replace:: 0.4.9
 
 libsophon在不同的Linux发行版上提供不同类型的安装方式。请根据您的系统选择对应的方式，不要在一台机器上混用多种安装方式。
 以下描述中“|ver|”仅为示例，视当前实际安装版本会有变化。
@@ -27,9 +27,9 @@ libsophon在不同的Linux发行版上提供不同类型的安装方式。请根
   uname -m
 
 通常x86_64机器对应的硬件架构为amd64，arm64机器对应的硬件架构为arm64：
- - sophon-driver\_\ |ver|\ _$arch.deb
- - sophon-libsophon\_\ |ver|\ _$arch.deb
- - sophon-libsophon-dev\_\ |ver|\ _$arch.deb
+ - sophon-driver\_\ |ver|\ -LTS_$arch.deb
+ - sophon-libsophon\_\ |ver|\ -LTS_$arch.deb
+ - sophon-libsophon-dev\_\ |ver|\ -LTS_$arch.deb
 
 其中：sophon-driver包含了PCIe加速卡驱动；sophon-libsophon包含了运行时环境（库文件、工具等）；sophon-libsophon-dev包含了开发环境（头文件等）。
 如果只是在部署环境上安装，则不需要安装sophon-libsophon-dev。
@@ -114,9 +114,9 @@ deb包安装方式并不允许您安装同一个包的多个不同版本，但�
   uname -m
 
 x86_64机器对应的安装包名称为：
- - sophon-driver-\ |ver|\ -1.$arch.rpm
- - sophon-libsophon-\ |ver|\ -1.$arch.rpm
- - sophon-libsophon-dev-\ |ver|\ -1.$arch.rpm
+ - sophon-driver\_\ |ver|\ -LTS_$arch.rpm
+ - sophon-libsophon\_\ |ver|\ -LTS_$arch.rpm
+ - sophon-libsophon-dev\_\ |ver|\ -LTS_$arch.rpm
 
 
 安装前需要通过后面“卸载方式”中的步骤卸载旧版本libsophon，可以通过如下步骤安装：
@@ -128,9 +128,9 @@ x86_64机器对应的安装包名称为：
   sudo yum install -y dkms
   sudo yum install -y ncurses*
   安装libsophon：
-  sudo  rpm -ivh sophon-driver-\ |ver|\ -1.x86_64.rpm
-  sudo  rpm -ivh sophon-libsophon-\ |ver|\ -1.x86_64.rpm
-  sudo  rpm -ivh --force sophon-libsophon-dev-\ |ver|\ -1.x86_64.rpm
+  sudo  rpm -ivh sophon-driver\_\ |ver|\ -LTS_x86_64.rpm
+  sudo  rpm -ivh sophon-libsophon\_\ |ver|\ -LTS_x86_64.rpm
+  sudo  rpm -ivh --force sophon-libsophon-dev\_\ |ver|\ -LTS_x86_64.rpm
   在终端执行如下命令，或者登出再登入当前用户后即可使用bm-smi等命令：
   source /etc/profile
 
@@ -138,9 +138,9 @@ x86_64机器对应的安装包名称为：
 
 .. parsed-literal::
 
-  sudo rpm -e sophon-driver-\ |ver|\ -1.x86_64
-  sudo rpm -e sophon-libsophon-dev-\ |ver|\ -1.x86_64
-  sudo rpm -e sophon-libsophon-\ |ver|\ -1.x86_64
+  sudo rpm -e sophon-driver
+  sudo rpm -e sophon-libsophon-dev
+  sudo rpm -e sophon-libsophon
 
 **如果使用其它Linux系统：**
 
@@ -151,7 +151,7 @@ x86_64机器对应的安装包名称为：
   uname -m
 
 通常x86_64机器对应的硬件架构为x86_64，arm64机器对应的硬件架构为aarch64：
- - libsophon\_\ |ver|\ _$arch.tar.gz
+ - libsophon\_\ |ver|\ -LTS_$arch.tar.gz
 
 可以通过如下步骤安装：
 
@@ -159,7 +159,7 @@ x86_64机器对应的安装包名称为：
 
 .. parsed-literal::
 
-  tar -xzvf libsophon\_\ |ver|\ _$arch.tar.gz
+  tar -xzvf libsophon\_\ |ver|\ -LTS_$arch.tar.gz
   sudo cp -r libsophon\_\ |ver|\ _$arch/* /
   sudo ln -s /opt/sophon/libsophon-|ver| /opt/sophon/libsophon-current
 

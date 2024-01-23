@@ -72,10 +72,10 @@ int bm_monitor_thread_init(struct bm_device_info *bmdi)
 	if (bmdi->monitor_thread_info.monitor_task == NULL) {
 		bmdi->monitor_thread_info.monitor_task = kthread_run(bm_monitor_thread, data, thread_name);
 		if (bmdi->monitor_thread_info.monitor_task == NULL) {
-			pr_info("create monitor thread %s fail\n", thread_name);
+			pr_info("creat monitor thread %s fail\n", thread_name);
 			return -1;
 		}
-		pr_info("create monitor thread %s done\n", thread_name);
+		pr_info("creat monitor thread %s done\n", thread_name);
 	}
 	return 0;
 }
@@ -87,7 +87,7 @@ int bm_monitor_thread_deinit(struct bm_device_info *bmdi)
 	if (bmdi->monitor_thread_info.monitor_task != NULL) {
 		bmdrv_stagemem_free(bmdi, log_mem->host_paddr, log_mem->host_vaddr, log_mem->host_size);
 		kthread_stop(bmdi->monitor_thread_info.monitor_task);
-		pr_info("monitor thread bm_monitor-%d deinit done\n", bmdi->dev_index);
+		pr_info("minitor thread bm_monitor-%d deinit done\n", bmdi->dev_index);
 		bmdi->monitor_thread_info.monitor_task = NULL;
 	}
 	return 0;

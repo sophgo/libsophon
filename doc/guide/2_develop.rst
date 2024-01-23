@@ -1,7 +1,7 @@
 使用libsophon开发
 ------------------
 
-.. |ver| replace:: 0.4.8
+.. |ver| replace:: 0.4.9
 
 PCIE MODE
 ~~~~~~~~~~~~~~
@@ -44,28 +44,28 @@ SOC MODE
 SOC 板卡上编译程序
 ^^^^^^^^^^^^^^^^
 
-如果您希望在SOC模式的板子上运行的Linux环境下进行开发，则需要安装sophon-soc-libsophon-dev\_\ |ver|\ _arm64.deb工具包，使用以下命令安装。
+如果您希望在SOC模式的板子上运行的Linux环境下进行开发，则需要安装sophon-soc-libsophon-dev\_\ |ver|\ -LTS_arm64.deb工具包，使用以下命令安装。
 
 .. parsed-literal::
-    sudo dpkg -i sophon-soc-libsophon-dev\_\ |ver|\ _arm64.deb
+    sudo dpkg -i sophon-soc-libsophon-dev\_\ |ver|\ -LTS_arm64.deb
 
 安装完成后，您可以参考PCIE MODE的开发方法，使用cmake将libsophon中的库链接到自己的程序中。
 
 x86 交叉编译程序
 ^^^^^^^^^^^^^^^^
 
-如果您希望使用SOPHON SDK搭建交叉编译环境，您需要用到的是gcc-aarch64-linux-gnu工具链以及sophon-img relesae包里的libsophon_soc\_\ |ver|\ _aarch64.tar.gz。首先使用如下命令安装gcc-aarch64-linux-gnu工具链。
+如果您希望使用SOPHON SDK搭建交叉编译环境，您需要用到的是gcc-aarch64-linux-gnu工具链以及sophon-img relesae包里的libsophon_soc\_\ |ver|\ -LTS_aarch64.tar.gz。首先使用如下命令安装gcc-aarch64-linux-gnu工具链。
 
 .. parsed-literal::
 
     sudo apt-get install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-其次解压sophon-img relesae包里的libsophon_soc\_\ |ver|\ _aarch64.tar.gz。
+其次解压sophon-img relesae包里的libsophon_soc\_\ |ver|\ -LTS_aarch64.tar.gz。
 
 .. parsed-literal::
 
     1. mkdir -p soc-sdk
-    2. tar -zxf libsophon_soc\_\ |ver|\ _aarch64.tar.gz
+    2. tar -zxf libsophon_soc\_\ |ver|\ -LTS_aarch64.tar.gz
     3. cp -rf libsophon_soc\_\ |ver|\ _aarch64/opt/sophon/libsophon-\ |ver|/lib  soc-sdk
     4. cp -rf libsophon_soc\_\ |ver|\ _aarch64/opt/sophon/libsophon-\ |ver|/include  soc-sdk
 

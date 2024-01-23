@@ -33,7 +33,6 @@ protected:
     int  k_;
     int  axis_;
     bool sorted_;
-    bool values_used_only_;
 };
 } /* namespace bmcpu */
 

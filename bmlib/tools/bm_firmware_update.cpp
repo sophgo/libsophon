@@ -76,7 +76,6 @@ SM5MA	13
 #define BM1684X_EVB "BM1684X_EVB"
 #define SC7P "SC7P"
 #define SC7PLUS "SC7+"
-#define CP24 "CP24"
 #define SM7M_V1_0 "SM7"
 
 DEFINE_int32(dev, 0, "device id");
@@ -112,8 +111,8 @@ struct {
     {"SM5MINI", {10, -1}, {SM5ME, SM5MP, SM5MS, SM5MA, "Error"}},
     {"BM1684X_EVB", {32, -1}, {EVB, "Error"}},
     {"SC7P", {33, -1}, {SC7P, "Error"}},
-    {"CP24/SM7_V0_0", {48, -1}, {CP24, SM7M_V1_0, "Error"}},
     {"SC7+", {34, -1}, {SC7PLUS, "Error"}},
+    {"SM7_V0_0",{48,-1},{SM7M_V1_0, "Error"}},
     {"SM7_MP1_1",{54,-1},{SM7M_V1_0, "Error"}}
 
 };
@@ -569,7 +568,6 @@ static int validate_firmware_and_board_type(bm_handle_t handle, Bin_buffer *bin_
   if (strcmp(board_type, "SC5R") == 0) {
 	  strcpy(board_type, "SC5+");
   }
-
   printf("board type=%s\n", board_type);
 
   for (j = 0; strcmp(firmware_table[i].type[j], "Error") != 0; j++) {
@@ -592,7 +590,7 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   int board_type = (int)((handle->misc_info.board_version & 0x0000FFFF) >> 8);
 
   /* check file size */
-  if ((board_type == 33) || (board_type == 34) || (board_type == 64)) {
+  if ((board_type == 33) || (board_type == 34)) {
     if (size != FLASH_SIZE_SC7P) {
       printf("wrong upgrade file size %ld, it should %ld bytes\n",
         size, (unsigned long)FLASH_SIZE_SC7P);
@@ -610,7 +608,7 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   MD5_CTX md_ctx;
   MD5Init(&md_ctx);
   unsigned long md_size;
-  if ((board_type == 33) || (board_type == 34) || (board_type == 64)) {
+  if ((board_type == 33) || (board_type == 34)) {
     md_size = PROGRAM_LIMIT_SC7P;
   } else {
     md_size = PROGRAM_LIMIT;
@@ -630,7 +628,7 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   /* check application efie */
   struct efie *app_efie;
 
-  if ((board_type == 33) || (board_type == 34) || (board_type == 64)) {
+  if ((board_type == 33) || (board_type == 34)) {
     app_efie = (struct efie *)(image + EFIT_START_SC7P);
     if (app_efie->offset + app_efie->length > PROGRAM_LIMIT_SC7P) {
       printf("wrong efie of app\n");
@@ -673,7 +671,7 @@ bm_status_t bm1684_firmware_update_mcu_app(bm_handle_t handle, Bin_buffer *bin_b
 
   int board_type = (int)((handle->misc_info.board_version & 0x0000FFFF) >> 8);
 
-  if ((board_type == 33) || (board_type == 34) || (board_type == 64)) {
+  if ((board_type == 33) || (board_type == 34)) {
 	efie_buf.buf = bin_buf->buf + EFIT_START_SC7P;
 	efie_buf.size = sizeof(struct efie);
 	efie_buf.target_addr = EFIT_START_SC7P;
@@ -720,7 +718,7 @@ bm_status_t bm1684_firmware_update_mcu_app(bm_handle_t handle, Bin_buffer *bin_b
   }
   printf("program app succeeds.\n");
   // calculate checksum
-  if((board_type != 33) && (board_type != 34) && (board_type != 64)) {
+  if((board_type != 33) && (board_type != 34)) {
     memset(calc_cksum, 0x0, sizeof(calc_cksum));
     chksum_buf.buf = calc_cksum;
     chksum_buf.size = app_efie->length;

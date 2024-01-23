@@ -816,9 +816,6 @@ int bm1684_lpddr4_init(struct bm_device_info *bmdi)
 	pr_info("LPDDR interleave disabled\n");
 #endif
 
-	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
-		top_reg_write(bmdi, 0x8, 0x8);
-
 	pll_setting(bmdi, freq);
 
 start:

@@ -525,9 +525,7 @@ int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
 	if (!bmdi)
 		return -ENODEV;
 
-	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) {
 		func_num = bmdi->misc_info.domain_bdf&0x7;
 		if (func_num == 0) {
 			bmdi = bmctl_get_bmdi(bmci, dev_id);

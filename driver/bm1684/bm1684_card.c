@@ -68,18 +68,6 @@ int bm1684_card_get_chip_index(struct bm_device_info *bmdi)
 			}
 		else
 			bmdi->cinfo.chip_index = 0x0;
-	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) {
-		mode = bmdrv_pcie_get_mode(bmdi) & 0x7;
-		if ((mode == 0x7) || (mode == 0x6))
-			bmdi->cinfo.chip_index = 0x0;
-		else if (mode == 0x2)
-			bmdi->cinfo.chip_index = 0x1;
-		else if (mode == 0x1)
-			bmdi->cinfo.chip_index = 0x2;
-		else if (mode == 0x0)
-			bmdi->cinfo.chip_index = 0x3;
-		else
-			bmdi->cinfo.chip_index = 0x0;
 	} else
 		bmdi->cinfo.chip_index = 0x0;
 
@@ -180,9 +168,6 @@ int bm1684_get_board_version_from_mcu(struct bm_device_info *bmdi)
 		mcu_sw_version = (board_version >> 16) & 0xff;
 		hw_version = (board_version >> 24) & 0xff;
 
-		if (board_type == 0x30 && hw_version == 0x1)
-			board_type = 0x40;
-
 		board_version = board_type << 8 | (int)hw_version;
 		board_version = board_version | (int)mcu_sw_version << 16;
 		bmdi->cinfo.board_version = board_version;
@@ -266,9 +251,6 @@ int bm1684_get_board_type_by_id(struct bm_device_info *bmdi, char *s_board_type,
 		break;
 	case BOARD_TYPE_SC7_PLUS:
 		strncpy(s_board_type, "SC7+", 10);
-		break;
-	case BOARD_TYPE_CP24:
-		strncpy(s_board_type, "CP24", 10);
 		break;
 	case BOARD_TYPE_SM7_V0_0:
 		strncpy(s_board_type, "SM7", 10);
@@ -364,12 +346,6 @@ int bm1684_get_board_version_by_id(struct bm_device_info *bmdi, char *s_board_ve
 			snprintf(s_board_version, 10, "V1_%d", board_version);
 		break;
 	case BOARD_TYPE_SC7_PLUS:
-		if (board_version == 0x11)
-			strncpy(s_board_version, "V1_0", 10);
-		else
-			snprintf(s_board_version, 10, "V1_%d", board_version);
-		break;
-	case BOARD_TYPE_CP24:
 		if (board_version == 0x11)
 			strncpy(s_board_version, "V1_0", 10);
 		else
