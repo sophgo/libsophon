@@ -608,7 +608,7 @@ int bm1684_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE typ
 	return -1;
 }
 
-int bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
+void bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	void __iomem *atu_base_addr;
 	void __iomem *cfg_base_addr;
@@ -626,7 +626,7 @@ int bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev,
 
 	if (REG_READ32(cfg_base_addr, 0x14) == 0xffffffff) {
 		pr_info("pcie link may error for mode choose\n");
-		return -1;
+		return;
 	}
 	bmdi->cinfo.bmdrv_setup_bar_dev_layout(bmdi, MODE_CHOSE_LAYOUT);
 	if (function_num == 0x0) {
@@ -711,8 +711,6 @@ int bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev,
 	REG_WRITE32(atu_base_addr, 0xd14, 0x80100000);      //dst addr
 	REG_WRITE32(atu_base_addr, 0xd18, 0);
 	REG_WRITE32(atu_base_addr, 0xd20, bar4_start >> 32);
-
-	return 0;
 }
 
 int bmdrv_pcie_get_mode(struct bm_device_info *bmdi)
@@ -1286,10 +1284,7 @@ int config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_info *bmdi
 		function_num = bmdi->cinfo.pcie_func_index;
 	else
 		function_num = (pdev->devfn & 0x7);
-	ret = bmdrv_init_for_mode_chose(bmdi,pdev, bari);
-	if (ret)
-		return -1;
-
+	bmdrv_init_for_mode_chose(bmdi,pdev, bari);
 	io_init(bmdi);
 
 	mode = bmdrv_pcie_get_mode(bmdi);

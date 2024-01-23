@@ -10,8 +10,6 @@
 #include "bm_fw.h"
 #include "bm_memcpy.h"
 #include "bm1682_eu_cmd.h"
-#include "bm1684_card.h"
-#include "bm_pcie.h"
 #ifdef SOC_MODE
 #include "bm1682_soc_firmware_ddr.h"
 #include "bm1682_soc_firmware_tcm.h"
@@ -21,8 +19,6 @@
 #endif
 #include "bm1684_firmware_ddr.h"
 #include "bm1684_firmware_tcm.h"
-
-#include "bm1686_firmware_ddr.h"
 
 static int bmdrv_compare_fw(struct bm_device_info *bmdi, struct file *file, const unsigned int *firmware,
 		int word_num, u64 dst) {
@@ -179,11 +175,6 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 	const char *bm1684x_dyn_fw = "bm1684x_firmware.bin";
 	const char *bm1684_itcm_fw = "bm1684_tcm_firmware.bin";
 	const char *bm1684x_ddr_fw = "bm1684_ddr_firmware.bin";
-	unsigned int *fw_ddr_array;
-	int fw_ddr_size;
-
-	fw_ddr_array = bm1686_firmware_ddr_array;
-	fw_ddr_size = sizeof(bm1686_firmware_ddr_array);
 
 	switch (bmdi->cinfo.chip_id) {
 	case 0x1684:
@@ -199,14 +190,7 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 		}
 		break;
 	case 0x1686:
-#ifndef SOC_MODE
-		if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
-			ret = bmdrv_load_firmware(bmdi, file, fw_ddr_array, fw_ddr_size / sizeof(u32), a53lite_park);
-		else
-			ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
-#else
 		ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
-#endif
 		if (ret != 0) {
 			pr_info("sophon %d load bm1684_fw fail, ret = %d\n", bmdi->dev_index, ret);
 			return -1;

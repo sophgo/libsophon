@@ -548,8 +548,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
   }
   if (0 == platform_ioctl(ctx, BMDEV_GET_MISC_INFO, &ctx->misc_info)) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-           "driver version is %1d.%1d.%1d\n",
-           ctx->misc_info.driver_version >> 16,
+           "driver version is %1d.%1d.%1d LTS\n",
+           (ctx->misc_info.driver_version >> 16) & 0xff,
            (ctx->misc_info.driver_version >> 8) & 0xff,
            ctx->misc_info.driver_version & 0xff);
     if(0x1686 == ctx->misc_info.chipid){

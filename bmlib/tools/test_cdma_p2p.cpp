@@ -406,19 +406,11 @@ int main(int argc, char *argv[])
   int transfer_size;
   int ret;
   int thread_num;
-  int test_num;
-  int i;
-
   if (argc == 1) {
     ret = test_cdma_ptop_transfer(0x130000000, 0, 0x140000000, 1, 0x1000);
   } else if (strcmp("muti", argv[1]) == 0) {
     thread_num = atoi(argv[2]);
-    test_num = atoi(argv[3]);
-    printf("p2p muti test, thread_num: %d, test_num: %d\n", thread_num, test_num);
-    for (i = 1; i <= test_num; i++) {
-      printf("test num: %d\n", i);
-      test_cmda_perf_mutithread(thread_num);
-    }
+    test_cmda_perf_mutithread(thread_num);
   } else if (argc == 6) {
     src_addr = strtoll(argv[1], NULL, 16);
     src_num = strtoll(argv[2], NULL, 16);
