@@ -48,33 +48,33 @@ bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件
 
     .. code-block:: c
 
-        typedef struct bmcv_rect {  
+        typedef struct bmcv_rect {
             int start_x;
             int start_y;
             int crop_w;
-            int crop_h;             
+            int crop_h;
         } bmcv_rect_t;
 
   每个输出 bm_image 对象所对应的在输入图像上 crop 的参数，包括起始点x坐标、起始点y坐标、crop图像的宽度以及crop图像的高度。图像左上顶点作为坐标原点。如果不使用 crop 功能可填 NULL。
 
 * bmcv_padding_atrr_t*  padding_attr = NULL
 
-  输入参数。所有 crop 的目标小图在 dst image 中的位置信息以及要 padding 的各通道像素值，若不使用 padding 功能则设置为 NULL。 
- 
-    .. code-block:: c 
- 
-        typedef struct bmcv_padding_atrr_s { 
-            unsigned int  dst_crop_stx; 
-            unsigned int  dst_crop_sty; 
-            unsigned int  dst_crop_w; 
-            unsigned int  dst_crop_h; 
-            unsigned char padding_r; 
-            unsigned char padding_g; 
-            unsigned char padding_b; 
-            int           if_memset; 
-        } bmcv_padding_atrr_t; 
- 
- 
+  输入参数。所有 crop 的目标小图在 dst image 中的位置信息以及要 padding 的各通道像素值，若不使用 padding 功能则设置为 NULL。
+
+    .. code-block:: c
+
+        typedef struct bmcv_padding_atrr_s {
+            unsigned int  dst_crop_stx;
+            unsigned int  dst_crop_sty;
+            unsigned int  dst_crop_w;
+            unsigned int  dst_crop_h;
+            unsigned char padding_r;
+            unsigned char padding_g;
+            unsigned char padding_b;
+            int           if_memset;
+        } bmcv_padding_atrr_t;
+
+
 
     1. 目标小图的左上角顶点相对于 dst image 原点（左上角）的offset信息：dst_crop_stx 和 dst_crop_sty；
     #. 目标小图经resize后的宽高：dst_crop_w 和 dst_crop_h；
@@ -85,7 +85,7 @@ bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件
 
   输入参数。resize 算法选择，包括 BMCV_INTER_NEAREST、BMCV_INTER_LINEAR 和 BMCV_INTER_BICUBIC三种，默认情况下是双线性差值。
 
-  - bm1684 支持 : 
+  - bm1684 支持 :
         BMCV_INTER_NEAREST，BMCV_INTER_LINEAR，BMCV_INTER_BICUBIC。
 
   - bm1684x 支持:
@@ -111,17 +111,17 @@ bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件
 | CSC_YPbPr2RGB_BT709        |
 +----------------------------+
 | CSC_RGB2YPbPr_BT709        |
-+----------------------------+ 
++----------------------------+
 | CSC_USER_DEFINED_MATRIX    |
-+----------------------------+  
++----------------------------+
 | CSC_MAX_ENUM               |
-+----------------------------+  
++----------------------------+
 
 * csc_matrix_t* matrix = NULL
 
 输入参数。如果 csc_type 选择 CSC_USER_DEFINED_MATRIX，则需要传入系数矩阵，格式如下：
 
-    .. code-block:: c 
+    .. code-block:: c
 
           typedef struct {
               int csc_coe00;
@@ -281,6 +281,8 @@ bm1684支持的要求如下：
 |                  | RGBP_SEPARATE       |  条件1   |
 |                  +---------------------+----------+
 |                  | BGRP_SEPARATE       |  条件1   |
+|                  +---------------------+----------+
+|                  | ARGB_PACKED         |  条件1   |
 +------------------+---------------------+----------+
 |                  | RGB_PACKED          |  条件1   |
 |                  +---------------------+----------+
@@ -305,6 +307,8 @@ bm1684支持的要求如下：
 |                  | RGBP_SEPARATE       |  条件1   |
 |                  +---------------------+----------+
 |                  | BGRP_SEPARATE       |  条件1   |
+|                  +---------------------+----------+
+|                  | ARGB_PACKED         |  条件1   |
 +------------------+---------------------+----------+
 |                  | RGB_PACKED          |  条件1   |
 |                  +---------------------+----------+
@@ -342,6 +346,12 @@ bm1684支持的要求如下：
 |                  +---------------------+----------+
 |                  | BGRP_SEPARATE       |  条件1   |
 +------------------+---------------------+----------+
+|                  | RGB_PLANAR          |  条件1   |
+|                  +---------------------+----------+
+| ARGB_PACKED      | RGB_PACKED          |  条件1   |
+|                  +---------------------+----------+
+|                  | ARGB_PACKED         |  条件1   |
++------------------+---------------------+----------+
 | GRAY             | GRAY                |  条件1   |
 +------------------+---------------------+----------+
 | YUV420P          | YUV420P             |  条件2   |
@@ -359,6 +369,8 @@ bm1684支持的要求如下：
 | RGBP_SEPARATE    |                     |  条件3   |
 +------------------+                     +----------+
 | BGRP_SEPARATE    |                     |  条件3   |
++------------------+                     +----------+
+| ARGB_PACKED      |                     |  条件3   |
 +------------------+---------------------+----------+
 |                  | RGB_PACKED          |  条件4   |
 |                  +---------------------+----------+
@@ -371,6 +383,8 @@ bm1684支持的要求如下：
 |                  | RGBP_SEPARATE       |  条件4   |
 |                  +---------------------+----------+
 |                  | BGRP_SEPARATE       |  条件4   |
+|                  +---------------------+----------+
+|                  | ARGB_PACKED         |  条件4   |
 +------------------+---------------------+----------+
 |                  | RGB_PACKED          |  条件4   |
 |                  +---------------------+----------+
@@ -433,4 +447,4 @@ bm1684支持的要求如下：
         bm_image_attach(*compressed_image, src_plane_device);
 
 
-   
+

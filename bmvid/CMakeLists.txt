@@ -177,6 +177,7 @@ if (CHIP_NAME STREQUAL bm1684)
 
     elseif(WINDOWS)
         message(STATUS "entry WINDOW")
+        add_definitions(-DBM_PCIE_MODE=1)
 
         if(NOT CACHED_INSTALL_PATH)
             set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/release)

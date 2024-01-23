@@ -1,23 +1,3 @@
-/* bmjpuapi API library for the BitMain SoC
- * Copyright (C) 2018 Solan Shang
- * Copyright (C) 2015 Carlos Rafael Giani
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301
- * USA
- */
-
 #ifndef BMJPUAPI_H
 #define BMJPUAPI_H
 
@@ -851,7 +831,9 @@ typedef enum
     /* write_output_data() in BmJpuEncParams returned 0. */
     BM_JPU_ENC_RETURN_CODE_WRITE_CALLBACK_FAILED,
     /* Allocation memory failure */
-    BM_JPU_ENC_RETURN_ALLOC_MEM_ERROR
+    BM_JPU_ENC_RETURN_ALLOC_MEM_ERROR,
+    /*JPU Enc byte error*/
+    BM_JPU_ENC_BYTE_ERROR
 }
 BmJpuEncReturnCodes;
 
@@ -1085,6 +1067,8 @@ DECL_EXPORT BmJpuEncReturnCodes bm_jpu_enc_encode(BmJpuEncoder *encoder,
                                       unsigned int *output_code);
 
 DECL_EXPORT int bm_jpu_get_dump(void);
+
+DECL_EXPORT int bm_jpu_hwreset_all();
 
 #ifdef __cplusplus
 }
