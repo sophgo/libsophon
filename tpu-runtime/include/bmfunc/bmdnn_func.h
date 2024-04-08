@@ -2,13 +2,78 @@
 #define BMDNN_FUNC_H_
 
 #include "bmruntime_common.h"
+#include "bmruntime_cpp.h"
 
 namespace bmruntime {
+
+struct tpu_tensor_info_t {
+  uint16_t dtype;
+  /// storage mode of input/output tensors which are setted by user
+  uint16_t user_stmode;
+  /// storage mode of input/output tensors which are fixed when compiling
+  uint16_t compiled_stmode;
+  uint32_t tensor_byte_size;
+  int32_t n;
+  int32_t c;
+  int32_t h;
+  int32_t w;
+  /// value of padding h for conv(only used for BM1684 conv 3ic)
+  uint32_t padding_h;
+  /// global addr that is malloced by user
+  uint64_t user_global_addr;
+  /// global addr of input/output tensors which are fixed when compiling
+  uint64_t compiled_global_addr;
+};
+struct tpu_cmd_info_t {
+  /// number of bdc command
+  int32_t bdc_cmd_num;
+  /// number of gdma command
+  int32_t gdma_cmd_num;
+  /// number of cdma command
+  int32_t cdma_cmd_num;
+  /// byte size of bdc command
+  uint64_t bdc_cmd_byte_size;
+  /// byte size of gdma command
+  uint64_t gdma_cmd_byte_size;
+  /// byte size of cdma command
+  uint64_t cdma_cmd_byte_size;
+};
+struct tpu_single_core_cmd_t {
+  std::vector<tpu_cmd_info_t> cmd_info;
+  /// global addr of bdc command
+  uint64_t bdc_cmd_addr;
+  /// global addr of gdma command
+  uint64_t gdma_cmd_addr;
+  /// global addr of cdma command
+  uint64_t cdma_cmd_addr;
+  /// global addr of hau command
+  uint64_t hau_cmd_addr;
+  //// global addr of sdma command
+  uint64_t sdma_cmd_addr;
+};
+typedef struct {
+  std::vector<tpu_tensor_info_t> input_info;
+  std::vector<tpu_tensor_info_t> output_info;
+  std::vector<tpu_single_core_cmd_t> core_commands;
+  std::vector<int32_t> core_list;
+  /// kernel func id(used for dynamic loading)
+  std::vector<tpu_kernel_function_t> kernel_func_ids;
+  /// coeff start addr
+  uint64_t coeff_start_addr;
+  /// neuron start addr
+  std::vector<uint64_t> neuron_start_addr;
+} tpu_net_info_t;
 
 class bmdnn_func {
   public:
     bmdnn_func() {};
-    ~bmdnn_func() {};
+    virtual ~bmdnn_func() {};
+
+    virtual bm_status_t
+    _bmdnn_multi_fullnet_(bm_handle_t handle,
+                          const tpu_net_info_t &net_info) = 0;
+    virtual void fill_api_info(const tpu_net_info_t &net_info,
+                               api_info_t &api_info) = 0;
 };
 
 class bmdnn_func_1682 : public bmdnn_func {
@@ -23,63 +88,12 @@ class bmdnn_func_1682 : public bmdnn_func {
     void set_bmdnn_func_profile(bool enable) {
         b_enable_profile = enable;
     }
-    bm_status_t _bmdnn_multi_fullnet_(
+    virtual bm_status_t _bmdnn_multi_fullnet_(
             bm_handle_t handle,
-            int input_num,
-            unsigned long long* user_input_global_offset,
-            unsigned long long* cmd_input_global_offset,
-            int* input_tensor_size,
-            unsigned short* input_dtype,
-            int output_num,
-            unsigned long long* user_output_global_offset,
-            unsigned long long* cmd_output_global_offset,
-            int* output_tensor_size,
-            unsigned short* output_dtype,
-            unsigned long long bdc_cmd_offset,
-            unsigned long long gdma_cmd_offset,
-            unsigned long long cdma_cmd_offset,
-            int* bdc_cmd_num,
-            int* gdma_cmd_num,
-            int* cdma_cmd_num,
-            int cmdgroup_num
-            );
-#if 0
-    // legacy interface
-    bm_status_t _bmdnn_dynamic_fullnet_(
-            bm_handle_t handle,
-            unsigned long long compiled_ir_global_addr,
-            unsigned int compiled_ir_length,  //unit dword
-            unsigned int batch_num,
-            unsigned int input_num,
-            unsigned long long* input_global_offset,
-            unsigned int* input_c,
-            unsigned int* input_height,
-            unsigned int* input_width,
-            unsigned int output_num,
-            unsigned long long* output_global_offset,
-            unsigned long long apd_ctx_mem_offset,
-            bool               get_output_shape,
-            unsigned long long output_shape_global_addr
-            );
-
-    bm_status_t _bmdnn_dynamic_fullnet_ex_(
-            bm_handle_t handle,
-            unsigned long long compiled_ir_global_addr,
-            unsigned int compiled_ir_length,  //unit dword
-            unsigned int batch_num,
-            unsigned int input_num,
-            unsigned long long* input_global_offset,
-            unsigned int* input_c,
-            unsigned int* input_height,
-            unsigned int* input_width,
-            unsigned int output_num,
-            unsigned long long* output_global_offset,
-            unsigned long long apd_ctx_mem_offset,
-            unsigned long long apd_coeff_mem_offset,
-            bool               get_output_shape,
-            unsigned long long output_shape_global_addr
-            );
-#endif
+            const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
 
     bm_status_t _bmdnn_dynamic_fullnet_v2_(
         bm_handle_t handle,
@@ -117,33 +131,12 @@ class bmdnn_func_1684 : public bmdnn_func {
         BM_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1022 * sizeof(u32); // ref to 1684
     };
-    bm_status_t _bmdnn_multi_fullnet_(
+    virtual bm_status_t _bmdnn_multi_fullnet_(
         bm_handle_t handle,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        int* input_n,
-        int* input_c,
-        int* input_h,
-        int* input_w,
-        unsigned short* input_data_type,
-        unsigned char* input_st_mode,
-        unsigned char* real_in_stmode,
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        int* output_n,
-        int* output_length,
-        unsigned short* output_data_type,
-        unsigned char* output_st_mode,
-        unsigned char* force_out_stmode,
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        int cmdgroup_num,
-        u32* input_pad_h);
-
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
     bm_status_t _bmdnn_dynamic_fullnet_v2_(
         bm_handle_t handle,
         unsigned long long compiled_ir_global_addr,
@@ -189,30 +182,12 @@ class bmdnn_func_1880 : public bmdnn_func {
     bmdnn_func_1880() {
         ;
     };
-    bm_status_t _bmdnn_multi_fullnet_(
+    virtual bm_status_t _bmdnn_multi_fullnet_(
         bm_handle_t handle,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        int* input_n,
-        int* input_length,
-        unsigned short* input_data_type,
-        unsigned char* input_st_mode,
-        unsigned char* real_in_stmode,
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        int* output_n,
-        int* output_length,
-        unsigned short* output_data_type,
-        unsigned char* output_st_mode,
-        unsigned char* force_out_stmode,
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        int cmdgroup_num
-        );
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
 
     bm_status_t _bmdnn_dynamic_fullnet_v2_(
         bm_handle_t handle,
@@ -248,28 +223,16 @@ class bmdnn_func_1684x : public bmdnn_func {
         SG_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
     };
-    bm_status_t _bmdnn_multi_fullnet_(
+    virtual bm_status_t _bmdnn_multi_fullnet_(
         bm_handle_t handle,
-        int func_id,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        u32* input_dsize,  // in bytes
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        u32* output_dsize, // in bytes
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        u32* bdc_cmd_byte_size,
-        u32* gdma_cmd_byte_size,
-        int cmdgroup_num);
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
 
     bm_status_t _bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
-        int func_id,
+        tpu_kernel_function_t func_id,
         unsigned long long compiled_ir_global_addr,
         unsigned int compiled_ir_length, //unit dword
         unsigned int input_num,
@@ -302,33 +265,69 @@ class bmdnn_func_1684x : public bmdnn_func {
     u32 MAX_API_MSG_SIZE;
 };
 
-class bmdnn_func_1686 : public bmdnn_func {
+class bmdnn_func_1688 : public bmdnn_func {
   public:
 
-    bmdnn_func_1686() {
+    bmdnn_func_1688() {
+        MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
+    };
+    virtual bm_status_t _bmdnn_multi_fullnet_(
+        bm_handle_t handle,
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
+
+    bm_status_t _bmdnn_dynamic_fullnet_(
+        bm_handle_t handle,
+        const std::vector<tpu_kernel_function_t> & func_id_list,
+        const unsigned long long compiled_ir_global_addr,
+        const unsigned int compiled_ir_length, //unit dword
+        const unsigned int input_num,
+        const unsigned long long *input_addrs,
+        const int * const * input_shapes,
+        const int * input_elem_nums,
+        const int * input_dtype_and_dims,
+        const unsigned int output_num,
+        const unsigned long long *output_addrs,
+        const unsigned long long apd_ctx_start,
+        const std::vector<unsigned long long> apd_ctx_mem_borders,
+        const std::vector<unsigned long long> apd_ctx_mem_offset,
+        const unsigned long long apd_coeff_mem_offset,
+        bool get_output_shape,
+        const unsigned long long output_shape_global_addr,
+        const std::vector<int32_t> &core_list);
+
+    bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size);
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable);
+    bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         int core,
+                                         tpu_kernel_function_t func_id,
+                                         unsigned long long output_global_addr,
+                                         unsigned int output_max_size,
+                                         unsigned int offset,
+                                         unsigned int data_category //0: profile time records, 1: extra data
+                                         );
+  private:
+    u32 MAX_API_MSG_SIZE;
+};
+
+class bmdnn_func_2260 : public bmdnn_func {
+  public:
+
+    bmdnn_func_2260() {
         SG_API_ID_MULTI_FULLNET       = 0x0ffffffb;
         SG_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
         SG_API_ID_SET_PROFILE_ENABLE  = 986;
         SG_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
     };
-    bm_status_t _bmdnn_multi_fullnet_(
+    virtual bm_status_t _bmdnn_multi_fullnet_(
         bm_handle_t handle,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        u32* input_dsize,  // in bytes
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        u32* output_dsize, // in bytes
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        u32* bdc_cmd_byte_size,
-        u32* gdma_cmd_byte_size,
-        int cmdgroup_num);
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
 
     bm_status_t _bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
@@ -346,9 +345,61 @@ class bmdnn_func_1686 : public bmdnn_func {
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
         bool get_output_shape,
-        unsigned long long output_shape_global_addr);
+        unsigned long long output_shape_global_addr,
+        const std::vector<int32_t> &core_list);
 
-    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, bool enable);
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable);
+    bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         unsigned long long output_global_addr,
+                                         unsigned int output_max_size,
+                                         unsigned int offset,
+                                         unsigned int data_category //0: profile time records, 1: extra data
+                                         );
+  private:
+    u32 SG_API_ID_MULTI_FULLNET;
+    u32 SG_API_ID_DYNAMIC_FULLNET;
+    u32 SG_API_ID_SET_PROFILE_ENABLE;
+    u32 SG_API_ID_GET_PROFILE_DATA;
+    u32 MAX_API_MSG_SIZE;
+};
+
+class bmdnn_func_mars3 : public bmdnn_func {
+  public:
+
+    bmdnn_func_mars3() {
+        SG_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        SG_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        SG_API_ID_SET_PROFILE_ENABLE  = 986;
+        SG_API_ID_GET_PROFILE_DATA    = 987;
+        MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
+    };
+    virtual bm_status_t _bmdnn_multi_fullnet_(
+        bm_handle_t handle,
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
+
+    bm_status_t _bmdnn_dynamic_fullnet_(
+        bm_handle_t handle,
+        unsigned long long compiled_ir_global_addr,
+        unsigned int compiled_ir_length, //unit dword
+        unsigned int input_num,
+        const unsigned long long *input_addrs,
+        const int * const * input_shapes,
+        const int * input_elem_nums,
+        const int * input_dtype_and_dims,
+        unsigned int output_num,
+        const unsigned long long *output_addrs,
+        unsigned long long apd_ctx_start,
+        std::vector<unsigned long long> apd_ctx_mem_borders,
+        std::vector<unsigned long long> apd_ctx_mem_offset,
+        unsigned long long apd_coeff_mem_offset,
+        bool get_output_shape,
+        unsigned long long output_shape_global_addr,
+        const std::vector<int32_t> &core_list);
+
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable);
     bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
                                          unsigned long long output_global_addr,
                                          unsigned int output_max_size,

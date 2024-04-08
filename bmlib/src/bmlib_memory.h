@@ -21,6 +21,7 @@ extern "C" {
 #endif
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 typedef enum host_cdma_dir { HOST2CHIP, CHIP2HOST, CHIP2CHIP } HOST_CDMA_DIR;
+typedef enum host_xfer_type { TRANS_1D, TRANS_2D } HOST_XFER_TYPE;
 typedef struct bm_memcpy_info {
 #ifdef __linux__
     void               *host_addr;
@@ -29,8 +30,20 @@ typedef struct bm_memcpy_info {
 #endif
     u64                src_device_addr;
     u64                device_addr;
-    u32                size;
+	union {
+		u32 size;
+		struct {
+			u16 width;
+			u16 height;
+			u16 src_width;
+			u16 dst_width;
+			u16 format;   //2:2-byte format, others:1-byte format
+			u16 fixed_data;
+			bool flush;
+		};
+	};
     HOST_CDMA_DIR      dir;
+    HOST_XFER_TYPE     type;
 #ifdef __linux__
     bool  intr;
 #else
@@ -53,7 +66,7 @@ struct bm_gmem_addr {
 	u64 vir_addr;
 	u64 phy_addr;
 };
-
+bm_status_t bm_init_basic_func_id(bm_handle_t handle);
 bm_status_t bm_total_gmem(bm_handle_t ctx, u64* total);
 bm_status_t bm_avail_gmem(bm_handle_t ctx, u64* avail);
 bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,

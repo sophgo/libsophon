@@ -35,7 +35,7 @@ struct ion_allocation_data {
 };
 #endif
 
-#define ION_MAX_HEAP_CNT    3
+#define ION_MAX_HEAP_CNT    2
 
 #define RDBUF_SIZE 672
 struct product_config {
@@ -130,12 +130,33 @@ DECL_EXPORT bm_status_t bm_send_api(
   const u8     *api,
   u32          size);
 
+DECL_EXPORT bm_status_t bm_send_api_to_core(
+  bm_handle_t  handle,
+  int api_id,
+  const u8     *api,
+  u32          size,
+  int          core_id);
+
+bm_status_t bm_send_api_multicores(
+  bm_handle_t handle,
+  int api_id,
+  tpu_launch_param_t *param_list,
+  int param_num);
+
+DECL_EXPORT bm_status_t bm_send_api_to_core_sync(
+  bm_handle_t  handle,
+  tpu_launch_async_param_t *param);
+
 DECL_EXPORT bm_status_t bm_send_api_ext(
   bm_handle_t  handle,
   int api_id,
   const u8     *api,
   u32          size,
   u64 *api_handle);
+
+DECL_EXPORT bm_status_t bm_get_tpu_scalar_num(
+  bm_handle_t  handle,
+  unsigned int* core_num);
 
 struct ce_cipher {
 	  int			  alg;
@@ -200,6 +221,7 @@ typedef struct loaded_lib {
 } loaded_lib_t;
 
 DECL_EXPORT bm_status_t bm_sync_api(bm_handle_t handle);
+DECL_EXPORT bm_status_t bm_sync_api_from_core(bm_handle_t handle, int core_id);
 
 u64 bm_get_version(bm_handle_t handle);
 
@@ -478,6 +500,8 @@ bm_status_t bmlib_log_mutex_lock(void);
 bm_status_t bmlib_log_mutex_unlock(void);
 
 DECL_EXPORT int platform_ioctl(bm_handle_t handle, u32 commandID, void *param);
+
+DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle);
 
 #ifdef _WIN32
 DECL_EXPORT int gettimeofday(struct timeval *tp, void *tzp);

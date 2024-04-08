@@ -47,7 +47,7 @@ static pool_addr_t find_slot(struct pool_struct *P, pool_size_t size) {
   return addr;
 }
 
-pool_addr_t bm_mem_pool::bm_mem_pool_alloc(pool_addr_t size) {
+pool_addr_t bm_mem_pool::bm_mem_pool_alloc(pool_size_t size) {
   struct pool_struct *P = &_mem_pool_list[0];
   pthread_mutex_lock(&P->mem_pool_lock);
   ASSERT(P->num_slots_in_use < MEM_POOL_SLOT_NUM);

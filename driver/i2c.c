@@ -3,6 +3,7 @@
 #include <linux/uaccess.h>
 #include "bm_common.h"
 #include "bm_attr.h"
+#include "bm_monitor.h"
 #include "i2c.h"
 #ifndef SOC_MODE
 #include "bm1684_card.h"
@@ -89,6 +90,7 @@
 #define I2C_SDA_HOLD           0x07c
 #define I2C_TX_ABRT_SOURCE     0x080
 #define I2C_FS_SPKLEN          0x0a0
+
 int bmdrv_i2c_init(struct bm_device_info *bmdi, u32 i2c_index, u32 rx_level, u32 tx_level, u32 target_addr)
 {
 	u32 reg_val = 0;
@@ -153,15 +155,12 @@ void bmdrv_power_and_temp_i2c_init(struct bm_device_info  *bmdi)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		i2c_addr = 0x4c;
 		rx_level = 0;
 	}
 
-	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_MP1_1)) {
+	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB) {
 		i2c_addr = I2C_68224_ADDR;
 	}
 
@@ -466,6 +465,7 @@ int bm_set_eeprom_reg(struct bm_device_info *bmdi, u16 index, u8 data)
 #define REG_LOG			(0x62)
 #define REG_CMD			(0x03)
 #define REG_CALC_CKSUM		(0x63)
+#define REG_FLASH_CMD		(0x63)
 #define REG_CKSUM_OFF		(0x64)
 #define REG_CKSUM_LEN		(0x68)
 #define REG_CKSUM		(0x6c)
@@ -473,7 +473,18 @@ int bm_set_eeprom_reg(struct bm_device_info *bmdi, u16 index, u8 data)
 #define REG_DATA		(0x80)
 #define REG_FLUSH		(0xff)
 
+#define CMD_MCU_UNLOCKFLASH (0x02)
+#define CMD_MCU_LOCKFLASH (0x03)
+#define CMD_MCU_ERASEFLASH (0x04)
 #define CMD_MCU_UPDATE		(0x08)
+
+#define ROUND_UP(x, align)	(((x) + ((align) - 1)) / (align) * (align))
+#define ROUND_DOWN(x, align)	((x) / (align) * (align))
+
+#define BE2LE(A)	((((u_int32_t)(A) & 0xff000000) >> 24) | \
+					(((u_int32_t)(A) & 0x00ff0000) >>  8) | \
+					(((u_int32_t)(A) & 0x0000ff00) <<  8) | \
+					(((u_int32_t)(A) & 0x000000ff) << 24))
 
 #define STAGE_APP		0
 #define STAGE_LOADER		1
@@ -528,6 +539,47 @@ int bm_i2c_write_byte(struct bm_device_info *bmdi, u32 i2c_index, u8 cmd, u8 dat
 	return 0;
 }
 
+int bm_mcu_send_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u32 data)
+{
+	u8 buf[4];
+	int ret = 0;
+	int i;
+
+	buf[0] = (data >> 24) & 0xff;
+	buf[1] = (data >> 16) & 0xff;
+	buf[2] = (data >> 8) & 0xff;
+	buf[3] = data & 0xff;
+
+	for (i = 0; i < 4; i++) {
+		ret = bm_i2c_write_byte(bmdi, i2c_index, cmd + i, buf[i]);
+		if (ret)
+			return ret;
+		udelay(300);
+	}
+	return ret;
+}
+
+int bm_mcu_send_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, void *data, int size)
+{
+	/*we send 4 bytes a round */
+	int left, slen = 4, off = 0;
+
+	while (off < size) {
+
+		left = size - off;
+		/*when transmitting 128 bytes in this loop, start addr of every int32 is off/4 */
+		/*without optimization, division may not be treated as right shift */
+		/*send u32 function transmit int in BIG ENDIAN MODE, so FLASH data should do a LEtoBE opration */
+		if(bm_mcu_send_u32(bmdi, i2c_index, cmd + off, BE2LE(((u_int32_t *) data)[off >> 2]))){
+			pr_err("send block failed");
+				return -1;
+		}
+		off += slen;
+	}
+
+	return 0;
+}
+
 int bm_i2c_read_byte(struct bm_device_info *bmdi, u32 i2c_index, u8 cmd, u8 *data)
 {
 	u32 cmd_data;
@@ -572,7 +624,6 @@ int bm_i2c_read_byte(struct bm_device_info *bmdi, u32 i2c_index, u8 cmd, u8 *dat
 	return 0;
 }
 
-
 int bm_mcu_read_reg(struct bm_device_info *bmdi, u8 cmd, u8 *data)
 {
 	int ret;
@@ -585,29 +636,33 @@ int bm_mcu_read_reg(struct bm_device_info *bmdi, u8 cmd, u8 *data)
 	return ret;
 }
 
-int bm_mcu_send_u32(struct bm_device_info *bmdi, u8 cmd, u32 data)
+int bm_mcu_read_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *data)
 {
-	u8 buf[4];
-	int ret = 0;
-	int i = 0;
-	int i2c_index = 0x1;
-
-	buf[0] = (data >> 24) & 0xff;
-	buf[1] = (data >> 16) & 0xff;
-	buf[2] = (data >> 8) & 0xff;
-	buf[3] = data & 0xff;
-
+	int i;
 	for (i = 0; i < 4; i++) {
-		ret = bm_i2c_write_byte(bmdi, i2c_index, cmd + i, buf[i]);
-		if (ret)
-			return ret;
-		udelay(300);
+		if(bm_i2c_read_byte(bmdi, i2c_index, cmd + i, data + i))
+			return -1;
+		udelay(100);
 	}
-	return ret;
+	return 0;
 }
 
+int bm_mcu_read_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *buf, size_t size)
+{
+	int left, slen = 4, off = 0;
 
-static int bm_mcu_check_stage(struct bm_device_info *bmdi, int stage)
+	while (off < size) {
+		left = size - off;
+		if(bm_mcu_read_u32(bmdi, i2c_index, cmd + off , buf + off)){
+			pr_err("recv block failed");
+				return -1;
+			}
+		off += slen;
+	}
+	return 0;
+}
+
+static int bm_stmcu_check_stage(struct bm_device_info *bmdi, int stage)
 {
 	u8 data = 0;
 	int ret = 0;
@@ -644,7 +699,7 @@ static int bm_mcu_check_stage(struct bm_device_info *bmdi, int stage)
 	}
 }
 
-static int bm_mcu_send_page(struct bm_device_info *bmdi, u8 *buf, u32 offset)
+static int bm_stmcu_send_page(struct bm_device_info *bmdi, u8 *buf, u32 offset)
 {
 	int ret = 0;
 	int i = 0;
@@ -654,12 +709,12 @@ static int bm_mcu_send_page(struct bm_device_info *bmdi, u8 *buf, u32 offset)
 
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x17);
 
-	if (bm_mcu_check_stage(bmdi, STAGE_UPGRADER)) {
+	if (bm_stmcu_check_stage(bmdi, STAGE_UPGRADER)) {
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 		return -1;
 	}
 
-	if (bm_mcu_send_u32(bmdi, REG_OFFSET, offset)) {
+	if (bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, offset)) {
 		pr_err("mcu send u32 reg_offset %d failed\n", offset);
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 		return -1;
@@ -681,7 +736,7 @@ static int bm_mcu_send_page(struct bm_device_info *bmdi, u8 *buf, u32 offset)
 	return 0;
 }
 
-int bm_mcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
+int bm_stmcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
 {
 	unsigned long nbytes, burn_size, percentage;
 	u8 tmp[128];
@@ -697,7 +752,7 @@ int bm_mcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t o
 		memset(tmp, 0x0, 128);
 		burn_size = size - nbytes >= 128 ? 128 : size - nbytes;
 		memcpy(tmp, ((u8 *)buf) + nbytes, burn_size);
-		if (bm_mcu_send_page(bmdi, tmp, offset + nbytes))
+		if (bm_stmcu_send_page(bmdi, tmp, offset + nbytes))
 			return -1;
 		percentage = ((nbytes + 128) * 100 / size);
 		percentage = percentage > 100 ? 100 : percentage;
@@ -708,30 +763,343 @@ int bm_mcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t o
 	return 0;
 }
 
+#ifndef SOC_MODE
+int bm_gdmcu_unlockflash(struct bm_device_info *bmdi, int i2c_index)
+{
+	if(bm_i2c_write_byte(bmdi, i2c_index, REG_FLASH_CMD, CMD_MCU_UNLOCKFLASH))
+		return -1;
+	return 0;
+}
+
+int bm_gdmcu_lockflash(struct bm_device_info *bmdi, int i2c_index)
+{
+	if(bm_i2c_write_byte(bmdi, i2c_index, REG_FLASH_CMD, CMD_MCU_LOCKFLASH))
+		return -1;
+	return 0;
+}
+
+int bm_gdmcu_erasepage(struct bm_device_info *bmdi, int i2c_index, size_t offset)
+{
+	const int FLASH_PAGE_MASK = 8 * 1024 - 1;
+
+	if (offset & FLASH_PAGE_MASK) {
+		pr_err("offset should page aligned when erase\n");
+		return -1;
+	}
+
+	if(bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, offset)){
+		pr_err("send flash offset failed\n");
+		return -1;
+	}
+
+	if(bm_i2c_write_byte(bmdi, i2c_index, REG_FLASH_CMD, CMD_MCU_ERASEFLASH)){
+		pr_err("send erase command failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+int bm_gdmcu_eraseflash(struct bm_device_info *bmdi, int i2c_index, size_t size, size_t offset)
+{
+	const int FLASH_PAGE_MASK = 8 * 1024 - 1;
+	const int FLASH_PAGE_SIZE = 8 * 1024;
+	int i;
+
+	if (offset & FLASH_PAGE_MASK) {
+		pr_err("offset should page aligned when erase\n");
+		return -1;
+	}
+
+	if (size & FLASH_PAGE_MASK) {
+		pr_err("length should page aligned when erase\n");
+		return -1;
+	}
+
+	for (i = 0; i < size; i += FLASH_PAGE_SIZE) {
+		pr_info("erase page %08lx\r", offset + i);
+		if(bm_gdmcu_erasepage(bmdi, i2c_index, offset + i))
+			return -1;
+	}
+
+	pr_info("\n");
+	return 0;
+}
+
+int bm_gdmcu_erasemcu(struct bm_device_info *bmdi, int i2c_index, size_t size, size_t offset)
+{
+	if(bm_gdmcu_unlockflash(bmdi, i2c_index)){
+		pr_err("unlock flash failed\n");
+		return -1;
+	}
+
+	if(bm_gdmcu_eraseflash(bmdi, i2c_index, size, offset)){
+		bm_gdmcu_lockflash(bmdi, i2c_index);
+		return -1;
+	}
+
+	if(bm_gdmcu_lockflash(bmdi, i2c_index)){
+		pr_err("lock flash failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+int bm_gdmcu_writeflash(struct bm_device_info *bmdi, int i2c_index, void *buf, size_t size, size_t offset)
+{
+	const int flash_data_max = 128;
+	int left, pgm , i, err = 0 , xoff = 0;
+	unsigned char *flash_data_buf = kmalloc(flash_data_max, GFP_KERNEL);
+
+	while(!bm_check_i2c_reg_bits_zero(bmdi, i2c_index, I2C_STATUS, 1 << 0, 0));
+	bm_monitor_thread_deinit(bmdi);
+	mutex_lock(&bmdi->c_attr.attr_mutex);
+
+	while (xoff < size) {
+
+		left = size - xoff;
+		memset(flash_data_buf, 0xff, flash_data_max);
+		memcpy(flash_data_buf, &((unsigned char *)buf)[xoff], flash_data_max);
+
+		pgm = 0;
+		/*for all FF 128bytes zone, programming is uncessary*/
+		for (i = 0; i < flash_data_max; ++i) {
+			if (flash_data_buf[i] != 0xff) {
+				pgm = 1;
+				break;
+			}
+		}
+
+		if (pgm) {
+			if(bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, offset + xoff)){
+				pr_err("send offset failed\n");
+				err = 1;
+				goto ret;
+		}
+
+		if(bm_mcu_send_block(bmdi, i2c_index, REG_DATA, flash_data_buf, flash_data_max)){
+			pr_err("send buf failed\n");
+			err = 1;
+			goto ret;
+		}
+	}
+		pr_info("program flash %08lx %ld%%\r",
+		offset + xoff, xoff * 100 / size);
+		xoff += flash_data_max;
+	}
+
+	pr_info("program flash %08lx 100%%\n", offset + xoff);
+	bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, 0);
+
+	ret:
+	kfree(flash_data_buf);
+	mutex_unlock(&bmdi->c_attr.attr_mutex);
+
+	if(err)
+		return -1;
+	else
+		return 0;
+}
+
+int bm_gdmcu_writemcu(struct bm_device_info *bmdi, int i2c_index, void *buf, size_t size, size_t offset)
+{
+	if(bm_gdmcu_unlockflash(bmdi, i2c_index)){
+		pr_err("unlock flash failed\n");
+		return -1;
+	}
+
+	if(bm_gdmcu_writeflash(bmdi, i2c_index, buf, size, offset)){
+		pr_err("write flash failed\n");
+		bm_gdmcu_lockflash(bmdi, i2c_index);
+		return -1;
+	}
+
+	if(bm_gdmcu_lockflash(bmdi, i2c_index)){
+		pr_err("lock flash failed\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+int	bm_gdmcu_checkmagic(void *buf , size_t size)
+{
+	const int TAGSIZE = 128;
+	const int MAGICSIZE = 4;
+	const int MAGICOFFSET = 16;
+
+	void *fwinfo = (void *)(((char *)buf) + size - TAGSIZE);
+	if (memcmp(fwinfo + MAGICOFFSET, "MCUF", MAGICSIZE))
+		return -1;
+	return 0;
+}
+
+int bm_gdmcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
+{
+	int32_t i2c_index = 0x1;
+	u_int32_t FLASH_PAGE_SIZE = 0;
+	u_int32_t FWINFO_START = 0;
+	u_int32_t APP_START = 0;
+	u_int32_t APP_LENGTH = 0;
+
+	switch (BM1684_BOARD_TYPE(bmdi)){
+		case BOARD_TYPE_SM5M_P:
+			FLASH_PAGE_SIZE = 8 * 1024;
+			FWINFO_START = size - 128;
+			APP_START = 32 * 1024;
+			break;
+	}
+	/*a none-zero offset means partly upgrade so ONLY erase Firmware info and APP zone
+		                and JUST erase the specific page in ONE burn round       	*/
+	if(offset){
+		if(((offset == APP_START) && bm_gdmcu_erasemcu(bmdi, i2c_index, ROUND_UP(APP_LENGTH, FLASH_PAGE_SIZE), APP_START))||\
+			((offset == FWINFO_START) && bm_gdmcu_erasemcu(bmdi, i2c_index, FLASH_PAGE_SIZE, ROUND_DOWN(FWINFO_START, FLASH_PAGE_SIZE)))){
+				pr_err("erase flash failed\n");
+				return -1;
+			}
+		}else {
+			if(bm_gdmcu_checkmagic(buf, size)){
+				pr_err("magic number not found\n");
+				return -1;
+			}
+			if(bm_gdmcu_erasemcu(bmdi, i2c_index, ROUND_UP(size, FLASH_PAGE_SIZE), 0)){
+				pr_err("erase flash failed\n");
+				return -1;
+			}
+		}
+	return bm_gdmcu_writemcu(bmdi, i2c_index, buf, size, offset);
+}
+
+int bm_mcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
+{
+	const int32_t i2c_index = 0x1;
+	bm_i2c_set_target_addr(bmdi, i2c_index, 0x17);
+	if(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM5M_P || (0) ){
+		return bm_gdmcu_program(bmdi,buf,size,offset);
+	}else
+		return bm_stmcu_program(bmdi,buf,size,offset);
+}
+
+int bm_stmcu_read(struct bm_device_info *bmdi, u8 *buf, size_t len, size_t offset)
+{
+	u32 i, j;
+	u32 i2c_index = 0x1;
+
+	pr_info("reading mcu ...\n");
+	mutex_lock(&bmdi->c_attr.attr_mutex);
+
+	bm_i2c_set_target_addr(bmdi, i2c_index, 0x17);
+
+	if (bm_stmcu_check_stage(bmdi, STAGE_UPGRADER)) {
+		mutex_unlock(&bmdi->c_attr.attr_mutex);
+		return -1;
+	}
+
+	for (i = offset, j = 0; j < len; j++, i++) {
+		if (i % 128 == 0) {
+			bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, i);
+		}
+
+		if (bm_i2c_read_byte(bmdi, i2c_index, REG_DATA + (i & 127), &buf[j])) {
+			mutex_unlock(&bmdi->c_attr.attr_mutex);
+			pr_err("mcu i2c read byte failed!\n");
+			return -1;
+		}
+	}
+	mutex_unlock(&bmdi->c_attr.attr_mutex);
+	return 0;
+}
+
+int bm_gdmcu_readflash(struct bm_device_info *bmdi, int i2c_index, u8 *buf, size_t size, size_t offset, int is_end)
+{
+	const int flash_data_max = 128;
+	int left, xoff = 0;
+
+	while(!bm_check_i2c_reg_bits_zero(bmdi, i2c_index, I2C_STATUS, 1 << 0, 0));
+	mutex_lock(&bmdi->c_attr.attr_mutex);
+
+	while (xoff < size) {
+
+		left = size - xoff;
+		if(bm_mcu_send_u32(bmdi, i2c_index, REG_OFFSET, offset + xoff)){
+			pr_err("send offset failed\n");
+			mutex_unlock(&bmdi->c_attr.attr_mutex);
+			return -1;
+		}
+
+		if(bm_mcu_read_block(bmdi, i2c_index, REG_DATA, buf + xoff, flash_data_max)){
+			pr_err("read flash failed\n");
+			mutex_unlock(&bmdi->c_attr.attr_mutex);
+			return -1;
+		}
+
+		pr_info("read flash %08lx %ld%%\r",
+				offset + xoff, xoff * 100 / size);
+
+		xoff += flash_data_max;
+	}
+
+	if(offset == 0 || is_end){
+		bm_monitor_thread_init(bmdi);
+	}
+
+	pr_info("read flash %08lx 100%%\n", offset + xoff);
+	mutex_unlock(&bmdi->c_attr.attr_mutex);
+
+	return 0;
+}
+
+int bm_gdmcu_read(struct bm_device_info *bmdi, u8 *buf, size_t size, size_t offset)
+{
+	int32_t i2c_index = 0x1;
+	static int8_t is_end = 0;
+
+	if (bm_gdmcu_readflash(bmdi, i2c_index, buf, size, offset, is_end)) {
+		pr_info("read flash data from mcu failed\n");
+		return -1;
+	}
+	if(offset != 0)
+		++is_end;
+
+	return 0;
+}
+
+int bm_mcu_read(struct bm_device_info *bmdi, u8 *buf, size_t size, size_t offset)
+{
+	if(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM5M_P ||\
+		0){
+		return bm_gdmcu_read(bmdi, buf, size, offset);
+	}else
+		return bm_stmcu_read(bmdi, buf, size, offset);
+}
+
+#endif
+
 int bm_mcu_checksum(struct bm_device_info *bmdi, u32 offset, u32 len, void *cksum)
 {
 	unsigned char calc_cksum[16];
 	int ret = 0;
 	int i = 0;
-	u32 i2c_index = 0x1;
+	int32_t i2c_index = 0x1;
 
 	mutex_lock(&bmdi->c_attr.attr_mutex);
 
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x17);
 
-	if (bm_mcu_check_stage(bmdi, STAGE_UPGRADER)) {
+	if (bm_stmcu_check_stage(bmdi, STAGE_UPGRADER)) {
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 		return -1;
 	}
 
 	// start offset
-	if (bm_mcu_send_u32(bmdi, REG_CKSUM_OFF, offset)) {
+	if (bm_mcu_send_u32(bmdi, i2c_index, REG_CKSUM_OFF, offset)) {
 		pr_err("mcu send u32 reg_cksum_offset %d failed\n", offset);
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 		return -1;
 	}
 	// calculated length
-	if (bm_mcu_send_u32(bmdi, REG_CKSUM_LEN, len)) {
+	if (bm_mcu_send_u32(bmdi, i2c_index, REG_CKSUM_LEN, len)) {
 		pr_err("mcu send u32 reg_cksum_len %d failed\n", len);
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 		return -1;
@@ -755,35 +1123,6 @@ int bm_mcu_checksum(struct bm_device_info *bmdi, u32 offset, u32 len, void *cksu
 	}
 	mutex_unlock(&bmdi->c_attr.attr_mutex);
 	memcpy(cksum, calc_cksum, 16);
-	return 0;
-}
-
-int bm_mcu_read(struct bm_device_info *bmdi, u8 *buf, size_t len, size_t offset)
-{
-	u32 i, j;
-	u32 i2c_index = 0x1;
-
-	pr_info("reading mcu ...\n");
-	mutex_lock(&bmdi->c_attr.attr_mutex);
-
-	bm_i2c_set_target_addr(bmdi, i2c_index, 0x17);
-
-	if (bm_mcu_check_stage(bmdi, STAGE_UPGRADER)) {
-		mutex_unlock(&bmdi->c_attr.attr_mutex);
-		return -1;
-	}
-	for (i = offset, j = 0; j < len; j++, i++) {
-		if (i % 128 == 0) {
-			bm_mcu_send_u32(bmdi, REG_OFFSET, i);
-		}
-
-		if (bm_i2c_read_byte(bmdi, i2c_index, REG_DATA + (i & 127), &buf[j])) {
-			mutex_unlock(&bmdi->c_attr.attr_mutex);
-			pr_err("mcu i2c read byte failed!\n");
-			return -1;
-		}
-	}
-	mutex_unlock(&bmdi->c_attr.attr_mutex);
 	return 0;
 }
 

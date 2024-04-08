@@ -10,6 +10,9 @@
 #ifndef BMRUNTIME_H_
 #define BMRUNTIME_H_
 #include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <unordered_map>
 #include "bmfunc/bmfunc.h"
 //#include "bmcpu.h"
 #include "bmruntime_common.h"
@@ -17,6 +20,7 @@
 
 #include "bmodel.hpp"
 #include "bmlib_runtime.h"
+#include <atomic>
 
 using bmodel::CoeffMem;
 using bmodel::ModelCtx;
@@ -56,31 +60,30 @@ struct BmMemory {
   int Check();
 };
 
+struct single_core_command_t {
+  vector<int> gdma_id;  // for static
+  vector<int> bdc_id;   // for static
+  vector<u32> gdma_cmd_byte; // for static
+  vector<u32> bdc_cmd_byte; // for static
+
+  BmMemory gdma_mem;    // for static
+  BmMemory bdc_mem;     // for static
+  BmMemory hau_mem;     // for static
+  BmMemory sdma_mem;    // for static
+  u64 gdma_offset;      // for static subnet
+  u64 bdc_offset;       // for static subnet
+
+  BmMemory ir_mem;      // for dynamic
+  u32 ir_offset;        // for dynamic subnet
+  u32 ir_len;           // for dynamic subnet
+};
 typedef struct subnet_tpu_info {
   subnet_tpu_info()
   {
-    gdma_offset = -1;
-    bdc_offset = -1;
-    cmdgroup_num = -1;
-    gdma_group_id_v.clear();
-    bdc_group_id_v.clear();
-    bdc_cmd_byte_v.clear();
-    gdma_cmd_byte_v.clear();
+    core_commands.clear();
   }
-
   int is_dynamic;
-
-  vector<u32> gdma_group_id_v;
-  vector<u32> bdc_group_id_v;
-  vector<u32> gdma_cmd_byte_v;
-  vector<u32> bdc_cmd_byte_v;
-  int cmdgroup_num;
-
-  u64 gdma_offset;
-  u64 bdc_offset;
-
-  u32 ir_offset;
-  u32 ir_len;
+  std::vector<single_core_command_t> core_commands;
 } SUBNET_TPU_INFO_T;
 
 /* TODO: reuse cpu_layer_param_t */
@@ -145,6 +148,7 @@ typedef enum {
 
 typedef struct {
   void*               addr;
+  u32                 tensor_cpu_addr;
   u64                 size;
   host_mem_type_t     type;
 } host_mem_t;
@@ -184,14 +188,16 @@ struct net_stage_t {
   u64 ctx_start;
   vector<u64> ctx_offset;
   vector<u64> ctx_borders;
+  std::vector<sg_device_mem_t> neuron_mem;
+  std::vector<u64> neuron_size;
 
-  vector<int> gdma_id;  // for static
-  vector<int> bdc_id;   // for static
-  vector<u32> gdma_cmd_byte; // for static
-  vector<u32> bdc_cmd_byte; // for static
-  BmMemory gdma_mem;    // for static
-  BmMemory bdc_mem;     // for static
-  BmMemory ir_mem;      // for dynamic
+  std::vector<single_core_command_t> core_commands;
+
+  // io alone
+  u64 io_start;
+  u64 io_size;
+  u64 io_offset;
+  bm_device_mem_t io_mem;
 
   // have multi subnet
   int subnet_num;                  /* subnet num per net */
@@ -208,6 +214,19 @@ struct net_stage_t {
   float* cpu_addr;
 };
 
+/* Record post dynamic alloc neuron usage info
+   detailed to each stage and core permutations
+*/
+struct dyn_neuron_stage_t {
+  vector<tensor_attr_t> input_v;
+  vector<tensor_attr_t> output_v;
+  vector<u64> ctx_offset;
+  std::vector<sg_device_mem_t> neuron_mem;
+
+  map<string, tensor_ext_t> subnet_tensor_v;
+  float* cpu_addr;
+};
+
 struct net_ctx_t {
   string net_name;
   vector<string> input_name_v;
@@ -219,24 +238,76 @@ struct net_ctx_t {
   vector<float> output_scale_v;
   vector<int> output_zero_point_v;
   vector<net_stage_t *> stage_v;              // each net has multi stages
+  std::unordered_map<size_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
 
   // Bulk neuron memories.
-  std::vector<bm_device_mem_t> neuron_mem;
+  vector<sg_device_mem_t> neuron_mem;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
   bool is_dynamic;
+  int core_num;
   int n_can_change;                           // for dynamic
   int h_w_can_change;                         // for dynamic
   vector<bm_device_mem_t> middlebuff_input;   // for dynamic, one net share one middlebuf
   vector<bm_device_mem_t> middlebuff_output;  // for dynamic
   bm_net_info_t net_info;                     // create for users by c interface
   std::shared_ptr<KernelModule> kernel_module_;
+
+  // net with cascade
+  int32_t device_id;
+  int32_t step_id;
+  bool in_cascade;
+  int32_t addr_mode;
+  vector<int> input_from; // input is loaded from which device
+  vector<int> input_hidden_v;
+  vector<int> input_index_v;
+  vector<int> output_hidden_v;
+  vector<int> output_index_v;
 };
+
+// net with cascade
+struct mem_cascade_t {
+  string name;
+  int32_t device_id;
+  bm_tensor_t tensor;
+};
+
+struct net_cascade_t {
+  string main_name;                  // net name
+  int num_device;                    // num device used
+  vector<vector<int>> step_ids;      // each step of nets
+  std::vector<mem_cascade_t> hidden_inputs;
+  std::vector<mem_cascade_t> hidden_outputs;
+
+  vector<string> input_names;
+  vector<bm_data_type_t> input_types;
+  vector<float> input_scales;
+  vector<int> input_zps;
+  vector<bm_shape_t> input_shapes;
+  vector<size_t> input_bytes;
+  vector<bm_device_mem_t> input_mems;
+  vector<int> input_loc_devices;
+
+  vector<string> output_names;
+  vector<bm_data_type_t> output_types;
+  vector<float> output_scales;
+  vector<int> output_zps;
+  vector<bm_shape_t> output_shapes;
+  vector<size_t> output_bytes;
+  vector<bm_device_mem_t> output_mems;
+  vector<int> output_loc_devices;
+
+  bm_net_info_t net_info;
+};
+
+class CascadeThread;
 
 class Bmruntime {
  public:
   Bmruntime(bm_handle_t* bm_handle, bool user_initlized, const string& arch_name);
   Bmruntime(const string& arch_name, int devid);
+  Bmruntime(bm_handle_t* bm_handles, int num_handles,
+            bool using_internal_hiddens, const string& arch_name);
   ~Bmruntime();
 
   friend class BMProfile;
@@ -253,7 +324,7 @@ class Bmruntime {
   const vector<string>* get_output_tensor(int net_idx) const;
   const vector<u8>* get_net_profile(int net_idx, int stage_idx);
   void init_output_tensors(net_ctx_t* net_ctx, net_stage_t* stage,
-                                  bm_tensor_t* output_tensors, bool user_mem, bool user_stmode);
+                           bm_tensor_t* output_tensors, bool user_mem, bool user_stmode);
 
 
   /* C style Interface */
@@ -264,12 +335,23 @@ class Bmruntime {
   bool launch(int net_idx, const int input_num, const bm_device_mem_t* input_mems,
               int* input_shapes, int* input_dims, int* in_stmode, int output_num,
               const bm_device_mem_t* output_mems, int* out_stmode, bm_shape_t * output_shapes = NULL);
-  bool launch(int net_idx, const bm_tensor_t* input_tensors, int input_num,
-              bm_tensor_t* output_tensors, int output_num, bool user_mem = false,
+  bool launch(int net_idx, const bm_tensor_t *input_tensors, int input_num,
+              bm_tensor_t *output_tensors, int output_num, bool user_mem = false,
               bool user_stmode = false);
-  bool launch(int net_idx, void* const input_datas[], const bm_shape_t input_shapes[],
+  bool launch_multi_cores(int net_idx, const bm_tensor_t *input_tensors,
+                          int input_num, bm_tensor_t *output_tensors,
+                          int output_num, const std::vector<int> &core_list,
+                          bool user_mem, bool user_stmode);
+  bool launch_multi_cores(int net_idx, void* const input_datas[], const bm_shape_t input_shapes[],
               int input_num, void* output_tensors[], bm_shape_t output_shapes[], int output_num,
-              bool user_mem = false);
+              bool user_mem = false, const std::vector<int>& core_list={});
+  bool launch(const net_cascade_t * net_c, const bm_tensor_t* input_tensors, int input_num,
+              bm_tensor_t* output_tensors, int output_num);
+  void pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const std::vector<int> &core_list);
+  bool memcpy_s2d_parallel(bm_tensor_t tensors[], void * datas[],
+                           int tensor_num[], int device_num);
+  bool memcpy_d2s_parallel(void * datas[], bm_tensor_t tensors[],
+                           int tensor_num[], int device_num);
 
   const bm_shape_t* get_input_max_shape(int net_idx, int input_idx);
   const bm_shape_t* get_output_max_shape(int net_idx, int output_idx);
@@ -296,82 +378,180 @@ class Bmruntime {
   void get_network_names(vector<const char*>* names);
 
   void show_neuron_network();
+
+  /* flag get/set */
+  inline uint32_t get_flags() {
+    return m_flags;
+  }
+
+  inline void set_flags(uint32_t flags) {
+    m_flags = flags;
+  }
+
   inline int get_network_number()
   {
-    return m_net_ctx_v.size();
+    auto num_cascade = m_net_cascade_v.size();
+    auto num_net = m_net_ctx_v.size();
+    if (num_cascade != 0) {
+      for (auto &v : m_net_ctx_v) {
+        if (v->in_cascade) {
+          num_net--;
+        }
+      }
+    }
+    return num_cascade + num_net;
   }
 
-  inline bm_handle_t get_bm_handle()
+  inline bm_handle_t get_bm_handle(int device_idx=0)
   {
-    return m_handle;
+    return m_handles[device_idx];
   }
-  inline int get_devid(){
-    return m_devid;
+  inline int get_devid(int device_idx=0){
+    return m_devids[device_idx];
   }
+  const net_cascade_t* get_net_cascade(const string& net_name);
+  bool cascade_thread_step(int net_idx,
+                           const std::vector<mem_cascade_t> *src,
+                           const std::vector<mem_cascade_t> *dst,
+                           bm_handle_t m_handle);
   int get_net_idx(const string& net_name);
   const bm_net_info_t* get_net_info(int net_idx);
+  const bm_net_info_t* get_net_info(const string& net_name);
 
-  const std::vector<bm_device_mem_t> &get_neuron_mem(int net_idx);
+  const vector<sg_device_mem_t> &get_neuron_mem(int net_idx);
   void trace();
 
   size_t size_4N_align(const bm_shape_t& shape, const bm_data_type_t& type);
 
-  u64 must_alloc_device_mem(bm_device_mem_t* mem, u64 size, const string& desc = "", int type_len=1);
-  bm_device_mem_t must_alloc_device_mem(u64 size, const string& desc = "", int type_len=1);
-  void must_free_device_mem(bm_device_mem_t& mem);
+  u64 must_alloc_device_mem(uint32_t devid, bm_device_mem_t* mem, u64 size, const string& desc = "", int type_len=1);
+  bm_device_mem_t must_alloc_device_mem(uint32_t devid, u64 size, const string& desc = "", int type_len=1);
+  void must_free_device_mem(uint32_t devid, bm_device_mem_t& mem);
+
+  // sg alloc for over 4GB
+  u64 must_alloc_sg_device_mem(uint32_t devid, sg_device_mem_t* mem, u64 size, const string& desc = "", int type_len=1);
+  sg_device_mem_t must_alloc_sg_device_mem(uint32_t devid, u64 size, const string& desc = "", int type_len=1);
+  void must_free_sg_device_mem(uint32_t devid, sg_device_mem_t& mem);
 
  protected:
   void init();
   void init_bmfunc(const string& arch_name);
+  void sync_cores(bm_handle_t handle, const std::vector<int32_t>& core_list);
   bool launch_static(net_ctx_t* net_ctx, net_stage_t* stage, const bm_tensor_t* input_tensors,
-                     int input_num, bm_tensor_t* output_tensors, int output_num);
+                     int input_num, bm_tensor_t* output_tensors, int output_num,
+                     const std::vector<int32_t> &core_list, const size_t dyn_core_mask);
   bool launch_ir(net_ctx_t* net_ctx, net_stage_t* stage, const bm_tensor_t* input_tensors,
-                 int input_num, bm_tensor_t* output_tensors, int output_num);
+                 int input_num, bm_tensor_t* output_tensors, int output_num,
+                 const size_t dyn_core_mask);
 
   int get_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
   int get_static_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
   int get_dynamic_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
+  std::vector<int32_t> refine_core_list(const net_stage_t *stage,
+                                        const std::vector<int32_t> &core_list);
 
- protected:
+protected:
   // functions for load bmodel
   u64 fix_gdma_addr(const net_stage_t* stage, u64 origin_addr, bool is_src);
   void convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_address,
                    const net_stage_t* stage);
-  bool setup_cmd_context(ModelCtx* model_ctx, const Vector<Offset<bmodel::CmdGroup>>* cmd_group,
-                         net_stage_t* stage);
+  bool setup_cmd_context(ModelCtx* model_ctx, const bmodel::NetParameter *param,
+                         net_stage_t* stage, uint32_t device_id);
   bool setup_ir_context(ModelCtx* model_ctx, const bmodel::Binary* binary_ir,
-                        const Vector<Offset<bmodel::StageIR>>* stage_ir, net_stage_t* stage);
+                        const Vector<Offset<bmodel::StageIR>>* stage_ir, net_stage_t* stage, uint32_t device_id);
   bool load_bmodel(ModelCtx*);
-  bool load_bmodel_net(ModelCtx*, int net_idx, std::shared_ptr<KernelModule> kernel_module);
+  bool load_bmodel_net(ModelCtx*, int net_idx);
   bool load_bmodel_net(ModelCtx*, int net_idx, net_ctx_t* net_ctx);
-  void load_tpu_module(ModelCtx*, std::shared_ptr<KernelModule>& kernel_module);
+  void load_tpu_module(ModelCtx*);
+  void load_cpu_module(ModelCtx*);
   bool fill_net_ctx(
       ModelCtx* model_ctx,
       net_ctx_t* net_ctx, const Vector<Offset<NetParameter>>* params,
-      std::vector<std::vector<u64>> &stage_ctx_sizes, net_stage_t *stages);
+      vector<vector<u64>> &stage_ctx_sizes, net_stage_t *stages);
+  void fill_subnet_dyn_neuron_tensor(
+      net_ctx_t* net_ctx, const size_t dyn_core_mask,
+      const net_stage_t *common_stage_info);
+  void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
+      const net_stage_t *common_stage_info, bool use_multi_subnet);
   void fill_net_info(net_ctx_t* net_ctx);
   void free_net_info(net_ctx_t* net_ctx);
-  void update_net_middlebuf(net_ctx_t* net_ctx);
+  void free_dyn_neuron(net_ctx_t* net_ctx);
+  void update_net_middlebuf(net_ctx_t *net_ctx);
   void update_max_middlebuf_size(net_ctx_t* net_ctx);
-  void update_max_neuron_mem(const std::vector<u64> &sizes);
+  void update_max_neuron_mem(uint32_t devid, const vector<u64> &sizes);
   bool setup_profile_context(ModelCtx* model_ctx, net_stage_t* net_stage,
                              const bmodel::Binary* net_profile,
                              const bmodel::Binary* net_stat);
 
   void set_profile_enabled(bool enable);
 
- protected:
-  static const int MAX_NET_NUM = 256;  // one bmruntime can load 256 nets at most
-  vector<net_ctx_t*> m_net_ctx_v;
+  // functions for fill static bmdnn net info
+  void fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
+                         const bm_tensor_t *input_tensors, int input_num,
+                         bm_tensor_t *output_tensors, int output_num,
+                         const std::vector<int32_t> &core_list,
+                         tpu_net_info_t &net_info,
+                         const size_t dyn_core_mask);
+  template <typename T_stage>
+  void fill_tpu_tensor_info(vector<tpu_tensor_info_t> &tensor_info,
+                            const T_stage *stage,
+                            const bm_tensor_t *user_tensors, bool is_input);
+  void fill_tpu_cmd_info(std::vector<tpu_cmd_info_t> &cmd_info,
+                         const net_stage_t *stage, const int32_t core_idx);
+  // function for fill tpu static subnet net info
+  template <typename T_stage>
+  void fill_tpu_tensor_info(vector<tpu_tensor_info_t> &tensor_info,
+                            const T_stage *stage,
+                            const SUBNET_INFO_T *subnet,
+                            const bm_tensor_t *user_tensors, bool is_input);
+  void fill_tpu_cmd_info(std::vector<tpu_cmd_info_t> &cmd_info,
+                         const SUBNET_INFO_T *subnet,
+                         const int32_t core_idx);
+  // functions for cascade
+  void cascade_fill_net_info(net_cascade_t *net_cascade);
+  void cascade_free_net_info(net_cascade_t *net_cascade);
+  bool cascade_insert_net(int net_idx, net_ctx_t *net_ctx,
+                          const string &main_name);
+  void cascade_update_all_info();
+  void cascade_update_input(net_cascade_t &v);
+  void cascade_update_output(net_cascade_t &v);
+  void cascade_update_max_hidden_buffer_size(net_cascade_t &v);
+  void cascade_update_hidden_buffer(net_cascade_t &v);
+  const bm_tensor_t *
+  cascade_prepare_input(const string &name,
+                        int32_t devid,
+                        const std::vector<mem_cascade_t> *src,
+                        const std::vector<mem_cascade_t> *dst);
+  const bm_tensor_t *
+  cascade_prepare_output(const string &name, uint32_t devid,
+                         const std::vector<mem_cascade_t> *dst);
+  uint32_t get_dyn_core_mask(int stage_idx, const std::vector<int32_t> core_list);
+  std::vector<int> get_core_list_from_core_mask(uint32_t dyn_core_mask);
+public:
+  api_info_t get_api_info(int net_idx, const bm_tensor_t *input_tensors,
+                          int input_num, bm_tensor_t *output_tensors,
+                          int output_num, bool user_mem, bool user_stmode,
+                          uint32_t *core_ids);
 
-  bm_handle_t m_handle;
+protected:                                                    // one bmruntime can load nets at most
+  vector<net_ctx_t*> m_net_ctx_v;
+  vector<net_cascade_t> m_net_cascade_v;                      // net in cascade info
+  vector<std::shared_ptr<CascadeThread>> m_cascade_thread_v;  // thread for cascade
+
+  static const int MAX_DEVICE_NUM = 32;   // one bmruntime can run 32 device at most
+  bm_handle_t m_handles[MAX_DEVICE_NUM];
+  int m_device_num;
+  unsigned int m_core_num;
+  bool using_internal_hidden_tensors; /* internal initlized hidden_tensors device_mem or accept from user parameter when launch */
   bool using_internal_bm_handle; /* internal initlized bm_handle or accept from user parameter */
-  int m_devid;
+  int m_devids[MAX_DEVICE_NUM];
 
   vector<bm_device_mem_t> m_device_mem_vec;     /* save device memory address, for free */
+  vector<uint32_t> m_device_mem_ids;            /* record each device memory belong which device*/
 
-  std::shared_ptr<BmCoeff> m_local_coeff;
-  bool m_share_coeff;
+  vector<sg_device_mem_t> m_sg_device_mem_vec;     /* save device memory address, for free */
+  vector<uint32_t> m_sg_device_mem_ids;            /* record each device memory belong which device*/
+
+  std::shared_ptr<BmCoeff> m_local_coeffs[MAX_DEVICE_NUM];
   static map<int, std::shared_ptr<BmCoeff>> m_global_coeff_map;
   static std::mutex m_global_coeff_mutex;
 
@@ -382,45 +562,57 @@ class Bmruntime {
 
   bool b_enable_mmap;
   bool m_subnet_time_print;
+  uint32_t m_flags;
 
   std::shared_ptr<BMProfile> m_profile;
 
   // For middle buffer
   // Because max_middle_buffer is also record in m_device_mem_vec.
   // So we do not need to free max_middle_buffer at last.
-  bm_device_mem_t max_middle_buffer;
-  u64 max_middle_buffer_size;
-  u32 middle_buffer_num;
+  bm_device_mem_t max_middle_buffer[MAX_DEVICE_NUM];
+  u64 max_middle_buffer_size[MAX_DEVICE_NUM];
+  u32 middle_buffer_num[MAX_DEVICE_NUM];
+
+  // For hidden buffer
+  // Because max_hidden_buffer is also record in m_device_mem_vec.
+  // So we do not need to free max_hidden_buffer at last.
+  bm_device_mem_t max_hidden_buffer[MAX_DEVICE_NUM];
+  u64 max_hidden_buffer_size[MAX_DEVICE_NUM];
+  u32 hidden_buffer_num[MAX_DEVICE_NUM];
 
   // For neuron memory share
   u32 m_neuron_heap_mask;
-  std::vector<bm_device_mem_t> max_neuron_mem;
+  vector<sg_device_mem_t> max_neuron_mem[MAX_DEVICE_NUM];
+  std::shared_ptr<KernelModule> kernel_modules[MAX_DEVICE_NUM];
 
  protected:
   /* functions for subnet */
   void bmcpu_setup();
   void bmtpu_setup();
-  bool launch_cpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, SUBNET_INFO_T* subnet,
+  bool launch_cpu_subnet(net_ctx_t* net_ctx, map<string, tensor_ext_t> *subnet_tensor_v, const SUBNET_INFO_T* subnet,
                          const bm_tensor_t* input_tensors, bm_shape_t real_out_shape[]);
-  bool launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, SUBNET_INFO_T* subnet,
+  bool launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                          const bm_tensor_t* input_tensors, int input_num,
-                         bm_tensor_t* output_tensors, int output_num);
-  bool launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, SUBNET_INFO_T* subnet,
+                         bm_tensor_t* output_tensors, int output_num,
+                         const uint32_t dyn_core_mask);
+  bool launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                             const bm_tensor_t* input_tensors, const int* input_elem_num, int input_num,
-                            bm_tensor_t* output_tensors, int* output_elem_num, int output_num);
+                            bm_tensor_t* output_tensors, int* output_elem_num, int output_num,
+                            const uint32_t dyn_core_mask);
   bool launch_multi_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const bm_tensor_t* input_tensors,
-                           int input_num, bm_tensor_t* output_tensors, int output_num);
+                           int input_num, bm_tensor_t* output_tensors, int output_num,
+                           const uint32_t dyn_core_mask);
   void fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::SubNet>>* subnet_set_v,
                     net_ctx_t* net_ctx, net_stage_t* net_stage);
   void fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stage, SUBNET_INFO_T* subnet,
                               const Vector<Offset<bmodel::Tensor>>* tensor_set_v, bool is_input,
                               std::set<string> subnet_switch_inputs);
   void subnet_clear(net_ctx_t* net_ctx);
-  void subnet_tensor_s2d(net_stage_t* net_stage, const string& tensor_name,
+  void subnet_tensor_s2d(uint32_t devid, map<string, tensor_ext_t> *subnet_tensor_v, const string& tensor_name,
                          bm_device_mem_t* out_dev_mem = NULL, u64 offset = 0, u64 size = 0);
-  void* subnet_tensor_d2s(net_stage_t* net_stage, const string& tensor_name,
+  void* subnet_tensor_d2s(uint32_t devid, map<string, tensor_ext_t> *subnet_tensor_v, const string& tensor_name,
                          bm_device_mem_t* out_dev_mem = NULL, u64 offset = 0, u64 size = 0);
-  void subnet_tensor_forward(net_stage_t* stage, const string& src_tensor, const string& dst_tensor, bm_tensor_t* output_tensors);
+  void subnet_tensor_forward(uint32_t devid, map<string, tensor_ext_t> *subnet_tensor_v, const string& src_tensor, const string& dst_tensor, const bm_tensor_t* output_tensors);
 
  protected:
   typedef void* (*t_bmcpu_init)();
@@ -432,10 +624,20 @@ class Bmruntime {
   t_bmcpu_init bmcpu_init_;
   t_bmcpu_uninit bmcpu_uninit_;
   t_bmcpu_process bmcpu_process_;
+
+  void* customcpu_handle_ = NULL;
+  t_bmcpu_init customcpu_init_ = NULL;
+  t_bmcpu_uninit customcpu_uninit_ = NULL;
+  t_bmcpu_process customcpu_process_ = NULL;
+
   std::shared_ptr<KernelModule> kernel_module_;
 
  private:
   bmfunc* p_bmfunc;
+
+  // temp custom cpu related
+  void *tmpcpuso_handle_ = NULL;
+  std::string temp_filename_;
 };
 
 class BmCoeff {
@@ -446,45 +648,180 @@ class BmCoeff {
 
   u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem);
   int Check();
-  bm_device_mem_t GetCoeffDeviceMem() {
+  sg_device_mem_t GetCoeffDeviceMem() {
     return m_latest_device_mem;
   }
 
  protected:
-  map<vector<u8>, bm_device_mem_t> m_coeff_map; /* to share the same coeff, by check code*/
+  map<vector<u8>, sg_device_mem_t> m_coeff_map; /* to share the same coeff, by check code*/
   std::mutex m_coeff_mutex;
   bm_handle_t m_handle;
   bool m_inner_handle;
   int m_devid;
-  bm_device_mem_t m_latest_device_mem;
+  sg_device_mem_t m_latest_device_mem;
 };
 
 class KernelModule {
 public:
-  explicit KernelModule(bm_handle_t &handle, const char* file_name);
-  explicit KernelModule(bm_handle_t &handle, const char* binary, size_t size);
+  explicit KernelModule(bm_handle_t &handle):m_handle(handle) {}
   ~KernelModule();
 private:
-  KernelModule();
-private:
-  void check_exist() {
-    BMRT_ASSERT_INFO(_kernel_module, "kernel_module shouldn't be NULL!!\n");
-  }
-  void preload_funcs(bm_handle_t &handle);
+  void preload_funcs(int core_id);
 public:
-  tpu_kernel_module_t get_kernel_module();
-  tpu_kernel_function_t get_multi_fullnet_func_id();
-  tpu_kernel_function_t get_dynamic_fullnet_func_id();
-  tpu_kernel_function_t get_enable_profile_func_id();
-  tpu_kernel_function_t get_get_profile_func_id();
+  void add_core_module(int core_id, const unsigned char* binary, size_t size);
+  void add_core_module(int core_id, const char* filename);
+  vector<tpu_kernel_function_t> get_multi_fullnet_func_id(const vector<int>& core_list);
+  vector<tpu_kernel_function_t> get_dynamic_fullnet_func_id(const vector<int>& core_list);
+  vector<tpu_kernel_function_t> get_enable_profile_func_id(const vector<int>& core_list);
+  vector<tpu_kernel_function_t> get_get_profile_func_id(const vector<int>& core_list);
+  vector<tpu_kernel_function_t> get_set_engine_profile_param_func_id(const vector<int>& core_list);
 
 private:
   bm_handle_t m_handle;
-  tpu_kernel_module_t _kernel_module = {0};
-  tpu_kernel_function_t _multi_fullnet_func_id = {0};
-  tpu_kernel_function_t _dynamic_fullnet_func_id = {0};
-  tpu_kernel_function_t _enable_profile_func_id = {0};
-  tpu_kernel_function_t _get_profile_func_id = {0};
+  map<int, tpu_kernel_module_t> _kernel_modules;
+  map<int, tpu_kernel_function_t> _multi_fullnet_func_id;
+  map<int, tpu_kernel_function_t> _dynamic_fullnet_func_id;
+  map<int, tpu_kernel_function_t> _enable_profile_func_id;
+  map<int, tpu_kernel_function_t> _get_profile_func_id;
+  map<int, tpu_kernel_function_t> _set_engine_profile_param_func_id;
+};
+
+class CascadeThread {
+  typedef enum {
+    NET_MODE = 0,
+    S2D_MODE = 1,
+    D2S_MODE = 2,
+    UNKNOWN = -1,
+  } FUNC_MODE_T;
+public:
+  CascadeThread(Bmruntime *rt, bm_handle_t handle)
+      : m_stop(false), m_paramReady(false), m_done(true),
+        m_ok(true), m_handle(handle), m_rt(rt)
+        {
+    m_worker = std::thread(&CascadeThread::threadFunction, this);
+  }
+
+  ~CascadeThread() {
+    {
+      // std::unique_lock<std::mutex> lock(m_mutex);
+      m_done = false;
+      m_stop = true;
+      // m_condition.notify_all();
+      while(m_done == false) {}
+    }
+    if (m_worker.joinable()) {
+      m_worker.join();
+    }
+  }
+
+  void run(int net_idx,
+           const vector<mem_cascade_t> *src,
+           const vector<mem_cascade_t> *dst) {
+    // std::unique_lock<std::mutex> lock(m_mutex);
+    m_net_idx = net_idx;
+    m_src = src;
+    m_dst = dst;
+    m_mode = NET_MODE;
+    m_paramReady = true;
+    m_done = false;
+    // m_condition.notify_all();
+  }
+
+  void s2d(bm_tensor_t *tensors, void **datas, int tensor_num) {
+    // std::unique_lock<std::mutex> lock(m_mutex);
+    m_tensors = tensors;
+    m_datas = datas;
+    m_mode = S2D_MODE;
+    m_tensor_num = tensor_num;
+    m_paramReady = true;
+    m_done = false;
+    // m_condition.notify_all();
+  }
+
+  void d2s(void **datas, bm_tensor_t *tensors, int tensor_num) {
+    // std::unique_lock<std::mutex> lock(m_mutex);
+    m_tensors = tensors;
+    m_datas = datas;
+    m_mode = D2S_MODE;
+    m_tensor_num = tensor_num;
+    m_paramReady = true;
+    m_done = false;
+    // m_condition.notify_all();
+  }
+
+  bool sync() {
+    // std::unique_lock<std::mutex> lock(m_mutex);
+    // m_doneCondition.wait(lock, [this]() { return m_done; });
+    while(m_done == false) {}
+    return m_ok;
+  }
+
+private:
+  void threadFunction() {
+    while (true) {
+      // std::unique_lock<std::mutex> lock(m_mutex);
+      // m_condition.wait(lock, [this]() { return m_paramReady || m_stop; });
+      // BMRT_LOG(INFO, "M_MODE is %d\n", m_mode);
+      while (m_paramReady == false && m_stop == false) {}
+      if (m_stop) {
+        m_done = true;
+        return;
+      }
+      if (m_mode == NET_MODE) {
+        m_ok = m_rt->cascade_thread_step(m_net_idx, m_src, m_dst, m_handle);
+        if (m_ok) {
+          auto status = bm_thread_sync(m_handle);
+          m_ok = BM_SUCCESS == status;
+        }
+      } else if (m_mode == S2D_MODE) {
+        for (int i = 0; i < m_tensor_num; ++i) {
+          auto status = bm_memcpy_s2d(m_handle, m_tensors[i].device_mem, m_datas[i]);
+          if (BM_SUCCESS != status) {
+            m_ok = false;
+            break;
+          } else {
+            m_ok = true;
+          }
+        }
+      } else if (m_mode == D2S_MODE) {
+        for (int i = 0; i < m_tensor_num; ++i) {
+          auto status = bm_memcpy_d2s(m_handle, m_datas[i], m_tensors[i].device_mem);
+          if (BM_SUCCESS != status) {
+            m_ok = false;
+            break;
+          } else {
+            m_ok = true;
+          }
+        }
+      }
+      m_paramReady = false;
+      m_done = true;
+      // m_doneCondition.notify_one();
+    }
+  }
+
+  std::thread m_worker;
+  std::mutex m_mutex;
+  std::condition_variable m_condition;
+  std::condition_variable m_doneCondition;
+  std::atomic_bool m_stop;
+  std::atomic_bool m_paramReady;
+  std::atomic_bool m_done;
+  // bool m_stop;
+  // bool m_paramReady;
+  // bool m_done;
+  bool m_ok;
+  // s2d/d2s param
+  bm_tensor_t *m_tensors;
+  void **m_datas;
+  FUNC_MODE_T m_mode;
+  int m_tensor_num;
+  // net param
+  int m_net_idx;
+  bm_handle_t m_handle;
+  Bmruntime *m_rt;
+  const vector<mem_cascade_t> *m_src;
+  const vector<mem_cascade_t> *m_dst;
 };
 
 }  // namespace bmruntime

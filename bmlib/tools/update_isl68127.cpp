@@ -49,63 +49,93 @@ int main(int argc, char *argv[])
 	bm_status_t ret = BM_SUCCESS;
 	bm_i2c_smbus_ioctl_info i2c_buf;
 	int chip_num = 0;
+	int last_chip_num;
 	int bus = 0;
 	int isl68127_addr = 0x5c;
 
-	ret = bm_dev_request(&handle, chip_num);
-	if (ret != BM_SUCCESS || handle == NULL) {
-		printf("bm_dev_request failed, ret = %d\n", ret);
-		return -1;
+	if (argc == 2) {
+		for (chip_num = 0; chip_num < 24; ++chip_num) {
+			ret = bm_dev_request(&handle, chip_num);
+			if (ret != BM_SUCCESS || handle == NULL) {
+				printf("bm_dev_request failed, ret = %d\n", ret);
+				return -1;
+			}
+
+			printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
+
+			isl68127_get_device_id(&handle, bus, isl68127_addr);
+
+			isl68127_get_reversion_id(&handle, bus, isl68127_addr);
+
+			// isl68127_enable_full_power_mode(&handle, bus, isl68127_addr);
+			isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
+
+			isl68127_program(&handle, bus, isl68127_addr, argv[1]);
+
+			printf("[chip%d] isl68127 have change config!\n", chip_num);
+		}
+	} else if (argc == 3) {
+		chip_num = atoi(argv[2]);
+		if (chip_num < 0 || chip_num > 23) {
+			printf("error chip_idx\n");
+			return 0;
+		}
+		ret = bm_dev_request(&handle, chip_num);
+		if (ret != BM_SUCCESS || handle == NULL) {
+			printf("bm_dev_request failed, ret = %d\n", ret);
+			return -1;
+		}
+
+		printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
+
+		isl68127_get_device_id(&handle, bus, isl68127_addr);
+
+		isl68127_get_reversion_id(&handle, bus, isl68127_addr);
+
+		// isl68127_enable_full_power_mode(&handle, bus, isl68127_addr);
+		isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
+
+		isl68127_program(&handle, bus, isl68127_addr, argv[1]);
+
+		printf("[chip%d] isl68127 have change config!\n", chip_num);
+	} else if(argc == 4) {
+		chip_num = atoi(argv[2]);
+		last_chip_num = atoi(argv[3]);
+		if (chip_num < 0 || chip_num > 23) {
+			printf("error first chip_idx\n");
+			return 0;
+		} else if (last_chip_num < 0 || last_chip_num > 23) {
+			printf("error last chip_idx\n");
+			return 0;
+		} else if (chip_num > last_chip_num) {
+			printf("error sequence\n");
+		}
+
+		for (chip_num; chip_num < (last_chip_num + 1); ++chip_num) {
+			ret = bm_dev_request(&handle, chip_num);
+			if (ret != BM_SUCCESS || handle == NULL) {
+				printf("bm_dev_request failed, ret = %d\n", ret);
+				return -1;
+			}
+
+			printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
+
+			isl68127_get_device_id(&handle, bus, isl68127_addr);
+
+			isl68127_get_reversion_id(&handle, bus, isl68127_addr);
+
+			// isl68127_enable_full_power_mode(&handle, bus, isl68127_addr);
+			isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
+
+			isl68127_program(&handle, bus, isl68127_addr, argv[1]);
+
+			printf("[chip%d] isl68127 have change config!\n", chip_num);
+		}
+	} else {
+		printf("error input...please input as follow\n");
+		printf("	./'your path'/update_isl68127 [file path] <chip_idx> <lastchip_idx>\n");
 	}
 
-	printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
-
-	isl68127_get_device_id(&handle, 0, 0x5c);
-
-	isl68127_get_reversion_id(&handle, 0, 0x5c);
-
-	// isl68127_enable_full_power_mode(&handle, bus, isl68127_addr);
-	isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
-
-	isl68127_program(&handle, bus, isl68127_addr, argv[1]);
-
-	printf("[chip0] isl68127 have change config!\n");
-
-	ret = bm_dev_request(&handle, 1);
-	if (ret != BM_SUCCESS || handle == NULL) {
-		printf("bm_dev_request failed, ret = %d\n", ret);
-		return -1;
-	}
-
-	printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
-
-	isl68127_get_device_id(&handle, 0, 0x5c);
-
-	isl68127_get_reversion_id(&handle, 0, 0x5c);
-
-	isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
-
-	isl68127_program(&handle, bus, isl68127_addr, argv[1]);
-
-	printf("[chip1] isl68127 have change config!\n");
-
-	ret = bm_dev_request(&handle, 2);
-	if (ret != BM_SUCCESS || handle == NULL) {
-		printf("bm_dev_request failed, ret = %d\n", ret);
-		return -1;
-	}
-
-	printf("availiable nvm slots: %u\n", isl68127_get_nvm_slot_num(&handle, bus, isl68127_addr));
-
-	isl68127_get_device_id(&handle, 0, 0x5c);
-
-	isl68127_get_reversion_id(&handle, 0, 0x5c);
-
-	isl68127_enable_voltage_regulation(&handle, bus, isl68127_addr);
-
-	isl68127_program(&handle, bus, isl68127_addr, argv[1]);
-
-	printf("[chip2] isl68127 have change config!\n");
 	return 0;
 }
 

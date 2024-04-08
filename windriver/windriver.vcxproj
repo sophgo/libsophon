@@ -1,0 +1,227 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="bm1682\bm1682_card.c" />
+    <ClCompile Include="bm1682\bm1682_cdma.c" />
+    <ClCompile Include="bm1682\bm1682_ddr.c" />
+    <ClCompile Include="bm1682\bm1682_gmem.c" />
+    <ClCompile Include="bm1682\bm1682_irq.c" />
+    <ClCompile Include="bm1682\bm1682_msgfifo.c" />
+    <ClCompile Include="bm1682\bm1682_pcie.c" />
+    <ClCompile Include="bm1684\bm1684_base64.c" />
+    <ClCompile Include="bm1684\bm1684_card.c" />
+    <ClCompile Include="bm1684\bm1684_cdma.c" />
+    <ClCompile Include="bm1684\bm1684_clkrst.c" />
+    <ClCompile Include="bm1684\bm1684_ddr.c" />
+    <ClCompile Include="bm1684\bm1684_flash.c" />
+    <ClCompile Include="bm1684\bm1684_gmem.c" />
+    <ClCompile Include="bm1684\bm1684_irq.c" />
+    <ClCompile Include="bm1684\bm1684_jpu.c" />
+    <ClCompile Include="bm1684\bm1684_lpddr4.c" />
+    <ClCompile Include="bm1684\bm1684_msgfifo.c" />
+    <ClCompile Include="bm1684\bm1684_pcie.c" />
+    <ClCompile Include="bm1684\bm1684_perf.c" />
+    <ClCompile Include="bm1684\bm1684_smbus.c" />
+    <ClCompile Include="bm1684\bm1684_vpp.c" />
+    <ClCompile Include="bm_api.c" />
+    <ClCompile Include="bm_attr.c" />
+    <ClCompile Include="bm_bgm.c" />
+    <ClCompile Include="bm_boot_info.c" />
+    <ClCompile Include="bm_card.c" />
+    <ClCompile Include="bm_cdma.c" />
+    <ClCompile Include="bm_ctl.c" />
+    <ClCompile Include="bm_debug.c" />
+    <ClCompile Include="bm_drv.c" />
+    <ClCompile Include="bm_fops.c" />
+    <ClCompile Include="bm_fw.c" />
+    <ClCompile Include="bm_gmem.c" />
+    <ClCompile Include="bm_io.c" />
+    <ClCompile Include="bm_irq.c" />
+    <ClCompile Include="bm_memcpy.c" />
+    <ClCompile Include="bm_monitor.c" />
+    <ClCompile Include="bm_msgfifo.c" />
+    <ClCompile Include="bm_pcie_drv.c" />
+    <ClCompile Include="bm_thread.c" />
+    <ClCompile Include="bm_timer.c" />
+    <ClCompile Include="bm_trace.c" />
+    <ClCompile Include="bm_wdt.c" />
+    <ClCompile Include="Device.c" />
+    <ClCompile Include="Driver.c" />
+    <ClCompile Include="fifo.c" />
+    <ClCompile Include="gpio.c" />
+    <ClCompile Include="i2c.c" />
+    <ClCompile Include="pwm.c" />
+    <ClCompile Include="Queue.c" />
+    <ClCompile Include="spi.c" />
+    <ClCompile Include="uart.c" />
+    <ClCompile Include="vpu\vpu.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="bm1682\bm1682_card.h" />
+    <ClInclude Include="bm1682\bm1682_cdma.h" />
+    <ClInclude Include="bm1682\bm1682_ddr.h" />
+    <ClInclude Include="bm1682\bm1682_eu_cmd.h" />
+    <ClInclude Include="bm1682\bm1682_firmware_ddr.h" />
+    <ClInclude Include="bm1682\bm1682_firmware_tcm.h" />
+    <ClInclude Include="bm1682\bm1682_gmem.h" />
+    <ClInclude Include="bm1682\bm1682_irq.h" />
+    <ClInclude Include="bm1682\bm1682_msgfifo.h" />
+    <ClInclude Include="bm1682\bm1682_pcie.h" />
+    <ClInclude Include="bm1682\bm1682_reg.h" />
+    <ClInclude Include="bm1684\bm1684_base64.h" />
+    <ClInclude Include="bm1684\bm1684_card.h" />
+    <ClInclude Include="bm1684\bm1684_cdma.h" />
+    <ClInclude Include="bm1684\bm1684_clkrst.h" />
+    <ClInclude Include="bm1684\bm1684_ddr.h" />
+    <ClInclude Include="bm1684\bm1684_firmware_ddr.h" />
+    <ClInclude Include="bm1684\bm1684_firmware_tcm.h" />
+    <ClInclude Include="bm1684\bm1684_flash.h" />
+    <ClInclude Include="bm1684\bm1684_gmem.h" />
+    <ClInclude Include="bm1684\bm1684_irq.h" />
+    <ClInclude Include="bm1684\bm1684_jpu.h" />
+    <ClInclude Include="bm1684\bm1684_lpddr4.h" />
+    <ClInclude Include="bm1684\bm1684_msgfifo.h" />
+    <ClInclude Include="bm1684\bm1684_pcie.h" />
+    <ClInclude Include="bm1684\bm1684_perf.h" />
+    <ClInclude Include="bm1684\bm1684_reg.h" />
+    <ClInclude Include="bm1684\bm1684_smbus.h" />
+    <ClInclude Include="bm1684\bm1684_vpp.h" />
+    <ClInclude Include="bm1684\bm1686_firmware_ddr.h" />
+    <ClInclude Include="bm1684\temp_def.h" />
+    <ClInclude Include="bm_api.h" />
+    <ClInclude Include="bm_attr.h" />
+    <ClInclude Include="bm_bgm.h" />
+    <ClInclude Include="bm_boot_info.h" />
+    <ClInclude Include="bm_card.h" />
+    <ClInclude Include="bm_cdma.h" />
+    <ClInclude Include="bm_ctl.h" />
+    <ClInclude Include="bm_ddr.h" />
+    <ClInclude Include="bm_debug.h" />
+    <ClInclude Include="bm_drv.h" />
+    <ClInclude Include="bm_fw.h" />
+    <ClInclude Include="bm_gmem.h" />
+    <ClInclude Include="bm_io.h" />
+    <ClInclude Include="bm_irq.h" />
+    <ClInclude Include="bm_memcpy.h" />
+    <ClInclude Include="bm_monitor.h" />
+    <ClInclude Include="bm_msg.h" />
+    <ClInclude Include="bm_msgfifo.h" />
+    <ClInclude Include="bm_pcie.h" />
+    <ClInclude Include="bm_thread.h" />
+    <ClInclude Include="bm_timer.h" />
+    <ClInclude Include="bm_trace.h" />
+    <ClInclude Include="bm_uapi.h" />
+    <ClInclude Include="bm_wdt.h" />
+    <ClInclude Include="Device.h" />
+    <ClInclude Include="Driver.h" />
+    <ClInclude Include="bm_def.h" />
+    <ClInclude Include="gpio.h" />
+    <ClInclude Include="i2c.h" />
+    <ClInclude Include="l2_sram_table.h" />
+    <ClInclude Include="bm_common.h" />
+    <ClInclude Include="Public.h" />
+    <ClInclude Include="pwm.h" />
+    <ClInclude Include="Queue.h" />
+    <ClInclude Include="spi.h" />
+    <ClInclude Include="Trace.h" />
+    <ClInclude Include="uart.h" />
+    <ClInclude Include="vpu\config.h" />
+    <ClInclude Include="vpu\vmm.h" />
+    <ClInclude Include="vpu\vmm_type.h" />
+    <ClInclude Include="vpu\vpu.h" />
+    <ClInclude Include="vpu\vpuconfig.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="windriver.inf" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{DE2A16DE-AD39-4F4F-B625-02D4E38F7777}</ProjectGuid>
+    <TemplateGuid>{497e31cb-056b-4f31-abb8-447fd55ee5a5}</TemplateGuid>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
+    <MinimumVisualStudioVersion>12.0</MinimumVisualStudioVersion>
+    <Configuration>Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">Win32</Platform>
+    <RootNamespace>windriver</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <Driver_SpectreMitigation>Spectre</Driver_SpectreMitigation>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <TargetVersion>Windows10</TargetVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <DebuggerFlavor>DbgengKernelDebugger</DebuggerFlavor>
+    <Inf2CatUseLocalTime>true</Inf2CatUseLocalTime>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WppEnabled>true</WppEnabled>
+      <WppRecorderEnabled>true</WppRecorderEnabled>
+      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
+      <WppKernelMode>true</WppKernelMode>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <WppGenerateUsingTemplateFile>{km-WdfDefault.tpl}*.tmh</WppGenerateUsingTemplateFile>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <AdditionalIncludeDirectories>C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\km;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfLdr.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfDriverEntry.lib;$(DDK_LIB_PATH)\wdmsec.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WppEnabled>true</WppEnabled>
+      <WppRecorderEnabled>true</WppRecorderEnabled>
+      <WppScanConfigurationData Condition="'%(ClCompile.ScanConfigurationData)' == ''">trace.h</WppScanConfigurationData>
+      <WppKernelMode>true</WppKernelMode>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(KernelBufferOverflowLib);$(DDK_LIB_PATH)ntoskrnl.lib;$(DDK_LIB_PATH)hal.lib;$(DDK_LIB_PATH)wmilib.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfLdr.lib;$(KMDF_LIB_PATH)$(KMDF_VER_PATH)\WdfDriverEntry.lib;$(DDK_LIB_PATH)\wdmsec.lib</AdditionalDependencies>
+      <GenerateMapFile>true</GenerateMapFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <FilesToPackage Include="$(TargetPath)" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

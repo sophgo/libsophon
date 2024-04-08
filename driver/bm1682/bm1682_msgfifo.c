@@ -36,11 +36,11 @@ u32 bm1682_pending_msgirq_cnt(struct bm_device_info *bmdi)
 
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU)
-		api_info = &bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU];
+		api_info = &bmdi->api_info[0][BM_MSGFIFO_CHANNEL_XPU];
 	else
-		api_info = &bmdi->api_info[BM_MSGFIFO_CHANNEL_CPU];
+		api_info = &bmdi->api_info[0][BM_MSGFIFO_CHANNEL_CPU];
 #else
-	api_info = &bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU];
+	api_info = &bmdi->api_info[0][BM_MSGFIFO_CHANNEL_XPU];
 #endif
 	lo = gp_reg_read_enh(bmdi, GP_REG_MSGIRQ_NUM_LO);
 	hi = gp_reg_read_enh(bmdi, GP_REG_MSGIRQ_NUM_HI);

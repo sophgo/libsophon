@@ -9,6 +9,7 @@
 #define BM_MAX_CHIP_NUM_PER_CARD	1
 #define BM_MAX_CHIP_NUM                 1
 #endif
+#define BM_MAX_CORE_NUM			2
 
 struct bm_card {
 	int card_index;

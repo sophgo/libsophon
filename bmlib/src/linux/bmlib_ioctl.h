@@ -93,6 +93,7 @@
 #define BMDEV_COMM_SET_CARDID         _IOWR('p', 0xAA, unsigned long)
 #define BMDEV_SET_IP                  _IOWR('p', 0xAC, unsigned long)
 #define BMDEV_SET_GATE                _IOWR('p', 0xAD, unsigned long)
+#define BMDEV_FORCE_RESET_TPU         _IOWR('p', 0xAE, unsigned long)
 
 #define BMDEV_GET_TPUC                _IOWR('p', 0x81, unsigned long)
 #define BMDEV_GET_MAXP                _IOWR('p', 0x82, unsigned long)
@@ -116,6 +117,7 @@
 #define BMDEV_GET_VERSION             _IOR('p', 0x94, unsigned long)
 #define BMDEV_LOADED_LIB              _IOR('p', 0x95, unsigned long)
 #define BMDEV_GET_SMI_ATTR            _IOR('p', 0x96, unsigned long)
+#define BMDEV_PWR_CTRL                _IOR('p', 0x97, unsigned long)
 
 #define BMCTL_GET_DEV_CNT             _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR            _IOWR('q', 0x01, unsigned long)

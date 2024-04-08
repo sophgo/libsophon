@@ -56,7 +56,7 @@ u32 bm1684_cdma_transfer(struct bm_device_info *bmdi, struct file *file, pbm_cdm
 	u64 nv_cdma_send_us = 0;
 	u32 lock_timeout = timeout_ms * 1000;
 	u32 int_mask_val;
-
+	unsigned long irq_flags;
 
 	nv_cdma_send_us = bmdev_timer_get_time_us(bmdi);
 #ifndef SOC_MODE
@@ -228,10 +228,10 @@ u32 bm1684_cdma_transfer(struct bm_device_info *bmdi, struct file *file, pbm_cdm
 		ptitem->payload.end_time = nv_cdma_end_us;
 		ptitem->payload.start_time = nv_cdma_start_us;
 		INIT_LIST_HEAD(&ptitem->node);
-		mutex_lock(&ti->trace_mutex);
+		spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
 		list_add_tail(&ptitem->node, &ti->trace_list);
 		ti->trace_item_num++;
-		mutex_unlock(&ti->trace_mutex);
+		spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
 	}
 
 	top_reg_write(bmdi, TOP_CDMA_LOCK, 0);

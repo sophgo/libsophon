@@ -47,6 +47,38 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 			address < pbar_info->bar1_dev_start + pbar_info->bar1_len) {
 		*bar_vaddr = pbar_info->bar1_vaddr;
 		*offset = address - pbar_info->bar1_dev_start;
+	} else if (address >= pbar_info->bar1_part17_dev_start &&
+			address < pbar_info->bar1_part17_dev_start + pbar_info->bar1_part17_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part17_dev_start + pbar_info->bar1_part17_offset;
+	} else if (address >= pbar_info->bar1_part16_dev_start &&
+			address < pbar_info->bar1_part16_dev_start + pbar_info->bar1_part16_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part16_dev_start + pbar_info->bar1_part16_offset;
+	} else if (address >= pbar_info->bar1_part15_dev_start &&
+			address < pbar_info->bar1_part15_dev_start + pbar_info->bar1_part15_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part15_dev_start + pbar_info->bar1_part15_offset;
+	} else if (address >= pbar_info->bar1_part14_dev_start &&
+			address < pbar_info->bar1_part14_dev_start + pbar_info->bar1_part14_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part14_dev_start + pbar_info->bar1_part14_offset;
+	} else if (address >= pbar_info->bar1_part13_dev_start &&
+			address < pbar_info->bar1_part13_dev_start + pbar_info->bar1_part13_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part13_dev_start + pbar_info->bar1_part13_offset;
+	} else if (address >= pbar_info->bar1_part12_dev_start &&
+			address < pbar_info->bar1_part12_dev_start + pbar_info->bar1_part12_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part12_dev_start + pbar_info->bar1_part12_offset;
+	} else if (address >= pbar_info->bar1_part11_dev_start &&
+			address < pbar_info->bar1_part11_dev_start + pbar_info->bar1_part11_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part11_dev_start + pbar_info->bar1_part11_offset;
+	} else if (address >= pbar_info->bar1_part10_dev_start &&
+			address < pbar_info->bar1_part10_dev_start + pbar_info->bar1_part10_len) {
+		*bar_vaddr = pbar_info->bar1_vaddr;
+		*offset = address - pbar_info->bar1_part10_dev_start + pbar_info->bar1_part10_offset;
 	} else if (address >= pbar_info->bar1_part9_dev_start &&
 			address < pbar_info->bar1_part9_dev_start + pbar_info->bar1_part9_len) {
 		*bar_vaddr = pbar_info->bar1_vaddr;
@@ -132,7 +164,7 @@ void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base)
 }
 #endif
 
-static void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address)
+void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address)
 {
 	u32 offset = 0;
 	void __iomem *bar_vaddr = NULL;
@@ -446,22 +478,52 @@ u32 wdt_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 
 void tpu_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
 {
-	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr + reg_offset);
+	tpu_reg_write_idx(bmdi, reg_offset, val, 0);
 }
 
 u32 tpu_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 {
-	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr + reg_offset);
+	return tpu_reg_read_idx(bmdi, reg_offset, 0);
+}
+
+void tpu_reg_write_idx(struct bm_device_info *bmdi, u32 reg_offset, u32 val, int core_id)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr + reg_offset + core_id * BD_ENGINE_TPU1_OFFSET);
+}
+
+u32 tpu_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr + reg_offset + core_id * BD_ENGINE_TPU1_OFFSET);
 }
 
 void gdma_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
 {
-	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr + reg_offset);
+	gdma_reg_write_idx(bmdi, reg_offset, val, 0);
 }
 
 u32 gdma_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 {
-	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr + reg_offset);
+	return gdma_reg_read_idx(bmdi, reg_offset, 0);
+}
+
+void gdma_reg_write_idx(struct bm_device_info *bmdi, u32 reg_offset, u32 val, int core_id)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr + reg_offset + core_id * GDMA_ENGINE_TPU1_OFFSET);
+}
+
+u32 gdma_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr + reg_offset + core_id * GDMA_ENGINE_TPU1_OFFSET);
+}
+
+void hau_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.hau_bar_vaddr + reg_offset);
+}
+
+u32 hau_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.hau_bar_vaddr + reg_offset);
 }
 
 void spacc_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
@@ -494,27 +556,34 @@ u32 efuse_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr + reg_offset);
 }
 
+u32 otp_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.otp_bar_vaddr + reg_offset);
+}
+
 void io_init(struct bm_device_info *bmdi)
 {
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->shmem_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.shmem_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->top_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->gp_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.gp_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pwm_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pwm_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pwm_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pwm_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->cdma_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.cdma_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->bdc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.bdc_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->smmu_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.smmu_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->smmu_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.smmu_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->intc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.intc_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->nv_timer_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.nv_timer_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->gpio_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.gpio_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->vpp0_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.vpp0_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->vpp1_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.vpp1_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->uart_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.uart_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->wdt_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.wdt_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->vpp0_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.vpp0_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->vpp1_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.vpp1_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->uart_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.uart_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->wdt_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.wdt_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->tpu_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->gdma_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->spacc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.spacc_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pka_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pka_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->efuse_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->hau_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.hau_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->spacc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.spacc_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pka_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pka_bar_vaddr);
+	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->efuse_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->otp_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.otp_bar_vaddr);
 #ifndef SOC_MODE
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->dev_info_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.dev_info_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->i2c_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.i2c_bar_vaddr);

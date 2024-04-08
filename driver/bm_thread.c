@@ -25,27 +25,31 @@ struct bm_thread_info *bmdrv_find_thread_info(struct bm_handle_info *h_info, pid
 struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, pid_t pid)
 {
 	struct bm_thread_info *thd_info;
+	int i;
 
-	thd_info = kmalloc(sizeof(struct bm_thread_info), GFP_KERNEL);
+	thd_info = kmalloc(sizeof(struct bm_thread_info), GFP_ATOMIC);
 	if (!thd_info)
 		return thd_info;
 	thd_info->user_pid = pid;
 
 	init_completion(&thd_info->msg_done);
-	thd_info->last_api_seq = 0;
-	thd_info->cpl_api_seq = 0;
+	for (i = 0; i < BM_MAX_CORE_NUM; i++) {
+		thd_info->last_api_seq[i] = 0;
+		thd_info->cpl_api_seq[i] = 0;
+	}
 
 	thd_info->profile.cdma_in_time = 0ULL;
 	thd_info->profile.cdma_in_counter = 0ULL;
 	thd_info->profile.cdma_out_time = 0ULL;
 	thd_info->profile.cdma_out_counter = 0ULL;
 	thd_info->profile.tpu_process_time = 0ULL;
+	thd_info->profile.tpu1_process_time = 0ULL;
 	thd_info->profile.sent_api_counter = 0ULL;
 	thd_info->profile.completed_api_counter = 0ULL;
 
 	thd_info->trace_enable = 0;
 	thd_info->trace_item_num = 0ULL;
-	mutex_init(&thd_info->trace_mutex);
+	spin_lock_init(&thd_info->trace_spinlock);
 	INIT_LIST_HEAD(&thd_info->trace_list);
 
 	hash_add_rcu(h_info->api_htable, &thd_info->node, pid);

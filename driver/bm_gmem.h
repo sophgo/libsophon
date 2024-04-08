@@ -17,8 +17,8 @@ struct bm_handle_info {
 	struct file *file;
 	pid_t open_pid;
 	u64 gmem_used;
-	u64 h_send_api_seq;
-	u64 h_cpl_api_seq;
+	u64 h_send_api_seq[BM_MAX_CORE_NUM];
+	u64 h_cpl_api_seq[BM_MAX_CORE_NUM];
 	struct mutex h_api_seq_mutex;
 	wait_queue_head_t h_msg_done;
 	int f_owner;
@@ -52,7 +52,7 @@ struct reserved_mem_info {
 };
 
 struct bm_gmem_info {
-	struct mutex gmem_mutex;
+	spinlock_t gmem_spinlock;
 	struct ion_device idev;
 	struct reserved_mem_info resmem_info;
 	int (*bm_gmem_init)(struct bm_device_info *);

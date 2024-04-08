@@ -210,6 +210,24 @@ int platform_ioctl(bm_handle_t handle, u32 commandID, void*param){
             }
             break;
 
+	case BMDEV_LOADED_LIB:
+	    status = DeviceIoControl(handle->hDevice,
+				     BMDEV_LOADED_LIB,
+				     param,
+				     sizeof(loaded_lib_t),
+				     param,
+				     sizeof(loaded_lib_t),
+				     &bytesReceived,
+				     NULL);
+	    if (status == FALSE){
+		    printf("DeviceIoControl BMDEV_LOADED_LIB failed 0x%x\n",
+			   GetLastError());
+		    return -1;
+	    } else {
+		    return 0;
+	    }
+	    break;
+
         case BMDEV_GET_PROFILE:
             status = DeviceIoControl(handle->hDevice,
                                      BMDEV_GET_PROFILE,

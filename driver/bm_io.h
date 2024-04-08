@@ -24,8 +24,8 @@ typedef enum {
 #define GP_REG_MESSAGE_RP          1
 #define GP_REG_FW_STATUS             9
 #define GP_REG_ARM9_FW_MODE              13
-#define GP_REG_ARM9FW_LOG_RP             11
-#define GP_REG_ARM9FW_LOG_WP             12
+#define GP_REG_FW0_LOG_WP             11
+#define GP_REG_FW1_LOG_WP             12
 // bm1682 GP registers
 #define GP_REG_MESSAGE_IRQSTATUS     2
 #define GP_REG_CDMA_IRQSTATUS        3
@@ -42,6 +42,15 @@ typedef enum {
 #define GP_REG_MESSAGE_RP_CHANNEL_CPU          7
 #define GP_REG_I2C2_IRQ_COUNT                  2
 #define GP_REG_TEMPSMI                         4
+
+// bm1688 GP registers
+// C906_0 -> GP[0,1,9,11,12]; C906_1 -> GP[14,15,23,25,26]
+#define GP_REG_C906_FW_MODE              	10
+#define GP_REG_TPU1_OFFSET			14
+#define BD_ENGINE_TPU1_OFFSET		       	0x10000UL
+#define GDMA_ENGINE_TPU1_OFFSET		       	0x10000UL
+#define SHMEM_TPU1_OFFSET		       	0x10000UL
+
 struct bm_io_bar_vaddr {
 	void __iomem *mcu_info_bar_vaddr;
 	void __iomem *dev_info_bar_vaddr;
@@ -65,9 +74,11 @@ struct bm_io_bar_vaddr {
 	void __iomem *wdt_bar_vaddr;
 	void __iomem *tpu_bar_vaddr;
 	void __iomem *gdma_bar_vaddr;
+	void __iomem *hau_bar_vaddr;
 	void __iomem *spacc_bar_vaddr;
 	void __iomem *pka_bar_vaddr;
 	void __iomem *efuse_bar_vaddr;
+	void __iomem *otp_bar_vaddr;
 };
 
 struct bm_card_reg {
@@ -93,9 +104,11 @@ struct bm_card_reg {
 	u32 wdt_base_addr;
 	u32 tpu_base_addr;
 	u32 gdma_base_addr;
+	u32 hau_base_addr;
 	u32 spacc_base_addr;
 	u32 pka_base_addr;
 	u32 efuse_base_addr;
+	u32 otp_base_addr;
 };
 
 #ifdef SOC_MODE
@@ -159,6 +172,30 @@ struct bm_bar_info {
 	u64 bar1_part9_offset;
 	u64 bar1_part9_dev_start;
 	u64 bar1_part9_len;
+	u64 bar1_part10_offset;
+	u64 bar1_part10_dev_start;
+	u64 bar1_part10_len;
+	u64 bar1_part11_offset;
+	u64 bar1_part11_dev_start;
+	u64 bar1_part11_len;
+	u64 bar1_part12_offset;
+	u64 bar1_part12_dev_start;
+	u64 bar1_part12_len;
+	u64 bar1_part13_offset;
+	u64 bar1_part13_dev_start;
+	u64 bar1_part13_len;
+	u64 bar1_part14_offset;
+	u64 bar1_part14_dev_start;
+	u64 bar1_part14_len;
+	u64 bar1_part15_offset;
+	u64 bar1_part15_dev_start;
+	u64 bar1_part15_len;
+	u64 bar1_part16_offset;
+	u64 bar1_part16_dev_start;
+	u64 bar1_part16_len;
+	u64 bar1_part17_offset;
+	u64 bar1_part17_dev_start;
+	u64 bar1_part17_len;
 	void __iomem *bar1_vaddr;
 
 	u64 bar2_start;
@@ -260,8 +297,38 @@ static const struct bm_card_reg bm_reg_1684x = {
         .efuse_base_addr = 0x50028000,
 };
 
-struct bm_device_info;
+static const struct bm_card_reg bm_reg_bm1688 = {
+	.mcu_info_base_addr  = 0x101fb000,
+	.dev_info_base_addr  = 0x101fb100,
+	.shmem_base_addr  = 0x2580c000, // TPU0
+	.ddr_base_addr  = 0x68000000,
+	.top_base_addr  = 0x28100000,
+	.gp_base_addr  = 0x28100080,
+	.i2c_base_addr  = 0x29000000, // i2c0
+	.intc_base_addr  = 0x27110000,
+	.gpio_base_addr  = 0x27010000, // GPIO0
+	.nv_timer_base_addr  = 0x27090000,
+	.cfg_base_addr  = 0x36000000, //AP CFG???
+	.pwm_base_addr  = 0x27050000, // PWM0
+	.bdc_base_addr = 0x26050000,
+	.cdma_base_addr  = 0x20be8000,
+	.smmu_base_addr  = 0,
+	.spi_base_addr = 0x29200000,
+	.vpp0_base_addr  = 0,
+	.vpp1_base_addr  = 0,
+	.uart_base_addr  = 0x29180000, // UART0
+	.wdt_base_addr  = 0x27000000,
+	.tpu_base_addr  = 0x26000000,
+	.gdma_base_addr  = 0x26020000,
+	.hau_base_addr = 0x26040000,
+	.spacc_base_addr = 0x33000000,
+	.pka_base_addr = 0,
+	.efuse_base_addr = 0x27040000,
+	.otp_base_addr = 0x27100000,
+};
 
+struct bm_device_info;
+void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address);
 u32 bm_read32(struct bm_device_info *bmdi, u32 address);
 u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data);
 u8 bm_read8(struct bm_device_info *bmdi, u32 address);
@@ -317,14 +384,31 @@ void wdt_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 wdt_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void tpu_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 tpu_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+void tpu_reg_write_idx(struct bm_device_info *bmdi, u32 reg_offset, u32 val, int core_id);
+u32 tpu_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id);
 void gdma_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 gdma_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+void gdma_reg_write_idx(struct bm_device_info *bmdi, u32 reg_offset, u32 val, int core_id);
+u32 gdma_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id);
+void hau_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
+u32 hau_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void spacc_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 spacc_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void pka_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 pka_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void efuse_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 efuse_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+u32 otp_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+
+static inline void gp_reg_write_idx(struct bm_device_info *bmdi, u32 idx, u32 data, int core_id)
+{
+	gp_reg_write(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4, data);
+}
+
+static inline u32 gp_reg_read_idx(struct bm_device_info *bmdi, u32 idx, int core_id)
+{
+	return gp_reg_read(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4);
+}
 
 static inline void gp_reg_write_enh(struct bm_device_info *bmdi, u32 idx, u32 data)
 {
@@ -336,14 +420,14 @@ static inline u32 gp_reg_read_enh(struct bm_device_info *bmdi, u32 idx)
 	return gp_reg_read(bmdi, idx * 4);
 }
 
-static inline void shmem_reg_write_enh(struct bm_device_info *bmdi, u32 idx, u32 data, u32 channel)
+static inline void shmem_reg_write_enh(struct bm_device_info *bmdi, u32 idx, u32 data, u32 channel, int core_id)
 {
-	shmem_reg_write(bmdi, idx * 4, data, channel);
+	shmem_reg_write(bmdi, idx * 4 + core_id * SHMEM_TPU1_OFFSET, data, channel);
 }
 
-static inline u32 shmem_reg_read_enh(struct bm_device_info *bmdi, u32 idx, u32 channel)
+static inline u32 shmem_reg_read_enh(struct bm_device_info *bmdi, u32 idx, u32 channel, int core_id)
 {
-	return shmem_reg_read(bmdi, idx * 4, channel);
+	return shmem_reg_read(bmdi, idx * 4 + core_id * SHMEM_TPU1_OFFSET, channel);
 }
 
 /* DDR read/write enhance: operate on specified ddr controller region */

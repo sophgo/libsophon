@@ -5,86 +5,95 @@
 
 namespace bmruntime {
 
-bm_status_t bmdnn_func_1684x::_bmdnn_multi_fullnet_(
-        bm_handle_t handle,
-        int func_id,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        u32* input_dsize,  // in bytes
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        u32* output_dsize, // in bytes
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        u32* bdc_cmd_byte_size,
-        u32* gdma_cmd_byte_size,
-        int cmdgroup_num)
-{
-  BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
-  u32 api_buffer_size = sizeof(int) + (input_num * (sizeof(u64) * 2 + sizeof(u32))) + // input
-                        sizeof(int) + (output_num * (sizeof(u64) * 2 + sizeof(u32))) + // output
-                        sizeof(u64) * 2 + (sizeof(int) * 2 + sizeof(u32) * 2) * cmdgroup_num +
-                        sizeof(int);
-  u8* api_buffer = new u8 [api_buffer_size];
+void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
+                                     api_info_t &api_info) {
+  const std::vector<tpu_tensor_info_t> &input_info = net_info.input_info;
+  const std::vector<tpu_tensor_info_t> &output_info = net_info.output_info;
+  const std::vector<tpu_cmd_info_t> &cmd_info = net_info.core_commands[0].cmd_info;
 
-  void* p_api = api_buffer;
+  u32 api_buffer_size =
+      sizeof(int) +
+      (input_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // input
+      sizeof(int) +
+      (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
+      sizeof(u64) * 2 + (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() +
+      sizeof(int);
+  api_info.api_data.resize(1);
+  api_info.api_data[0].assign(api_buffer_size, 0);
+  api_info.input_addr_offset.assign(input_info.size(), 0);
+  api_info.output_addr_offset.assign(output_info.size(), 0);
+
+  void *p_api = api_info.api_data[0].data();
   // input global offset process
-  *(int*)p_api = input_num;
-  p_api = (int*)p_api + 1;
-  for (int i = 0; i < input_num; ++i) {
-    *(u64*)p_api = user_input_global_offset[i];
-    p_api = (u64*)p_api + 1;
-    *(u64*)p_api = cmd_input_global_offset[i];
-    p_api = (u64*)p_api + 1;
-    *(u32*)p_api = input_dsize[i];
-    p_api = (u32*)p_api + 1;
+  *(int *)p_api = input_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < input_info.size(); ++i) {
+    const auto &info = input_info.at(i);
+    api_info.input_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = info.user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = info.compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u32 *)p_api = bmrt_data_type_size((bm_data_type_t)info.dtype) *
+                    (info.n * info.c * info.h * info.w);
+    p_api = (u32 *)p_api + 1;
   }
 
   // output global offset process
-  *(int*)p_api = output_num;
-  p_api = (int*)p_api + 1;
-  for (int i = 0; i < output_num; ++i) {
-    *(u64*)p_api = user_output_global_offset[i];
-    p_api = (u64*)p_api + 1;
-    *(u64*)p_api = cmd_output_global_offset[i];
-    p_api = (u64*)p_api + 1;
-    *(u32*)p_api = output_dsize[i];
-    p_api = (u32*)p_api + 1;
+  *(int *)p_api = output_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < output_info.size(); ++i) {
+    const auto &info = output_info.at(i);
+    api_info.output_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = info.user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = info.compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u32 *)p_api = bmrt_data_type_size((bm_data_type_t)info.dtype) *
+                    (info.n * info.c * info.h * info.w);
+    p_api = (u32 *)p_api + 1;
   }
 
   // memcpy cmd offset and num
-  *(u64*)p_api = bdc_cmd_offset;
-  p_api = (u64*)p_api + 1;
-  *(u64*)p_api = gdma_cmd_offset;
-  p_api = (u64*)p_api + 1;
-  *(int*)p_api = cmdgroup_num;
-  p_api = (int*)p_api + 1;
-  for (int i = 0; i < cmdgroup_num; i++) {
-    *(int*)p_api = bdc_cmd_num[i];
-    p_api = (int*)p_api + 1;
-    *(int*)p_api = gdma_cmd_num[i];
-    p_api = (int*)p_api + 1;
-    *(u32*)p_api = bdc_cmd_byte_size[i];
-    p_api = (u32*)p_api + 1;
-    *(u32*)p_api = gdma_cmd_byte_size[i];
-    p_api = (u32*)p_api + 1;
+  *(u64 *)p_api = net_info.core_commands[0].bdc_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(u64 *)p_api = net_info.core_commands[0].gdma_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(int *)p_api = cmd_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < cmd_info.size(); i++) {
+    *(int *)p_api = cmd_info.at(i).bdc_cmd_num;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).gdma_cmd_num;
+    p_api = (int *)p_api + 1;
+    *(u32 *)p_api = cmd_info.at(i).bdc_cmd_byte_size;
+    p_api = (u32 *)p_api + 1;
+    *(u32 *)p_api = cmd_info.at(i).gdma_cmd_byte_size;
+    p_api = (u32 *)p_api + 1;
   }
+}
+bm_status_t
+bmdnn_func_1684x::_bmdnn_multi_fullnet_(bm_handle_t handle,
+                                        const tpu_net_info_t &net_info) {
+  BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
-  bm_status_t status = tpu_kernel_launch_async(handle, func_id, api_buffer, api_buffer_size);
+  api_info_t api_info;
+  fill_api_info(net_info, api_info);
+  auto api_id = net_info.kernel_func_ids[0];
+  bm_status_t status = tpu_kernel_launch_async(handle, api_id,
+                                               api_info.api_data[0].data(),
+                                               api_info.api_data[0].size());
   if (BM_SUCCESS != status) {
-    BMRT_LOG(WRONG, "tpu_kernel_launch failed, func id:%d, status:%d", func_id, status);
+    BMRT_LOG(WRONG, "tpu_kernel_launch failed, func id:%d, status:%d", api_id, status);
   }
-  delete [] api_buffer;
   return status;
 }
 
 bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
-        int func_id,
+        tpu_kernel_function_t func_id,
         unsigned long long compiled_ir_global_addr,
         unsigned int compiled_ir_length, //unit dword
         unsigned int input_num,

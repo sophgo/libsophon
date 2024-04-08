@@ -45,6 +45,7 @@ ModelGen::ModelGen(uint32_t reserved_size)
 {
   binary_.reserve(reserved_size);
   max_neuron_size_ = 0;
+  num_device_ = 0;
 }
 
 FlatBufferBuilder &ModelGen::Builder()
@@ -81,8 +82,25 @@ void ModelGen::AddNet(const flatbuffers::Offset<bmodel::Net> &net)
   nets_.push_back(net);
 }
 
+void ModelGen::AddNet(const std::string &net_name,
+                      const CASCADE_INFO_T &cascade,
+                      const flatbuffers::Offset<NetParameter> &parameter,
+                      int32_t addr_mode) {
+  auto net_new = reinterpret_cast<const NetParameter *>(
+      builder_.GetCurrentBufferPointer() + builder_.GetSize() - parameter.o);
+  if (net_new->ctx_size() > max_neuron_size_) {
+    max_neuron_size_ = net_new->ctx_size();
+  }
+  NET_INFO_T net_info;
+  net_info.name = net_name;
+  net_info.cascade = cascade;
+  net_info.parameters.push_back(parameter);
+  net_info.addr_mode = addr_mode;
+  net_vector_.push_back(net_info);
+}
+
 void ModelGen::AddNet(string net_name, const Offset<NetParameter> &parameter, uint32_t *net_idx,
-                      uint32_t *stage_idx)
+                      uint32_t *stage_idx, const bmodel::Cascade * cascade, int32_t addr_mode)
 {
   ASSERT(net_name.empty() == false);
   auto net_new = reinterpret_cast<const NetParameter *>(builder_.GetCurrentBufferPointer() +
@@ -99,15 +117,30 @@ void ModelGen::AddNet(string net_name, const Offset<NetParameter> &parameter, ui
   if (net_idx != NULL) {
     *net_idx = idx;
   }
+  if (cascade != NULL) {
+    // cascade not support multi stage
+    ASSERT(idx == net_vector_.size());
+  }
   if (idx == net_vector_.size()) {  // if not found
     NET_INFO_T net_info;
     net_info.name = net_name;
     net_info.parameters.push_back(parameter);
+    net_info.addr_mode = addr_mode;
+    if (cascade) {
+      net_info.cascade.main_name = cascade->main_name()->str();
+      net_info.cascade.device_id = cascade->device_id();
+      net_info.cascade.step = cascade->step();
+    }
     net_vector_.push_back(net_info);
     if (stage_idx != NULL) {
       *stage_idx = 0;
     }
   } else {  // if found
+    if (net_vector_[idx].addr_mode != addr_mode) {
+      BMODEL_LOG(FATAL) << "net[" << net_name
+                        << "] addr_mode should be the same" << std::endl;
+      exit(-1);
+    }
     auto &parameters = net_vector_[idx].parameters;
     for (auto &net_offset : parameters) {
       // check whether conflict
@@ -216,9 +249,16 @@ void ModelGen::AddChip(const std::string &arch_name)
   chip_ = arch_name;
 }
 
+void ModelGen::AddNumDevice(int num_device) { num_device_ = num_device; }
+
 void ModelGen::AddKernelModule(std::string &file_name, Binary &tpu_module) {
   kernel_module_.file_name = file_name;
   kernel_module_.binary = tpu_module;
+}
+
+void ModelGen::AddCpuModule(std::string &file_name, Binary &cpu_module) {
+  cpuop_module_.file_name = file_name;
+  cpuop_module_.binary = cpu_module;
 }
 
 void ModelGen::Finish(const string &filename)
@@ -237,10 +277,19 @@ size_t ModelGen::Finish()
     }
 
     ASSERT(parameter.IsNull() == false);
-
+    flatbuffers::Offset<Cascade> cascade = 0;
+    if (net_info.cascade.main_name.empty() == false) {
+      auto main_name = builder_.CreateString(net_info.cascade.main_name);
+      bmodel::CascadeBuilder cb(builder_);
+      cb.add_device_id(net_info.cascade.device_id);
+      cb.add_step(net_info.cascade.step);
+      cb.add_main_name(main_name);
+      cascade = cb.Finish();
+    }
     auto net_name = builder_.CreateString(net_info.name);
     bmodel::NetBuilder nb(builder_);
     nb.add_name(net_name);
+    nb.add_cascade(cascade);
     nb.add_parameter(parameter);
     nets_.push_back(nb.Finish());
   }
@@ -259,13 +308,19 @@ size_t ModelGen::Finish()
 
   // kernel_module related
   flatbuffers::Offset<bmodel::KernelModule> kernel_module;
-  if (chip_ == "BM1684X") {
-    auto module_name = builder_.CreateString(kernel_module_.file_name);
-    bmodel::KernelModuleBuilder kb(builder_);
-    kb.add_file_name(module_name);
-    kb.add_binary(&kernel_module_.binary);
-    kernel_module = kb.Finish();
-  }
+  auto module_name = builder_.CreateString(kernel_module_.file_name);
+  bmodel::KernelModuleBuilder kb(builder_);
+  kb.add_file_name(module_name);
+  kb.add_binary(&kernel_module_.binary);
+  kernel_module = kb.Finish();
+
+  // cpuop_module related
+  flatbuffers::Offset<bmodel::CpuopModule> cpuop_module;
+  auto cpu_module_name = builder_.CreateString(cpuop_module_.file_name);
+  bmodel::CpuopModuleBuilder cb(builder_);
+  cb.add_file_name(cpu_module_name);
+  cb.add_binary(&cpuop_module_.binary);
+  cpuop_module = cb.Finish();
 
   bmodel::ModelBuilder mb(builder_);
   mb.add_chip(chip);
@@ -274,10 +329,9 @@ size_t ModelGen::Finish()
   mb.add_version(version);
   mb.add_net(net);
   mb.add_neuron_size(max_neuron_size_);
-
-  if (chip_ == "BM1684X") {
-    mb.add_kernel_module(kernel_module);
-  }
+  mb.add_kernel_module(kernel_module);
+  mb.add_device_num(num_device_);
+  mb.add_cpuop_module(cpuop_module);
 
   auto model = mb.Finish();
   builder_.Finish(model);
@@ -333,13 +387,13 @@ ModelCtx::ModelCtx(const string &filename) : model_gen_(NULL), model_(NULL), bmo
   file_.open(filename, std::ios::binary | std::ios::in);
   if (!file_) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] open failed." << std::endl;
-    exit(-1);
+    throw std::runtime_error("failed to construct");
   }
   file_.seekg(0, std::ios::end);
   size_t length = file_.tellg();
   if (length <= sizeof(header_)) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken ." << std::endl;
-    exit(-1);
+    throw std::runtime_error("failed to construct");
   }
   file_.seekg(0, std::ios::beg);
 
@@ -348,11 +402,11 @@ ModelCtx::ModelCtx(const string &filename) : model_gen_(NULL), model_(NULL), bmo
   file_.read((char *)&header_, sizeof(header_));
   if (header_.magic != BMODEL_MAGIC) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken .." << std::endl;
-    exit(-1);
+    throw std::runtime_error("failed to construct");
   }
   if (length < header_.header_size + header_.flatbuffers_size + header_.binary_size) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken ..." << std::endl;
-    exit(-1);
+    throw std::runtime_error("failed to construct");
   }
   binary_offset_ = header_.header_size + header_.flatbuffers_size;
   model_buffer_ = (void *)malloc(header_.flatbuffers_size);
@@ -369,7 +423,7 @@ ModelCtx::ModelCtx(const string &filename) : model_gen_(NULL), model_(NULL), bmo
       BMODEL_LOG(FATAL) << "Chip: " << model_->chip()->c_str() << std::endl;
       BMODEL_LOG(FATAL) << "Date: " << model_->time()->c_str() << std::endl;
     }
-    exit(-1);
+    throw std::runtime_error("failed to construct");
   }
   model_ = bmodel::GetModel(model_buffer_);
   ASSERT(model_ != NULL);
@@ -454,7 +508,7 @@ void ModelCtx::read_binary(const Binary *binary, uint8_t *buffer)
 }
 
 // read binary from offset
-void ModelCtx::read_binary(const Binary *binary, uint32_t offset, uint8_t *buffer, uint32_t size)
+void ModelCtx::read_binary(const Binary *binary, uint64_t offset, uint8_t *buffer, uint64_t size)
 {
   ASSERT(binary != NULL);
   ASSERT(buffer != NULL);
@@ -779,6 +833,8 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
     memset(&info, 0, sizeof(info));
     size_t load_net_num = model()->net()->size();
     uint64_t net_max_neuron_size = 0;
+    std::set<std::vector<uint8_t>> device_check_codes;
+    std::set<std::vector<uint8_t>> host_check_codes;
     for (size_t net_idx = 0; net_idx < load_net_num; net_idx++) {
       auto net_params = model()->net()->Get(net_idx)->parameter();
 
@@ -786,8 +842,6 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
 
       auto stage_num = net_params->size();
       info.neuron_mem_size= 0;
-      std::set<std::vector<uint8_t>> device_check_codes;
-      std::set<std::vector<uint8_t>> host_check_codes;
       uint64_t max_neuron_size = 0;
       bool multi_subnet = false;
       for(size_t stage_idx=0; stage_idx < stage_num; stage_idx++){
@@ -827,9 +881,11 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
                 if(subnet->is_dynamic()){
                     info.dynamic_ir_mem_size += subnet->ir_len()*sizeof(uint32_t);
                 } else {
-                    int group_num = subnet->cmd_group()->size();
+                    const auto cmd_groups = subnet->cmd_group() ? subnet->cmd_group() :
+                        subnet->core_commands()->Get(0)->gdma_tiu_commands();
+                    int group_num = cmd_groups->size();
                     for (int group_idx = 0; group_idx < group_num; group_idx++) {
-                      auto cmd_group = subnet->cmd_group()->Get(group_idx);
+                      auto cmd_group = cmd_groups->Get(group_idx);
                       // just for bm1684. bm1684x instructions may be of variable length
                       if(model()->chip()->str() == "BM1682"){
                         info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<8);
@@ -837,6 +893,22 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
                       } else if(model()->chip()->str() == "BM1684"){
                         info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<7);
                         info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<7);
+                      } else {
+                        info.bd_cmd_mem_size += cmd_group->binary_bdc()->size();
+                        info.gdma_cmd_mem_size += cmd_group->binary_gdma()->size();
+                      }
+                    }
+                    if (model()->chip()->str() == "SG2260") {
+                      for (unsigned int i = 0; i < subnet->core_commands()->size(); ++i) {
+                        auto core_cmd = subnet->core_commands()->Get(i);
+                        if (core_cmd->hau_commands()) {
+                          for (unsigned int j = 0; j < core_cmd->hau_commands()->size(); ++j)
+                            info.hau_cmd_mem_size += core_cmd->hau_commands()->Get(j)->size();
+                        }
+                        if (core_cmd->sdma_commands()) {
+                          for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
+                            info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
+                        }
                       }
                     }
                 }

@@ -191,7 +191,7 @@ bm_status_t tpu_kernel_launch_sync(bm_handle_t handle, const char *func_name, co
     strcpy(buf, func_name);
     memcpy(buf + MAX_FUNC_NAME_LENGTH + 4, args, size);
     bm_get_chipid(handle, &chip_id);
-    if(chip_id == 0x1686) {
+    if(chip_id == 0x1686 || chip_id == 0x1686a200) {
         ret = bm_send_api(handle, (sglib_api_id_t)BM_API_BMKERNEL_PLUS_1684X,
                       reinterpret_cast< const u8 *>(buf),
                       MAX_FUNC_NAME_LENGTH + 4 + (nullptr == args ? 0 : size));
@@ -205,6 +205,42 @@ bm_status_t tpu_kernel_launch_sync(bm_handle_t handle, const char *func_name, co
     if (ret != BM_SUCCESS)
         return ret;
     ret = bm_handle_sync(handle);
+    return ret;
+}
+
+bm_status_t tpu_kernel_launch_sync_by_core(bm_handle_t handle, const char *func_name, const void *args,
+                                 unsigned int size, int core_id) {
+    static const int MAX_FUNC_NAME_LENGTH = 64;
+    unsigned int chip_id = 0x0;
+    if (strlen(func_name) > MAX_FUNC_NAME_LENGTH) {
+        bmlib_log("tpu_kernel", BMLIB_LOG_ERROR,
+                  "Length of the function name %s is greater than %d\n", MAX_FUNC_NAME_LENGTH);
+        return BM_ERR_PARAM;
+    }
+    bm_status_t ret = BM_SUCCESS;
+    char *buf = new char[size + MAX_FUNC_NAME_LENGTH + 4];
+    strcpy(buf, func_name);
+    memcpy(buf + MAX_FUNC_NAME_LENGTH + 4, args, size);
+    bm_get_chipid(handle, &chip_id);
+    if(chip_id != 0x1686a200 && core_id >= 2)
+        return BM_ERR_PARAM;
+
+    if(chip_id == 0x1686 || chip_id == 0x1686a200) {
+        ret = bm_send_api_to_core(handle, (sglib_api_id_t)BM_API_BMKERNEL_PLUS_1684X,
+                      reinterpret_cast< const u8 *>(buf),
+                      MAX_FUNC_NAME_LENGTH + 4 + (nullptr == args ? 0 : size),
+                      core_id);
+    } else {
+        ret = bm_send_api_to_core(handle, (sglib_api_id_t)BM_API_BMKERNEL_PLUS,
+                      reinterpret_cast< const u8 *>(buf),
+                      MAX_FUNC_NAME_LENGTH + 4 + (nullptr == args ? 0 : size),
+                      core_id);
+    }
+
+    delete [] buf;
+    if (ret != BM_SUCCESS)
+        return ret;
+    ret = bm_handle_sync_from_core(handle, core_id);
     return ret;
 }
 

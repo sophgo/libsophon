@@ -7,10 +7,12 @@
 #define LED_PWM_PERIOD 100000000UL  // p_clk 100MHz
 #define BM_THERMAL_WINDOW_WIDTH 5
 #define VFS_MAX_LEVEL_SC7_PRO    20
-#define VFS_MAX_LEVEL_SC7_PLUS   3
+//#define VFS_MAX_LEVEL_SC7_PLUS    16
+#define VFS_MAX_LEVEL_SC7_PLUS    20
+//#define VFS_INIT_LEVEL_SC7_PLUS   1
 #define VFS_INIT_LEVEL_SC7_PLUS   0
 #define VFS_INIT_LEVEL_SC7_PRO   0
-#define VFS_RELBL_LEVEL_SC7_PLUS   1
+#define VFS_RELBL_LEVEL_SC7_PLUS   5
 #define VFS_RELBL_LEVEL_SC7_PRO   5
 #define VFS_PWR_MEAN_SAMPLE_SIZE  10
 
@@ -70,6 +72,12 @@ struct bm_chip_attr {
 #define NPU_STAT_WINDOW_WIDTH 50
 	int npu_status[NPU_STAT_WINDOW_WIDTH];
 	int npu_status_idx;
+	// bm1688 core 1
+	atomic_t npu_utilization1;
+	u64 npu_busy_time_sum_ms1;
+	u64 npu_start_probe_time1;
+	int npu_status1[NPU_STAT_WINDOW_WIDTH];
+	int npu_status_idx1;
 	struct mutex attr_mutex;
 	atomic_t timer_on;
 	bool fan_control;
@@ -86,6 +94,7 @@ struct bm_chip_attr {
 	int (*bm_get_board_power)(struct bm_device_info *, u32 *);
 	int (*bm_get_fan_speed)(struct bm_device_info *);
 	int (*bm_get_npu_util)(struct bm_device_info *);
+	int (*bm_get_npu_util1)(struct bm_device_info *);
 
 	int (*bm_set_led_status)(struct bm_device_info *, int);
 	int last_valid_tpu_power;
@@ -97,16 +106,13 @@ struct bm_chip_attr {
 	int board_temp;
 	int chip_temp;
 	int board_power;
-	int max_board_power;
 	int tpu_power;
-	int max_tpu_power;
 	int vddc_power;
 	int vddphy_power;
 	int vdd_tpu_volt;
 	int vdd_tpu_curr;
 	int atx12v_curr;
 	int tpu_current_clock;
-	int max_chip_power;
 };
 
 struct bm_vfs_pair {
@@ -135,12 +141,6 @@ struct bm_freq_scaling_db {
 	u32 vfs_max_level;
 	u32 thermal_freq[BM_MAX_CHIP_NUM_PER_CARD];
 	struct bm_vfs_pair freq_volt_pair[VFS_MAX_LEVEL_SC7_PRO];
-};
-
-struct bm_rdrop{
-	int idx;
-	int page;
-	int rdrop;
 };
 
 int bmdrv_card_attr_init(struct bm_device_info *bmdi);
@@ -195,6 +195,7 @@ int bmdrv_get_tpu_target_freq(struct bm_device_info *bmdi, enum bm_freq_scaling_
 int bm_read_tmp451_local_temp_by_mcu(struct bm_device_info *bmdi, int *temp);
 int bm_read_tmp451_remote_temp_by_mcu(struct bm_device_info *bmdi, int *temp);
 int bm_read_npu_util(struct bm_device_info *bmdi);
+int bm_read_npu_util1(struct bm_device_info *bmdi);
 void bmdrv_adjust_fan_speed(struct bm_device_info *bmdi, u32 temp);
 int bm_get_fan_speed(struct bm_device_info *bmdi);
 int set_fan_speed(struct bm_device_info *bmdi, u16 spd);
@@ -202,13 +203,9 @@ int reset_fan_speed(struct bm_device_info *bmdi);
 int set_led_status(struct bm_device_info *bmdi, int);
 int set_ecc(struct bm_device_info *bmdi, int ecc_able);
 void bm_npu_utilization_stat(struct bm_device_info *bmdi);
+void bm_npu_utilization_stat1(struct bm_device_info *bmdi);
 void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed);
 void bmdrv_fetch_attr_board_power(struct bm_device_info *bmdi, int count);
 int bmdev_ioctl_get_attr(struct bm_device_info *bmdi, void *arg);
-int bm_set_sc7_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
-int bm_get_sc7_rdrop(struct bm_device_info *bmdi);
-int bm_set_sc7_vddc_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
-int bm_get_sc7_vddc_rdrop(struct bm_device_info *bmdi);
-int bm_set_rdrop(struct bm_device_info *bmdi);
 
 #endif

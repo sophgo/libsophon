@@ -3,6 +3,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include "bm1684_irq.h"
+#include "bm1688_irq.h"
 #else
 #include <linux/irqflags.h>
 #include <linux/platform_device.h>
@@ -59,10 +60,13 @@ static void bmdrv_do_irq(struct bm_device_info *bmdi)
 {
 	int i = 0;
 	int bitnum = 0;
-	u32 status[4] = {0};
+	u32 status[6] = {0};
 	enum arm9_fw_mode mode;
 
-	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		mode = gp_reg_read_enh(bmdi, GP_REG_C906_FW_MODE);
+	else
+		mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
 	bmdi->cinfo.bmdrv_get_irq_status(bmdi, status);
 	if (mode == FW_MIX_MODE) {
 		if ((status[1] >> (VETH_IRQ_ID - 32)) & 0x1) {
@@ -70,7 +74,7 @@ static void bmdrv_do_irq(struct bm_device_info *bmdi)
 			bmdi->cinfo.bmdrv_module_irq_handler[VETH_IRQ_ID](bmdi);
 		}
 	} else {
-		for (i = 0; i < 4; i++) {
+		for (i = 0; i < 6; i++) {
 			bitnum = 0x0;
 			while (status[i] != 0) {
 				if (status[i] & 0x1) {
@@ -134,6 +138,8 @@ retry:
 #if SYNC_API_INT_MODE == 1
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686)
 		bm1684_pcie_msi_irq_enable(pdev, bmdi);
+	else if (bmdi->cinfo.chip_id == 0x1686a200)
+		bm1688_pcie_msi_irq_enable(pdev, bmdi);
 #endif
 	dev_info(bmdi->cinfo.device, "Requested IRQ NO:%d, MSI state:%s(%d, %d)\n",
 			pdev->irq, bmdi->cinfo.has_msi ? "enabled" : "disabled",
@@ -147,6 +153,8 @@ void bmdrv_free_irq(struct pci_dev *pdev)
 
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686)
 		bm1684_pcie_msi_irq_disable(bmdi);
+	else if (bmdi->cinfo.chip_id == 0x1686a200)
+		bm1688_pcie_msi_irq_disable(bmdi);
 	free_irq(pdev->irq, bmdi);
 	if (bmdi->cinfo.has_msi)
 		pci_disable_msi(pdev);
@@ -158,19 +166,49 @@ int bmdrv_init_irq(struct platform_device *pdev)
 	struct bm_device_info *bmdi = platform_get_drvdata(pdev);
 	struct chip_info *cinfo = &bmdi->cinfo;
 
-	cinfo->irq_id_cdma = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma, NULL, bmdrv_irq_handler_cdma,
-						   IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA", bmdi);
-	if (ret)
-		return -EINVAL;
-	dev_info(&pdev->dev, "bmdrv: cdma irq is %d\n", cinfo->irq_id_cdma);
+	if (cinfo->chip_id == 0x1686a200) {
+		cinfo->irq_id_cdma0 = irq_of_parse_and_map(pdev->dev.of_node, 0);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma0, NULL, bmdrv_irq_handler_cdma,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA0", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: cdma0 irq is %d\n", cinfo->irq_id_cdma0);
 
-	cinfo->irq_id_msg = irq_of_parse_and_map(pdev->dev.of_node, 1);
-	ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_msg, NULL, bmdrv_irq_handler_msg,
-						 IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "MSG", bmdi);
-	if (ret)
-		return -EINVAL;
-	dev_info(&pdev->dev, "bmdrv: msg irq is %d\n", cinfo->irq_id_msg);
+		cinfo->irq_id_cdma1 = irq_of_parse_and_map(pdev->dev.of_node, 1);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma1, NULL, bmdrv_irq_handler_cdma,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA1", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: cdma1 irq is %d\n", cinfo->irq_id_cdma1);
+
+		cinfo->irq_id_msg0 = irq_of_parse_and_map(pdev->dev.of_node, 2);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_msg0, NULL, bmdrv_irq_handler_msg0,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "MSG0", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: msg0 irq is %d\n", cinfo->irq_id_msg0);
+
+		cinfo->irq_id_msg1 = irq_of_parse_and_map(pdev->dev.of_node, 3);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_msg1, NULL, bmdrv_irq_handler_msg1,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "MSG1", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: msg1 irq is %d\n", cinfo->irq_id_msg1);
+	} else {
+		cinfo->irq_id_cdma = irq_of_parse_and_map(pdev->dev.of_node, 0);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma, NULL, bmdrv_irq_handler_cdma,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: cdma irq is %d\n", cinfo->irq_id_cdma);
+
+		cinfo->irq_id_msg = irq_of_parse_and_map(pdev->dev.of_node, 1);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_msg, NULL, bmdrv_irq_handler_msg0,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "MSG", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: msg irq is %d\n", cinfo->irq_id_msg);
+	}
 
 	return 0;
 }
@@ -179,7 +217,14 @@ void bmdrv_free_irq(struct platform_device *pdev)
 {
 	struct bm_device_info *bmdi = platform_get_drvdata(pdev);
 
-	devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma, bmdi);
-	devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg, bmdi);
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma0, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma1, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg0, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg1, bmdi);
+	} else {
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg, bmdi);
+	}
 }
 #endif //SOC_MODE

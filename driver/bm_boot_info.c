@@ -47,10 +47,14 @@ int bmdrv_misc_info_init(struct pci_dev *pdev, struct bm_device_info *bmdi)
 	case 0x1686:
 		misc_info->chipid_bit_mask = BM1684X_CHIPID_BIT_MASK;
 		break;
+	case 0x1686a200:
+		misc_info->chipid_bit_mask = BM1688_CHIPID_BIT_MASK;
+		break;
 	default:
 		return -1;
 	}
 	misc_info->chipid = cinfo->chip_id;
+	misc_info->tpu_core_num = cinfo->tpu_core_num;
 	misc_info->pcie_soc_mode = BM_DRV_PCIE_MODE;
 	misc_info->ddr_ecc_enable = bmdrv_get_ddr_ecc_enable(bmdi, cinfo->chip_id);
 	misc_info->domain_bdf = domain_bdf;
@@ -214,7 +218,6 @@ int bmdrv_set_default_boot_info(struct bm_device_info *bmdi)
 			break;
 		case BOARD_TYPE_SE5:
 		case BOARD_TYPE_SA6:
-		case BOARD_TYPE_SM7_V0_0:
 		default:
 			pr_info("unknow board type = %d\n", board_type);
 			return -1;
@@ -237,7 +240,6 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 	int need_update = 0;
 	int ret = 0;
 	int function_num = 0;
-	unsigned int max_board_power_cmd = 0;
 
 	board_version = bmdi->cinfo.board_version;
 	board_type = (u8)((board_version >> 8) & 0xff);
@@ -345,12 +347,10 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
 				bmdi->boot_info.fan_exist != 0 ||
 				bmdi->boot_info.max_board_power != 300 ||
-				bmdi->boot_info.tpu_max_clk != 1000 ||
 				bmdi->boot_info.tpu_min_clk != 25) {
 				bmdi->boot_info.board_power_sensor_exist = 1;
 				bmdi->boot_info.max_board_power = 300;
 				bmdi->boot_info.tpu_min_clk = 25;
-				bmdi->boot_info.tpu_max_clk = 1000;
 				bmdi->boot_info.fan_exist = 0;
 				need_update = 1;
 			}
@@ -360,24 +360,9 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 				bmdi->boot_info.fan_exist != 0 ||
 				bmdi->boot_info.max_board_power != 75 ||
 				bmdi->boot_info.tpu_min_clk != 25 ||
-				bmdi->boot_info.tpu_max_clk != 750) {
-				bmdi->boot_info.board_power_sensor_exist = 1;
-				bmdi->boot_info.max_board_power = 75;
-				bmdi->boot_info.tpu_min_clk = 25;
-				bmdi->boot_info.tpu_max_clk = 750;
-				bmdi->boot_info.fan_exist = 0;
-				need_update = 1;
-			}
-			break;
-		case BOARD_TYPE_CP24:
-			max_board_power_cmd = 150;
-			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
-				bmdi->boot_info.fan_exist != 0 ||
-				bmdi->boot_info.max_board_power != max_board_power_cmd ||
-				bmdi->boot_info.tpu_min_clk != 25 ||
 				bmdi->boot_info.tpu_max_clk != 1000) {
 				bmdi->boot_info.board_power_sensor_exist = 1;
-				bmdi->boot_info.max_board_power = max_board_power_cmd;
+				bmdi->boot_info.max_board_power = 75;
 				bmdi->boot_info.tpu_min_clk = 25;
 				bmdi->boot_info.tpu_max_clk = 1000;
 				bmdi->boot_info.fan_exist = 0;
@@ -393,10 +378,6 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 				need_update = 1;
 			}
 			break;
-		case BOARD_TYPE_SM7_V0_0:
-		case BOARD_TYPE_SM7_MP1_1:
-			bmdi->boot_info.board_power_sensor_exist = 1;
-			bmdi->boot_info.max_board_power = 45;
 		default:
 			pr_info("unknow board type = %d \n", board_type);
 			return -1;
@@ -461,10 +442,29 @@ static int bmdrv_set_1684x_default_boot_info(struct bm_device_info *bmdi)
 		bmdi->boot_info.max_board_power = 300;
 	} else if (board_type == BOARD_TYPE_SC7_PLUS) {
 		bmdi->boot_info.max_board_power = 75;
-	} else if (board_type == BOARD_TYPE_CP24) {
-		bmdi->boot_info.max_board_power = 150;
 	}
 
+	return 0;
+}
+
+int bmdrv_set_bm1688_default_boot_info(struct bm_device_info *bmdi)
+{
+	bmdi->boot_info.ddr_rank_mode = 0x3;
+	bmdi->boot_info.ddr_1_size = 0x100000000;
+	bmdi->boot_info.ddr_2_size = 0x100000000;
+	bmdi->boot_info.board_power_sensor_exist = 0;
+	bmdi->boot_info.ddr_ecc_enable = 0;
+	bmdi->boot_info.ddr_0a_size = 0x80000000;
+	bmdi->boot_info.ddr_0b_size = 0x80000000;
+	bmdi->boot_info.ddr_mode = 0x1;
+	bmdi->boot_info.ddr_vendor_id = 0;
+	bmdi->boot_info.fan_exist = 0;
+	bmdi->boot_info.tpu_min_clk = 75;
+	bmdi->boot_info.tpu_max_clk = 550;
+	bmdi->boot_info.max_board_power = 75;
+	bmdi->boot_info.temp_sensor_exist = 0;
+	bmdi->boot_info.tpu_power_sensor_exist = 0;
+	bmdi->boot_info.deadbeef = 0xdeadbeef;
 	return 0;
 }
 
@@ -477,6 +477,11 @@ int bmdrv_boot_info_init(struct bm_device_info *bmdi)
 		rc = bmdrv_set_pld_boot_info(bmdi);
 		bmdrv_dump_bootinfo(bmdi);
 		return rc;
+	}
+
+	if (cinfo->chip_id == 0x1686a200) {
+		bmdrv_set_bm1688_default_boot_info(bmdi);
+		pr_info("bm1688 bmdrv_boot_info_init\n");
 	}
 
 	if ((cinfo->chip_id != 0x1684) && (cinfo->chip_id != 0x1686))
@@ -494,7 +499,7 @@ int bmdrv_boot_info_init(struct bm_device_info *bmdi)
 					return -1;
 			} else {
 				bmdrv_set_1684x_default_boot_info(bmdi);
-				pr_info("1684x bmdrv_boot_info_init \n");
+				pr_info("1684x bmdrv_boot_info_init\n");
 			}
 			rc = bm_spi_flash_update_boot_info(bmdi, &bmdi->boot_info);
 		}

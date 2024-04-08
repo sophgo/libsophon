@@ -11,7 +11,7 @@
 #include "bm1684/bm1684_clkrst.h"
 #include <linux/version.h>
 
-void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
+void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 {
 	struct api_fifo_entry api_entry;
 	struct list_head *handle_list = NULL;
@@ -31,7 +31,12 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 #endif
 	u64 time_us;
 
-	bmdi->cinfo.bmdrv_clear_msgirq(bmdi);
+	// clear irq
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		bmdi->cinfo.bmdrv_clear_msgirq_by_core(bmdi, core_id);
+	} else {
+		bmdi->cinfo.bmdrv_clear_msgirq(bmdi);
+	}
 	pending_msgirq_cnt = bmdi->cinfo.bmdrv_pending_msgirq_cnt(bmdi);
 	PR_TRACE("The pending msg irq is %d\n", pending_msgirq_cnt);
 
@@ -43,13 +48,15 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 #endif
 
 #ifdef PCIE_MODE_ENABLE_CPU
-	if (bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU)
+	if (bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU || 
+	    bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU_A2_0 ||
+	    bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU_A2_1)
 		channel = BM_MSGFIFO_CHANNEL_XPU;
 	else
 		channel = BM_MSGFIFO_CHANNEL_CPU;
 
 	if (BM_MSGFIFO_CHANNEL_CPU == channel) {
-		if (bmdi->api_info[channel].sw_rp == gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU))
+		if (bmdi->api_info[core_id][channel].sw_rp == gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU))
 			return;
 	}
 
@@ -57,28 +64,28 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 	channel = BM_MSGFIFO_CHANNEL_XPU;
 #endif
 
-	api_info = &bmdi->api_info[channel];
-	mutex_lock(&api_info->api_fifo_mutex);
+	api_info = &bmdi->api_info[core_id][channel];
+	spin_lock(&api_info->api_fifo_spinlock);
 
 	while (pending_msgirq_cnt) {
 		if (BM_MSGFIFO_CHANNEL_XPU == channel) {
 			count = kfifo_out(&api_info->api_fifo, &api_entry, API_ENTRY_SIZE);
 			if (count < API_ENTRY_SIZE) {
-				pr_err("The dequeue entry size %d is not correct!\n", count);
+				pr_err("core_id %d: The dequeue entry size %d is not correct!\n", core_id, count);
 				break;
 			}
 		}
 #ifdef PCIE_MODE_ENABLE_CPU
 		else {
-			next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32));
-			tmp = shmem_reg_read_enh(bmdi, next_rp, channel);
+			next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32));
+			tmp = shmem_reg_read_enh(bmdi, next_rp, channel, 0);
 			next_rp = bmdev_msgfifo_add_pointer(bmdi, next_rp, 1);
-			global_seq = ((u64)tmp << 32) + shmem_reg_read_enh(bmdi, next_rp, channel);
+			global_seq = ((u64)tmp << 32) + shmem_reg_read_enh(bmdi, next_rp, channel, 0);
 
 			next_rp = bmdev_msgfifo_add_pointer(bmdi, next_rp, 1);
-			tmp = shmem_reg_read_enh(bmdi, next_rp, channel);
+			tmp = shmem_reg_read_enh(bmdi, next_rp, channel, 0);
 			next_rp = bmdev_msgfifo_add_pointer(bmdi, next_rp, 1);
-			api_data = ((u64)tmp << 32) + shmem_reg_read_enh(bmdi, next_rp, channel);
+			api_data = ((u64)tmp << 32) + shmem_reg_read_enh(bmdi, next_rp, channel, 0);
 
 			find_device_sync_flag = 1;
 			list_for_each(list, &api_info->api_list) {
@@ -123,10 +130,12 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 			// device sync marker; NOT a real api entry
 			api_info->device_sync_cpl = api_entry.dev_api_seq;
 			complete(&api_info->dev_sync_done);
+			PR_TRACE("[%s: %d] error: core_id=%d\n", __func__, __LINE__, core_id);
+
 			continue;
 		} else {
 			// msg api done
-			mutex_lock(&bmdi->gmem_info.gmem_mutex);
+			spin_lock(&bmdi->gmem_info.gmem_spinlock);
 			list_for_each(handle_list, &bmdi->handle_list) {
 				if (container_of(handle_list, struct bm_handle_info, list) ==  api_entry.h_info)
 					break;
@@ -136,24 +145,27 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 				api_entry.h_info = NULL;
 			}
 			if (api_entry.thd_info && api_entry.h_info) {
-				api_entry.thd_info->cpl_api_seq = api_entry.thd_api_seq;
-				api_entry.h_info->h_cpl_api_seq = api_entry.thd_info->cpl_api_seq;
+				api_entry.thd_info->cpl_api_seq[core_id] = api_entry.thd_api_seq[core_id];
+				api_entry.h_info->h_cpl_api_seq[core_id] = api_entry.thd_info->cpl_api_seq[core_id];
 			}
-			bmdrv_post_api_process(bmdi, api_entry, channel);
+			bmdrv_post_api_process(bmdi, api_entry, channel, core_id);
 			if (api_entry.h_info)
 				wake_up_all(&api_entry.h_info->h_msg_done);
 			if (api_entry.thd_info)	{
 				complete(&api_entry.thd_info->msg_done);
-				PR_TRACE("pid %d complete api %d\n", api_entry.thd_info->user_pid,
-						 api_entry.thd_api_seq);
+				PR_TRACE("[%s: %d] pid=%d, core_id=%d complete api %lld\n",
+					__func__, __LINE__,
+					api_entry.thd_info->user_pid, core_id, api_entry.thd_api_seq[core_id]);
+			} else {
+				PR_TRACE("[%s: %d] waring: core_id=%d\n", __func__, __LINE__, core_id);
 			}
 
-			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+			spin_unlock(&bmdi->gmem_info.gmem_spinlock);
 
 			if (BM_MSGFIFO_CHANNEL_XPU == channel) {
 				pending_msgirq_cnt--;
 			} else {
-				if (bmdi->api_info[channel].sw_rp == gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU))
+				if (bmdi->api_info[core_id][channel].sw_rp == gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU))
 					pending_msgirq_cnt--;
 			}
 		}
@@ -180,17 +192,41 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi)
 			}
 		} while (count != 0);
 	}
-	mutex_unlock(&api_info->api_fifo_mutex);
+	spin_unlock(&api_info->api_fifo_spinlock);
 }
 
 #ifdef SOC_MODE
-irqreturn_t bmdrv_irq_handler_msg(int irq, void *data)
+irqreturn_t bmdrv_irq_handler_msg0(int irq, void *data)
 {
 	struct bm_device_info *bmdi = data;
 
-	PR_TRACE("bmdrv: msg irq received.\n");
-	bmdrv_msg_irq_handler(bmdi);
+	PR_TRACE("[%s: %d] msg irq=%d received.\n", __func__, __LINE__, irq);
+	bmdrv_msg_irq_handler(bmdi, 0);
 	return IRQ_HANDLED;
+}
+
+irqreturn_t bmdrv_irq_handler_msg1(int irq, void *data)
+{
+	struct bm_device_info *bmdi = data;
+
+	PR_TRACE("[%s: %d] msg irq=%d received.\n", __func__, __LINE__, irq);
+	bmdrv_msg_irq_handler(bmdi, 1);
+	return IRQ_HANDLED;
+}
+#else
+void bmdrv_msg_irq_handler_xpu_0(struct bm_device_info *bmdi)
+{
+	bmdrv_msg_irq_handler(bmdi, 0);
+}
+
+void bmdrv_msg_irq_handler_xpu_1(struct bm_device_info *bmdi)
+{
+	bmdrv_msg_irq_handler(bmdi, 1);
+}
+
+void bmdrv_msg_irq_handler_cpu(struct bm_device_info *bmdi)
+{
+	bmdrv_msg_irq_handler(bmdi, 0);
 }
 #endif
 
@@ -213,9 +249,13 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 	u32 word_size;
 	int ret;
 	u32 header_size;
+	int core_id = 0;
+
+	if (channel == BM_MSGFIFO_CHANNEL_XPU)
+		core_id = bm_api_p->core_id;
 
 	if (BM_MSGFIFO_CHANNEL_XPU == channel)
-		cur_wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU);
+		cur_wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
 	else if (BM_MSGFIFO_CHANNEL_CPU == channel)
 		cur_wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
 	else {
@@ -223,15 +263,15 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 		return 0;
 	}
 
-	shmem_reg_write_enh(bmdi, cur_wp, api_header_p->api_id, channel);
+	shmem_reg_write_enh(bmdi, cur_wp, api_header_p->api_id, channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, api_size) / sizeof(u32));
-	shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_size, channel);
+	shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_size, channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32));
-	shmem_reg_write_enh(bmdi, next_wp, (u32)(api_header_p->api_handle), channel);
+	shmem_reg_write_enh(bmdi, next_wp, (u32)(api_header_p->api_handle), channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, next_wp, 1);
-	shmem_reg_write_enh(bmdi, next_wp, (u32)(api_header_p->api_handle >> 32), channel);
+	shmem_reg_write_enh(bmdi, next_wp, (u32)(api_header_p->api_handle >> 32), channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, api_seq) / sizeof(u32));
-	shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_seq, channel);
+	shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_seq, channel, core_id);
 #if 0
 	// no need to write, but should left the space
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, duration)/sizeof(u32));
@@ -242,13 +282,13 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 
 	if (api_opt_header_p != NULL) {
 		next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, sizeof(bm_kapi_header_t) / sizeof(u32));
-		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->global_api_seq >> 32), channel);
+		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->global_api_seq >> 32), channel, core_id);
 		next_wp = bmdev_msgfifo_add_pointer(bmdi, next_wp, 1);
-		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->global_api_seq), channel);
+		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->global_api_seq), channel, core_id);
 		next_wp = bmdev_msgfifo_add_pointer(bmdi, next_wp, 1);
-		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->api_data >> 32), channel);
+		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->api_data >> 32), channel, core_id);
 		next_wp = bmdev_msgfifo_add_pointer(bmdi, next_wp, 1);
-		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->api_data), channel);
+		shmem_reg_write_enh(bmdi, next_wp, (u32)(api_opt_header_p->api_data), channel, core_id);
 		header_size = sizeof(bm_kapi_header_t) + sizeof(bm_kapi_opt_header_t);
 	} else {
 		header_size = sizeof(bm_kapi_header_t);
@@ -267,19 +307,18 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 			}
 		else
 			msg_buf = *((u32 *)(bm_api_p->api_addr) + idx);
-
-		shmem_reg_write_enh(bmdi, next_wp, msg_buf, channel);
+		shmem_reg_write_enh(bmdi, next_wp, msg_buf, channel, core_id);
 	}
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, word_size);
 	if (BM_MSGFIFO_CHANNEL_XPU == channel)
-		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, next_wp);
+		gp_reg_write_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, next_wp, core_id);
 	else
 		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU, next_wp);
 
 	return 0;
 }
 
-int bmdev_invalidate_pending_apis(struct bm_device_info *bmdi, struct bm_handle_info *h_info)
+int bmdev_invalidate_pending_apis(struct bm_device_info *bmdi, struct bm_handle_info *h_info, int core_id)
 {
 	u32 channel, cur_rp, next_rp, wp;
 	u32 word_size, api_size;
@@ -287,11 +326,11 @@ int bmdev_invalidate_pending_apis(struct bm_device_info *bmdi, struct bm_handle_
 
 	channel = BM_MSGFIFO_CHANNEL_XPU;
 
-	mutex_lock(&bmdi->api_info[channel].api_mutex);
+	mutex_lock(&bmdi->api_info[core_id][channel].api_mutex);
 
 	if (BM_MSGFIFO_CHANNEL_XPU == channel) {
-		cur_rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU);
-		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU);
+		cur_rp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU, core_id);
+		wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
 	} else if (BM_MSGFIFO_CHANNEL_CPU == channel) {
 		cur_rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU);
 		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
@@ -304,23 +343,23 @@ int bmdev_invalidate_pending_apis(struct bm_device_info *bmdi, struct bm_handle_
 	while (cur_rp != wp) {
 		PR_TRACE("start invalidating\n");
 		next_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, offsetof(bm_kapi_header_t, api_size) / sizeof(u32));
-		api_size = shmem_reg_read_enh(bmdi, next_rp, channel);
+		api_size = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
 		word_size = api_size + sizeof(bm_kapi_header_t) / sizeof(u32);
 		next_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32));
-		api_handle = shmem_reg_read_enh(bmdi, next_rp, channel);
+		api_handle = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
 		next_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32) + 1);
-		api_handle |= (u64)shmem_reg_read_enh(bmdi, next_rp, channel) << 32;
+		api_handle |= (u64)shmem_reg_read_enh(bmdi, next_rp, channel, core_id) << 32;
 		if (api_handle == (u64)h_info->file) {
 			next_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32));
-			shmem_reg_write_enh(bmdi, next_rp, 0, channel);
+			shmem_reg_write_enh(bmdi, next_rp, 0, channel, core_id);
 			next_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32) + 1);
-			shmem_reg_write_enh(bmdi, next_rp, 0, channel);
+			shmem_reg_write_enh(bmdi, next_rp, 0, channel, core_id);
 			PR_TRACE("api handle %llx in msgfifo is invalidated\n", api_handle);
 		}
 		cur_rp = bmdev_msgfifo_add_pointer(bmdi, cur_rp, word_size);
 	}
 	PR_TRACE("invalidate complete\n");
-	mutex_unlock(&bmdi->api_info[channel].api_mutex);
+	mutex_unlock(&bmdi->api_info[core_id][channel].api_mutex);
 	return 0;
 }
 
@@ -342,8 +381,8 @@ int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api
 	else
 		timeout_ms = timeout;
 
-	api_info = &bmdi->api_info[channel];
-	mutex_lock(&api_info->api_fifo_mutex);
+	api_info = &bmdi->api_info[0][channel];
+	spin_lock_irqsave(&api_info->api_fifo_spinlock, flags);
 	list_for_each(list, &api_info->api_list) {
 		api_entry = &((struct api_list_entry *)list)->api_entry;
 		if (api_entry->global_api_seq == api_handle) {
@@ -353,7 +392,7 @@ int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api
 			break;
 		}
 	}
-	mutex_unlock(&api_info->api_fifo_mutex);
+	spin_unlock_irqrestore(&api_info->api_fifo_spinlock, flags);
 
 	if (1 == match) {
 		if (0 == (api_entry->api_done_flag & API_FLAG_DONE))
@@ -372,20 +411,20 @@ int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api
 	return -1;
 }
 
-bool bmdev_msgfifo_empty(struct bm_device_info *bmdi, u32 channel)
+bool bmdev_msgfifo_empty(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	u32 wp, rp;
 
 	if (channel == BM_MSGFIFO_CHANNEL_XPU) {
-		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU);
-		rp = bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU].sw_rp;
+		wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
+		rp = bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_XPU].sw_rp;
 
 		return (wp == rp);
 	}
 #ifdef PCIE_MODE_ENABLE_CPU
 	else {
 		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
-		rp = bmdi->api_info[BM_MSGFIFO_CHANNEL_CPU].sw_rp;
+		rp = bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_CPU].sw_rp;
 
 		return (wp == rp);
 	}
@@ -394,16 +433,16 @@ bool bmdev_msgfifo_empty(struct bm_device_info *bmdi, u32 channel)
 #endif
 }
 
-static int bmdev_msgfifo_get_free_slots(struct bm_device_info *bmdi, u32 channel)
+static int bmdev_msgfifo_get_free_slots(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	u32 wp, rp;
 
 	if (channel == BM_MSGFIFO_CHANNEL_XPU) {
-		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU);
+		wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
 #if SYNC_API_INT_MODE == 1
-		rp = bmdi->api_info[channel].sw_rp;
+		rp = bmdi->api_info[core_id][channel].sw_rp;
 #else
-		rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU);
+		rp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU, core_id);
 #endif
 		if (wp >= rp)
 			return (bmdi->cinfo.share_mem_size / BM_MSGFIFO_CHANNEL_NUM - (wp - rp) - 1);
@@ -414,7 +453,7 @@ static int bmdev_msgfifo_get_free_slots(struct bm_device_info *bmdi, u32 channel
 	else {
 		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
 #if SYNC_API_INT_MODE == 1
-		rp = bmdi->api_info[channel].sw_rp;
+		rp = bmdi->api_info[core_id][channel].sw_rp;
 #else
 		rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU);
 #endif
@@ -563,7 +602,7 @@ static const char *api_desc(int api_id) {
 
 DEFINE_SPINLOCK(msg_lock);
 
-void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel)
+void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	u32 wp, rp, new_rp;
 	u32 header_size;
@@ -574,26 +613,26 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel)
 	if (GP_REG_MESSAGE_WP_CHANNEL_XPU == channel) {
 		header_size = sizeof(bm_kapi_header_t) / sizeof(u32);
 
-		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU);
+		wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
 #if SYNC_API_INT_MODE == 1
-		rp = bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU].sw_rp;
+		rp = bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_XPU].sw_rp;
 #else
-		rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU);
+		rp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU, core_id);
 #endif
 		new_rp = rp;
 
 		if (wp == rp) {
 			PR_TRACE("the fifo is empty.\n");
 		} else {
-				data = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU);
-				pr_err("bm-sophon%d tpu api [%d:%s] timeout\n", bmdi->dev_index, data, api_desc(data));
+			data = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, core_id);
+			pr_err("bm-sophon%d tpu api [%d:%s] timeout\n", bmdi->dev_index, data, api_desc(data));
 		}
 	}
 #ifdef PCIE_MODE_ENABLE_CPU
 	else {
 		wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
 #if SYNC_API_INT_MODE == 1
-		rp = bmdi->api_info[BM_MSGFIFO_CHANNEL_CPU].sw_rp;
+		rp = bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_CPU].sw_rp;
 #else
 		rp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU);
 #endif
@@ -603,9 +642,8 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel)
 			PR_TRACE("the fifo is empty.\n");
 		else {
 			while (new_rp != wp) {
-
 				pr_err("bm-sophon%d message in cpu fifo : %d\n", bmdi->dev_index,
-                shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_CPU));
+				shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_CPU, 0));
 				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
 			}
 		}
@@ -614,19 +652,19 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel)
 	spin_unlock(&msg_lock);
 }
 
-int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32 channel)
+int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32 channel, int core_id)
 {
 	int ret_wait = 1;
 
-	while (!(bmdev_msgfifo_get_free_slots(bmdi, channel) >= slot_number) && (ret_wait != 0)) {
+	while (!(bmdev_msgfifo_get_free_slots(bmdi, channel, core_id) >= slot_number) && (ret_wait != 0)) {
 		if (channel == BM_MSGFIFO_CHANNEL_XPU)
-			ret_wait = wait_for_completion_timeout(&bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU].msg_done, msecs_to_jiffies(ms));
+			ret_wait = wait_for_completion_timeout(&bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_XPU].msg_done, msecs_to_jiffies(ms));
 		else if (channel == BM_MSGFIFO_CHANNEL_CPU)
-			ret_wait = wait_for_completion_timeout(&bmdi->api_info[BM_MSGFIFO_CHANNEL_CPU].msg_done, msecs_to_jiffies(ms));
+			ret_wait = wait_for_completion_timeout(&bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_CPU].msg_done, msecs_to_jiffies(ms));
 	}
 	if (ret_wait)
 		return 0;
-	bmdev_dump_msgfifo(bmdi, channel);
+	bmdev_dump_msgfifo(bmdi, channel, core_id);
 	PR_TRACE("bmdev : wait msg fifo empty slot %d timeout!\n", slot_number);
 	return -EBUSY;
 }
@@ -634,17 +672,33 @@ int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32
 #ifndef SOC_MODE
 void bm_msg_request_irq(struct bm_device_info *bmdi)
 {
-	bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU, bmdrv_msg_irq_handler);
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_0, bmdrv_msg_irq_handler_xpu_0);
+		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_1, bmdrv_msg_irq_handler_xpu_1);
 #ifdef PCIE_MODE_ENABLE_CPU
-	bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU, bmdrv_msg_irq_handler);
+		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU_A2, bmdrv_msg_irq_handler_cpu);
 #endif
+	} else {
+		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU, bmdrv_msg_irq_handler_xpu_0);
+#ifdef PCIE_MODE_ENABLE_CPU
+		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU, bmdrv_msg_irq_handler_xpu_0);
+#endif
+	}
 }
 
 void bm_msg_free_irq(struct bm_device_info *bmdi)
 {
-	bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU);
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_0);
+		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_1);
 #ifdef PCIE_MODE_ENABLE_CPU
-	bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU);
+		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU_A2);
 #endif
+	} else {
+		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU);
+#ifdef PCIE_MODE_ENABLE_CPU
+		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_CPU);
+#endif
+	}
 }
 #endif

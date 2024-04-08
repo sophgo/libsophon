@@ -23,17 +23,102 @@
 #else
     //#include "..\..\common\bm1684\include_win\common_win.h"
     #include "window\bmlib_ioctl.h"
-#endif
-
-#ifdef USING_CMODEL
-//#include "cmodel_common.h"
-//#include "cmodel_runtime.h"
-#ifdef BM_TV_GEN
-#include "bm_tv_gen_util.h"
-#endif
+    #include <io.h>
+    EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
 
 #define BMLIB_MEMORY_LOG_TAG "bmlib_memory"
+#define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
+#define KERNEL_MODULE_PATH "/lib/firmware/libbm1688_kernel_module.so"
+typedef struct {
+  char *func_name;
+  tpu_kernel_function_t f_id_core0;
+  tpu_kernel_function_t f_id_core1;
+} bm_basic_func_t;
+bm_basic_func_t g_basic_func[] = {
+  {.func_name = (char*)"sg_api_memset", 0, 0},
+  {.func_name = (char*)"sg_api_memcpy", 0, 0},
+  {.func_name = (char*)"sg_api_memcpy_wstride", 0, 0},
+  {.func_name = (char*)"sg_api_memcpy_byte", 0, 0},
+};
+int g_init_basic_func_flag = 0;
+
+bm_status_t bm_init_basic_func_id(bm_handle_t handle)
+{
+  tpu_kernel_module_t bm_module0 = NULL;
+  tpu_kernel_module_t bm_module1 = NULL;
+
+  unsigned int core_num;
+  bm_get_tpu_scalar_num(handle, &core_num);
+
+  if (g_init_basic_func_flag == 0x5a) {
+    return BM_SUCCESS;
+  }
+  g_init_basic_func_flag = 0x5a;
+
+  #ifdef __linux__
+  char key[64] = {0};
+  char lib_path[512] = {0};
+  strcpy(lib_path, KERNEL_MODULE_PATH);
+  strcpy(key, KERNEL_MODULE_NAME);
+  #else
+  static char lib_path[512] = {0};
+  const char key[64] = KERNEL_MODULE_NAME;
+  if (0 != find_tpufirmware_path(lib_path, key)) {
+    printf("%s does not exist\n", KERNEL_MODULE_NAME);
+    return BM_ERR_FAILURE;
+  }
+  #endif
+
+  int key_size = strlen(key);
+
+
+  if (bm_is_dynamic_loading(handle)) {
+    bm_module0 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 0);
+    if(bm_module0 == NULL) {
+        printf("bm_module0 is null!\n");
+        return BM_ERR_FAILURE;
+    }
+    if (core_num != 1) {
+      bm_module1 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 1);
+      if(bm_module1 == NULL) {
+          printf("bm_module1 is null!\n");
+          return BM_ERR_FAILURE;
+      }
+    }
+    for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
+      g_basic_func[i].f_id_core0 = tpu_kernel_get_function_from_core(handle, bm_module0, g_basic_func[i].func_name, 0);
+      if (core_num != 1)
+        g_basic_func[i].f_id_core1 = tpu_kernel_get_function_from_core(handle, bm_module1, g_basic_func[i].func_name, 1);
+    }
+    free(bm_module0);
+    bm_module0 = NULL;
+    if (core_num != 1)
+      free(bm_module1);
+    bm_module1 = NULL;
+  }
+
+  return BM_SUCCESS;
+}
+
+tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_name, int core_id)
+{
+  if (g_init_basic_func_flag != 0x5a) {
+    printf("error g_basic_func not init\n");
+    return -1;
+  }
+  for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
+    if (strcmp(g_basic_func[i].func_name, func_name) == 0){
+      if (core_id) {
+        return g_basic_func[i].f_id_core1;
+      } else {
+        return g_basic_func[i].f_id_core0;
+      }
+    }
+  }
+  printf("not found func_name: %s\n", func_name);
+  return -1;
+}
 
 #ifdef _WIN32
     u64 bm_getpagesize(void){
@@ -224,10 +309,6 @@ bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx) {
     } else if (heap_data[i].type == ION_HEAP_TYPE_CARVEOUT &&
                strcmp(heap_data[i].name, "vpp") == 0) {
       ctx->carveout_heap_id[1] = heap_data[i].heap_id;
-      ctx->heap_cnt++;
-    } else if (heap_data[i].type == ION_HEAP_TYPE_CARVEOUT &&
-               strcmp(heap_data[i].name, "vpu") == 0) {
-      ctx->carveout_heap_id[2] = heap_data[i].heap_id;
       ctx->heap_cnt++;
     }
     if (ctx->heap_cnt == ION_MAX_HEAP_CNT) break;
@@ -456,6 +537,15 @@ static bm_status_t __alloc_sg_device_mem_raw(bm_handle_t ctx,
     return BM_ERR_FAILURE;
   }
 #ifdef USING_CMODEL
+  UNUSED(heap_id_mask);
+  u64 addr;
+  addr = ctx->bm_dev->bm_device_alloc_mem(pmem->size);
+  pmem->u.device.device_addr = addr;
+  if (addr == MEM_POOL_ADDR_INVALID) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "No memory in device mem\n");
+    return BM_ERR_NOMEM;
+  }
   return BM_SUCCESS;
 #else
   int ret = 0;
@@ -770,7 +860,7 @@ void sg_free_device(bm_handle_t ctx, sg_device_mem_t mem) {
 #endif
 
 #ifdef USING_CMODEL
-  return;
+  ctx->bm_dev->bm_device_free_mem(sg_mem_get_device_addr(mem));
 #else
   sg_free_gmem(ctx, &mem);
 #endif
@@ -1468,6 +1558,7 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
   bm_mem_s2d.device_addr = bm_mem_get_device_addr(dst);
   bm_mem_s2d.size = bm_mem_get_size(dst);
   bm_mem_s2d.dir = HOST2CHIP;
+  bm_mem_s2d.type = TRANS_1D;
   bm_mem_s2d.src_device_addr = 0;
   bm_mem_s2d.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1528,7 +1619,7 @@ bm_status_t bm_memcpy_p2p(bm_handle_t handle_src, bm_device_mem_t src, bm_handle
 
 bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
 #ifdef USING_CMODEL
-  return BM_SUCCESS;
+  return handle->bm_dev->sg_device_memcpy_s2d(dst, src);
 #else
   u64 size;
   int trans_size = 0x10000000;//256MB
@@ -1569,6 +1660,7 @@ bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
     }
 
     bm_mem_s2d.dir = HOST2CHIP;
+    bm_mem_s2d.type = TRANS_1D;
     bm_mem_s2d.src_device_addr = 0;
     bm_mem_s2d.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1616,6 +1708,7 @@ bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
     bm_mem_s2d.device_addr     = bm_mem_get_device_addr(dst);
     bm_mem_s2d.size            = bm_mem_get_size(dst);
     bm_mem_s2d.dir             = HOST2CHIP;
+    bm_mem_s2d.type            = TRANS_1D;
     bm_mem_s2d.src_device_addr = 0;
     bm_mem_s2d.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1679,6 +1772,7 @@ bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
         tran_over = 1;
       }
       bm_mem_s2d.dir             = HOST2CHIP;
+      bm_mem_s2d.type            = TRANS_1D;
       bm_mem_s2d.src_device_addr = 0;
       bm_mem_s2d.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1776,6 +1870,7 @@ bm_status_t bm_memcpy_d2s_normal(bm_handle_t handle, void *dst, bm_device_mem_t 
   bm_mem_d2s.device_addr = bm_mem_get_device_addr(src);
   bm_mem_d2s.size = bm_mem_get_size(src);
   bm_mem_d2s.dir = CHIP2HOST;
+  bm_mem_d2s.type = TRANS_1D;
   bm_mem_d2s.src_device_addr = 0;
   bm_mem_d2s.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1825,6 +1920,7 @@ bm_status_t sg_memcpy_d2s_normal(bm_handle_t handle, void *dst, sg_device_mem_t 
     }
 
     bm_mem_d2s.dir = CHIP2HOST;
+    bm_mem_d2s.type = TRANS_1D;
     bm_mem_d2s.src_device_addr = 0;
     bm_mem_d2s.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -1957,7 +2053,7 @@ bm_status_t bm_memcpy_d2s(bm_handle_t handle, void *dst, bm_device_mem_t src) {
 
 bm_status_t sg_memcpy_d2s(bm_handle_t handle, void *dst, sg_device_mem_t src) {
 #ifdef USING_CMODEL
-  return BM_SUCCESS;
+  return handle->bm_dev->sg_device_memcpy_d2s(dst, src);
 #else
   bm_status_t ret;
   u64          dev_addr;
@@ -2101,6 +2197,7 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
         bm_mem_d2s.device_addr     = bm_mem_get_device_addr(src);
         bm_mem_d2s.size            = bm_mem_get_size(src);
         bm_mem_d2s.dir             = CHIP2HOST;
+        bm_mem_d2s.type            = TRANS_1D;
         bm_mem_d2s.src_device_addr = 0;
         bm_mem_d2s.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -2125,6 +2222,10 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
     }
     #endif
 }
+
+#ifdef USING_CMODEL
+extern int fun_id;
+#endif
 
 bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
                                void *          dst,
@@ -2186,6 +2287,7 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
           }
 
           bm_mem_d2s.dir             = CHIP2HOST;
+          bm_mem_d2s.type            = TRANS_1D;
           bm_mem_d2s.src_device_addr = 0;
           bm_mem_d2s.cdma_iommu_mode = handle->cdma_iommu_mode;
 
@@ -2211,15 +2313,56 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
     #endif
 }
 
-bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
-                                 bm_device_mem_t mem) {
+#ifdef _WIN32
+static int find_tpufirmware_path(char fw_path[512], const char* path){
+	char* ptr;
+	int dirname_len;
+	int ret = 0;
+
+	strcpy(fw_path, ".\\libbm1688_kernel_module.so");
+
+	// test ./libbm1688_kernel_module.so
+	ret = _access(fw_path,0);
+	if (ret == 0) {
+		return ret;
+	}
+
+	// test ./tpu_module/libbm1688_kernel_module.so
+	LPTSTR strDLLPath1 = (char*)malloc(512);
+	GetModuleFileName((HINSTANCE)&__ImageBase, strDLLPath1, _MAX_PATH);
+
+	ptr = strrchr(strDLLPath1, '\\');
+
+	if (!ptr) {
+		printf("Invalid absolute path name of libbm1688_kernel_module.so\n");
+		return -1;
+	}
+
+	dirname_len = strlen(strDLLPath1) - strlen(ptr) + 1;
+	if (dirname_len < 0) {
+		printf("Invalid length of folder name\n");
+		return -1;
+	}
+
+	memset(fw_path, 0, 512);
+	strncpy(fw_path, strDLLPath1, dirname_len);
+	strcat(fw_path, "tpu_module\\");
+	strcat(fw_path, path);
+
+	free(strDLLPath1);
+	ret = _access(fw_path, 0);
+	if (ret == 0) {
+		return ret;
+	}
+	return -1;
+}
+#endif
+
+bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mode,
+                                 bm_device_mem_t mem, int core_id) {
   bm_status_t ret = BM_SUCCESS;
   int tmp = 0;
-  tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
-  int key_size = strlen(key);
 
   if(!value) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "input NULL pointer = %d\n");
@@ -2250,31 +2393,28 @@ bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
                          bm_mem_get_size(mem),
                          mode,
                          tmp};
-#ifdef USING_CMODEL
-  ret = bm_send_api(handle, BM_API_ID_MEM_SET,
-                    (u8 *)(&api), sizeof(api));
-  ret = bm_sync_api(handle);
-#else
-  if (handle->misc_info.chipid == 0x1684) {
-    ret = bm_send_api(handle, BM_API_ID_MEM_SET,
-                    (u8 *)(&api), sizeof(api));
-    ret = bm_sync_api(handle);
-  } else if (handle->misc_info.chipid == 0x1686) {
-    bm_module = tpu_kernel_load_module_file_key(handle, lib_path, key, key_size);
-    if(bm_module == NULL) {
-        printf("bm_module is null!\n");
-        return BM_ERR_FAILURE;
-    }
-
-    f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_memset");
-    ret = tpu_kernel_launch(handle, f_id, (void *)(&api), sizeof(bm_api_memset_t));
-    if (bm_module != NULL) {
-      free(bm_module);
-      bm_module = NULL;
-    }
+  if (bm_is_dynamic_loading(handle)) {
+	bm_init_basic_func_id(handle);
+    f_id = bm_get_basic_func_id(handle, "sg_api_memset", core_id);
+    ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memset_t), core_id);
+  } else {
+    ret = bm_send_api_to_core(handle, BM_API_ID_MEM_SET,
+                    (u8 *)(&api), sizeof(api), core_id);
+    ret = bm_sync_api_from_core(handle, core_id);
   }
-#endif
   return ret;
+}
+
+bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
+                                 bm_device_mem_t mem) {
+  return bm_memset_device_ext_to_core(handle, value, 4, mem, 0);
+}
+
+bm_status_t bm_memset_device_to_core(bm_handle_t     handle,
+                             const int       value,
+                             bm_device_mem_t mem,
+                             int core_id) {
+    return bm_memset_device_ext_to_core(handle, (void *)&value, 4, mem, core_id);
 }
 
 bm_status_t bm_memset_device(bm_handle_t     handle,
@@ -2283,18 +2423,14 @@ bm_status_t bm_memset_device(bm_handle_t     handle,
     return bm_memset_device_ext(handle, (void *)&value, 4, mem);
 }
 
-bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
+bm_status_t bm_memcpy_d2d_with_core(bm_handle_t handle, bm_device_mem_t dst,
                           int dst_offset, bm_device_mem_t src, int src_offset,
-                          int len) {
+                          int len, int core_id) {
   int max_n = 1;
   int src_nstride = bm_mem_get_device_size(src) / max_n / FLOAT_SIZE;
   int dst_nstride = bm_mem_get_device_size(dst) / max_n / FLOAT_SIZE;
   bm_status_t ret = BM_SUCCESS;
-  tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
-  int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
     return BM_ERR_PARAM;
@@ -2310,44 +2446,36 @@ bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
                          src_nstride,
                          dst_nstride,
                          len};
-#ifdef USING_CMODEL
-  ret = bm_send_api(handle, BM_API_ID_MEM_CPY, (u8 *)(&api), sizeof(api));
-  ret = bm_sync_api(handle);
-#else
-  if (handle->misc_info.chipid == 0x1684) {
-    ret = bm_send_api(handle, BM_API_ID_MEM_CPY, (u8 *)(&api), sizeof(api));
-    ret = bm_sync_api(handle);
-  } else if (handle->misc_info.chipid == 0x1686) {
-    bm_module = tpu_kernel_load_module_file_key(handle, lib_path, key, key_size);
-    if(bm_module == NULL) {
-        printf("bm_module is null!\n");
-        return BM_ERR_FAILURE;
-    }
-
-    f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_memcpy");
-    ret = tpu_kernel_launch(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_t));
-    if (bm_module != NULL) {
-      free(bm_module);
-      bm_module = NULL;
+  if (bm_is_dynamic_loading(handle)) {
+	bm_init_basic_func_id(handle);
+    f_id = bm_get_basic_func_id(handle, "sg_api_memcpy", core_id);
+    ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_t), core_id);
+  } else {
+    ret = bm_send_api_to_core(handle, BM_API_ID_MEM_CPY, (u8 *)(&api), sizeof(api), core_id);
+    if (BM_SUCCESS == ret) {
+      ret = bm_sync_api_from_core(handle, core_id);
     }
   }
-#endif
+
   return ret;
 }
 
-bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
+bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
+                          int dst_offset, bm_device_mem_t src, int src_offset,
+                          int len) {
+  return bm_memcpy_d2d_with_core(handle, dst, dst_offset, src, src_offset, len, 0);
+}
+
+bm_status_t bm_memcpy_d2d_stride_with_core(bm_handle_t     handle,
                                  bm_device_mem_t dst,
                                  int             dst_stride,
                                  bm_device_mem_t src,
                                  int             src_stride,
                                  int             count,
-                                 int             format_size) {
+                                 int             format_size,
+                                 int             core_id) {
   bm_status_t ret = BM_SUCCESS;
-  tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
-  int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
     return BM_ERR_PARAM;
@@ -2403,44 +2531,36 @@ bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
                                  dst_stride,
                                  count,
                                  format_size};
-#ifdef USING_CMODEL
-  ret = bm_send_api(handle, BM_API_ID_MEMCPY_WSTRIDE, (u8 *)(&api), sizeof(api));
-  if (BM_SUCCESS == ret) {
-      ret = bm_sync_api(handle);
-  }
-#else
-  if (handle->misc_info.chipid == 0x1684) {
-    ret = bm_send_api(handle, BM_API_ID_MEMCPY_WSTRIDE, (u8 *)(&api), sizeof(api));
+  if (bm_is_dynamic_loading(handle)) {
+	bm_init_basic_func_id(handle);
+    f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_wstride", core_id);
+    ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_wstride_t), core_id);
+  } else {
+    ret = bm_send_api_to_core(handle, BM_API_ID_MEMCPY_WSTRIDE, (u8 *)(&api), sizeof(api), core_id);
     if (BM_SUCCESS == ret) {
-        ret = bm_sync_api(handle);
-    }
-  } else if (handle->misc_info.chipid == 0x1686) {
-    bm_module = tpu_kernel_load_module_file_key(handle, lib_path, key, key_size);
-    if(bm_module == NULL) {
-        printf("bm_module is null!\n");
-        return BM_ERR_FAILURE;
-    }
-
-    f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_memcpy_wstride");
-    ret = tpu_kernel_launch(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_wstride_t));
-    if (bm_module != NULL) {
-      free(bm_module);
-      bm_module = NULL;
+      ret = bm_sync_api_from_core(handle, core_id);
     }
   }
-#endif
   return ret;
 }
 
-bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
+bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
+                                 bm_device_mem_t dst,
+                                 int             dst_stride,
+                                 bm_device_mem_t src,
+                                 int             src_stride,
+                                 int             count,
+                                 int             format_size) {
+  return bm_memcpy_d2d_stride_with_core(handle, dst, dst_stride, src, src_stride,
+    count, format_size, 0);
+}
+
+bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst,
                                size_t dst_offset, bm_device_mem_t src,
-                               size_t src_offset, size_t size) {
+                               size_t src_offset, size_t size, int core_id) {
+
   bm_status_t ret = BM_SUCCESS;
-  tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
-  int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
     return BM_ERR_PARAM;
@@ -2452,29 +2572,23 @@ bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
 
   bm_api_memcpy_byte_t api = {bm_mem_get_device_addr(src) + src_offset,
                               bm_mem_get_device_addr(dst) + dst_offset, size};
-#ifdef USING_CMODEL
-  ret = bm_send_api(handle, BM_API_ID_MEMCPY_BYTE, (u8 *)(&api), sizeof(api));
-  ret = bm_sync_api(handle);
-#else
-  if (handle->misc_info.chipid == 0x1684) {
-    ret = bm_send_api(handle, BM_API_ID_MEMCPY_BYTE, (u8 *)(&api), sizeof(api));
-    ret = bm_sync_api(handle);
-  } else if (handle->misc_info.chipid == 0x1686) {
-    bm_module = tpu_kernel_load_module_file_key(handle, lib_path, key, key_size);
-    if(bm_module == NULL) {
-        printf("bm_module is null!\n");
-        return BM_ERR_FAILURE;
-    }
-
-    f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_memcpy_byte");
-    ret = tpu_kernel_launch(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_byte_t));
-    if (bm_module != NULL) {
-      free(bm_module);
-      bm_module = NULL;
+  if (bm_is_dynamic_loading(handle)) {
+	bm_init_basic_func_id(handle);
+    f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_byte", core_id);
+    ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_byte_t), core_id);
+  } else {
+    ret = bm_send_api_to_core(handle, BM_API_ID_MEMCPY_BYTE, (u8 *)(&api), sizeof(api), core_id);
+    if (BM_SUCCESS == ret) {
+      ret = bm_sync_api_from_core(handle, core_id);
     }
   }
-#endif
   return ret;
+}
+
+bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
+                               size_t dst_offset, bm_device_mem_t src,
+                               size_t src_offset, size_t size) {
+  return bm_memcpy_d2d_byte_with_core(handle, dst, dst_offset, src, src_offset, size, 0);
 }
 
 #ifndef USING_CMODEL
@@ -2560,6 +2674,168 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
   bm_mem_c2c.src_device_addr = src_addr;
   bm_mem_c2c.size = size;
   bm_mem_c2c.dir = CHIP2CHIP;
+  bm_mem_c2c.type = TRANS_1D;
+  bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
+
+  if (force_use_dst_cdma) {
+    if (0 != platform_ioctl(dst_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
+  } else {
+    if (0 != platform_ioctl(src_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
+  }
+  return BM_SUCCESS;
+#endif
+}
+
+bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src, struct stride_cfg stride) {
+#ifdef USING_CMODEL
+  return BM_NOT_SUPPORTED;
+#else
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  if (!bm_device_mem_range_valid(handle, dst)) {
+    return BM_ERR_PARAM;
+  }
+
+  bm_memcpy_info_t bm_mem_s2d;
+#ifdef __linux__
+    #ifdef USING_INT_CDMA
+      bm_mem_s2d.intr = true;
+    #else
+      bm_mem_s2d.intr = false;
+    #endif
+    bm_mem_s2d.host_addr = src;
+#else
+  bm_mem_s2d.intr      = 1;
+  bm_mem_s2d.host_addr = (u64)src;
+#endif
+  bm_mem_s2d.device_addr = bm_mem_get_device_addr(dst);
+  bm_mem_s2d.width = stride.width;
+  bm_mem_s2d.height = stride.height;
+  bm_mem_s2d.src_width = stride.src_width;
+  bm_mem_s2d.dst_width = stride.dst_width;
+  bm_mem_s2d.format = stride.format;
+  bm_mem_s2d.flush = stride.flush;
+  bm_mem_s2d.fixed_data = stride.fixed_data;
+  bm_mem_s2d.dir = HOST2CHIP;
+  bm_mem_s2d.type = TRANS_2D;
+  bm_mem_s2d.src_device_addr = 0;
+  bm_mem_s2d.cdma_iommu_mode = handle->cdma_iommu_mode;
+
+  union { void* ptr; u64 val; } ptr_to_u64;
+  ptr_to_u64.ptr = src;
+  bm_profile_record_memcpy_begin(handle);
+  auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
+  bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
+  return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
+#endif
+}
+
+bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src, struct stride_cfg stride) {
+#ifdef USING_CMODEL
+  return BM_NOT_SUPPORTED;
+#else
+  bm_memcpy_info_t bm_mem_d2s;
+
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__,
+           __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  if (!bm_device_mem_range_valid(handle, src)) {
+    return BM_ERR_PARAM;
+  }
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    // PCIE mode
+#ifdef __linux__
+#ifdef USING_INT_CDMA
+	bm_mem_d2s.intr = true;
+#else
+	bm_mem_d2s.intr = false;
+#endif
+	bm_mem_d2s.host_addr = dst;
+#else
+	bm_mem_d2s.intr      = 1;
+	bm_mem_d2s.host_addr = (u64)dst;
+#endif
+
+	bm_mem_d2s.device_addr = bm_mem_get_device_addr(src);
+	bm_mem_d2s.width = stride.width;
+	bm_mem_d2s.height = stride.height;
+	bm_mem_d2s.src_width = stride.src_width;
+	bm_mem_d2s.dst_width = stride.dst_width;
+	bm_mem_d2s.format = stride.format;
+	bm_mem_d2s.flush = stride.flush;
+	bm_mem_d2s.fixed_data = stride.fixed_data;
+	bm_mem_d2s.dir = CHIP2HOST;
+	bm_mem_d2s.type = TRANS_2D;
+	bm_mem_d2s.src_device_addr = 0;
+	bm_mem_d2s.cdma_iommu_mode = handle->cdma_iommu_mode;
+
+	union { void* ptr; u64 val; } ptr_to_u64;
+	ptr_to_u64.ptr = dst;
+	bm_profile_record_memcpy_begin(handle);
+	auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
+	bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
+	if(0 != res) return BM_ERR_FAILURE;
+  } else {
+    //TODO SoC mode    
+  }
+  return BM_SUCCESS;
+#endif
+}
+
+bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
+                          bm_device_mem_t src, bm_device_mem_t dst,
+                          struct stride_cfg stride, bool force_use_dst_cdma) {
+#ifdef USING_CMODEL
+  UNUSED(src_handle);
+  UNUSED(dst_handle);
+  UNUSED(src);
+  UNUSED(dst);
+  UNUSED(force_use_dst_cdma);
+  return BM_NOT_SUPPORTED;
+#else
+  if (src_handle == nullptr || dst_handle == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n",
+           __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+  u64 src_addr = bm_mem_get_device_addr(src);
+  u64 dst_addr = bm_mem_get_device_addr(dst);
+  if (BM_SUCCESS != bm_calculate_cdma_addr(src_handle, dst_handle, &src_addr,
+                                           &dst_addr, force_use_dst_cdma))
+    return BM_ERR_FAILURE;
+  bm_memcpy_info_t bm_mem_c2c;
+  #ifdef USING_INT_CDMA
+      bm_mem_c2c.intr = true;
+  #else
+      bm_mem_c2c.intr = false;
+  #endif
+  #if __linux__
+  bm_mem_c2c.host_addr = nullptr;
+  #else
+  bm_mem_c2c.host_addr = 0;
+  #endif
+  bm_mem_c2c.device_addr = dst_addr;
+  bm_mem_c2c.src_device_addr = src_addr;
+  bm_mem_c2c.width = stride.width;
+  bm_mem_c2c.height = stride.height;
+  bm_mem_c2c.src_width = stride.src_width;
+  bm_mem_c2c.dst_width = stride.dst_width;
+  bm_mem_c2c.format = stride.format;
+  bm_mem_c2c.flush = stride.flush;
+  bm_mem_c2c.fixed_data = stride.fixed_data;
+  bm_mem_c2c.dir = CHIP2CHIP;
+  bm_mem_c2c.type = TRANS_2D;
   bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
 
   if (force_use_dst_cdma) {

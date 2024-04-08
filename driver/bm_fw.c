@@ -10,8 +10,6 @@
 #include "bm_fw.h"
 #include "bm_memcpy.h"
 #include "bm1682_eu_cmd.h"
-#include "bm1684_card.h"
-#include "bm_pcie.h"
 #ifdef SOC_MODE
 #include "bm1682_soc_firmware_ddr.h"
 #include "bm1682_soc_firmware_tcm.h"
@@ -21,8 +19,6 @@
 #endif
 #include "bm1684_firmware_ddr.h"
 #include "bm1684_firmware_tcm.h"
-
-#include "bm1686_firmware_ddr.h"
 
 static int bmdrv_compare_fw(struct bm_device_info *bmdi, struct file *file, const unsigned int *firmware,
 		int word_num, u64 dst) {
@@ -102,32 +98,79 @@ int bmdrv_wait_fwinit_done(struct bm_device_info *bmdi)
 	int cnt = 2500;
 	int polling_ms = bmdi->cinfo.polling_ms;
 	u32 fw_mask = ~(0xf << 28);
-	u32 value = 0;
+	u32 value0 = 0;
+	u32 value1 = 0;
 
 #ifndef SOC_MODE
 	if (bmdi->cinfo.platform == PALLADIUM) {
 		polling_ms *= PALLADIUM_CLK_RATIO;
 	}
 #endif
-	while ((gp_reg_read_enh(bmdi, GP_REG_FW_STATUS) & fw_mask) != (LAST_INI_REG_VAL & fw_mask)) {
-		mdelay(polling_ms);
-		if (--cnt == 0)
-			break;
-	}
 
-	value = gp_reg_read_enh(bmdi, GP_REG_FW_STATUS);
-	if (cnt) {
-		pr_info("bmdrv: bmsophon%d firmware init done!, status = 0x%x\n", bmdi->dev_index, value);
-		return 0;
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		if (bmdi->cinfo.tpu_core_num == 1) {
+			while (cnt) {
+				if ((gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 0) & fw_mask) == (LAST_INI_REG_VAL & fw_mask))
+					break;
+				mdelay(polling_ms);
+				cnt--;
+			}
+
+			value0 = gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 0);
+			if (cnt) {
+				pr_info("bmdrv: bmsophon%d firmware init done!, status1 = 0x%x\n", bmdi->dev_index, value0);
+				return 0;
+			} else {
+				pr_err("bmdrv: bmsophon%d firmware init timeout!, status1 = 0x%x\n", bmdi->dev_index, value0);
+				return -EBUSY;
+			}
+		} else {
+			while (cnt) {
+				if (((gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 0) & fw_mask) == (LAST_INI_REG_VAL & fw_mask))
+				 && ((gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 1) & fw_mask) == (LAST_INI_REG_VAL & fw_mask)))
+					break;
+				mdelay(polling_ms);
+				cnt--;
+			}
+
+			value0 = gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 0);
+			value1 = gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 1);
+			if (cnt) {
+				pr_info("bmdrv: bmsophon%d firmware init done!, status1 = 0x%x, status2 = 0x%x\n", bmdi->dev_index, value0, value1);
+				return 0;
+			} else {
+				pr_err("bmdrv: bmsophon%d firmware init timeout!, status1 = 0x%x, status2 = 0x%x\n", bmdi->dev_index, value0, value1);
+				return -EBUSY;
+			}
+		}
+	} else {
+		while ((gp_reg_read_enh(bmdi, GP_REG_FW_STATUS) & fw_mask) != (LAST_INI_REG_VAL & fw_mask)) {
+			mdelay(polling_ms);
+			if (--cnt == 0)
+				break;
+		}
+
+		value0 = gp_reg_read_enh(bmdi, GP_REG_FW_STATUS);
+		if (cnt) {
+			pr_info("bmdrv: bmsophon%d firmware init done!, status = 0x%x\n", bmdi->dev_index, value0);
+			return 0;
+		}
+		pr_err("bmdrv: bmsophon%d firmware init timeout!, status = 0x%x\n", bmdi->dev_index, value0);
+		return -EBUSY;
 	}
-	pr_err("bmdrv: bmsophon%d firmware init timeout!, status = 0x%x\n", bmdi->dev_index, value);
-	return -EBUSY;
 }
 
 static int bmdrv_check_firmware_version(struct bm_device_info *bmdi, struct firmware_header *firmware_header){
 
 #ifndef SOC_MODE
-	if (bmdi->cinfo.chip_id == 0x1686) {
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		snprintf(bmdi->firmware_info, 50, "bm1688_firmware.bin_v%x.%x.%x-%x-%x",
+				firmware_header->major,
+				firmware_header->minor,
+				firmware_header->patch,
+				firmware_header->commit_hash,
+				((firmware_header->date)>>8) & 0xffffff);
+	} else if (bmdi->cinfo.chip_id == 0x1686) {
 		snprintf(bmdi->firmware_info, 50, "bm1684x_firmware.bin_v%x.%x.%x-%x-%x",
 				firmware_header->major,
 				firmware_header->minor,
@@ -154,11 +197,11 @@ static int bmdrv_request_and_load_firmware(struct bm_device_info *bmdi, struct f
 
 	ret = request_firmware(&fw, fw_name, bmdi->cinfo.device);
 	if (ret != 0) {
-		pr_info("bm-sophon%d request_firmware fail, please check if these is bm1684x_firmware.bin in /lib/firmware !!\n", bmdi->dev_index);
+		pr_info("bm-sophon%d request_firmware fail, please check if these is %s in /lib/firmware !!\n", bmdi->dev_index, fw_name);
 		return -1;
 	}
 
-	if(bmdi->cinfo.chip_id == 0x1686) {
+	if (bmdi->cinfo.chip_id == 0x1686 || bmdi->cinfo.chip_id == 0x1686a200) {
 		ret = bmdrv_load_firmware(bmdi, file, (unsigned int *)(fw->data),
 					fw->size / sizeof(u32), load_addr);
 	} else {
@@ -176,15 +219,18 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 {
 	int ret;
 	u64 a53lite_park = 0x100000000;
+	u64 c906_0_park = 0x104000000;
+	u64 c906_1_park = 0x114000000; // 256M
 	const char *bm1684x_dyn_fw = "bm1684x_firmware.bin";
 	const char *bm1684_itcm_fw = "bm1684_tcm_firmware.bin";
 	const char *bm1684x_ddr_fw = "bm1684_ddr_firmware.bin";
-	unsigned int *fw_ddr_array;
-	int fw_ddr_size;
-
-	fw_ddr_array = bm1686_firmware_ddr_array;
-	fw_ddr_size = sizeof(bm1686_firmware_ddr_array);
-
+#ifdef __linux__
+	const char *c906_0_fw = "bm1688_firmware0_os.bin";
+	const char *c906_1_fw = "bm1688_firmware1_os.bin";
+#else
+	const char *c906_0_fw = "bm1688_firmware0.bin";
+	const char *c906_1_fw = "bm1688_firmware1.bin";
+#endif
 	switch (bmdi->cinfo.chip_id) {
 	case 0x1684:
 		ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684_itcm_fw, 0);
@@ -199,22 +245,30 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 		}
 		break;
 	case 0x1686:
-#ifndef SOC_MODE
-		if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
-			ret = bmdrv_load_firmware(bmdi, file, fw_ddr_array, fw_ddr_size / sizeof(u32), a53lite_park);
-		else
-			ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
-#else
 		ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
-#endif
 		if (ret != 0) {
 			pr_info("sophon %d load bm1684_fw fail, ret = %d\n", bmdi->dev_index, ret);
 			return -1;
 		}
 		break;
+	case 0x1686a200:
+		ret = bmdrv_request_and_load_firmware(bmdi, file, c906_0_fw, c906_0_park);
+		if (ret != 0) {
+			pr_info("sophon %d load bm1688_fw fail, ret = %d\n", bmdi->dev_index, ret);
+			return -1;
+		}
+		if (bmdi->cinfo.tpu_core_num != 1) {
+			ret = bmdrv_request_and_load_firmware(bmdi, file, c906_1_fw, c906_1_park);
+			if (ret != 0) {
+				pr_info("sophon %d load bm1688_fw fail, ret = %d\n", bmdi->dev_index, ret);
+				return -1;
+			}
+		}
+		break;
 	default:
 		return -EINVAL;
 	}
+	pr_info("load %s and %s success\n", c906_0_fw, c906_1_fw);
 
 	return ret;
 }
@@ -343,12 +397,20 @@ extern void bm1684_pcie_msi_irq_enable(struct pci_dev *pdev,
 int bmdrv_fw_load(struct bm_device_info *bmdi, struct file *file, pbm_fw_desc fw)
 {
 	int ret = 0;
+	int core = 0;
+	int core_num = bmdi->cinfo.tpu_core_num;
 
-	if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686)) {
+	if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686) || (bmdi->cinfo.chip_id == 0x1686a200)) {
 		bmdi->cinfo.bmdrv_stop_arm9(bmdi);
 	}
 
-	gp_reg_write_enh(bmdi, GP_REG_FW_STATUS, FW_START);
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		gp_reg_write_idx(bmdi, GP_REG_FW_STATUS, FW_START, 0);
+		if (core_num != 1)
+			gp_reg_write_idx(bmdi, GP_REG_FW_STATUS, FW_START, 1);
+	} else {
+		gp_reg_write_enh(bmdi, GP_REG_FW_STATUS, FW_START);
+	}
 
 	ret = bmdrv_fw_download(bmdi, file, fw);
 	if (ret) {
@@ -363,8 +425,10 @@ int bmdrv_fw_load(struct bm_device_info *bmdi, struct file *file, pbm_fw_desc fw
 		return ret;
 	}
 	if (fw) {
-		bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU].msgirq_num = 0UL;
-		bmdi->api_info[BM_MSGFIFO_CHANNEL_XPU].sw_rp = 0;
+		for (core = 0; core < core_num; core++) {
+			bmdi->api_info[core][BM_MSGFIFO_CHANNEL_XPU].msgirq_num = 0UL;
+			bmdi->api_info[core][BM_MSGFIFO_CHANNEL_XPU].sw_rp = 0;
+		}
 #ifndef SOC_MODE
 		/* arm9 reset may cause irq related registers reset*/
 #if SYNC_API_INT_MODE == 1

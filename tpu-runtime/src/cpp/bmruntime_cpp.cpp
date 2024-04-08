@@ -89,6 +89,28 @@ bool IsSameShape(const bm_shape_t &left, const bm_shape_t &right)
   return true;
 }
 
+static std::string chip_name_by_id(unsigned int chipid) {
+  std::string chip_name = "";
+  if (chipid == 0x1684) {
+    chip_name = "BM1684";
+  } else if (chipid == 0x1686) {
+    chip_name = "BM1684X";
+  } else if (chipid == 0x1686a200) {
+    chip_name = "BM1688";
+  } else if (chipid == 0x1682) {
+    chip_name = "BM1682";
+  } else if (chipid == 0x1880) {
+    chip_name = "BM1880";
+  } else if (chipid == 0x2260) {
+    chip_name = "BM1690";
+  } else if (chipid == 0x3000) {
+    chip_name = "MARS3";
+  } else {
+    BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
+  }
+  return chip_name;
+}
+
 Context::Context(bm_handle_t bm_handle)
 {
   bm_handle_ = NULL;
@@ -99,16 +121,8 @@ Context::Context(bm_handle_t bm_handle)
   if (0 != bm_get_chipid(bm_handle, &chipid)) {
     BMRT_LOG(FATAL, "Cannot get chipid");
   }
-  std::string chip_name;
-  if (chipid == 0x1682) {
-    chip_name = "BM1682";
-  } else if (chipid == 0x1684) {
-    chip_name = "BM1684";
-  } else if (chipid == 0x1686) {
-    chip_name = "BM1684X";
-  } else {
-    BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
-  }
+
+  std::string chip_name = chip_name_by_id(chipid);
 
   Bmruntime *p_bmrt = new Bmruntime(&bm_handle, true, chip_name);
   BMRT_ASSERT_INFO(p_bmrt != NULL,"p_bmrt shouldn't be NULL,chip_name: %s",chip_name.c_str());
@@ -127,16 +141,8 @@ Context::Context(int devid)
   if (0 != bm_get_chipid(bm_handle_, &chipid)) {
     BMRT_LOG(FATAL, "Cannot get chipid");
   }
-  std::string chip_name;
-  if (chipid == 0x1682) {
-    chip_name = "BM1682";
-  } else if (chipid == 0x1684) {
-    chip_name = "BM1684";
-  } else if (chipid == 0x1686) {
-    chip_name = "BM1684X";
-  } else {
-    BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
-  }
+
+  std::string chip_name = chip_name_by_id(chipid);
 
   Bmruntime *p_bmrt = new Bmruntime(&bm_handle_, true, chip_name);
   BMRT_ASSERT_INFO(p_bmrt != NULL,"p_bmrt shouldn't be NULL");
@@ -196,7 +202,7 @@ void Context::trace() const
 const bm_net_info_t *Context::get_network_info(const char *net_name) const
 {
   Bmruntime *p_bmrt = (Bmruntime *)body_;
-  return p_bmrt->get_net_info(p_bmrt->get_net_idx(net_name));
+  return p_bmrt->get_net_info(net_name);
 }
 
 // Network --------------------------------------------------------------------------
@@ -434,4 +440,23 @@ bool Tensor::ready()
   return true;
 }
 
+api_info_t get_bmodel_api_info(void *p_bmrt, const char *net_name,
+                               const bm_tensor_t *input_tensors, int input_num,
+                               bm_tensor_t *output_tensors, int output_num,
+                               bool user_mem, bool user_stmode, uint32_t *core_ids) {
+  api_info_t api_info;
+  memset(&api_info, 0x0, sizeof(api_info_t));
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return api_info;
+  }
+  int net_idx = ((Bmruntime *)p_bmrt)->get_net_idx(net_name);
+  if (net_idx < 0) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return api_info;
+  }
+  return ((Bmruntime *)p_bmrt)
+      ->get_api_info(net_idx, input_tensors, input_num, output_tensors,
+                     output_num, user_mem, user_stmode, core_ids);
+}
 }  // namespace bmruntime

@@ -8,7 +8,8 @@ static int                     text_lines;
 static int                     win_y_offset;
 static int                     proc_y;
 static bool                    proc_show;
-char                    bm_smi_version[10] = PROJECT_VER;
+static char                    bm_smi_version[10] = PROJECT_VER;
+static char                    board_name[20] = "";
 static std::ofstream           target_file;
 static struct bm_smi_attr      g_attr[64];
 static struct bm_smi_proc_gmem proc_gmem[64];
@@ -35,6 +36,18 @@ static int bm_smi_dev_request(bm_handle_t *handle) {
     ctx->ion_fd = fd;
     bm_get_carveout_heap_id(ctx);
     *handle = ctx;
+    return 0;
+}
+
+static int bm_smi_get_board_name(void) {
+    bm_handle_t handle = NULL;
+    int ret = bm_dev_request(&handle, 0);
+    if (ret != BM_SUCCESS || handle == NULL) {
+        printf("bm_dev_request failed, ret = %d\n", ret);
+        return -1;
+    }
+    bm_get_board_name(handle, board_name);
+    bm_dev_free(handle);
     return 0;
 }
 
@@ -188,27 +201,15 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                          "----------------------------------------------+\n");
                 break;
             case 2:
-                if ((g_driver_version >> 24) == 0x6) {
-                    snprintf(
-                        line_str,
-                        BUFFER_LEN,
-                        "| SDK Version:%9s LTS         Driver Version:  "
-                        "%1d.%1d.%1d LTS                                     |\n",
-                        bm_smi_version,
-                        (g_driver_version >> 16) & 0xff,
-                        (g_driver_version >> 8) & 0xff,
-                        g_driver_version & 0xff);
-                } else {
-                    snprintf(
-                        line_str,
-                        BUFFER_LEN,
-                        "| SDK Version:%9s LTS         Driver Version:  "
-                        "%1d.%1d.%1d                                         |\n",
-                        bm_smi_version,
-                        (g_driver_version >> 16) & 0xff,
-                        (g_driver_version >> 8) & 0xff,
-                        g_driver_version & 0xff);
-                }
+                snprintf(
+                    line_str,
+                    BUFFER_LEN,
+                    "| SDK Version:%9s             Driver Version:  "
+                    "%1d.%1d.%1d                                         |\n",
+                    bm_smi_version,
+                    g_driver_version >> 16,
+                    (g_driver_version >> 8) & 0xff,
+                    g_driver_version & 0xff);
                 break;
             case 3:
                 snprintf(line_str,
@@ -254,8 +255,10 @@ static void bm_smi_chipid_to_str(int dev_id, char *s) {
     } else if (g_attr[dev_id].chip_id == ATTR_FAULT_VALUE) {
         snprintf(s, 6, "%s", " F ");
     } else {
-        if(g_attr[dev_id].chip_id == 0x1686)
+        if (g_attr[dev_id].chip_id == 0x1686)
             snprintf(s, 6, "%s","1684X");
+        else if (g_attr[dev_id].chip_id == 0x1686a200)
+            snprintf(s, 6, "%s","1688");
         else
             snprintf(s, 6, "%x", g_attr[dev_id].chip_id);
     }
@@ -531,7 +534,6 @@ static void bm_smi_display_attr(int            dev_id,
     char after_color_str[BUFFER_LEN]{};
     char line_str[BUFFER_LEN]{};
     char whole_str[BUFFER_LEN]{};
-    char chip_id_s[6];
     char card_index_s[6];
     char status_s[7];
     char boardt_s[5];
@@ -554,7 +556,6 @@ static void bm_smi_display_attr(int            dev_id,
     char tpu_util_s[6];
     char board_type_s[7];
 
-    bm_smi_chipid_to_str(dev_id, chip_id_s);
     bm_smi_card_index_to_str(dev_id, card_index_s);
     bm_smi_status_to_str(dev_id, status_s);
     bm_smi_boardt_to_str(dev_id, boardt_s);
@@ -587,10 +588,9 @@ static void bm_smi_display_attr(int            dev_id,
                 if (g_attr[dev_id].board_attr) {
                     snprintf(line_str,
                              BUFFER_LEN,
-                             "|%2s %5s-%-5s %5s %17s |%2d   %4s    %4s",
+                             "|%2s %10s %5s %17s |%2d   %4s    %4s",
                              card_index_s,
-                             chip_id_s,
-                             board_type_s,
+                             board_name,
                              mode_s,
                              sn_s,
                              dev_id,
@@ -607,11 +607,10 @@ static void bm_smi_display_attr(int            dev_id,
                              tpu_util_s);
                     snprintf(whole_str,
                              BUFFER_LEN,
-                             "|%2s %5s-%-5s %5s %17s |%2d   %4s    %4s   %5s  "
+                             "|%2s %10s %5s %17s |%2d   %4s    %4s   %5s  "
                              " %5s  %3s    %3s       %5s |\n",
                              card_index_s,
-                             chip_id_s,
-                             board_type_s,
+                             board_name,
                              mode_s,
                              sn_s,
                              dev_id,
@@ -1069,7 +1068,6 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
     int  i              = 0;
     int  board_max_temp = 0;
     int  board_avg_temp = 0;
-    char chip_id_s[6];
     char status_s[7];
     char boardt_s[5];
     char chipt_s[5];
@@ -1098,7 +1096,6 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
             board_max_temp = g_attr[i].board_temp;
         }
 
-        bm_smi_chipid_to_str(i, chip_id_s);
         bm_smi_status_to_str(i, status_s);
         bm_smi_boardt_to_str(i, boardt_s);
         bm_smi_chipt_to_str(i, chipt_s);
@@ -1116,7 +1113,7 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
         bm_smi_tpu_util_to_str(i, tpu_util_s);
         bm_smi_board_type_to_str(i, board_type_s);
 
-        printf("%s-%s ", chip_id_s, board_type_s);
+        printf("%s ", board_name);
         printf("%s ", mode_s);
         printf("chip%d: %d ", i - start_dev, g_attr[i].dev_id);
         printf("%s ", busid_s);
@@ -1295,6 +1292,7 @@ int bm_smi_display::run_opmode() {
 #ifdef SOC_MODE
     bm_handle_t handle;
     bm_smi_dev_request(&handle);
+    bm_smi_get_board_name();
 #endif
 
     // loop getting chars until an invalid char is got;

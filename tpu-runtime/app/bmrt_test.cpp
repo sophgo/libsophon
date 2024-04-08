@@ -1,3 +1,4 @@
+#include <thread>
 #include "bmrt_test_inner.h"
 #ifndef __linux__
 //#include <boost/shared_array.hpp>
@@ -16,6 +17,19 @@ using namespace tpu;
 
 extern u64 bmrt_must_alloc_device_mem(void*, bm_device_mem_t*, u32);
 extern void bmrt_must_free_device_mem(void*, bm_device_mem_t);
+
+void dump_tensor(bm_handle_t bm_handle, bm_tensor_t &tensor) {
+  auto shape = tensor.shape;
+  int size = 1;
+  for (int i = 0; i < shape.num_dims; ++i){
+    size *= shape.dims[i];
+  }
+  std::vector<float> data(size);
+  bm_memcpy_d2s(bm_handle, data.data(), tensor.device_mem);
+  // std::cout<< data[0] << "\t" << data[data.size()-1] << std::endl;
+  auto ptr = data.data();
+  ptr[0] = ptr[0];
+}
 
 string CHIPNAME;
 vector<string> CONTEXT_DIR_V;
@@ -43,6 +57,8 @@ bool b_print_subnet_time = false;
 bool b_bmodel_dir = true;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
+vector<int> devices;
+std::vector<std::vector<int32_t>> core_lists;
 
 typedef struct {
   FILE *f_input_ref;
@@ -235,7 +251,7 @@ static int array_cmp_fix32b(void *p_exp, void *p_got,
 }
 
 template <typename T>
-void dump_debug_data(T *host_output_data, T *ref_output_data, int output_idx, int len) {
+void dump_debug_data(const T *host_output_data, const T *ref_output_data, int output_idx, int len) {
   string outfile_name = "output_";
   outfile_name += std::to_string(output_idx) + ".dat";
   FILE* out_fp = fopen(outfile_name.c_str(), "w");
@@ -361,65 +377,89 @@ static int dump_tensor_all(string & tensor_name, void const* data,  int dtype, v
   return res;
 }
 
-int result_cmp(int8_t **host_output_data, int8_t **ref_output_data, int output_num, int *o_count,
-               bm_data_type_t *o_dtype)
-{
-  int res_flag = 0;
-  const char *info_label = "error comparing the last tensor: ";
-  for (int i = 0; i < output_num; ++i) {
+int result_cmp_inner(int output_index, const void* host_data, const void* ref_data, int len, bm_data_type_t dtype){
       int flag = 0;
-      int len = o_count[i];
-      int dtype = o_dtype[i];
+      const char *info_label = "error comparing the last tensor: ";
       switch (dtype) {
       case BM_INT32:
-      case BM_UINT32:
-          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", i,
-                     ((int *)(host_output_data[i]))[0], ((int *)(ref_output_data[i]))[0]);
-          flag = array_cmp_fix32b((void *)(ref_output_data[i]), (void *)(host_output_data[i]),
+      case BM_UINT32: {
+          auto host_data_ptr =(int *)host_data;
+          auto ref_data_ptr =(int *)ref_data;
+          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", output_index, host_data_ptr[0], ref_data_ptr[0]);
+          flag = array_cmp_fix32b((void *)ref_data_ptr, (void *)host_data_ptr,
                                   dtype == BM_INT32 ? 1 : 0, len, info_label, DELTA_INT);
           if (OUTPUT_DEBUG) {
-            dump_debug_data((int *)(host_output_data[i]), (int *)(ref_output_data[i]), i, len);
+            dump_debug_data(host_data_ptr, ref_data_ptr, output_index, len);
           }
-          break;
+        }
+        break;
       case BM_INT16:
-      case BM_UINT16:
-          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", i,
-                     ((short *)(host_output_data[i]))[0], ((short *)(ref_output_data[i]))[0]);
-          flag = array_cmp_fix16b((void *)(ref_output_data[i]), (void *)(host_output_data[i]),
+      case BM_UINT16: {
+          auto host_data_ptr =(short *)host_data;
+          auto ref_data_ptr =(short *)ref_data;
+          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", output_index, host_data_ptr[0], ref_data_ptr[0]);
+          flag = array_cmp_fix16b((void *)ref_data_ptr, (void *)host_data_ptr,
                                   dtype == BM_INT16 ? 1 : 0, len, info_label, DELTA_INT);
           if (OUTPUT_DEBUG) {
-            dump_debug_data((short *)(host_output_data[i]), (short *)(ref_output_data[i]), i, len);
+            dump_debug_data(host_data_ptr, ref_data_ptr, output_index, len);
           }
-          break;
-      case BM_INT8:
-          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", i,
-                     ((char *)(host_output_data[i]))[0], ((char *)(ref_output_data[i]))[0]);
-          flag = array_cmp_fix8b((void *)(ref_output_data[i]), (void *)(host_output_data[i]), 1, len, info_label, DELTA_INT);
+        }
+        break;
+      case BM_INT8:{
+          auto host_data_ptr =(char *)host_data;
+          auto ref_data_ptr =(char *)ref_data;
+          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", output_index,
+                     host_data_ptr[0], ref_data_ptr[0]);
+          flag = array_cmp_fix8b((void*)ref_data_ptr, (void *)host_data_ptr, 1, len, info_label, DELTA_INT);
           if (OUTPUT_DEBUG) {
-            dump_debug_data((char *)(host_output_data[i]), (char *)(ref_output_data[i]), i, len);
+            dump_debug_data(host_data_ptr, ref_data_ptr, output_index, len);
           }
-          break;
-      case BM_UINT8:
-          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", i,
-                     ((unsigned char *)(host_output_data[i]))[0], ((unsigned char *)(ref_output_data[i]))[0]);
-          flag = array_cmp_fix8b((void *)(ref_output_data[i]), (void *)(host_output_data[i]), 0, len, info_label, DELTA_INT);
+        }
+        break;
+      case BM_UINT8: {
+          auto host_data_ptr =(unsigned char *)host_data;
+          auto ref_data_ptr =(unsigned char *)ref_data;
+          BMRT_DEBUG("The %d-th tensor got[0] = %d, ref[0] = %d", output_index,
+                     host_data_ptr[0], ref_data_ptr[0]);
+          flag = array_cmp_fix8b((void *)ref_data_ptr, (void *)host_data_ptr, 0, len, info_label, DELTA_INT);
           if (OUTPUT_DEBUG) {
-            dump_debug_data((unsigned char *)(host_output_data[i]), (unsigned char *)(ref_output_data[i]), i, len);
+            dump_debug_data(host_data_ptr, ref_data_ptr, output_index, len);
           }
-          break;
-      default:
+        }
+        break;
+      default:{
           BMRT_DEBUG("The %d-th tensor ", i);
-          flag = array_cmp_float(ref_output_data[i], host_output_data[i], dtype, len,
-                           info_label, DELTA_FLOAT);
+          flag = array_cmp_float(ref_data, host_data, dtype, len, info_label, DELTA_FLOAT);
           if (OUTPUT_DEBUG) {
-            dump_debug_data((float*)(host_output_data[i]), (float*)(ref_output_data[i]), i, len);
+            dump_debug_data((float*)ref_data, (float*)host_data, output_index, len);
           }
-          break;
+        }
+        break;
       }
       if(flag){
-          BMRT_LOG(WRONG, "comparing #%d output failed!", i);
+          BMRT_LOG(WRONG, "comparing #%d output failed!", output_index);
       }
-      res_flag |= flag;
+      return flag;
+
+}
+int result_cmp(int8_t **host_output_data, int8_t **ref_output_data, int output_num,
+                      int *o_count, bm_data_type_t *o_dtype) {
+  int res_flag = 0;
+  for (int i = 0; i < output_num; ++i) {
+    res_flag |= result_cmp_inner(i, host_output_data[i], ref_output_data[i], o_count[i], o_dtype[i]);
+  }
+  return res_flag;
+}
+
+int result_cmp(const std::vector<std::vector<int8_t>>& host_output_data,
+               const std::vector<std::vector<int8_t>>& ref_output_data,
+               const std::vector<int>& o_count,
+               const bm_data_type_t* o_dtype)
+{
+  int res_flag = 0;
+  int output_num = host_output_data.size();
+  for (int i = 0; i < output_num; ++i) {
+    res_flag |= result_cmp_inner(i, host_output_data[i].data(), ref_output_data[i].data(), o_count[i], o_dtype[i]);
   }
   return res_flag;
 }
@@ -432,37 +472,37 @@ string fix_bmodel_path(const string& path) {
 }
 
 /* ------------------------------------------------------------------------- */
-#ifdef __linux__
-static struct timeval g_time;
-static void start_time()
-{
-  gettimeofday(&g_time, NULL);
-}
 
-static long end_time()
-{
-  struct timeval time;
-  gettimeofday(&time, NULL);
-  long elapsed = (time.tv_sec - g_time.tv_sec) * 1000000 + time.tv_usec - g_time.tv_usec;
-  g_time = time;
-  return elapsed;
+#ifdef __linux__
+typedef struct timeval bmrt_time_t;
+static inline void bmrt_gettime(bmrt_time_t& val){
+  gettimeofday(&val, NULL);
+}
+static inline long bmrt_interval(const bmrt_time_t& start, const bmrt_time_t& end){
+    return (end.tv_sec - start.tv_sec) * 1000000 + end.tv_usec - start.tv_usec;
 }
 #else
-static struct timespec g_time;
-static void start_time()
-{
-  bmrt_clock_gettime(0, &g_time);
+typedef struct timespec bmrt_time_t;
+static inline void bmrt_gettime(bmrt_time_t& val){
+  bmrt_clock_gettime(0, &val);
 }
-
-static long end_time()
-{
-  struct timespec time;
-  bmrt_clock_gettime(0, &time);
-  long elapsed = (time.tv_sec - g_time.tv_sec) * 1000000 + (time.tv_nsec - g_time.tv_nsec)/1000;
-  g_time = time;
-  return elapsed;
+static inline long bmrt_interval(const bmrt_time_t& start, const bmrt_time_t& end){
+    return (end.tv_sec - start.tv_sec) * 1000000 + (end.tv_nsec - start.tv_nsec)/1000;
 }
 #endif
+
+static bmrt_time_t g_time;
+static void start_time() {
+  bmrt_gettime(g_time);
+}
+
+static long end_time() {
+  bmrt_time_t end_time;
+  bmrt_gettime(end_time);
+  long elapsed = bmrt_interval(g_time, end_time);
+  g_time = end_time;
+  return elapsed;
+}
 
 /* --------------------------------------------------------------------------*/
 /* code for read input and output reference data */
@@ -644,10 +684,11 @@ void save_neuron(void *p_bmrt, int net_idx, int stage_idx)
   bm_handle_t handle = ((Bmruntime *)p_bmrt)->get_bm_handle();
   size_t size = 0;
   for (const auto &mem : device_mem)
-    size += bm_mem_get_device_size(mem);
+    size += sg_mem_get_device_size(mem);
   char *data = new char[size];
-  for (const auto &mem : device_mem)
-    bm_memcpy_d2s_partial(handle, data, mem, bm_mem_get_device_size(mem));
+  for (const auto &mem : device_mem) {
+    sg_memcpy_d2s_partial(handle, data, mem, sg_mem_get_device_size(mem));
+  }
   string filename = str.str();
   FILE *fout = fopen(filename.c_str(), "wb");
   if (NULL == fout) {
@@ -667,6 +708,15 @@ void save_output(int net_idx, int8_t data[], size_t size)
     fwrite(data, size, 1, info.f_output);
     return;
   }
+}
+void save_data(const char* filename, const void* data, size_t byte_size){
+  FILE* fp = fopen(filename, "wb");
+  if(!fp) {
+    BMRT_LOG(WARNING, "Cannot save data to file %s", filename);
+    return;
+  }
+  fwrite(data, byte_size, 1, fp);
+  fclose(fp);
 }
 
 /* --------------------------------------------------------------------------*/
@@ -714,6 +764,39 @@ void print_array_ex(const void* data, int len, int dtype, const char* prefix = n
   }
 }
 
+void bmrt_launch_tensor_thread_func(
+  bm_handle_t &handle, void *p_bmrt, const char *net_name,
+  const bm_tensor_t *input_tensors,
+  int input_num, bm_tensor_t *output_tensors,
+  int output_num, bool user_mem,
+  bool user_stmode, const int *core_list,
+  int core_num, int net_idx, int stage_idx,
+  int chipid, bmrt_time_t &launch_time, bm_profile_t &start, bm_profile_t &end) {
+  if (chipid != 0x1682) {
+    bm_get_profile(handle, &start);
+  }
+  bool ret = bmrt_launch_tensor_multi_cores(p_bmrt, net_name, input_tensors, input_num,
+            output_tensors, output_num, user_mem, user_stmode, core_list, core_num);
+  if (ret == false) {
+    print_array_ex(core_list, core_num, BM_INT32,  "cores=");
+    BMRT_LOG(FATAL, "The %d-th neuron network '%s' stage '%d' launch failed", net_idx,
+            net_name, stage_idx);
+  }
+  bmrt_gettime(launch_time);
+  for (int i = 0; i < core_num; ++i) {
+    auto core_id = core_list[i];
+    bm_status_t core_status = bm_thread_sync_from_core(handle, core_id);
+    if (core_status != BM_SUCCESS) {
+      print_array_ex(core_list, core_num, BM_INT32,  "cores=");
+      BMRT_LOG(FATAL, "The %d-th neuron network '%s' stage '%d' sync failed, core=%d", net_idx,
+              net_name, stage_idx, core_id);
+    }
+  }
+  if (chipid != 0x1682) {
+    bm_get_profile(handle, &end);
+  }
+}
+
 void bmrt_test()
 {
 #ifdef __linux__
@@ -725,20 +808,32 @@ void bmrt_test()
 #endif
 
   // create bmruntime
-  bm_handle_t bm_handle;
-  bm_device_mem_t prealloc_mem;
-  bm_status_t status = bm_dev_request(&bm_handle, DEV_ID);
-  if (BM_SUCCESS != status) {
-    BMRT_LOG(FATAL, "bm_dev_request failed, id:[%d]",  DEV_ID);
-  }
   unsigned int chipid = 0;
-  if (0 != bm_get_chipid(bm_handle, &chipid)) {
-    BMRT_LOG(FATAL, "Cannot get chipid");
+  if (devices.empty()) {
+    devices.push_back(DEV_ID);
   }
-  #ifdef _WIN32
-  chipid = 0x1684;
-  #endif
-  void *p_bmrt = bmrt_create(bm_handle);
+  int device_num = devices.size();
+  vector<bm_handle_t> bm_handles(device_num);
+  bm_device_mem_t prealloc_mem;
+  bm_status_t status;
+  for (int i = 0; i < device_num; i++) {
+    status = bm_dev_request(&bm_handles[i], devices[i]);
+    if (BM_SUCCESS != status) {
+      BMRT_LOG(FATAL, "bm_dev_request failed, id:[%d]",  devices[i]);
+    }
+    unsigned int chipid_ = 0;
+    if (0 != bm_get_chipid(bm_handles[i], &chipid_)) {
+      BMRT_LOG(FATAL, "Cannot get chipid");
+    }
+    if (i == 0) {
+      chipid = chipid_;
+    } else if (chipid != chipid_) {
+      BMRT_LOG(FATAL, "Not same chipid");
+    }
+    BMRT_LOG(INFO, "device_index=%d, chip_id=%d", i, chipid_);
+  }
+  bm_handle_t bm_handle = bm_handles[0];
+  auto p_bmrt = bmrt_create_ex(bm_handles.data(), device_num);
 
   if (PREALLOC_SIZE != 0) {
     bmrt_must_alloc_device_mem(p_bmrt, &prealloc_mem, PREALLOC_SIZE);
@@ -751,6 +846,18 @@ void bmrt_test()
 #ifdef SOC_MODE
   set_bmrt_mmap(p_bmrt, b_enable_mmap);
 #endif
+  int REAL_MEM_NUM = MEM_NUM * core_lists.size();
+
+  bool use_multi_thread = true;
+  if (core_lists.size() <= 1) {
+    //only multi-core multi-mession use threads, cause start thread reduce about 100us performance
+    use_multi_thread = false;
+  }
+#ifdef USING_CMODEL
+  //TODO, dynamic backend exist data race
+  use_multi_thread = false;
+#endif
+
   // load bmodel by file
   for (auto &context_dir : CONTEXT_DIR_V) {
     context_info_t info;
@@ -781,19 +888,9 @@ void bmrt_test()
       BMRT_LOG(INFO, "==> running network #%d, name: %s, loop: %d", net_idx, net_names[net_idx],
               loop);
       auto net_info = bmrt_get_network_info(p_bmrt, net_names[net_idx]);
-      #ifdef __linux__
-      bm_tensor_t output_tensors[MEM_NUM][net_info->output_num];
-      #else
-      //boost::shared_array<boost::shared_array<bm_tensor_t>> output_tensors(
-      //    new boost::shared_array<bm_tensor_t>[MEM_NUM]);
-      //for (int row = 0; row < MEM_NUM; ++row) {
-      //  output_tensors[row].reset(new bm_shape_t[net_info->output_num]);
-      //}
-      bm_tensor_t **output_tensors;
-      output_tensors = new bm_tensor_t *[MEM_NUM];
-      for (int i = 0; i < MEM_NUM; i++)
-        output_tensors[i] = new bm_tensor_t[net_info->output_num];
-      #endif
+
+
+      std::vector<std::vector<bm_tensor_t>> output_tensors(REAL_MEM_NUM, std::vector<bm_tensor_t>(net_info->output_num));
 
       for (int stage_idx = 0; stage_idx < net_info->stage_num; stage_idx++) {
         if (STAGE_SEL != -1) {
@@ -807,67 +904,46 @@ void bmrt_test()
 
         auto &stage = net_info->stages[stage_idx];
         // prepare output tensor
-        #ifdef __linux__
-        int8_t *host_output[MEM_NUM][net_info->output_num];
-        int output_count[net_info->output_num];
-        #else
-        int8_t ***host_output;
-        host_output = new int8_t **[MEM_NUM];
-        for (int i = 0; i < MEM_NUM; i++)
-          host_output[i] = new int8_t *[net_info->output_num];
-        std::shared_ptr<int> output_count_(new int[net_info->output_num], std::default_delete<int[]>());
-        int* output_count = output_count_.get();
-        #endif
+        std::vector<std::vector<std::vector<int8_t>>> host_output(REAL_MEM_NUM, std::vector<std::vector<int8_t>>(net_info->output_num));
+        std::vector<int> output_count(net_info->output_num);
+
         size_t size,ref_size;
-        for (int mem_idx = 0; mem_idx < MEM_NUM; ++mem_idx) {
+        for (int mem_idx = 0; mem_idx < REAL_MEM_NUM; ++mem_idx) {
           for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
+            int devid = net_info->output_loc_devices[output_idx];
             auto &output_tensor = output_tensors[mem_idx][output_idx];
             if (output_idx < (int)output_shapes.size()) {
-              bmrt_tensor(&output_tensor, p_bmrt, net_info->input_dtypes[output_idx],
-                          shapes[output_idx]);
+              bmrt_tensor_ex(&output_tensor, p_bmrt, devid, net_info->input_dtypes[output_idx], shapes[output_idx]);
             } else {
-              bmrt_tensor(&output_tensor, p_bmrt, net_info->output_dtypes[output_idx],
-                          stage.output_shapes[output_idx]);
+              bmrt_tensor_ex(&output_tensor, p_bmrt, devid, net_info->output_dtypes[output_idx], stage.output_shapes[output_idx]);
             }
             size = bmrt_tensor_bytesize(&output_tensor);
             ref_size = bmrt_shape_count(&stage.output_shapes[output_idx]) * bmrt_data_type_size(output_tensor.dtype);
             if (output_shapes.size() > 0) ref_size = size; // If we set shape, ref_size may be smaller than size
-            host_output[mem_idx][output_idx] = new int8_t[ref_size];
-            memset(host_output[mem_idx][output_idx], 0, ref_size);
+            host_output[mem_idx][output_idx].resize(ref_size);
+            memset(host_output[mem_idx][output_idx].data(), 0, ref_size);
           }
         }
 
         // prepare input tensor
-        #ifdef __linux__
-        struct timeval t1, t2, t3, t4, t5;
-        gettimeofday(&t1, NULL);
-        #else
-        struct timespec t1, t2, t3, t4, t5;
-        bmrt_clock_gettime(0, &t1);
-        #endif
-        #ifdef __linux__
-        bm_tensor_t input_tensors[net_info->input_num];
-        #else
-        std::shared_ptr<bm_tensor_t> input_tensors_(new bm_tensor_t[net_info->input_num],
-                                                    std::default_delete<bm_tensor_t[]>());
-        bm_tensor_t *input_tensors = input_tensors_.get();
-        #endif
+        bmrt_time_t t1, t2, t3, t4, t5, t6;
+        std::vector<bmrt_time_t> launch_times(core_lists.size());
+        bmrt_gettime(t1);
 
+        std::vector<bm_tensor_t> input_tensors(net_info->input_num);
         for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
+          int devid = net_info->input_loc_devices[input_idx];
           auto &input_tensor = input_tensors[input_idx];
           if (input_idx < (int)shapes.size()) {
-            bmrt_tensor(&input_tensor, p_bmrt, net_info->input_dtypes[input_idx],
-                        shapes[input_idx]);
+            bmrt_tensor_ex(&input_tensor, p_bmrt, devid, net_info->input_dtypes[input_idx], shapes[input_idx]);
           } else {
-            bmrt_tensor(&input_tensor, p_bmrt, net_info->input_dtypes[input_idx],
-                        stage.input_shapes[input_idx]);
+            bmrt_tensor_ex(&input_tensor, p_bmrt, devid, net_info->input_dtypes[input_idx], stage.input_shapes[input_idx]);
           }
           size_t size = bmrt_tensor_bytesize(&input_tensor);
-          int8_t *host_data = new int8_t[size];
-
+          std::vector<int8_t> host_data(size);
           BMRT_LOG(INFO, "reading input #%d, bytesize=%zu", input_idx, size);
-          read_ref_data(host_data, size, net_idx, true);
-          print_array_ex(host_data, bmrt_shape_count(&input_tensor.shape), net_info->input_dtypes[input_idx], "  --> input_data:");
+          read_ref_data(host_data.data(), size, net_idx, true);
+          print_array_ex(host_data.data(), bmrt_shape_count(&input_tensor.shape), net_info->input_dtypes[input_idx], "  --> input_data:");
 
           // dump input ref tensors in NCHW format into current directory
           if (OUTPUT_DEBUG) {
@@ -882,61 +958,78 @@ void bmrt_test()
               for (int i = 0; i < input_shape.num_dims; i ++) {
                   shape.push_back(input_shape.dims[i]);
               }
-              dump_tensor_all(tensor_name, host_data, net_info->input_dtypes[input_idx], shape);
+              dump_tensor_all(tensor_name, host_data.data(), net_info->input_dtypes[input_idx], shape);
           }  // <== dump input ref tensors
 
-          bm_memcpy_s2d(bm_handle, input_tensor.device_mem, ((void *)host_data));
-          delete[] host_data;
+          bm_memcpy_s2d(bm_handles[devid], input_tensor.device_mem, ((void *)host_data.data()));
         }
 
-        bm_profile_t start,end;
-        memset(&start, 0, sizeof(bm_profile_t));
-        memset(&end, 0, sizeof(bm_profile_t));
+        std::vector<bm_profile_t> starts(1), ends(1);
+        std::vector<std::thread> threads;
+        if (use_multi_thread) {
+          starts.resize(2);
+          ends.resize(2);
+          threads.resize(core_lists.size());
+        }
+        for (auto &s : starts) memset(&s, 0, sizeof(bm_profile_t));
+        for (auto &e : ends) memset(&e, 0, sizeof(bm_profile_t));
 
-        #ifdef __linux__
-        gettimeofday(&t2, NULL);
-        #else
-        bmrt_clock_gettime(0, &t2);
-        #endif
+        bmrt_gettime(t2);
+        for(size_t group_idx = 0; group_idx<core_lists.size(); group_idx++) {
+          auto& core_list = core_lists[group_idx];
+          bool pre_alloc_neuron_ret =  bmrt_pre_alloc_neuron_multi_cores(p_bmrt, net_info->name, stage_idx, core_list.data(), core_list.size());
+          if (!pre_alloc_neuron_ret) {
+            std::string core_list_str = "";
+            for (auto &core_id_ : core_list) { core_list_str += std::to_string(core_id_) + ","; }
+            BMRT_LOG(FATAL, "net:%s pre_alloc_neuron failed, stage_idx:%d, core_list:%s", net_info->name, stage_idx, core_list_str.c_str());
+          }
+        }
+
+        bmrt_gettime(t3);
         // calculate for CAL_TIMES times
-        #ifdef __linux__
-        unsigned long total_elapsed = 0, npu_elapsed = 0;
-        #else
-        unsigned long long total_elapsed = 0, npu_elapsed = 0;
-        #endif
+        unsigned long total_elapsed = 0, npu_elapsed = 0, npu1_elapsed = 0;
 
         for (int t = 0; t < CAL_TIMES; t++) {
           if (chipid != 0x1682) {
-            bm_get_profile(bm_handle, &start);
             start_time();
           }
 
           int n = (MEM_NUM == 1) ? 0 : t;
-          bool ret = bmrt_launch_tensor_ex(p_bmrt, net_names[net_idx], input_tensors,
-                                           net_info->input_num, output_tensors[n], net_info->output_num,
-                                           true, false);
 
-          if (ret == true) {
-            /* TODO : exception now if bmodel only have cpu subnet */
-            status = bm_thread_sync(bm_handle);
+          if (use_multi_thread) {
+            for(size_t group_idx = 0; group_idx<core_lists.size(); group_idx++){
+              auto& core_list = core_lists[group_idx];
+              threads[group_idx] = std::move(std::thread(&bmrt_launch_tensor_thread_func,
+                                                std::ref(bm_handle), p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
+                                                output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
+                                                core_list.data(), core_list.size(), net_idx, stage_idx,
+                                                chipid, std::ref(launch_times[group_idx]), std::ref(starts[group_idx]), std::ref(ends[group_idx])));
+            }
+            for (auto& thread: threads) {
+              thread.join();
+            }
+          } else {
+            for(size_t group_idx = 0; group_idx<core_lists.size(); group_idx++){
+              auto& core_list = core_lists[group_idx];
+              bmrt_launch_tensor_thread_func(bm_handle, p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
+                                            output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
+                                            core_list.data(), core_list.size(), net_idx, stage_idx,
+                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx]);
+            }
           }
-          if (ret == false || BM_SUCCESS != status) {
-            BMRT_LOG(FATAL, "The %d-th neuron network '%s' stage '%d' inference failed", net_idx,
-                    net_info->name, stage_idx);
-          }
+
+          /* TODO : exception now if bmodel only have cpu subnet */
 
           if (chipid != 0x1682) {
             total_elapsed += end_time();
-            bm_get_profile(bm_handle, &end);
-            npu_elapsed += end.tpu_process_time - start.tpu_process_time;
+            for (size_t i = 0; i < ends.size(); i++) {
+              npu_elapsed += ends[i].tpu_process_time - starts[i].tpu_process_time;
+              npu1_elapsed += ends[i].tpu1_process_time - starts[i].tpu1_process_time;
+            }
           }
         }  // end continue calculate (add by nan.wu)
 
-        #ifdef __linux__
-        gettimeofday(&t3, NULL);
-        #else
-        bmrt_clock_gettime(0, &t3);
-        #endif
+        bmrt_gettime(t4);
 
         // save neuron memory for debug
         if (EXPORT_NEURON && loop == 0) {
@@ -944,7 +1037,7 @@ void bmrt_test()
         }
         // memcpy output data from device to system
 
-        for (int t = 0; t < MEM_NUM; t++) {
+        for (int t = 0; t < REAL_MEM_NUM; t++) {
           for (int output_idx = 0; output_idx < net_info->output_num; ++output_idx) {
             auto &output_tensor = output_tensors[t][output_idx];
             if (bmrt_shape_count(&output_tensor.shape) >
@@ -957,11 +1050,11 @@ void bmrt_test()
             }
             size_t out_size = bmrt_tensor_bytesize(&output_tensor);
             size_t out_ref_size = bmrt_shape_count(&stage.output_shapes[output_idx]) * bmrt_data_type_size(output_tensor.dtype);
-            bm_memcpy_d2s_partial(bm_handle, host_output[t][output_idx], output_tensor.device_mem,
+            bm_memcpy_d2s_partial(bm_handle, host_output[t][output_idx].data(), output_tensor.device_mem,
                                   out_size);
             output_count[output_idx] = bmrt_shape_count(&output_tensor.shape);
             if (EXPORT_OUTPUT && loop == 0 && t == 0) {
-              save_output(net_idx, host_output[0][output_idx], out_ref_size);
+              save_output(net_idx, host_output[0][output_idx].data(), out_ref_size);
             }
 
             // dump output tensors in NCHW format into current directory
@@ -972,24 +1065,15 @@ void bmrt_test()
                 for (int i = 0; i < output_shape.num_dims; i ++) {
                     shape.push_back(output_shape.dims[i]);
                 }
-                dump_tensor_all(tensor_name, host_output[t][output_idx], output_tensor.dtype, shape);
+                dump_tensor_all(tensor_name, host_output[t][output_idx].data(), output_tensor.dtype, shape);
             } // <== dump output tensors
 
           }
         }
 
-        #ifdef __linux__
-        gettimeofday(&t4, NULL);
-        #else
-        bmrt_clock_gettime(0, &t4);
-        #endif
+        bmrt_gettime(t5);
         // and read ref output data
-        #ifdef __linux__
-        int8_t *ref_output[net_info->output_num];
-        #else
-        std::shared_ptr<int8_t*> ref_output_(new int8_t*[net_info->output_num], std::default_delete<int8_t*[]>());
-        int8_t** ref_output = ref_output_.get();
-        #endif
+        std::vector<std::vector<int8_t>> ref_output(net_info->output_num);
         for (int output_idx = 0; output_idx < net_info->output_num; ++output_idx) {
           auto &output_tensor = output_tensors[0][output_idx];
           /* shape gap count = max shape count - real shape count */
@@ -1001,10 +1085,10 @@ void bmrt_test()
                     net_idx, net_info->name, stage_idx, output_idx);
           }
           size_t size = bmrt_tensor_bytesize(&output_tensor);
-          ref_output[output_idx] = new int8_t[size];
+          ref_output[output_idx].resize(size);
           BMRT_LOG(INFO, "reading output #%d, bytesize=%zu", output_idx, size);
-          read_ref_data(ref_output[output_idx], size, net_idx, false, shape_gap_count * bmrt_data_type_size(output_tensor.dtype));
-          print_array_ex(ref_output[output_idx], elem_num, net_info->output_dtypes[output_idx], "  --> output ref_data:");
+          read_ref_data(ref_output[output_idx].data(), size, net_idx, false, shape_gap_count * bmrt_data_type_size(output_tensor.dtype));
+          print_array_ex(ref_output[output_idx].data(), elem_num, net_info->output_dtypes[output_idx], "  --> output ref_data:");
 
           // dump output ref tensors in NCHW format into current directory
           if (OUTPUT_DEBUG) {
@@ -1014,19 +1098,18 @@ void bmrt_test()
               for (int i = 0; i < output_shape.num_dims; i ++) {
                   shape.push_back(output_shape.dims[i]);
               }
-              dump_tensor_all(tensor_name, ref_output[output_idx], output_tensor.dtype, shape);
+              dump_tensor_all(tensor_name, ref_output[output_idx].data(), output_tensor.dtype, shape);
           }  // <== dump output ref tensors
-
         }
 
         if (chipid == 0x1682) {
           // get true performance time
-          #ifdef __linux__
-          long unsigned int last_api_process_time_us = 0;
-          #else
           unsigned long long last_api_process_time_us = 0;
-          #endif
+          #ifdef __linux__
+          bm_get_last_api_process_time_us(bm_handle, (long unsigned int*)&last_api_process_time_us);
+          #else
           bm_get_last_api_process_time_us(bm_handle, &last_api_process_time_us);
+          #endif
           BMRT_LOG(INFO, "net[%s] stage[%d], the last_api_process_time_us is %lu us",
                    net_info->name, stage_idx, last_api_process_time_us);
         } else {
@@ -1034,9 +1117,30 @@ void bmrt_test()
             total_elapsed = npu_elapsed;
           }
           npu_elapsed /= CAL_TIMES;
+          npu1_elapsed /= CAL_TIMES;
           total_elapsed /= CAL_TIMES;
-          BMRT_LOG(INFO, "net[%s] stage[%d], launch total time is %lu us (npu %lu us, cpu %lu us)",
-                  net_info->name, stage_idx, total_elapsed, npu_elapsed, total_elapsed - npu_elapsed);
+          unsigned long max_npu_time = max(npu_elapsed, npu1_elapsed);
+          unsigned long cpu_time = total_elapsed - max_npu_time;
+
+          auto launch_time = launch_times.front();
+          if (use_multi_thread) {
+            for (size_t i = 1; i < launch_times.size(); ++i) {
+              #ifdef __linux__
+              if (launch_times[i].tv_usec > launch_time.tv_usec) launch_time = launch_times[i];
+              #else
+              if (launch_times[i].tv_nsec > launch_time.tv_nsec) launch_time = launch_times[i];
+              #endif
+            }
+          }
+          unsigned long launch_time_us = bmrt_interval(t3, launch_time);
+          unsigned long sync_time_us = bmrt_interval(launch_time, t4);
+          if (core_lists.size() == 1){
+              BMRT_LOG(INFO, "net[%s] stage[%d], launch total time is %lu us (npu %lu us, cpu %lu us), (launch func time %lu us, sync %lu us)",
+                    net_info->name, stage_idx, total_elapsed, max_npu_time, cpu_time, launch_time_us, sync_time_us);
+          } else {
+              BMRT_LOG(INFO, "net[%s] stage[%d], launch total time is %lu us (npu %lu us [%lu us, %lu us], cpu %lu us), (launch func time %lu us, sync %lu us)",
+                    net_info->name, stage_idx, total_elapsed, max_npu_time, npu_elapsed, npu1_elapsed, cpu_time, launch_time_us, sync_time_us);
+          }
         }
 
         BMRT_LOG(INFO, "+++ The network[%s] stage[%d] output_data +++", net_info->name, stage_idx);
@@ -1049,17 +1153,43 @@ void bmrt_test()
               prefix = prefix + std::to_string(out_tensor.shape.dims[j]) + " ";
             }
             prefix += "]";
-            print_array_ex(host_output[0][i], num_elem, net_info->output_dtypes[i], prefix.c_str());
+            print_array_ex(host_output[0][i].data(), num_elem, net_info->output_dtypes[i], prefix.c_str());
         }
         if (NEED_CMP) {
           // compare inference output data with reference data
-          int flag = 0;
-          for (int t = 0; t < MEM_NUM; t++) {
-            BMRT_LOG(INFO, "==>comparing #%d output ... ", t);
-            flag |= result_cmp(host_output[t], ref_output, net_info->output_num, output_count,
-                              net_info->output_dtypes);
+          BMRT_LOG(INFO, "==>comparing output in mem #0 ... ");
+          bool failed = result_cmp(host_output[0], ref_output, output_count, net_info->output_dtypes);
+
+          // compare multiple outputs from multiple infer mems, all of them should be bit level equal
+          if(!failed && REAL_MEM_NUM>1){
+            BMRT_LOG(INFO, "==> comparing multiple mems ... ");
+            for (int output_idx = 0; output_idx < net_info->output_num; ++output_idx) {
+              auto ref_output_data = host_output[0][output_idx].data();
+              auto& ref_tensor = output_tensors[0][output_idx];
+              int elem_num = output_count[output_idx];
+              int byte_len = elem_num * bmrt_data_type_size(ref_tensor.dtype);
+              std::string ref_info = std::string("mem")+std::to_string(0)+"_output" +std::to_string(output_idx);
+              print_array_ex(ref_output_data, elem_num, ref_tensor.dtype, ref_info.c_str());
+              for(int t = 1; t<REAL_MEM_NUM; t++){
+                auto other_output = host_output[t][output_idx].data();
+                int result = memcmp(ref_output_data, other_output, byte_len);
+                if(result != 0){
+                  if(!failed){
+                    std::string filename = ref_info + ".dat";
+                    save_data(filename.c_str(), other_output, byte_len);
+                    failed = true;
+                  }
+                  BMRT_LOG(WARNING, "mem_idx=%d compare failed with mem 0!", t);
+                  std::string output_info = std::string("mem")+std::to_string(t)+"_output" +std::to_string(output_idx);
+                  print_array_ex(other_output, elem_num, ref_tensor.dtype, output_info.c_str());
+                  auto filename = output_info + ".dat";
+                  save_data(filename.c_str(), other_output, byte_len);
+                }
+              }
+            }
           }
-          if (flag == 0) {
+
+          if (!failed) {
             BMRT_LOG(INFO, "+++ The network[%s] stage[%d] cmp success +++", net_info->name, stage_idx);
           } else {
             bmrt_trace(p_bmrt);
@@ -1067,44 +1197,30 @@ void bmrt_test()
           }
         }
 
-        #ifdef __linux__
-        gettimeofday(&t5, NULL);
-        long use1 = (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec;
-        long use2 = (t3.tv_sec - t2.tv_sec) * 1000000 + t3.tv_usec - t2.tv_usec;
-        long use3 = (t4.tv_sec - t3.tv_sec) * 1000000 + t4.tv_usec - t3.tv_usec;
-        long use4 = (t5.tv_sec - t4.tv_sec) * 1000000 + t5.tv_usec - t4.tv_usec;
-        #else
-        bmrt_clock_gettime(0, &t5);
-        long use1 = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_nsec - t1.tv_nsec)/1000;
-        long use2 = (t3.tv_sec - t2.tv_sec) * 1000000 + (t3.tv_nsec - t2.tv_nsec)/1000;
-        long use3 = (t4.tv_sec - t3.tv_sec) * 1000000 + (t4.tv_nsec - t3.tv_nsec)/1000;
-        long use4 = (t5.tv_sec - t4.tv_sec) * 1000000 + (t5.tv_nsec - t4.tv_nsec)/1000;
-        #endif
+        bmrt_gettime(t6);
+
+        long use1 = bmrt_interval(t1, t2);
+        long use2 = bmrt_interval(t2, t3);
+        long use3 = bmrt_interval(t3, t4);
+        long use4 = bmrt_interval(t4, t5);
+        long use5 = bmrt_interval(t5, t6);
+
         BMRT_LOG(INFO, "load input time(s): %f", (float)use1 / 1000000);
-        BMRT_LOG(INFO, "calculate  time(s): %f", (float)use2 / 1000000);
-        BMRT_LOG(INFO, "get output time(s): %f", (float)use3 / 1000000);
-        BMRT_LOG(INFO, "compare    time(s): %f", (float)use4 / 1000000);
+        BMRT_LOG(INFO, "pre alloc  time(s): %f", (float)use2 / 1000000);
+        BMRT_LOG(INFO, "calculate  time(s): %f", (float)use3 / 1000000);
+        BMRT_LOG(INFO, "get output time(s): %f", (float)use4 / 1000000);
+        BMRT_LOG(INFO, "compare    time(s): %f", (float)use5 / 1000000);
 
         // free memory
         for (int i = 0; i < net_info->input_num; ++i) {
-          bmrt_must_free_device_mem(p_bmrt, input_tensors[i].device_mem);
+          int devid = net_info->input_loc_devices[i];
+          bm_free_device(bm_handles[devid], input_tensors[i].device_mem);
         }
-        for (int t = 0; t < MEM_NUM; t++) {
+        for (int t = 0; t < REAL_MEM_NUM; t++) {
           for (int i = 0; i < net_info->output_num; ++i) {
-            bmrt_must_free_device_mem(p_bmrt, output_tensors[t][i].device_mem);
-            delete[] host_output[t][i];
+            int devid = net_info->output_loc_devices[i];
+            bm_free_device(bm_handles[devid], output_tensors[t][i].device_mem);
           }
-          #ifndef __linux__
-            delete[] host_output[t];
-            delete[] output_tensors[t];
-          #endif
-        }
-        #ifndef __linux__
-          delete[] host_output;
-          delete[] output_tensors;
-        #endif
-        for (int i = 0; i < net_info->output_num; ++i) {
-          delete[] ref_output[i];
         }
         if (STAGE_SEL != -1) {
           fseek_ref_file_by_stage(stage_idx + 1, net_info->stage_num, net_idx, net_info);
@@ -1113,19 +1229,21 @@ void bmrt_test()
         if (shapes.size() > 0) {
           break;
         }
-      }
+      } // stage_num
       if (NET_SEL != -1) {
         break;
       }
-    }
-  }
+    } // net_num
+  } // loopnum
   free(net_names);
   close_ref_file();
   if (PREALLOC_SIZE != 0) {
     bmrt_must_free_device_mem(p_bmrt, prealloc_mem);
   }
   bmrt_destroy(p_bmrt);
-  bm_dev_free(bm_handle);
+  for (int i = 0; i < device_num; i++) {
+    bm_dev_free(bm_handles[i]);
+  }
 }
 
 extern void bmrt_test_case();
@@ -1140,6 +1258,8 @@ vector<string> test_case_v = {
     "bmrt_launch_data",
     "bmrt_simple_api",
     "bmrt_multi_thread",
+    "bmrt_get_bmodel_api",
+    "bmrt_get_bmodel_api_c",
     // bmruntime new c++ interface
     "bmcpp_load_bmodel",
     "bmcpp_load_bmodel_data",
@@ -1152,6 +1272,8 @@ vector<string> test_case_v = {
     // bmtap2 c++ interface
     "bmtap2cpp_load_bmodel",
     "bmtap2cpp_multi_thread",
+    // bmruntime multi-core interface
+    "bmmc_multi_mession",
 };
 
 void Usage()
@@ -1180,6 +1302,10 @@ void Usage()
       "  --debug_output     : Dump output data and reference data for debug.\n"
       "  --shapes           : Set shapes of the input shapes.\n"
       "  --output_shapes    : Set shapes of the output shapes.\n"
+      "  --cascade_device   : Set devices to run for cascade model, e.g. 1,2\n"
+      "  --core_list        : Set the core id list those will be used to inference\n"
+      "                         e.g. 0,1,2,3 means using 0,1,2,3 core to infer the bmodel.\n"
+      "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
 #ifdef DEBUG
       "  --test_case        : Test api case, \n"
       "                       Option:\n"
@@ -1214,10 +1340,12 @@ DEFINE_int32(stage_idx, -1, "Select the stage with stage_idx to run.");
 DEFINE_bool(debug_output, false, "Dump output data and reference data for debug.");
 DEFINE_string(shapes, "", "Set shapes of the input shapes.");
 DEFINE_string(output_shapes, "", "Set shapes of the output shapes.");
+DEFINE_string(cascade_device, "", "Set devices to run for cascade model, e.g. 1,2");
 DEFINE_bool(mmap, true, "Mmap");
 DEFINE_int32(calculate_times, 1, "Calculate time.");
 DEFINE_string(output_ref, "", "Output_ref");
 DEFINE_bool(only_cmp_last, false, "only cmp last");
+DEFINE_string(core_list, "", "");
 DECLARE_bool(help);
 #ifdef DEBUG
 DEFINE_string(test_case, "", "Test api case");
@@ -1303,6 +1431,58 @@ static vector<bm_shape_t> parseShapes(const string &str) {
     return dst;
 }
 
+static void split(const std::string &s, const std::string &delim,
+                  std::vector<std::string> &ret) {
+    size_t last = 0;
+    size_t index = s.find_first_of(delim, last);
+    while (index != std::string::npos) {
+        ret.push_back(s.substr(last, index - last));
+        last = index + 1;
+        index = s.find_first_of(delim, last);
+    }
+    if (last < s.length()) {
+      ret.push_back(s.substr(last));
+    }
+}
+
+static vector<int> parseCascadeDevices(const string &str) {
+    vector<int> devices;
+    vector<string> sub_str;
+    split(str, ",", sub_str);
+    for(auto &s :sub_str) {
+      devices.push_back(std::atoi(s.c_str()));
+    }
+    return devices;
+}
+
+static vector<int32_t> parseList(const string &str) {
+    vector<int32_t> dst;
+    std::string dst_str(str);
+    for (auto &iter : dst_str) {
+      if (iter == ',')
+        iter = ' ';
+    }
+    std::istringstream out(dst_str);
+    string tmp;
+    while (out >> tmp) {
+        if (tmp == "," || tmp == " ")
+            continue;
+        dst.emplace_back(std::stoi(tmp));
+    }
+    return dst;
+}
+
+static vector<vector<int32_t>> parseMultipleList(const string &str) {
+  std::vector<std::string> list_strings;
+  split(str, ":", list_strings);
+  std::vector<std::vector<int32_t>> results;
+  for(auto& list_string: list_strings){
+    auto list = parseList(list_string);
+    results.push_back(list);
+  }
+  return results;
+}
+
 static void deal_with_options(int argc, char **argv)
 {
   #ifdef __linux__
@@ -1334,6 +1514,8 @@ static void deal_with_options(int argc, char **argv)
                                          {"debug_output", no_argument, &lopt, 14},
                                          {"shapes", required_argument, &lopt, 15},
                                          {"output_shapes", required_argument, &lopt, 16},
+                                         {"cascade_device", required_argument, &lopt, 17},
+                                         {"core_list", required_argument, &lopt, 18},
                                          {0, 0, 0, 0}};
 
   if (argc < 2) {
@@ -1433,6 +1615,12 @@ static void deal_with_options(int argc, char **argv)
           case 16:
             output_shapes = parseShapes(optarg);
             break;
+          case 17:
+            devices = parseCascadeDevices(optarg);
+            break;
+          case 18:
+            core_lists = parseMultipleList(optarg);
+            break;
         }
         break;
       case '?':
@@ -1468,8 +1656,11 @@ static void deal_with_options(int argc, char **argv)
       "  --stage_idx        : Select the stage with stage_idx to run.\n"
       "  --debug_output     : Dump output data and reference data for debug.\n"
       "  --shapes           : Set shapes of the input shapes.\n"
-      "  --output_shapes    : Set shapes of the output shapes.\n");
-
+      "  --output_shapes    : Set shapes of the output shapes.\n"
+      "  --core_list        : Set the core id list those will be used to inference.\n"
+      "                         e.g. 0,1,2,3 means using 0,1,2,3 core to infer the bmodel.\n"
+      "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
+    );
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   if (FLAGS_context_dir.empty() == false)
@@ -1493,7 +1684,8 @@ static void deal_with_options(int argc, char **argv)
   CAL_TIMES = FLAGS_calculate_times;
   EXPORT_NEURON = FLAGS_export_neuron;
   EXPORT_OUTPUT = FLAGS_export_output;
-  OUTPUT_REF_NAME = FLAGS_output_ref;
+  if (FLAGS_output_ref.empty() == false)
+    OUTPUT_REF_NAME = FLAGS_output_ref;
   if (FLAGS_bmodel.empty() == false) {
     BMODEL_PATH = FLAGS_bmodel;
     NEED_CMP = false;
@@ -1503,6 +1695,7 @@ static void deal_with_options(int argc, char **argv)
   if (FLAGS_debug_output) OUTPUT_DEBUG = true;
   shapes = parseShapes(FLAGS_shapes);
   output_shapes = parseShapes(FLAGS_output_shapes);
+  core_lists = parseMultipleList(FLAGS_core_list);
   if (FLAGS_only_cmp_last) MEM_NUM = 1;
   if (!NEED_CMP) MEM_NUM = 1;
   gflags::HandleCommandLineHelpFlags();
@@ -1511,6 +1704,9 @@ static void deal_with_options(int argc, char **argv)
   BMRT_LOG(INFO, "Loop num: %d", LOOP_NUM);
 
   #endif
+  if (core_lists.empty()) {
+    core_lists = {{0}};
+  }
 }
 
 int main(int argc, char **argv)

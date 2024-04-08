@@ -4,6 +4,7 @@
 #include "gpio.h"
 #include "bm_irq.h"
 #include "bm1684/bm1684_irq.h"
+#include "bm1688/bm1688_irq.h"
 
 /*gpio register*/
 #define GPIO_SWPORTA_DR		0x000
@@ -76,11 +77,17 @@ int bmdrv_gpio_init(struct bm_device_info *bmdi)
 #ifndef SOC_MODE
 void bm_gpio_request_irq(struct bm_device_info *bmdi)
 {
-	bmdrv_submodule_request_irq(bmdi, GPIO_IRQ_ID, bmdrv_gpio_irq);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		bmdrv_submodule_request_irq(bmdi, BM1688_GPIO_IRQ_ID, bmdrv_gpio_irq);
+	else
+		bmdrv_submodule_request_irq(bmdi, GPIO_IRQ_ID, bmdrv_gpio_irq);
 }
 
 void bm_gpio_free_irq(struct bm_device_info *bmdi)
 {
-	bmdrv_submodule_free_irq(bmdi, GPIO_IRQ_ID);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		bmdrv_submodule_free_irq(bmdi, BM1688_GPIO_IRQ_ID);
+	else
+		bmdrv_submodule_free_irq(bmdi, GPIO_IRQ_ID);
 }
 #endif

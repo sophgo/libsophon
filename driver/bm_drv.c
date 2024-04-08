@@ -49,7 +49,7 @@ static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 }
 
 void bmdrv_post_api_process(struct bm_device_info *bmdi,
-		struct api_fifo_entry api_entry, u32 channel)
+		struct api_fifo_entry api_entry, u32 channel, int core_id)
 {
 	struct bm_thread_info *ti = api_entry.thd_info;
 	struct bm_trace_item *ptitem = NULL;
@@ -58,33 +58,41 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	u32 api_size = 0;
 	u32 api_duration = 0;
 	u32 api_result = 0;
+	unsigned long irq_flags;
 
-	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, offsetof(bm_kapi_header_t, api_id) / sizeof(u32));
-	api_id = shmem_reg_read_enh(bmdi, next_rp, channel);
-	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, offsetof(bm_kapi_header_t, api_size) / sizeof(u32));
-	api_size = shmem_reg_read_enh(bmdi, next_rp, channel);
-	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, offsetof(bm_kapi_header_t, duration) / sizeof(u32));
-	api_duration = shmem_reg_read_enh(bmdi, next_rp, channel);
-	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, offsetof(bm_kapi_header_t, result) / sizeof(u32));
-	api_result = shmem_reg_read_enh(bmdi, next_rp, channel);
+	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, api_id) / sizeof(u32));
+	api_id = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
+	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, api_size) / sizeof(u32));
+	api_size = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
+	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, duration) / sizeof(u32));
+	api_duration = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
+	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, result) / sizeof(u32));
+	api_result = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (channel == BM_MSGFIFO_CHANNEL_CPU)
-		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, (sizeof(bm_kapi_header_t) + sizeof(bm_kapi_opt_header_t)) / sizeof(u32) + api_size);
+		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, (sizeof(bm_kapi_header_t) + sizeof(bm_kapi_opt_header_t)) / sizeof(u32) + api_size);
 	else
 #endif
-		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32) + api_size);
-	bmdi->api_info[channel].sw_rp = next_rp;
+		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32) + api_size);
+	bmdi->api_info[core_id][channel].sw_rp = next_rp;
 	//todo, print a log for tmp;
-	if (api_result != 0)
-		pr_err("bm-sophon%d api process fail, error id is 0x%x", bmdi->dev_index, api_id);
-
+	if (api_result != 0) {
+		pr_err("[%s: %d] error: bm-sophon%d, api_id=0x%x, core_id=0x%x, api_result=0x%x\n",
+			 __func__, __LINE__, bmdi->dev_index, api_id, core_id, api_result);
+	}
 	if (ti) {
-		ti->profile.tpu_process_time += api_duration;
+		if (core_id == 0) {
+			ti->profile.tpu_process_time += api_duration;
+			bmdi->profile.tpu_process_time += api_duration;
+		}
+		else if (core_id == 1) {
+			ti->profile.tpu1_process_time += api_duration;
+			bmdi->profile.tpu1_process_time += api_duration;
+		}
 		ti->profile.completed_api_counter++;
-		bmdi->profile.tpu_process_time += api_duration;
 		bmdi->profile.completed_api_counter++;
 
-		mutex_lock(&ti->trace_mutex);
+
 		if (ti->trace_enable) {
 			ptitem = (struct bm_trace_item *)mempool_alloc(bmdi->trace_info.trace_mempool, GFP_KERNEL);
 			ptitem->payload.trace_type = 1;
@@ -98,10 +106,11 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 #endif
 			ptitem->payload.start_time = ptitem->payload.end_time - api_duration * 4166;
 			INIT_LIST_HEAD(&ptitem->node);
+			spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
 			list_add_tail(&ptitem->node, &ti->trace_list);
 			ti->trace_item_num++;
+			spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
 		}
-		mutex_unlock(&ti->trace_mutex);
 	}
 }
 
@@ -116,10 +125,14 @@ static char *bmdrv_class_devnode(struct device *dev, umode_t *mode)
 static void bmdrv_sw_register_init(struct bm_device_info *bmdi)
 {
 	int channel = 0;
+	int core = 0;
+	int core_num = bmdi->cinfo.tpu_core_num;	
 
-	for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
-		bmdi->api_info[channel].bm_api_init = bmdrv_api_init;
-		bmdi->api_info[channel].bm_api_deinit = bmdrv_api_deinit;
+	for (core = 0; core < core_num; core++) {
+		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
+			bmdi->api_info[core][channel].bm_api_init = bmdrv_api_init;
+			bmdi->api_info[core][channel].bm_api_deinit = bmdrv_api_deinit;
+		}
 	}
 	bmdi->c_attr.bm_card_attr_init = bmdrv_card_attr_init;
 	bmdi->memcpy_info.bm_memcpy_init = bmdrv_memcpy_init;
@@ -133,8 +146,10 @@ static void bmdrv_sw_register_init(struct bm_device_info *bmdi)
 int bmdrv_software_init(struct bm_device_info *bmdi)
 {
 	int ret = 0;
-	u32 channel = 0;
 	struct chip_info *cinfo = &bmdi->cinfo;
+	u32 channel = 0;
+	u32 core = 0;
+	u32 core_num = cinfo->tpu_core_num;
 
 	INIT_LIST_HEAD(&bmdi->handle_list);
 	bmdrv_sw_register_init(bmdi);
@@ -145,10 +160,12 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 		bmdi->gmem_info.bm_gmem_init(bmdi))
 		return -EFAULT;
 
-	for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
-		if (bmdi->api_info[channel].bm_api_init &&
-			bmdi->api_info[channel].bm_api_init(bmdi, channel))
-			return -EFAULT;
+	for (core = 0; core < core_num; core++) {
+		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
+			if (bmdi->api_info[core][channel].bm_api_init &&
+				bmdi->api_info[core][channel].bm_api_init(bmdi, core, channel))
+				return -EFAULT;
+		}
 	}
 
 	if (bmdi->c_attr.bm_card_attr_init &&
@@ -175,10 +192,14 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 void bmdrv_software_deinit(struct bm_device_info *bmdi)
 {
 	u32 channel = 0;
+	u32 core = 0;
+	u32 core_num = bmdi->cinfo.tpu_core_num;
 
-	for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
-		if (bmdi->api_info[channel].bm_api_deinit)
-			bmdi->api_info[channel].bm_api_deinit(bmdi, channel);
+	for (core = 0; core < core_num; core++) {
+		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
+			if (bmdi->api_info[core][channel].bm_api_deinit)
+				bmdi->api_info[core][channel].bm_api_deinit(bmdi, core, channel);
+		}
 	}
 	if (bmdi->memcpy_info.bm_memcpy_deinit)
 		bmdi->memcpy_info.bm_memcpy_deinit(bmdi);

@@ -162,6 +162,16 @@ typedef struct sg_mem_desc sg_device_mem_t;
 typedef struct sg_mem_desc sg_system_mem_t;
 #endif
 
+struct stride_cfg {
+  unsigned short width;
+  unsigned short height;
+	unsigned short src_width;
+	unsigned short dst_width;
+	unsigned short format;   //2:2-byte format, others:1-byte format
+	unsigned short fixed_data;
+	bool flush;
+};
+
 struct bm_context;
 typedef struct bm_context *bm_handle_t;
 
@@ -179,6 +189,17 @@ typedef struct bm_module
 typedef struct bm_module *tpu_kernel_module_t;
 typedef int tpu_kernel_function_t;
 
+typedef struct{
+	int core_id;
+	tpu_kernel_function_t func_id;
+	void *param_data;
+	unsigned int param_size;
+} tpu_launch_param_t;
+typedef struct{
+	tpu_launch_param_t *param_list;
+	int param_num;
+} tpu_launch_async_param_t;
+
 /**
  * @name    tpu_kernel_load_module_file
  * @brief   To load dyn file
@@ -189,6 +210,18 @@ typedef int tpu_kernel_function_t;
  * @retval  dyn lib ptr
  */
 tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *module_file);
+
+/**
+ * @name    tpu_kernel_load_module_file_to_core
+ * @brief   To load dyn file
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  module_file     dyn file
+ * @param [in]  core_id         core id
+ * @retval  dyn lib ptr
+ */
+tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, const char *module_file, int core_id);
 
 /**
  * @name    tpu_kernel_load_module_file_key
@@ -204,6 +237,20 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
 tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const char *module_file, const char *key, int size);
 
 /**
+ * @name    tpu_kernel_load_module_file_key_to_core
+ * @brief   To load dyn file with key
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  module_file     dyn file
+ * @param [in]  key             identification str
+ * @param [in]  size            key size
+ * @param [in]  core_id         core id
+ * @retval  dyn lib ptr
+ */
+tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, const char *module_file, const char *key, int size, int core_id);
+
+/**
  * @name    tpu_kernel_unload_module
  * @brief   To unload dyn file
  * @ingroup bmlib_runtime
@@ -214,6 +261,19 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
  *          Other code  Fails.
  */
 bm_status_t tpu_kernel_unload_module(bm_handle_t handle, tpu_kernel_module_t p_module);
+
+/**
+ * @name    tpu_kernel_unload_module_from_core
+ * @brief   To unload dyn file
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  p_module        dyn lib ptr
+ * @param [in]  core_id         core id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_unload_module_from_core(bm_handle_t handle, tpu_kernel_module_t p_module, int core_id);
 
 /**
  * @name    tpu_kernel_free_module
@@ -240,6 +300,19 @@ bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_mod
 tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data, size_t length);
 
 /**
+ * @name    tpu_kernel_load_module_to_core
+ * @brief   To load dyn module
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  data            dyn module
+ * @param [in]  length          dyn module size
+ * @param [in]  core_id         core id
+ * @retval  dyn lib ptr
+ */
+tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const char *data, size_t length, int core_id);
+
+/**
  * @name    tpu_kernel_get_function
  * @brief   To get function from lib
  * @ingroup bmlib_runtime
@@ -250,6 +323,19 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
  * @retval  function id
  */
 tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_module_t module, const char *function);
+
+/**
+ * @name    tpu_kernel_get_function_from_core
+ * @brief   To get function from lib
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  module          dyn module
+ * @param [in]  function        funtion name
+ * @param [in]  core_id         core id
+ * @retval  function id
+ */
+tpu_kernel_function_t tpu_kernel_get_function_from_core(bm_handle_t handle, tpu_kernel_module_t module, const char *function, int core_id);
 
 /**
  * @name    tpu_kernel_launch
@@ -266,6 +352,21 @@ tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_mod
 bm_status_t tpu_kernel_launch(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size);
 
 /**
+ * @name    tpu_kernel_launch_from_core
+ * @brief   To launch function with sync
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  function        function id
+ * @param [in]  args            funtion args
+ * @param [in]  size            args size
+ * @param [in]  core_id         core id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_launch_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id);
+
+/**
  * @name    tpu_kernel_launch_async
  * @brief   To launch function with async
  * @ingroup bmlib_runtime
@@ -280,6 +381,51 @@ bm_status_t tpu_kernel_launch(bm_handle_t handle, tpu_kernel_function_t function
 bm_status_t tpu_kernel_launch_async(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size);
 
 /**
+ * @name    tpu_kernel_launch_async_from_core
+ * @brief   To launch function with async
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  function        function id
+ * @param [in]  args            funtion args
+ * @param [in]  size            args size
+ * @param [in]  core_id         core_id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_launch_async_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id);
+
+/**
+ * @name    tpu_kernel_launch_async_multi_cores
+ * @brief   To launch function with async for multi cores
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  param_list      param_list
+ * @param [in]  param_num       funtion params
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_launch_async_multicores(bm_handle_t handle, tpu_launch_param_t *param_list, int param_num);
+
+/**
+ * @name    tpu_kernel_launch_sync_multi_cores
+ * @brief   To launch function with sync for multi cores
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  func_name       function name
+ * @param [in]  api_param       funtion params
+ * @param [in]  api_size        params size
+ * @param [in]  core_list       list of core ids
+ * @param [in]  core_num        number of cores
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_launch_sync_multi_cores(bm_handle_t handle, const char *func_name, const void *api_param,
+                                              size_t api_size, const int* core_list, const int core_num);
+
+/**
  * @name    tpu_kernel_sync
  * @brief   To sync
  * @ingroup bmlib_runtime
@@ -289,6 +435,18 @@ bm_status_t tpu_kernel_launch_async(bm_handle_t handle, tpu_kernel_function_t fu
  *          Other code  Fails.
  */
 bm_status_t tpu_kernel_sync(bm_handle_t handle);
+
+/**
+ * @name    tpu_kernel_sync_from_core
+ * @brief   To sync
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  core_id         core_id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_sync_from_core(bm_handle_t handle, int core_id);
 void show_md5(unsigned char md5[]);
 
 DECL_EXPORT void bmlib_log(const char *tag, int level, const char *fmt, ...);
@@ -313,6 +471,17 @@ DECL_EXPORT void bmlib_log(const char *tag, int level, const char *fmt, ...);
     }                                          \
   } while (0)
 #endif
+
+/**
+ * @name    bm_reset_tpu
+ * @brief   safely reset tpu system
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The given handle
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_reset_tpu(bm_handle_t handle);
 
 /*******************handle releated functions *********************************/
 /**
@@ -1002,6 +1171,28 @@ DECL_EXPORT bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
                           int len);
 
 /**
+ * @name    bm_memcpy_d2d_with_core
+ * @brief   To copy specified dwords of data from one piece of device memory
+ *          to another piece of device memory within one device. Both source
+ *          and destination offsets can be specified.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle     The device handle
+ * @param [in]  dst       The destination device memory
+ * @param [in] dst_offset The offset of destination device memory address
+ * @param [in]  src       The source device memory
+ * @param [in] src_offset The offset of source device memory address
+ * @param [in]  len       Length of data to copy (in DWORD 4 bytes)
+ * @param [in] core_id    The core id to copy
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_d2d_with_core(bm_handle_t handle, bm_device_mem_t dst,
+                          int dst_offset, bm_device_mem_t src, int src_offset,
+                          int len, int core_id);
+
+/**
  * @name    bm_memcpy_d2d_byte
  * @brief   To copy specified bytes of data from one piece of device memory
  *          to another piece of device memory within one device. Both source
@@ -1021,6 +1212,28 @@ DECL_EXPORT bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
 DECL_EXPORT bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
                                size_t dst_offset, bm_device_mem_t src,
                                size_t src_offset, size_t size);
+
+/**
+ * @name    bm_memcpy_d2d_byte_with_core
+ * @brief   To copy specified bytes of data from one piece of device memory
+ *          to another piece of device memory within one device. Both source
+ *          and destination offsets can be specified.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle     The device handle
+ * @param [in]  dst       The destination device memory
+ * @param [in] dst_offset The offset of destination device memory address (in bytes)
+ * @param [in]  src       The source device memory
+ * @param [in] src_offset The offset of source device memory address (in bytes)
+ * @param [in]  size      Size of data to copy (in bytes)
+ * @param [in] core_id    The core id to copy
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst,
+                               size_t dst_offset, bm_device_mem_t src,
+                               size_t src_offset, size_t size, int core_id);
 
 /**
  * @name    bm_memcpy_d2d_stride
@@ -1052,6 +1265,37 @@ DECL_EXPORT bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
                                  int             format_size);
 
 /**
+ * @name    bm_memcpy_d2d_stride_with_core
+ * @brief   To copy specified data from one piece of device memory
+ *          to another piece of device memory within one device. Both source
+ *          and destination offsets can be specified.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle      The device handle
+ * @param [in] dst         The destination device memory
+ * @param [in] dst_stride  The data stride of destination data
+ * @param [in] src         The source device memory
+ * @param [in] src_stride  The data stride of source data
+ * @param [in] count       Count of data to copy
+ * @param [in] format_size Data format byte size, such as sizeof(uint8_t), sizeof(float), etc.
+ *                         format_size only support 1/2/4.
+ * @param [in] core_id     The core id to copy.
+ *
+ * dst_stride MUST be 1, EXCEPT: dst_stride == 4 && src_stride == 1 && format_size ==1
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_d2d_stride_with_core(bm_handle_t     handle,
+                                 bm_device_mem_t dst,
+                                 int             dst_stride,
+                                 bm_device_mem_t src,
+                                 int             src_stride,
+                                 int             count,
+                                 int             format_size,
+                                 int             core_id);
+
+/**
  * @name    bm_memcpy_c2c
  * @brief   To copy data from one chip to another chip.
  *          (Used in multi-chip card scenario)
@@ -1070,6 +1314,21 @@ DECL_EXPORT bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_ha
                           bool force_dst_cdma);
 
 /**
+ * @name    bm_memset_device_to_core
+ * @brief   To fill in specified device memory with the given value
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]   value  The value used to fill. (int type)
+ * @param [in]  mem     The device memory which will be filled in
+ * @param [in]  core_id The core id to memset.
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memset_device_to_core(bm_handle_t handle, const int value,
+                             bm_device_mem_t mem, int core_id);
+
+/**
  * @name    bm_memset_device
  * @brief   To fill in specified device memory with the given value
  * @ingroup bmlib_runtime
@@ -1082,6 +1341,22 @@ DECL_EXPORT bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_ha
  */
 DECL_EXPORT bm_status_t bm_memset_device(bm_handle_t handle, const int value,
                              bm_device_mem_t mem);
+
+/**
+ * @name    bm_memset_device_ext_to_core
+ * @brief   To fill in specified device memory with the given value and mode
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]   value  The pointer of value used to fill
+ * @param [in]   mode   The valid bytes of *value
+ * @param [in]  mem     The device memory which will be filled in
+ * @param [in]  core_id The core id to memset.
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mode,
+                             bm_device_mem_t mem, int core_id);
 
 /**
  * @name    bm_memset_device_ext
@@ -1474,6 +1749,19 @@ DECL_EXPORT bm_status_t bm_device_sync(bm_handle_t handle);
 DECL_EXPORT bm_status_t bm_handle_sync(bm_handle_t handle);
 
 /**
+ * @name    bm_handle_sync_from_core
+ * @brief   To synchronize APIs of the handle. The thread will block
+ *          until all the outstanding APIs of the handle are finished.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle   The device handle
+ * @param [in] core_id  The core id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id);
+
+/**
  * @name    bm_thread_sync
  * @brief   To synchronize APIs of the current thread. The thread will block
  *          until all the outstanding APIs of the current thread are finished.
@@ -1485,6 +1773,19 @@ DECL_EXPORT bm_status_t bm_handle_sync(bm_handle_t handle);
  */
 DECL_EXPORT bm_status_t bm_thread_sync(bm_handle_t handle);
 
+/**
+ * @name    bm_thread_sync_from_core
+ * @brief   To synchronize APIs of the current thread. The thread will block
+ *          until all the outstanding APIs of the current thread are finished.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] core_id The core id
+ * @retval  BM_SUCCESS Succeeds.
+ *          Other code Fails.
+ */
+DECL_EXPORT bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id);
+
 /*******************trace and profile releated functions **********************/
 typedef struct bm_profile {
 #ifdef __linux__
@@ -1493,6 +1794,7 @@ typedef struct bm_profile {
   unsigned long cdma_out_time;
   unsigned long cdma_out_counter;
   unsigned long tpu_process_time;
+  unsigned long tpu1_process_time;
   unsigned long sent_api_counter;
   unsigned long completed_api_counter;
 #else
@@ -1501,6 +1803,7 @@ typedef struct bm_profile {
   unsigned long long cdma_out_time;
   unsigned long long cdma_out_counter;
   unsigned long long tpu_process_time;
+  unsigned long long tpu1_process_time;
   unsigned long long sent_api_counter;
   unsigned long long completed_api_counter;
 #endif
@@ -1617,6 +1920,7 @@ struct bm_misc_info {
   long long ddr1_size;
   long long ddr2_size;
   unsigned int chipid;
+  int tpu_core_num;
 #define BM1682_CHIPID_BIT_MASK (0X1 << 0)
 #define BM1684_CHIPID_BIT_MASK (0X1 << 1)
 #define BM1686_CHIPID_BIT_MASK (0X1 << 2)
@@ -2122,6 +2426,13 @@ DECL_EXPORT bm_status_t tpu_kernel_launch_sync(
         const void   *args,
         unsigned int  size);
 
+DECL_EXPORT bm_status_t tpu_kernel_launch_sync_by_core(
+        bm_handle_t   handle,
+        const char   *func_name,
+        const void   *args,
+        unsigned int  size,
+        int core_id);
+
 DECL_EXPORT bm_status_t okkernel_sync(bm_handle_t handle);
 
 /**
@@ -2423,6 +2734,39 @@ DECL_EXPORT bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_s
  */
 DECL_EXPORT bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status);
 
+/**
+ * @name    bm_get_tpu_scalar_num
+ * @brief   To get the core number of TPU scalar
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle    The device handle
+ * @param [out] core_num The core number of TPU scalar
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_scalar_num(bm_handle_t handle, unsigned int *core_num);
+
+/**
+ * @name    bm_get_tpu_scalar_num
+ * @brief   To get the core number of TPU scalar
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle    The device handle
+ * @param [in/out] bm_api_cfg_pwr_ctrl Pointer to cfg_pwr_ctrl_t structure
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl);
+
+#define  bm_get_tpu_core_num bm_get_tpu_scalar_num
+
+bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
+                          bm_device_mem_t src, bm_device_mem_t dst,
+                          struct stride_cfg stride, bool force_use_dst_cdma);
+bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src,
+                          struct stride_cfg stride);
+bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src,
+                          struct stride_cfg stride);
 #if defined(__cplusplus)
 }
 #endif

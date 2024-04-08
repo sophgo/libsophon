@@ -3,7 +3,6 @@ cmake_policy(SET CMP0048 NEW)
 cmake_policy(SET CMP0046 NEW)
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE PATH "Install prefix")
-
 set(common_dir ${CMAKE_CURRENT_SOURCE_DIR}/../tpu-common)
 if (NOT EXISTS ${common_dir})
     message(FATAL_ERROR "${common_dir} does not exist")
@@ -16,26 +15,30 @@ find_package(bmlib REQUIRED)
 find_package(bmodel REQUIRED)
 find_package(Threads REQUIRED)
 
-# dump kernel_module.so to kernel_module.h
-set(KERNEL_MODULE_PATH "${PROJECT_SOURCE_DIR}/lib/libbm1684x_kernel_module.so")
-set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/kernel_module.h")
-add_custom_command(
-    OUTPUT ${OUTPUT_FILE}
-    COMMAND echo "const unsigned char kernel_module_data[] = {" > ${OUTPUT_FILE}
-    COMMAND hexdump -v -e '8/1 \"0x%02x,\" \"\\n\"' ${KERNEL_MODULE_PATH} >> ${OUTPUT_FILE}
-    COMMAND echo "}\;" >> ${OUTPUT_FILE}
-)
-add_custom_target(kernel_header DEPENDS ${OUTPUT_FILE})
+include(gen_kernel_header.cmake)
+add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
 
 file(GLOB_RECURSE srcs src/*.cpp src/*.c)
 
 add_library(bmrt SHARED ${srcs})
+add_library(bmrt_static STATIC ${srcs})
 add_dependencies(bmrt kernel_header)
+add_dependencies(bmrt_static kernel_header)
+
 target_link_libraries(bmrt PUBLIC
     bmodel::bmodel bmlib::bmlib
     ${CMAKE_DL_LIBS}
     Threads::Threads)
+target_link_libraries(bmrt_static PUBLIC
+    bmodel::bmodel bmlib::bmlib
+    ${CMAKE_DL_LIBS}
+    Threads::Threads)
 target_include_directories(bmrt PUBLIC
+    ${common_dir}/base/
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_BINARY_DIR})
+target_include_directories(bmrt_static PUBLIC
     ${common_dir}/base/
     ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -45,16 +48,36 @@ include(git-utils)
 get_version_from_tag(version soversion revision)
 
 set_target_properties(bmrt PROPERTIES SOVERSION ${soversion})
-
+set_target_properties(bmrt_static PROPERTIES SOVERSION ${soversion})
 set(app_srcs
     app/bmrt_test.cpp
     app/bmrt_test_case.cpp)
 add_executable(bmrt_test ${app_srcs})
-target_link_libraries(bmrt_test bmrt)
+target_link_libraries(bmrt_test bmrt  bmrt_static)
 target_compile_definitions(bmrt_test PRIVATE
     VER="${revision}")
 
-install(TARGETS bmrt bmrt_test
+set(runner_srcs
+    app/model_runner/cnpy.cpp
+    app/model_runner/model_runner.cpp)
+add_executable(model_runner ${runner_srcs})
+
+if("${ARCH}" STREQUAL "arm64")
+    find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
+    target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
+    target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so)
+elseif("${ARCH}" STREQUAL "loongarch64")
+    find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
+    target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
+    target_link_libraries(model_runner bmrt bmrt_static ${LIB_DIR}/lib/libz.so)
+else()
+    target_link_libraries(model_runner bmrt bmrt_static z)
+endif()
+
+target_compile_definitions(model_runner PRIVATE
+    VER="${revision}")
+set_target_properties(bmrt_static PROPERTIES OUTPUT_NAME bmrt)
+install(TARGETS bmrt bmrt_test bmrt_static model_runner
     LIBRARY DESTINATION lib
     COMPONENT libsophon
     RUNTIME DESTINATION bin

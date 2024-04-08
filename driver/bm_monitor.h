@@ -4,7 +4,7 @@
 #include "bm_debug.h"
 
 struct bm_monitor_thread_info {
-	struct bm_arm9fw_log_mem log_mem;
+	struct bm_arm9fw_log_mem log_mem[2];	// log_mem[0]:scalar0 log_mem[1]:scalar1
 	struct task_struct *monitor_task;
 };
 

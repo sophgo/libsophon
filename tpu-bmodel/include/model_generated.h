@@ -16,6 +16,9 @@ struct ShapeT;
 struct CmdGroup;
 struct CmdGroupT;
 
+struct CoreCommands;
+struct CoreCommandsT;
+
 struct StageIR;
 struct StageIRT;
 
@@ -52,11 +55,17 @@ struct NetDynamicT;
 struct NetParameter;
 struct NetParameterT;
 
+struct Cascade;
+struct CascadeT;
+
 struct Net;
 struct NetT;
 
 struct KernelModule;
 struct KernelModuleT;
+
+struct CpuopModule;
+struct CpuopModuleT;
 
 struct Model;
 struct ModelT;
@@ -284,6 +293,127 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(
 }
 
 flatbuffers::Offset<CmdGroup> CreateCmdGroup(flatbuffers::FlatBufferBuilder &_fbb, const CmdGroupT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CoreCommandsT : public flatbuffers::NativeTable {
+  typedef CoreCommands TableType;
+  std::vector<std::unique_ptr<CmdGroupT>> gdma_tiu_commands;
+  std::vector<Binary> sdma_commands;
+  std::vector<Binary> hau_commands;
+  std::vector<Binary> cdma_commands;
+  CoreCommandsT() {
+  }
+};
+
+struct CoreCommands FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef CoreCommandsT NativeTableType;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_GDMA_TIU_COMMANDS = 4,
+    VT_SDMA_COMMANDS = 6,
+    VT_HAU_COMMANDS = 8,
+    VT_CDMA_COMMANDS = 10
+  };
+  const flatbuffers::Vector<flatbuffers::Offset<CmdGroup>> *gdma_tiu_commands() const {
+    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<CmdGroup>> *>(VT_GDMA_TIU_COMMANDS);
+  }
+  flatbuffers::Vector<flatbuffers::Offset<CmdGroup>> *mutable_gdma_tiu_commands() {
+    return GetPointer<flatbuffers::Vector<flatbuffers::Offset<CmdGroup>> *>(VT_GDMA_TIU_COMMANDS);
+  }
+  const flatbuffers::Vector<const Binary *> *sdma_commands() const {
+    return GetPointer<const flatbuffers::Vector<const Binary *> *>(VT_SDMA_COMMANDS);
+  }
+  flatbuffers::Vector<const Binary *> *mutable_sdma_commands() {
+    return GetPointer<flatbuffers::Vector<const Binary *> *>(VT_SDMA_COMMANDS);
+  }
+  const flatbuffers::Vector<const Binary *> *hau_commands() const {
+    return GetPointer<const flatbuffers::Vector<const Binary *> *>(VT_HAU_COMMANDS);
+  }
+  flatbuffers::Vector<const Binary *> *mutable_hau_commands() {
+    return GetPointer<flatbuffers::Vector<const Binary *> *>(VT_HAU_COMMANDS);
+  }
+  const flatbuffers::Vector<const Binary *> *cdma_commands() const {
+    return GetPointer<const flatbuffers::Vector<const Binary *> *>(VT_CDMA_COMMANDS);
+  }
+  flatbuffers::Vector<const Binary *> *mutable_cdma_commands() {
+    return GetPointer<flatbuffers::Vector<const Binary *> *>(VT_CDMA_COMMANDS);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffset(verifier, VT_GDMA_TIU_COMMANDS) &&
+           verifier.VerifyVector(gdma_tiu_commands()) &&
+           verifier.VerifyVectorOfTables(gdma_tiu_commands()) &&
+           VerifyOffset(verifier, VT_SDMA_COMMANDS) &&
+           verifier.VerifyVector(sdma_commands()) &&
+           VerifyOffset(verifier, VT_HAU_COMMANDS) &&
+           verifier.VerifyVector(hau_commands()) &&
+           VerifyOffset(verifier, VT_CDMA_COMMANDS) &&
+           verifier.VerifyVector(cdma_commands()) &&
+           verifier.EndTable();
+  }
+  CoreCommandsT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CoreCommandsT *_o, const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static flatbuffers::Offset<CoreCommands> Pack(flatbuffers::FlatBufferBuilder &_fbb, const CoreCommandsT* _o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CoreCommandsBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_gdma_tiu_commands(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CmdGroup>>> gdma_tiu_commands) {
+    fbb_.AddOffset(CoreCommands::VT_GDMA_TIU_COMMANDS, gdma_tiu_commands);
+  }
+  void add_sdma_commands(flatbuffers::Offset<flatbuffers::Vector<const Binary *>> sdma_commands) {
+    fbb_.AddOffset(CoreCommands::VT_SDMA_COMMANDS, sdma_commands);
+  }
+  void add_hau_commands(flatbuffers::Offset<flatbuffers::Vector<const Binary *>> hau_commands) {
+    fbb_.AddOffset(CoreCommands::VT_HAU_COMMANDS, hau_commands);
+  }
+  void add_cdma_commands(flatbuffers::Offset<flatbuffers::Vector<const Binary *>> cdma_commands) {
+    fbb_.AddOffset(CoreCommands::VT_CDMA_COMMANDS, cdma_commands);
+  }
+  explicit CoreCommandsBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  CoreCommandsBuilder &operator=(const CoreCommandsBuilder &);
+  flatbuffers::Offset<CoreCommands> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<CoreCommands>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<CoreCommands> CreateCoreCommands(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CmdGroup>>> gdma_tiu_commands = 0,
+    flatbuffers::Offset<flatbuffers::Vector<const Binary *>> sdma_commands = 0,
+    flatbuffers::Offset<flatbuffers::Vector<const Binary *>> hau_commands = 0,
+    flatbuffers::Offset<flatbuffers::Vector<const Binary *>> cdma_commands = 0) {
+  CoreCommandsBuilder builder_(_fbb);
+  builder_.add_cdma_commands(cdma_commands);
+  builder_.add_hau_commands(hau_commands);
+  builder_.add_sdma_commands(sdma_commands);
+  builder_.add_gdma_tiu_commands(gdma_tiu_commands);
+  return builder_.Finish();
+}
+
+inline flatbuffers::Offset<CoreCommands> CreateCoreCommandsDirect(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    const std::vector<flatbuffers::Offset<CmdGroup>> *gdma_tiu_commands = nullptr,
+    const std::vector<Binary> *sdma_commands = nullptr,
+    const std::vector<Binary> *hau_commands = nullptr,
+    const std::vector<Binary> *cdma_commands = nullptr) {
+  auto gdma_tiu_commands__ = gdma_tiu_commands ? _fbb.CreateVector<flatbuffers::Offset<CmdGroup>>(*gdma_tiu_commands) : 0;
+  auto sdma_commands__ = sdma_commands ? _fbb.CreateVectorOfStructs<Binary>(*sdma_commands) : 0;
+  auto hau_commands__ = hau_commands ? _fbb.CreateVectorOfStructs<Binary>(*hau_commands) : 0;
+  auto cdma_commands__ = cdma_commands ? _fbb.CreateVectorOfStructs<Binary>(*cdma_commands) : 0;
+  return bmodel::CreateCoreCommands(
+      _fbb,
+      gdma_tiu_commands__,
+      sdma_commands__,
+      hau_commands__,
+      cdma_commands__);
+}
+
+flatbuffers::Offset<CoreCommands> CreateCoreCommands(flatbuffers::FlatBufferBuilder &_fbb, const CoreCommandsT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct StageIRT : public flatbuffers::NativeTable {
   typedef StageIR TableType;
@@ -514,6 +644,8 @@ struct TensorT : public flatbuffers::NativeTable {
   uint32_t cpu_addr;
   uint32_t pad_h;
   int32_t zero_point;
+  int32_t hidden;
+  int32_t index;
   TensorT()
       : data_type(0),
         gmem_stmode(0),
@@ -523,7 +655,9 @@ struct TensorT : public flatbuffers::NativeTable {
         scale(1.0f),
         cpu_addr(0),
         pad_h(0),
-        zero_point(0) {
+        zero_point(0),
+        hidden(0),
+        index(0) {
   }
 };
 
@@ -540,7 +674,9 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_SCALE = 18,
     VT_CPU_ADDR = 20,
     VT_PAD_H = 22,
-    VT_ZERO_POINT = 24
+    VT_ZERO_POINT = 24,
+    VT_HIDDEN = 26,
+    VT_INDEX = 28
   };
   const flatbuffers::String *name() const {
     return GetPointer<const flatbuffers::String *>(VT_NAME);
@@ -608,6 +744,18 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   bool mutate_zero_point(int32_t _zero_point) {
     return SetField<int32_t>(VT_ZERO_POINT, _zero_point, 0);
   }
+  int32_t hidden() const {
+    return GetField<int32_t>(VT_HIDDEN, 0);
+  }
+  bool mutate_hidden(int32_t _hidden) {
+    return SetField<int32_t>(VT_HIDDEN, _hidden, 0);
+  }
+  int32_t index() const {
+    return GetField<int32_t>(VT_INDEX, 0);
+  }
+  bool mutate_index(int32_t _index) {
+    return SetField<int32_t>(VT_INDEX, _index, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_NAME) &&
@@ -624,6 +772,8 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_CPU_ADDR) &&
            VerifyField<uint32_t>(verifier, VT_PAD_H) &&
            VerifyField<int32_t>(verifier, VT_ZERO_POINT) &&
+           VerifyField<int32_t>(verifier, VT_HIDDEN) &&
+           VerifyField<int32_t>(verifier, VT_INDEX) &&
            verifier.EndTable();
   }
   TensorT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -667,6 +817,12 @@ struct TensorBuilder {
   void add_zero_point(int32_t zero_point) {
     fbb_.AddElement<int32_t>(Tensor::VT_ZERO_POINT, zero_point, 0);
   }
+  void add_hidden(int32_t hidden) {
+    fbb_.AddElement<int32_t>(Tensor::VT_HIDDEN, hidden, 0);
+  }
+  void add_index(int32_t index) {
+    fbb_.AddElement<int32_t>(Tensor::VT_INDEX, index, 0);
+  }
   explicit TensorBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -692,10 +848,14 @@ inline flatbuffers::Offset<Tensor> CreateTensor(
     float scale = 1.0f,
     uint32_t cpu_addr = 0,
     uint32_t pad_h = 0,
-    int32_t zero_point = 0) {
+    int32_t zero_point = 0,
+    int32_t hidden = 0,
+    int32_t index = 0) {
   TensorBuilder builder_(_fbb);
   builder_.add_size(size);
   builder_.add_device_addr(device_addr);
+  builder_.add_index(index);
+  builder_.add_hidden(hidden);
   builder_.add_zero_point(zero_point);
   builder_.add_pad_h(pad_h);
   builder_.add_cpu_addr(cpu_addr);
@@ -720,7 +880,9 @@ inline flatbuffers::Offset<Tensor> CreateTensorDirect(
     float scale = 1.0f,
     uint32_t cpu_addr = 0,
     uint32_t pad_h = 0,
-    int32_t zero_point = 0) {
+    int32_t zero_point = 0,
+    int32_t hidden = 0,
+    int32_t index = 0) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto shape__ = shape ? _fbb.CreateVector<flatbuffers::Offset<Shape>>(*shape) : 0;
   return bmodel::CreateTensor(
@@ -735,7 +897,9 @@ inline flatbuffers::Offset<Tensor> CreateTensorDirect(
       scale,
       cpu_addr,
       pad_h,
-      zero_point);
+      zero_point,
+      hidden,
+      index);
 }
 
 flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &_fbb, const TensorT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1173,6 +1337,7 @@ struct SubNetT : public flatbuffers::NativeTable {
   std::vector<int32_t> next_subnet_ids;
   std::unique_ptr<MergeParamT> merge_param;
   std::unique_ptr<SwitchParamT> switch_param;
+  std::vector<std::unique_ptr<CoreCommandsT>> core_commands;
   SubNetT()
       : subnet_mode(0),
         is_dynamic(0),
@@ -1200,7 +1365,8 @@ struct SubNet FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_ID = 24,
     VT_NEXT_SUBNET_IDS = 26,
     VT_MERGE_PARAM = 28,
-    VT_SWITCH_PARAM = 30
+    VT_SWITCH_PARAM = 30,
+    VT_CORE_COMMANDS = 32
   };
   int32_t subnet_mode() const {
     return GetField<int32_t>(VT_SUBNET_MODE, 0);
@@ -1286,6 +1452,12 @@ struct SubNet FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   SwitchParam *mutable_switch_param() {
     return GetPointer<SwitchParam *>(VT_SWITCH_PARAM);
   }
+  const flatbuffers::Vector<flatbuffers::Offset<CoreCommands>> *core_commands() const {
+    return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<CoreCommands>> *>(VT_CORE_COMMANDS);
+  }
+  flatbuffers::Vector<flatbuffers::Offset<CoreCommands>> *mutable_core_commands() {
+    return GetPointer<flatbuffers::Vector<flatbuffers::Offset<CoreCommands>> *>(VT_CORE_COMMANDS);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<int32_t>(verifier, VT_SUBNET_MODE) &&
@@ -1313,6 +1485,9 @@ struct SubNet FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            verifier.VerifyTable(merge_param()) &&
            VerifyOffset(verifier, VT_SWITCH_PARAM) &&
            verifier.VerifyTable(switch_param()) &&
+           VerifyOffset(verifier, VT_CORE_COMMANDS) &&
+           verifier.VerifyVector(core_commands()) &&
+           verifier.VerifyVectorOfTables(core_commands()) &&
            verifier.EndTable();
   }
   SubNetT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -1365,6 +1540,9 @@ struct SubNetBuilder {
   void add_switch_param(flatbuffers::Offset<SwitchParam> switch_param) {
     fbb_.AddOffset(SubNet::VT_SWITCH_PARAM, switch_param);
   }
+  void add_core_commands(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CoreCommands>>> core_commands) {
+    fbb_.AddOffset(SubNet::VT_CORE_COMMANDS, core_commands);
+  }
   explicit SubNetBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1392,8 +1570,10 @@ inline flatbuffers::Offset<SubNet> CreateSubNet(
     int32_t id = -1,
     flatbuffers::Offset<flatbuffers::Vector<int32_t>> next_subnet_ids = 0,
     flatbuffers::Offset<MergeParam> merge_param = 0,
-    flatbuffers::Offset<SwitchParam> switch_param = 0) {
+    flatbuffers::Offset<SwitchParam> switch_param = 0,
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<CoreCommands>>> core_commands = 0) {
   SubNetBuilder builder_(_fbb);
+  builder_.add_core_commands(core_commands);
   builder_.add_switch_param(switch_param);
   builder_.add_merge_param(merge_param);
   builder_.add_next_subnet_ids(next_subnet_ids);
@@ -1426,12 +1606,14 @@ inline flatbuffers::Offset<SubNet> CreateSubNetDirect(
     int32_t id = -1,
     const std::vector<int32_t> *next_subnet_ids = nullptr,
     flatbuffers::Offset<MergeParam> merge_param = 0,
-    flatbuffers::Offset<SwitchParam> switch_param = 0) {
+    flatbuffers::Offset<SwitchParam> switch_param = 0,
+    const std::vector<flatbuffers::Offset<CoreCommands>> *core_commands = nullptr) {
   auto cmd_group__ = cmd_group ? _fbb.CreateVector<flatbuffers::Offset<CmdGroup>>(*cmd_group) : 0;
   auto cpu_param__ = cpu_param ? _fbb.CreateVector<flatbuffers::Offset<CpuParam>>(*cpu_param) : 0;
   auto input_tensor__ = input_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*input_tensor) : 0;
   auto output_tensor__ = output_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*output_tensor) : 0;
   auto next_subnet_ids__ = next_subnet_ids ? _fbb.CreateVector<int32_t>(*next_subnet_ids) : 0;
+  auto core_commands__ = core_commands ? _fbb.CreateVector<flatbuffers::Offset<CoreCommands>>(*core_commands) : 0;
   return bmodel::CreateSubNet(
       _fbb,
       subnet_mode,
@@ -1447,7 +1629,8 @@ inline flatbuffers::Offset<SubNet> CreateSubNetDirect(
       id,
       next_subnet_ids__,
       merge_param,
-      switch_param);
+      switch_param,
+      core_commands__);
 }
 
 flatbuffers::Offset<SubNet> CreateSubNet(flatbuffers::FlatBufferBuilder &_fbb, const SubNetT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -1890,13 +2073,19 @@ struct NetParameterT : public flatbuffers::NativeTable {
   uint32_t cpu_mem_size;
   std::vector<uint64_t> ctx_sizes;
   std::unique_ptr<Binary> net_stat;
+  uint32_t core_num;
+  uint64_t io_addr;
+  uint64_t io_size;
   NetParameterT()
       : ctx_addr(0),
         ctx_size(0),
         is_dynamic(0),
         n_dynamic(0),
         h_w_dynamic(0),
-        cpu_mem_size(0) {
+        cpu_mem_size(0),
+        core_num(0),
+        io_addr(0),
+        io_size(0) {
   }
 };
 
@@ -1918,7 +2107,10 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_SUB_NET = 28,
     VT_CPU_MEM_SIZE = 30,
     VT_CTX_SIZES = 32,
-    VT_NET_STAT = 34
+    VT_NET_STAT = 34,
+    VT_CORE_NUM = 36,
+    VT_IO_ADDR = 38,
+    VT_IO_SIZE = 40
   };
   const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *input_tensor() const {
     return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *>(VT_INPUT_TENSOR);
@@ -2016,6 +2208,24 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   Binary *mutable_net_stat() {
     return GetStruct<Binary *>(VT_NET_STAT);
   }
+  uint32_t core_num() const {
+    return GetField<uint32_t>(VT_CORE_NUM, 0);
+  }
+  bool mutate_core_num(uint32_t _core_num) {
+    return SetField<uint32_t>(VT_CORE_NUM, _core_num, 0);
+  }
+  uint64_t io_addr() const {
+    return GetField<uint64_t>(VT_IO_ADDR, 0);
+  }
+  bool mutate_io_addr(uint64_t _io_addr) {
+    return SetField<uint64_t>(VT_IO_ADDR, _io_addr, 0);
+  }
+  uint64_t io_size() const {
+    return GetField<uint64_t>(VT_IO_SIZE, 0);
+  }
+  bool mutate_io_size(uint64_t _io_size) {
+    return SetField<uint64_t>(VT_IO_SIZE, _io_size, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_INPUT_TENSOR) &&
@@ -2046,6 +2256,9 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyOffset(verifier, VT_CTX_SIZES) &&
            verifier.VerifyVector(ctx_sizes()) &&
            VerifyField<Binary>(verifier, VT_NET_STAT) &&
+           VerifyField<uint32_t>(verifier, VT_CORE_NUM) &&
+           VerifyField<uint64_t>(verifier, VT_IO_ADDR) &&
+           VerifyField<uint64_t>(verifier, VT_IO_SIZE) &&
            verifier.EndTable();
   }
   NetParameterT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2104,6 +2317,15 @@ struct NetParameterBuilder {
   void add_net_stat(const Binary *net_stat) {
     fbb_.AddStruct(NetParameter::VT_NET_STAT, net_stat);
   }
+  void add_core_num(uint32_t core_num) {
+    fbb_.AddElement<uint32_t>(NetParameter::VT_CORE_NUM, core_num, 0);
+  }
+  void add_io_addr(uint64_t io_addr) {
+    fbb_.AddElement<uint64_t>(NetParameter::VT_IO_ADDR, io_addr, 0);
+  }
+  void add_io_size(uint64_t io_size) {
+    fbb_.AddElement<uint64_t>(NetParameter::VT_IO_SIZE, io_size, 0);
+  }
   explicit NetParameterBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2135,10 +2357,16 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<SubNet>>> sub_net = 0,
     uint32_t cpu_mem_size = 0,
     flatbuffers::Offset<flatbuffers::Vector<uint64_t>> ctx_sizes = 0,
-    const Binary *net_stat = 0) {
+    const Binary *net_stat = 0,
+    uint32_t core_num = 0,
+    uint64_t io_addr = 0,
+    uint64_t io_size = 0) {
   NetParameterBuilder builder_(_fbb);
+  builder_.add_io_size(io_size);
+  builder_.add_io_addr(io_addr);
   builder_.add_ctx_size(ctx_size);
   builder_.add_ctx_addr(ctx_addr);
+  builder_.add_core_num(core_num);
   builder_.add_net_stat(net_stat);
   builder_.add_ctx_sizes(ctx_sizes);
   builder_.add_cpu_mem_size(cpu_mem_size);
@@ -2173,7 +2401,10 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameterDirect(
     const std::vector<flatbuffers::Offset<SubNet>> *sub_net = nullptr,
     uint32_t cpu_mem_size = 0,
     const std::vector<uint64_t> *ctx_sizes = nullptr,
-    const Binary *net_stat = 0) {
+    const Binary *net_stat = 0,
+    uint32_t core_num = 0,
+    uint64_t io_addr = 0,
+    uint64_t io_size = 0) {
   auto input_tensor__ = input_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*input_tensor) : 0;
   auto output_tensor__ = output_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*output_tensor) : 0;
   auto cmd_group__ = cmd_group ? _fbb.CreateVector<flatbuffers::Offset<CmdGroup>>(*cmd_group) : 0;
@@ -2197,10 +2428,113 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameterDirect(
       sub_net__,
       cpu_mem_size,
       ctx_sizes__,
-      net_stat);
+      net_stat,
+      core_num,
+      io_addr,
+      io_size);
 }
 
 flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBufferBuilder &_fbb, const NetParameterT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
+struct CascadeT : public flatbuffers::NativeTable {
+  typedef Cascade TableType;
+  uint32_t device_id;
+  uint32_t step;
+  std::string main_name;
+  CascadeT()
+      : device_id(0),
+        step(0) {
+  }
+};
+
+struct Cascade FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef CascadeT NativeTableType;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_DEVICE_ID = 4,
+    VT_STEP = 6,
+    VT_MAIN_NAME = 8
+  };
+  uint32_t device_id() const {
+    return GetField<uint32_t>(VT_DEVICE_ID, 0);
+  }
+  bool mutate_device_id(uint32_t _device_id) {
+    return SetField<uint32_t>(VT_DEVICE_ID, _device_id, 0);
+  }
+  uint32_t step() const {
+    return GetField<uint32_t>(VT_STEP, 0);
+  }
+  bool mutate_step(uint32_t _step) {
+    return SetField<uint32_t>(VT_STEP, _step, 0);
+  }
+  const flatbuffers::String *main_name() const {
+    return GetPointer<const flatbuffers::String *>(VT_MAIN_NAME);
+  }
+  flatbuffers::String *mutable_main_name() {
+    return GetPointer<flatbuffers::String *>(VT_MAIN_NAME);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyField<uint32_t>(verifier, VT_DEVICE_ID) &&
+           VerifyField<uint32_t>(verifier, VT_STEP) &&
+           VerifyOffset(verifier, VT_MAIN_NAME) &&
+           verifier.VerifyString(main_name()) &&
+           verifier.EndTable();
+  }
+  CascadeT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CascadeT *_o, const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static flatbuffers::Offset<Cascade> Pack(flatbuffers::FlatBufferBuilder &_fbb, const CascadeT* _o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CascadeBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_device_id(uint32_t device_id) {
+    fbb_.AddElement<uint32_t>(Cascade::VT_DEVICE_ID, device_id, 0);
+  }
+  void add_step(uint32_t step) {
+    fbb_.AddElement<uint32_t>(Cascade::VT_STEP, step, 0);
+  }
+  void add_main_name(flatbuffers::Offset<flatbuffers::String> main_name) {
+    fbb_.AddOffset(Cascade::VT_MAIN_NAME, main_name);
+  }
+  explicit CascadeBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  CascadeBuilder &operator=(const CascadeBuilder &);
+  flatbuffers::Offset<Cascade> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<Cascade>(end);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<Cascade> CreateCascade(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t device_id = 0,
+    uint32_t step = 0,
+    flatbuffers::Offset<flatbuffers::String> main_name = 0) {
+  CascadeBuilder builder_(_fbb);
+  builder_.add_main_name(main_name);
+  builder_.add_step(step);
+  builder_.add_device_id(device_id);
+  return builder_.Finish();
+}
+
+inline flatbuffers::Offset<Cascade> CreateCascadeDirect(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t device_id = 0,
+    uint32_t step = 0,
+    const char *main_name = nullptr) {
+  auto main_name__ = main_name ? _fbb.CreateString(main_name) : 0;
+  return bmodel::CreateCascade(
+      _fbb,
+      device_id,
+      step,
+      main_name__);
+}
+
+flatbuffers::Offset<Cascade> CreateCascade(flatbuffers::FlatBufferBuilder &_fbb, const CascadeT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
 struct NetT : public flatbuffers::NativeTable {
   typedef Net TableType;
@@ -2208,7 +2542,10 @@ struct NetT : public flatbuffers::NativeTable {
   std::vector<std::unique_ptr<NetStaticT>> net_static;
   std::vector<std::unique_ptr<NetDynamicT>> net_dynamic;
   std::vector<std::unique_ptr<NetParameterT>> parameter;
-  NetT() {
+  std::unique_ptr<CascadeT> cascade;
+  int32_t addr_mode;
+  NetT()
+      : addr_mode(0) {
   }
 };
 
@@ -2218,7 +2555,9 @@ struct Net FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_NAME = 4,
     VT_NET_STATIC = 6,
     VT_NET_DYNAMIC = 8,
-    VT_PARAMETER = 10
+    VT_PARAMETER = 10,
+    VT_CASCADE = 12,
+    VT_ADDR_MODE = 14
   };
   const flatbuffers::String *name() const {
     return GetPointer<const flatbuffers::String *>(VT_NAME);
@@ -2244,6 +2583,18 @@ struct Net FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   flatbuffers::Vector<flatbuffers::Offset<NetParameter>> *mutable_parameter() {
     return GetPointer<flatbuffers::Vector<flatbuffers::Offset<NetParameter>> *>(VT_PARAMETER);
   }
+  const Cascade *cascade() const {
+    return GetPointer<const Cascade *>(VT_CASCADE);
+  }
+  Cascade *mutable_cascade() {
+    return GetPointer<Cascade *>(VT_CASCADE);
+  }
+  int32_t addr_mode() const {
+    return GetField<int32_t>(VT_ADDR_MODE, 0);
+  }
+  bool mutate_addr_mode(int32_t _addr_mode) {
+    return SetField<int32_t>(VT_ADDR_MODE, _addr_mode, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_NAME) &&
@@ -2257,6 +2608,9 @@ struct Net FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyOffset(verifier, VT_PARAMETER) &&
            verifier.VerifyVector(parameter()) &&
            verifier.VerifyVectorOfTables(parameter()) &&
+           VerifyOffset(verifier, VT_CASCADE) &&
+           verifier.VerifyTable(cascade()) &&
+           VerifyField<int32_t>(verifier, VT_ADDR_MODE) &&
            verifier.EndTable();
   }
   NetT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2279,6 +2633,12 @@ struct NetBuilder {
   void add_parameter(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<NetParameter>>> parameter) {
     fbb_.AddOffset(Net::VT_PARAMETER, parameter);
   }
+  void add_cascade(flatbuffers::Offset<Cascade> cascade) {
+    fbb_.AddOffset(Net::VT_CASCADE, cascade);
+  }
+  void add_addr_mode(int32_t addr_mode) {
+    fbb_.AddElement<int32_t>(Net::VT_ADDR_MODE, addr_mode, 0);
+  }
   explicit NetBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2297,8 +2657,12 @@ inline flatbuffers::Offset<Net> CreateNet(
     flatbuffers::Offset<flatbuffers::String> name = 0,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<NetStatic>>> net_static = 0,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<NetDynamic>>> net_dynamic = 0,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<NetParameter>>> parameter = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<NetParameter>>> parameter = 0,
+    flatbuffers::Offset<Cascade> cascade = 0,
+    int32_t addr_mode = 0) {
   NetBuilder builder_(_fbb);
+  builder_.add_addr_mode(addr_mode);
+  builder_.add_cascade(cascade);
   builder_.add_parameter(parameter);
   builder_.add_net_dynamic(net_dynamic);
   builder_.add_net_static(net_static);
@@ -2311,7 +2675,9 @@ inline flatbuffers::Offset<Net> CreateNetDirect(
     const char *name = nullptr,
     const std::vector<flatbuffers::Offset<NetStatic>> *net_static = nullptr,
     const std::vector<flatbuffers::Offset<NetDynamic>> *net_dynamic = nullptr,
-    const std::vector<flatbuffers::Offset<NetParameter>> *parameter = nullptr) {
+    const std::vector<flatbuffers::Offset<NetParameter>> *parameter = nullptr,
+    flatbuffers::Offset<Cascade> cascade = 0,
+    int32_t addr_mode = 0) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto net_static__ = net_static ? _fbb.CreateVector<flatbuffers::Offset<NetStatic>>(*net_static) : 0;
   auto net_dynamic__ = net_dynamic ? _fbb.CreateVector<flatbuffers::Offset<NetDynamic>>(*net_dynamic) : 0;
@@ -2321,7 +2687,9 @@ inline flatbuffers::Offset<Net> CreateNetDirect(
       name__,
       net_static__,
       net_dynamic__,
-      parameter__);
+      parameter__,
+      cascade,
+      addr_mode);
 }
 
 flatbuffers::Offset<Net> CreateNet(flatbuffers::FlatBufferBuilder &_fbb, const NetT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2410,6 +2778,90 @@ inline flatbuffers::Offset<KernelModule> CreateKernelModuleDirect(
 
 flatbuffers::Offset<KernelModule> CreateKernelModule(flatbuffers::FlatBufferBuilder &_fbb, const KernelModuleT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
 
+struct CpuopModuleT : public flatbuffers::NativeTable {
+  typedef CpuopModule TableType;
+  std::string file_name;
+  std::unique_ptr<Binary> binary;
+  CpuopModuleT() {
+  }
+};
+
+struct CpuopModule FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
+  typedef CpuopModuleT NativeTableType;
+  enum FlatBuffersVTableOffset FLATBUFFERS_VTABLE_UNDERLYING_TYPE {
+    VT_FILE_NAME = 4,
+    VT_BINARY = 6
+  };
+  const flatbuffers::String *file_name() const {
+    return GetPointer<const flatbuffers::String *>(VT_FILE_NAME);
+  }
+  flatbuffers::String *mutable_file_name() {
+    return GetPointer<flatbuffers::String *>(VT_FILE_NAME);
+  }
+  const Binary *binary() const {
+    return GetStruct<const Binary *>(VT_BINARY);
+  }
+  Binary *mutable_binary() {
+    return GetStruct<Binary *>(VT_BINARY);
+  }
+  bool Verify(flatbuffers::Verifier &verifier) const {
+    return VerifyTableStart(verifier) &&
+           VerifyOffsetRequired(verifier, VT_FILE_NAME) &&
+           verifier.VerifyString(file_name()) &&
+           VerifyFieldRequired<Binary>(verifier, VT_BINARY) &&
+           verifier.EndTable();
+  }
+  CpuopModuleT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  void UnPackTo(CpuopModuleT *_o, const flatbuffers::resolver_function_t *_resolver = nullptr) const;
+  static flatbuffers::Offset<CpuopModule> Pack(flatbuffers::FlatBufferBuilder &_fbb, const CpuopModuleT* _o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+};
+
+struct CpuopModuleBuilder {
+  flatbuffers::FlatBufferBuilder &fbb_;
+  flatbuffers::uoffset_t start_;
+  void add_file_name(flatbuffers::Offset<flatbuffers::String> file_name) {
+    fbb_.AddOffset(CpuopModule::VT_FILE_NAME, file_name);
+  }
+  void add_binary(const Binary *binary) {
+    fbb_.AddStruct(CpuopModule::VT_BINARY, binary);
+  }
+  explicit CpuopModuleBuilder(flatbuffers::FlatBufferBuilder &_fbb)
+        : fbb_(_fbb) {
+    start_ = fbb_.StartTable();
+  }
+  CpuopModuleBuilder &operator=(const CpuopModuleBuilder &);
+  flatbuffers::Offset<CpuopModule> Finish() {
+    const auto end = fbb_.EndTable(start_);
+    auto o = flatbuffers::Offset<CpuopModule>(end);
+    fbb_.Required(o, CpuopModule::VT_FILE_NAME);
+    fbb_.Required(o, CpuopModule::VT_BINARY);
+    return o;
+  }
+};
+
+inline flatbuffers::Offset<CpuopModule> CreateCpuopModule(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    flatbuffers::Offset<flatbuffers::String> file_name = 0,
+    const Binary *binary = 0) {
+  CpuopModuleBuilder builder_(_fbb);
+  builder_.add_binary(binary);
+  builder_.add_file_name(file_name);
+  return builder_.Finish();
+}
+
+inline flatbuffers::Offset<CpuopModule> CreateCpuopModuleDirect(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    const char *file_name = nullptr,
+    const Binary *binary = 0) {
+  auto file_name__ = file_name ? _fbb.CreateString(file_name) : 0;
+  return bmodel::CreateCpuopModule(
+      _fbb,
+      file_name__,
+      binary);
+}
+
+flatbuffers::Offset<CpuopModule> CreateCpuopModule(flatbuffers::FlatBufferBuilder &_fbb, const CpuopModuleT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
+
 struct ModelT : public flatbuffers::NativeTable {
   typedef Model TableType;
   std::string type;
@@ -2419,8 +2871,11 @@ struct ModelT : public flatbuffers::NativeTable {
   std::vector<std::unique_ptr<NetT>> net;
   uint64_t neuron_size;
   std::unique_ptr<KernelModuleT> kernel_module;
+  uint32_t device_num;
+  std::unique_ptr<CpuopModuleT> cpuop_module;
   ModelT()
-      : neuron_size(0) {
+      : neuron_size(0),
+        device_num(0) {
   }
 };
 
@@ -2433,7 +2888,9 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_CHIP = 10,
     VT_NET = 12,
     VT_NEURON_SIZE = 14,
-    VT_KERNEL_MODULE = 16
+    VT_KERNEL_MODULE = 16,
+    VT_DEVICE_NUM = 18,
+    VT_CPUOP_MODULE = 20,
   };
   const flatbuffers::String *type() const {
     return GetPointer<const flatbuffers::String *>(VT_TYPE);
@@ -2477,6 +2934,18 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   KernelModule *mutable_kernel_module() {
     return GetPointer<KernelModule *>(VT_KERNEL_MODULE);
   }
+  uint32_t device_num() const {
+    return GetField<uint32_t>(VT_DEVICE_NUM, 0);
+  }
+  bool mutate_device_num(uint32_t _device_num) {
+    return SetField<uint32_t>(VT_DEVICE_NUM, _device_num, 0);
+  }
+  const CpuopModule *cpuop_module() const {
+    return GetPointer<const CpuopModule *>(VT_CPUOP_MODULE);
+  }
+  CpuopModule *mutable_cpuop_module() {
+    return GetPointer<CpuopModule *>(VT_CPUOP_MODULE);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_TYPE) &&
@@ -2493,6 +2962,9 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_NEURON_SIZE) &&
            VerifyOffset(verifier, VT_KERNEL_MODULE) &&
            verifier.VerifyTable(kernel_module()) &&
+           VerifyField<uint32_t>(verifier, VT_DEVICE_NUM) &&
+           VerifyOffset(verifier, VT_CPUOP_MODULE) &&
+           verifier.VerifyTable(cpuop_module()) &&
            verifier.EndTable();
   }
   ModelT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2524,6 +2996,12 @@ struct ModelBuilder {
   void add_kernel_module(flatbuffers::Offset<KernelModule> kernel_module) {
     fbb_.AddOffset(Model::VT_KERNEL_MODULE, kernel_module);
   }
+  void add_device_num(uint32_t device_num) {
+    fbb_.AddElement<uint32_t>(Model::VT_DEVICE_NUM, device_num, 0);
+  }
+  void add_cpuop_module(flatbuffers::Offset<CpuopModule> cpuop_module) {
+    fbb_.AddOffset(Model::VT_CPUOP_MODULE, cpuop_module);
+  }
   explicit ModelBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2549,10 +3027,14 @@ inline flatbuffers::Offset<Model> CreateModel(
     flatbuffers::Offset<flatbuffers::String> chip = 0,
     flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Net>>> net = 0,
     uint64_t neuron_size = 0,
-    flatbuffers::Offset<KernelModule> kernel_module = 0) {
+    flatbuffers::Offset<KernelModule> kernel_module = 0,
+    uint32_t device_num = 0,
+    flatbuffers::Offset<CpuopModule> cpuop_module = 0) {
   ModelBuilder builder_(_fbb);
   builder_.add_neuron_size(neuron_size);
+  builder_.add_device_num(device_num);
   builder_.add_kernel_module(kernel_module);
+  builder_.add_cpuop_module(cpuop_module);
   builder_.add_net(net);
   builder_.add_chip(chip);
   builder_.add_time(time);
@@ -2569,7 +3051,9 @@ inline flatbuffers::Offset<Model> CreateModelDirect(
     const char *chip = nullptr,
     const std::vector<flatbuffers::Offset<Net>> *net = nullptr,
     uint64_t neuron_size = 0,
-    flatbuffers::Offset<KernelModule> kernel_module = 0) {
+    flatbuffers::Offset<KernelModule> kernel_module = 0,
+    uint32_t device_num = 0,
+    flatbuffers::Offset<CpuopModule> cpuop_module = 0) {
   auto type__ = type ? _fbb.CreateString(type) : 0;
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto time__ = time ? _fbb.CreateString(time) : 0;
@@ -2583,7 +3067,9 @@ inline flatbuffers::Offset<Model> CreateModelDirect(
       chip__,
       net__,
       neuron_size,
-      kernel_module);
+      kernel_module,
+      device_num,
+      cpuop_module);
 }
 
 flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_fbb, const ModelT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -2653,6 +3139,41 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(flatbuffers::FlatBufferBuild
       _binary_gdma,
       _bdc_cmd_byte,
       _gdma_cmd_byte);
+}
+
+inline CoreCommandsT *CoreCommands::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = new CoreCommandsT();
+  UnPackTo(_o, _resolver);
+  return _o;
+}
+
+inline void CoreCommands::UnPackTo(CoreCommandsT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = gdma_tiu_commands(); if (_e) { _o->gdma_tiu_commands.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->gdma_tiu_commands[_i] = std::unique_ptr<CmdGroupT>(_e->Get(_i)->UnPack(_resolver)); } } };
+  { auto _e = sdma_commands(); if (_e) { _o->sdma_commands.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->sdma_commands[_i] = *_e->Get(_i); } } };
+  { auto _e = hau_commands(); if (_e) { _o->hau_commands.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->hau_commands[_i] = *_e->Get(_i); } } };
+  { auto _e = cdma_commands(); if (_e) { _o->cdma_commands.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->cdma_commands[_i] = *_e->Get(_i); } } };
+}
+
+inline flatbuffers::Offset<CoreCommands> CoreCommands::Pack(flatbuffers::FlatBufferBuilder &_fbb, const CoreCommandsT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCoreCommands(_fbb, _o, _rehasher);
+}
+
+inline flatbuffers::Offset<CoreCommands> CreateCoreCommands(flatbuffers::FlatBufferBuilder &_fbb, const CoreCommandsT *_o, const flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { flatbuffers::FlatBufferBuilder *__fbb; const CoreCommandsT* __o; const flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _gdma_tiu_commands = _o->gdma_tiu_commands.size() ? _fbb.CreateVector<flatbuffers::Offset<CmdGroup>> (_o->gdma_tiu_commands.size(), [](size_t i, _VectorArgs *__va) { return CreateCmdGroup(*__va->__fbb, __va->__o->gdma_tiu_commands[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _sdma_commands = _o->sdma_commands.size() ? _fbb.CreateVectorOfStructs(_o->sdma_commands) : 0;
+  auto _hau_commands = _o->hau_commands.size() ? _fbb.CreateVectorOfStructs(_o->hau_commands) : 0;
+  auto _cdma_commands = _o->cdma_commands.size() ? _fbb.CreateVectorOfStructs(_o->cdma_commands) : 0;
+  return bmodel::CreateCoreCommands(
+      _fbb,
+      _gdma_tiu_commands,
+      _sdma_commands,
+      _hau_commands,
+      _cdma_commands);
 }
 
 inline StageIRT *StageIR::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -2745,6 +3266,8 @@ inline void Tensor::UnPackTo(TensorT *_o, const flatbuffers::resolver_function_t
   { auto _e = cpu_addr(); _o->cpu_addr = _e; };
   { auto _e = pad_h(); _o->pad_h = _e; };
   { auto _e = zero_point(); _o->zero_point = _e; };
+  { auto _e = hidden(); _o->hidden = _e; };
+  { auto _e = index(); _o->index = _e; };
 }
 
 inline flatbuffers::Offset<Tensor> Tensor::Pack(flatbuffers::FlatBufferBuilder &_fbb, const TensorT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -2766,6 +3289,8 @@ inline flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &
   auto _cpu_addr = _o->cpu_addr;
   auto _pad_h = _o->pad_h;
   auto _zero_point = _o->zero_point;
+  auto _hidden = _o->hidden;
+  auto _index = _o->index;
   return bmodel::CreateTensor(
       _fbb,
       _name,
@@ -2778,7 +3303,9 @@ inline flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &
       _scale,
       _cpu_addr,
       _pad_h,
-      _zero_point);
+      _zero_point,
+      _hidden,
+      _index);
 }
 
 inline CpuConstT *CpuConst::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -2949,6 +3476,7 @@ inline void SubNet::UnPackTo(SubNetT *_o, const flatbuffers::resolver_function_t
   { auto _e = next_subnet_ids(); if (_e) { _o->next_subnet_ids.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->next_subnet_ids[_i] = _e->Get(_i); } } };
   { auto _e = merge_param(); if (_e) _o->merge_param = std::unique_ptr<MergeParamT>(_e->UnPack(_resolver)); };
   { auto _e = switch_param(); if (_e) _o->switch_param = std::unique_ptr<SwitchParamT>(_e->UnPack(_resolver)); };
+  { auto _e = core_commands(); if (_e) { _o->core_commands.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->core_commands[_i] = std::unique_ptr<CoreCommandsT>(_e->Get(_i)->UnPack(_resolver)); } } };
 }
 
 inline flatbuffers::Offset<SubNet> SubNet::Pack(flatbuffers::FlatBufferBuilder &_fbb, const SubNetT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -2973,6 +3501,7 @@ inline flatbuffers::Offset<SubNet> CreateSubNet(flatbuffers::FlatBufferBuilder &
   auto _next_subnet_ids = _o->next_subnet_ids.size() ? _fbb.CreateVector(_o->next_subnet_ids) : 0;
   auto _merge_param = _o->merge_param ? CreateMergeParam(_fbb, _o->merge_param.get(), _rehasher) : 0;
   auto _switch_param = _o->switch_param ? CreateSwitchParam(_fbb, _o->switch_param.get(), _rehasher) : 0;
+  auto _core_commands = _o->core_commands.size() ? _fbb.CreateVector<flatbuffers::Offset<CoreCommands>> (_o->core_commands.size(), [](size_t i, _VectorArgs *__va) { return CreateCoreCommands(*__va->__fbb, __va->__o->core_commands[i].get(), __va->__rehasher); }, &_va ) : 0;
   return bmodel::CreateSubNet(
       _fbb,
       _subnet_mode,
@@ -2988,7 +3517,8 @@ inline flatbuffers::Offset<SubNet> CreateSubNet(flatbuffers::FlatBufferBuilder &
       _id,
       _next_subnet_ids,
       _merge_param,
-      _switch_param);
+      _switch_param,
+      _core_commands);
 }
 
 inline NetStaticT *NetStatic::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -3116,6 +3646,9 @@ inline void NetParameter::UnPackTo(NetParameterT *_o, const flatbuffers::resolve
   { auto _e = cpu_mem_size(); _o->cpu_mem_size = _e; };
   { auto _e = ctx_sizes(); if (_e) { _o->ctx_sizes.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->ctx_sizes[_i] = _e->Get(_i); } } };
   { auto _e = net_stat(); if (_e) _o->net_stat = std::unique_ptr<Binary>(new Binary(*_e)); };
+  { auto _e = core_num(); _o->core_num = _e; };
+  { auto _e = io_addr(); _o->io_addr = _e; };
+  { auto _e = io_size(); _o->io_size = _e; };
 }
 
 inline flatbuffers::Offset<NetParameter> NetParameter::Pack(flatbuffers::FlatBufferBuilder &_fbb, const NetParameterT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3142,6 +3675,9 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBuf
   auto _cpu_mem_size = _o->cpu_mem_size;
   auto _ctx_sizes = _o->ctx_sizes.size() ? _fbb.CreateVector(_o->ctx_sizes) : 0;
   auto _net_stat = _o->net_stat ? _o->net_stat.get() : 0;
+  auto _core_num = _o->core_num;
+  auto _io_addr = _o->io_addr;
+  auto _io_size = _o->io_size;
   return bmodel::CreateNetParameter(
       _fbb,
       _input_tensor,
@@ -3159,7 +3695,42 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBuf
       _sub_net,
       _cpu_mem_size,
       _ctx_sizes,
-      _net_stat);
+      _net_stat,
+      _core_num,
+      _io_addr,
+      _io_size);
+}
+
+inline CascadeT *Cascade::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = new CascadeT();
+  UnPackTo(_o, _resolver);
+  return _o;
+}
+
+inline void Cascade::UnPackTo(CascadeT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = device_id(); _o->device_id = _e; };
+  { auto _e = step(); _o->step = _e; };
+  { auto _e = main_name(); if (_e) _o->main_name = _e->str(); };
+}
+
+inline flatbuffers::Offset<Cascade> Cascade::Pack(flatbuffers::FlatBufferBuilder &_fbb, const CascadeT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCascade(_fbb, _o, _rehasher);
+}
+
+inline flatbuffers::Offset<Cascade> CreateCascade(flatbuffers::FlatBufferBuilder &_fbb, const CascadeT *_o, const flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { flatbuffers::FlatBufferBuilder *__fbb; const CascadeT* __o; const flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _device_id = _o->device_id;
+  auto _step = _o->step;
+  auto _main_name = _o->main_name.empty() ? 0 : _fbb.CreateString(_o->main_name);
+  return bmodel::CreateCascade(
+      _fbb,
+      _device_id,
+      _step,
+      _main_name);
 }
 
 inline NetT *Net::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -3175,6 +3746,8 @@ inline void Net::UnPackTo(NetT *_o, const flatbuffers::resolver_function_t *_res
   { auto _e = net_static(); if (_e) { _o->net_static.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->net_static[_i] = std::unique_ptr<NetStaticT>(_e->Get(_i)->UnPack(_resolver)); } } };
   { auto _e = net_dynamic(); if (_e) { _o->net_dynamic.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->net_dynamic[_i] = std::unique_ptr<NetDynamicT>(_e->Get(_i)->UnPack(_resolver)); } } };
   { auto _e = parameter(); if (_e) { _o->parameter.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->parameter[_i] = std::unique_ptr<NetParameterT>(_e->Get(_i)->UnPack(_resolver)); } } };
+  { auto _e = cascade(); if (_e) _o->cascade = std::unique_ptr<CascadeT>(_e->UnPack(_resolver)); };
+  { auto _e = addr_mode(); _o->addr_mode = _e; };
 }
 
 inline flatbuffers::Offset<Net> Net::Pack(flatbuffers::FlatBufferBuilder &_fbb, const NetT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3189,12 +3762,16 @@ inline flatbuffers::Offset<Net> CreateNet(flatbuffers::FlatBufferBuilder &_fbb, 
   auto _net_static = _o->net_static.size() ? _fbb.CreateVector<flatbuffers::Offset<NetStatic>> (_o->net_static.size(), [](size_t i, _VectorArgs *__va) { return CreateNetStatic(*__va->__fbb, __va->__o->net_static[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _net_dynamic = _o->net_dynamic.size() ? _fbb.CreateVector<flatbuffers::Offset<NetDynamic>> (_o->net_dynamic.size(), [](size_t i, _VectorArgs *__va) { return CreateNetDynamic(*__va->__fbb, __va->__o->net_dynamic[i].get(), __va->__rehasher); }, &_va ) : 0;
   auto _parameter = _o->parameter.size() ? _fbb.CreateVector<flatbuffers::Offset<NetParameter>> (_o->parameter.size(), [](size_t i, _VectorArgs *__va) { return CreateNetParameter(*__va->__fbb, __va->__o->parameter[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _cascade = _o->cascade ? CreateCascade(_fbb, _o->cascade.get(), _rehasher) : 0;
+  auto _addr_mode = _o->addr_mode;
   return bmodel::CreateNet(
       _fbb,
       _name,
       _net_static,
       _net_dynamic,
-      _parameter);
+      _parameter,
+      _cascade,
+      _addr_mode);
 }
 
 inline KernelModuleT *KernelModule::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -3226,6 +3803,35 @@ inline flatbuffers::Offset<KernelModule> CreateKernelModule(flatbuffers::FlatBuf
       _binary);
 }
 
+inline CpuopModuleT *CpuopModule::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
+  auto _o = new CpuopModuleT();
+  UnPackTo(_o, _resolver);
+  return _o;
+}
+
+inline void CpuopModule::UnPackTo(CpuopModuleT *_o, const flatbuffers::resolver_function_t *_resolver) const {
+  (void)_o;
+  (void)_resolver;
+  { auto _e = file_name(); if (_e) _o->file_name = _e->str(); };
+  { auto _e = binary(); if (_e) _o->binary = std::unique_ptr<Binary>(new Binary(*_e)); };
+}
+
+inline flatbuffers::Offset<CpuopModule> CpuopModule::Pack(flatbuffers::FlatBufferBuilder &_fbb, const CpuopModuleT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
+  return CreateCpuopModule(_fbb, _o, _rehasher);
+}
+
+inline flatbuffers::Offset<CpuopModule> CreateCpuopModule(flatbuffers::FlatBufferBuilder &_fbb, const CpuopModuleT *_o, const flatbuffers::rehasher_function_t *_rehasher) {
+  (void)_rehasher;
+  (void)_o;
+  struct _VectorArgs { flatbuffers::FlatBufferBuilder *__fbb; const CpuopModuleT* __o; const flatbuffers::rehasher_function_t *__rehasher; } _va = { &_fbb, _o, _rehasher}; (void)_va;
+  auto _file_name = _fbb.CreateString(_o->file_name);
+  auto _binary = _o->binary ? _o->binary.get() : 0;
+  return bmodel::CreateCpuopModule(
+      _fbb,
+      _file_name,
+      _binary);
+}
+
 inline ModelT *Model::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
   auto _o = new ModelT();
   UnPackTo(_o, _resolver);
@@ -3242,6 +3848,8 @@ inline void Model::UnPackTo(ModelT *_o, const flatbuffers::resolver_function_t *
   { auto _e = net(); if (_e) { _o->net.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->net[_i] = std::unique_ptr<NetT>(_e->Get(_i)->UnPack(_resolver)); } } };
   { auto _e = neuron_size(); _o->neuron_size = _e; };
   { auto _e = kernel_module(); if (_e) _o->kernel_module = std::unique_ptr<KernelModuleT>(_e->UnPack(_resolver)); };
+  { auto _e = device_num(); _o->device_num = _e; };
+  { auto _e = cpuop_module(); if (_e) _o->cpuop_module = std::unique_ptr<CpuopModuleT>(_e->UnPack(_resolver)); };
 }
 
 inline flatbuffers::Offset<Model> Model::Pack(flatbuffers::FlatBufferBuilder &_fbb, const ModelT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3259,6 +3867,8 @@ inline flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_f
   auto _net = _fbb.CreateVector<flatbuffers::Offset<Net>> (_o->net.size(), [](size_t i, _VectorArgs *__va) { return CreateNet(*__va->__fbb, __va->__o->net[i].get(), __va->__rehasher); }, &_va );
   auto _neuron_size = _o->neuron_size;
   auto _kernel_module = _o->kernel_module ? CreateKernelModule(_fbb, _o->kernel_module.get(), _rehasher) : 0;
+  auto _device_num = _o->device_num;
+  auto _cpuop_module = _o->cpuop_module ? CreateCpuopModule(_fbb, _o->cpuop_module.get(), _rehasher) : 0;
   return bmodel::CreateModel(
       _fbb,
       _type,
@@ -3267,7 +3877,9 @@ inline flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_f
       _chip,
       _net,
       _neuron_size,
-      _kernel_module);
+      _kernel_module,
+      _device_num,
+      _cpuop_module);
 }
 
 inline const bmodel::Model *GetModel(const void *buf) {

@@ -12,12 +12,12 @@ struct bm_thread_info {
 
 	/* api record infomation */
 	struct completion msg_done;
-	u64 last_api_seq;
-	u64 cpl_api_seq;
+	u64 last_api_seq[BM_MAX_CORE_NUM];
+	u64 cpl_api_seq[BM_MAX_CORE_NUM];
 
 	/* profile trace information */
 	bm_profile_t profile;
-	struct mutex trace_mutex;
+	spinlock_t trace_spinlock;
 	struct list_head trace_list;
 	bool trace_enable;
 	u64 trace_item_num;

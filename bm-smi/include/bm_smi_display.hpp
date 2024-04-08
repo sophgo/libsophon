@@ -8,7 +8,6 @@
 #pragma comment(lib, "libbmlib-static.lib")
 #endif
 
-extern char bm_smi_version[];
 class bm_smi_display : public bm_smi_test {
  public:
   explicit bm_smi_display(bm_smi_cmdline &cmdline);

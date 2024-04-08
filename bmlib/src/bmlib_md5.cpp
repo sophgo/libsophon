@@ -185,11 +185,13 @@ void read_md5(unsigned char *file_path, unsigned char *md5sum)
     u32FileSize = fileStat.st_size;
     file_buffer = (unsigned char *)malloc(u32FileSize);
     read(fd, file_buffer, u32FileSize);
+    close(fd);
 
     MD5_CTX md5;
     MD5Init(&md5);
     MD5Update(&md5, file_buffer, u32FileSize);
     MD5Final(&md5, md5sum);
+    free(file_buffer);
 }
 
 void calc_md5(unsigned char *data, size_t len, unsigned char *md5sum)

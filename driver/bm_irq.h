@@ -5,6 +5,9 @@
 struct bm_device_info;
 #define MSG_IRQ_ID_CHANNEL_XPU	48
 #define MSG_IRQ_ID_CHANNEL_CPU  49
+#define MSG_IRQ_ID_CHANNEL_XPU_A2_0	168
+#define MSG_IRQ_ID_CHANNEL_XPU_A2_1	169
+#define MSG_IRQ_ID_CHANNEL_CPU_A2  	170
 #define CDMA_IRQ_ID	46
 #define VETH_IRQ_ID	50
 typedef void (*bmdrv_submodule_irq_handler)(struct bm_device_info *bmdi);

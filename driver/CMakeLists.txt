@@ -52,9 +52,10 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     # setup DEB scripts
     # post-install
     COMMAND echo "if [ ! -d \"/lib/firmware\" ]; then mkdir -p /lib/firmware; fi" > postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/a53lite_pkg.bin /lib/firmware/bm1684x_firmware.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_ddr.bin_v3.1.2-3dfbe057-221128 /lib/firmware/bm1684_ddr_firmware.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_tcm.bin_v3.1.2-3dfbe057-221128 /lib/firmware/bm1684_tcm_firmware.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0.bin /lib/firmware/bm1688_firmware0.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1.bin /lib/firmware/bm1688_firmware1.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0_os.bin /lib/firmware/bm1688_firmware0_os.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1_os.bin /lib/firmware/bm1688_firmware1_os.bin" >> postinst
     COMMAND echo >> postinst
 
     COMMAND echo "if [ -e \"/usr/share/misc/pci.ids\" ]; then" >> postinst
@@ -95,9 +96,10 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "dkms remove -m ${DKMS_NAME} -v ${PROJECT_VERSION} --all || true" >> prerm
     COMMAND echo "rm -rf /usr/src/${DKMS_NAME}-${PROJECT_VERSION}" >> prerm
     COMMAND echo >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1684x_firmware.bin" >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1684_ddr_firmware.bin" >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1684_tcm_firmware.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware0.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware1.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware0_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware1_os.bin" >> prerm
     COMMAND echo "devicenum=`ls /dev/ | grep bm-sophon -c`" >> prerm
     COMMAND echo "if [ 0 -ne \"$devicenum\" ]" >> prerm
     COMMAND echo "then" >> prerm
@@ -129,7 +131,10 @@ foreach(file ${firmware_files})
                  COMPONENT libsophon)
 endforeach()
 
-install(FILES ${CMAKE_SOURCE_DIR}/driver/a53lite_pkg.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware0.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware1.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware0_os.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware1_os.bin DESTINATION ./data COMPONENT libsophon)
 
 # copy driver code
 file(GLOB driver_files ${CMAKE_SOURCE_DIR}/driver/*)

@@ -167,7 +167,10 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	pattr->mem_used = pattr->mem_total - (int)(bmdrv_gmem_avail_size(bmdi)/1024/1024);
 	bmdrv_heap_mem_used(bmdi, &pattr->stat);
 
-	pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
+	if ((bmdi->cinfo.chip_id == 0x1686a200) && (bmdi->cinfo.tpu_core_num == 2))
+		pattr->tpu_util = (c_attr->bm_get_npu_util(bmdi) + c_attr->bm_get_npu_util1(bmdi)) / 2;
+	else
+		pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
 
 	if (c_attr->bm_get_chip_temp != NULL)
 		pattr->chip_temp =c_attr->chip_temp;
@@ -268,7 +271,22 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
 		} else {
 			pattr->tpu_min_clock = 75;
-			pattr->tpu_max_clock = 950;
+			pattr->tpu_max_clock = 1000;
+		}
+		pattr->tpu_current_clock = c_attr->tpu_current_clock;
+		if (pattr->tpu_current_clock < pattr->tpu_min_clock
+                           || (pattr->tpu_current_clock > pattr->tpu_max_clock)) {
+			pattr->tpu_current_clock = (int)0xFFFFFC00;
+		}
+		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
+		break;
+	case 0x1686a200:
+		if (pattr->chip_mode == 0) {
+			pattr->tpu_min_clock = bmdi->boot_info.tpu_min_clk;
+			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
+		} else {
+			pattr->tpu_min_clock = 450;
+			pattr->tpu_max_clock = 900;
 		}
 		pattr->tpu_current_clock = c_attr->tpu_current_clock;
 		if (pattr->tpu_current_clock < pattr->tpu_min_clock
@@ -409,12 +427,13 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 	struct bm_device_info *bmdi;
 	struct bm_handle_info *h_info;
 	int proc_cnt = 0;
+	unsigned long irq_flags;
 
 	bmdi = bmctl_get_bmdi(bmci, smi_proc_gmem->dev_id);
 	if (!bmdi)
 		return -1;
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	list_for_each_entry(h_info, &bmdi->handle_list, list) {
 		smi_proc_gmem->pid[proc_cnt] = h_info->open_pid;
 		smi_proc_gmem->gmem_used[proc_cnt] = h_info->gmem_used / 1024 / 1024;
@@ -422,7 +441,7 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 		if (proc_cnt == 128)
 			break;
 	}
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	smi_proc_gmem->proc_cnt = proc_cnt;
 	return 0;
 }
@@ -526,8 +545,7 @@ int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
 		return -ENODEV;
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+        (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		func_num = bmdi->misc_info.domain_bdf&0x7;
 		if (func_num == 0) {
 			bmdi = bmctl_get_bmdi(bmci, dev_id);

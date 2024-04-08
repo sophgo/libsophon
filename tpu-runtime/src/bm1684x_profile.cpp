@@ -33,7 +33,7 @@ bool BMProfileDevice::init()
 bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 {
     bm_status_t ret = BM_SUCCESS;
-    auto handle = profile->handle;
+    auto handle = profile->get_handle();
     if(enable_bdc){
         memset(tpu_buffer.ptr, -1, tpu_buffer.size);
         ret = bm_memcpy_s2d(handle, tpu_buffer.mem, tpu_buffer.ptr);
@@ -53,8 +53,8 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 
     // enable dynamic profile
     if(enable_arm){
-        auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id();
-        ret = bmfunc::bmdnn_1684x()->_bmdnn_set_profile_enable_(handle, enable_func_id, true);
+        auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id({0});
+        ret = bmfunc::bmdnn_1684x()->_bmdnn_set_profile_enable_(handle, enable_func_id[0], true);
         CHECK_status(ret);
     }
     return true;
@@ -62,7 +62,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 
 bool BMProfileDevice::end(net_ctx_t* net_ctx)
 {
-    auto handle = profile->handle;
+    auto handle = profile->get_handle();
     int ret = BM_SUCCESS;
     if (enable_bdc){
         bm_disable_perf_monitor(handle, &tpu_perf_monitor);
@@ -100,7 +100,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             size_t total_len = 0;
             u32 block_type = (i == 0) ? BLOCK_DYN_DATA : BLOCK_DYN_EXTRA;
             while(1){
-                auto get_func_id = net_ctx->kernel_module_->get_get_profile_func_id();
+                auto get_func_id = net_ctx->kernel_module_->get_get_profile_func_id({0})[0];
                 bm_status_t status = bmfunc::bmdnn_1684x()->_bmdnn_get_profile_data_(
                             handle,
                             get_func_id,
@@ -122,7 +122,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             }
             profile->write_block(block_type, data.size(), data.data());
         }
-        auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id();
+        auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id({0})[0];
         bm_status_t status = bmfunc::bmdnn_1684x()->_bmdnn_set_profile_enable_(handle, enable_func_id, false);
         CHECK_status(status);
     }

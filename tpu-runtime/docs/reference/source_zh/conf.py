@@ -20,7 +20,7 @@
 # -- Project information -----------------------------------------------------
 
 project = u'BMRuntime'
-copyright = u'2022, SOPHGO'
+copyright = u'2024, SOPHGO'
 author = u'SOPHGO'
 
 import os, subprocess
@@ -151,10 +151,10 @@ latex_elements = {
     # 全文文本左对齐：\usepackage[document]{ragged2e}
     'preamble':r'''
     \usepackage{tocloft}
-    \renewcommand\cftfignumwidth{4em} 
-    \renewcommand\cfttabnumwidth{4em} 
-    \renewcommand\cftsecnumwidth{4em} 
-    \renewcommand\cftsubsecnumwidth{6em} 
+    \renewcommand\cftfignumwidth{4em}
+    \renewcommand\cfttabnumwidth{4em}
+    \renewcommand\cftsecnumwidth{4em}
+    \renewcommand\cftsubsecnumwidth{6em}
     \renewcommand\cftparanumwidth{6em}
     \usepackage{fancyhdr}
     \setlength\headheight{14pt}

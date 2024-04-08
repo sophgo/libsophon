@@ -1,0 +1,95 @@
+;
+; windriver.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class=Sophon ; TODO: edit Class
+ClassGuid={316D30EF-538D-4C5F-8B75-57638A76EC07} ; TODO: edit ClassGuid
+Provider=%ManufacturerName%
+CatalogFile=windriver.cat
+DriverVer= ; TODO: set DriverVer in stampinf property pages
+
+[DestinationDirs]
+DefaultDestDir = 12
+windriver_Device_CoInstaller_CopyFiles = 11
+
+; ================= Class section =====================
+
+[ClassInstall32]
+Addreg=windriverClassReg
+
+[windriverClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+windriver.sys  = 1,,
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll=1 ; make sure the number matches with SourceDisksNames
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName%=Standard,NT$ARCH$
+
+[Standard.NT$ARCH$]
+%windriver.DeviceDesc%=windriver_Device, PCI\VEN_1F1C&DEV_1686 ; TODO: edit hw-id
+
+[windriver_Device.NT]
+CopyFiles=Drivers_Dir
+
+[Drivers_Dir]
+windriver.sys
+
+;-------------- MSI setup
+[windriver_Device.NT.HW]
+AddReg=Windriver_Reg
+
+[Windriver_Reg]
+HKR,Interrupt Management,0x00000010
+HKR,Interrupt Management\MessageSignaledInterruptProperties,0x00000010
+HKR,Interrupt Management\MessageSignaledInterruptProperties,MSISupported,0x00010001,1
+
+;-------------- Service installation
+[windriver_Device.NT.Services]
+AddService = windriver,%SPSVCINST_ASSOCSERVICE%, windriver_Service_Inst
+
+; -------------- windriver driver install sections
+[windriver_Service_Inst]
+DisplayName    = %windriver.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\windriver.sys
+
+;
+;--- windriver_Device Coinstaller installation ------
+;
+
+[windriver_Device.NT.CoInstallers]
+AddReg=windriver_Device_CoInstaller_AddReg
+CopyFiles=windriver_Device_CoInstaller_CopyFiles
+
+[windriver_Device_CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll,WdfCoInstaller"
+
+[windriver_Device_CoInstaller_CopyFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll
+
+[windriver_Device.NT.Wdf]
+KmdfService =  windriver, windriver_wdfsect
+[windriver_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE= 0x00000002
+ManufacturerName="<Bitmain>" ;TODO: Replace with your manufacturer name
+ClassName="Sophon" ; TODO: edit ClassName
+DiskName = "Sophon Installation Disk"
+windriver.DeviceDesc = "Sophon Device"
+windriver.SVCDESC = "Sophon Service"

@@ -39,6 +39,20 @@ BM1684_OBJ += bm1684_gmem.o bm1684_cdma.o bm1684_smmu.o bm1684_clkrst.o bm1684_c
 			  bm1684_msgfifo.o bm1684_perf.o bm1684_flash.o
 BM1684_OBJ := $(addprefix $(BM1684_DIR)/, $(BM1684_OBJ))
 
+BM1688_DIR ?= bm1688
+ifeq ($(SOC_MODE), 1)
+else
+BM1688_OBJ += bm1688_pcie.o bm1688_irq.o \
+				ddr/ddr.o \
+				ddr/ddr_sys_bring_up_pld.o \
+				ddr/ddr_sys_pld.o \
+				ddr/ddr_config/lp4_x16_4ch_pld/ddrc_init.o \
+				bm1688_smbus.o
+endif
+BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_smmu.o bm1688_clkrst.o bm1688_card.o \
+			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
+BM1688_OBJ := $(addprefix $(BM1688_DIR)/, $(BM1688_OBJ))
+
 VPP_DIR ?= vpp
 ifeq ($(SOC_MODE), 1)
 else
@@ -58,11 +72,17 @@ ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif
-ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684
+ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684  -I$(src)/bm1688 \
+			 -I$(src)/bm1688/ddr \
+			 -I$(src)/bm1688/ddr/include \
+			 -I$(src)/bm1688/ddr/ddr_config/lp4_x16_4ch_pld \
+       -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
 ifeq ($(SOC_MODE), 1)
   ccflags-y += -DSOC_MODE
   cflags-y += -DSOC_MODE
 endif
+
+KBUILD_EXTRA_SYMBOLS = $(src)/../../osdrv/interdrv/v2/base/Module.symvers
 
 FW_SIMPLE ?= 0
 ifeq ($(FW_SIMPLE),1)
@@ -91,6 +111,7 @@ $(BM_MODULE_NAME)-y += bm_drv.o bm_fops.o bm_irq.o i2c.o pwm.o  \
 
 $(BM_MODULE_NAME)-y += $(BM1682_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1684_OBJ)
+$(BM_MODULE_NAME)-y += $(BM1688_OBJ)
 $(BM_MODULE_NAME)-y += $(VPP_OBJ)
 
 ifeq ($(SOC_MODE), 1)

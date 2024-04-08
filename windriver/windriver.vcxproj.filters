@@ -1,0 +1,414 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Driver Files">
+      <UniqueIdentifier>{8E41214B-6785-4CFE-B992-037D68949A14}</UniqueIdentifier>
+      <Extensions>inf;inv;inx;mof;mc;</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="windriver.inf">
+      <Filter>Driver Files</Filter>
+    </Inf>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Device.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Driver.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Public.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Queue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Trace.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_irq.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_def.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_io.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_card.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_cdma.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_eu_cmd.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_firmware_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_firmware_tcm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_gmem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_irq.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_msgfifo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_pcie.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1682\bm1682_reg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_base64.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_card.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_cdma.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_clkrst.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_flash.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_gmem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_irq.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_jpu.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_lpddr4.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_msgfifo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_pcie.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_perf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_reg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_smbus.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_vpp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\temp_def.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vpu\config.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vpu\vmm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vpu\vmm_type.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vpu\vpu.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vpu\vpuconfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_api.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_attr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_bgm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_boot_info.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_card.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_cdma.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_ctl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_debug.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_drv.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_fw.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_gmem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_memcpy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_msg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_msgfifo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_pcie.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_thread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_timer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_trace.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_uapi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_wdt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gpio.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="i2c.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="l2_sram_table.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="pwm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="uart.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_firmware_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1684_firmware_tcm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_common.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm_monitor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="bm1684\bm1686_firmware_ddr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Device.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Driver.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Queue.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_irq.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_io.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_api.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_attr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_bgm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_boot_info.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_card.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_cdma.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_ctl.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_debug.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_drv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_fops.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_fw.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_gmem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_memcpy.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_msgfifo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_pcie_drv.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_thread.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_timer.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_trace.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_wdt.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="gpio.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="pwm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="uart.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_base64.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_card.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_cdma.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_clkrst.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_ddr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_flash.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_gmem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_irq.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_jpu.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_lpddr4.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_msgfifo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_pcie.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_perf.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_smbus.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1684\bm1684_vpp.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_card.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_cdma.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_ddr.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_gmem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_irq.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_msgfifo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm1682\bm1682_pcie.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vpu\vpu.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="i2c.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="fifo.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="bm_monitor.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

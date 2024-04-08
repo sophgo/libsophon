@@ -550,7 +550,6 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
         api_size     = sizeof(bm_api_cpu_exec_func_internal_t);
     }
     if (api_handle != NULL) {
-        bm_profile_record_send_api(handle, api_id);
         bm_api_ext_t bm_api = {api_id, api_internal, api_size, 0};
         if (0 == platform_ioctl(handle, BMDEV_SEND_API_EXT, &bm_api)) {
             *api_handle = bm_api.api_handle;

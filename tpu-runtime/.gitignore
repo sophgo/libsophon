@@ -3,3 +3,4 @@ obj
 .vscode
 
 include/kernel_module.h
+build_thirdparty

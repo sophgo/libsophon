@@ -36,9 +36,6 @@ typedef struct bm_api_data {
 /* bm api message struct
  * represent the api information to be sent to driver
  */
-/* bm api message struct
- * represent the api information to be sent to driver
- */
 typedef struct bm_api_ext {
     sglib_api_id_t api_id;
     const u8 *  api_addr;

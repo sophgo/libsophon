@@ -1,13 +1,13 @@
 BMRuntime
 ================
 
-BMRuntime is used to read the compiled output (.bmodel) of BMCompiler and drive it to be executed in the SOPHON TPU chip. BMRuntime provides users with diversified interfaces, which are convenient for users to transplant algorithms. Its software architecture is shown as follows:
+BMRuntime is used to read the compiled output (.bmodel) of BMCompiler and drive it to be executed in the deep-learning processor. BMRuntime provides users with diversified interfaces, which are convenient for users to transplant algorithms. Its software architecture is shown as follows:
 
 .. image:: ../_static/bmruntime.png
 
 BMRuntime has two interfaces available, C and C++. Some interfaces are reserved in order to be compatible with the previous generation of applications. However, it is not recommened to continue using new applications.
 
-Interfaces in this chapter are all synchronous by default and some of them are asynchronous (functions are executed by the NPU and the CPU may continue to execute from up to bottom), which will be specially described.
+Interfaces in this chapter are all synchronous by default and some of them are asynchronous (functions are executed by the deep-learning processor and the host processor may continue to execute from up to bottom), which will be specially described.
 
 This chapter consists of four parts:
 
@@ -241,12 +241,12 @@ The interface described in this section is only valid on the SoC. On the SoC, al
 
 Mmap may be used to get the virtual address of Device Memory so that it can be directly accessed by the application.
 
-**Special note**: The NPU directly accesses DDR when accessing Device Memory without passing cache but cache is passed when an application accesses it. 
+**Special note**: The deep-learning processor directly accesses DDR when accessing Device Memory without passing cache but cache is passed when an application accesses it.
 
 Thus, it is necessary to ensure the consistency of caches. This means:
 
-* The application revises the data of Device Memory through the virtual address. It is necessary to flush before NPU inference so as to ensure the cache data has been synchronized with DDR.
-* Device Memory data is modified upon the ending of NPU inference. The application needs to be invalidated before access through the virutal address so as to ensure DDR data has been synchronized with cache.
+* The application revises the data of Device Memory through the virtual address. It is necessary to flush before deep-learning processor inference so as to ensure the cache data has been synchronized with DDR.
+* Device Memory data is modified upon the ending of deep-learning processor inference. The application needs to be invalidated before access through the virutal address so as to ensure DDR data has been synchronized with cache.
 
 bm_mem_mmap_device_mem
 :::::::::::::::::::::::
@@ -322,9 +322,9 @@ Refresh cache data or ensure cache data has been sychronized with DDR.
    * [in]  offset
    * [in]  len
    */
-  bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle, bm_device_mem_t 
+  bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle, bm_device_mem_t
   *dmem,unsigned int offset, unsigned int len);
-  
+
 
 Specify cache refreshing within the offset and size of device mem.
 
@@ -376,7 +376,7 @@ Program synchronize
   bm_status_t bm_thread_sync(bm_handle_t handle);
 
 
-Synchronous interface. Normally, npu inference is made asynchronously and the user’s cpu program can continue to be executed. This interface is used in the cpu process to ensure the npu inference is completed. Unless otherwise specially described, all interfaces introduced in this chapter are synchronous ones. There are only a few asynchronous interfaces that need to call bm_thread_sync for synchronization.
+Synchronous interface. Normally, deep-learning processor inference is made asynchronously and the user’s host program can continue to be executed. This interface is used in the host process to ensure the deep-learning processor inference is completed. Unless otherwise specially described, all interfaces introduced in this chapter are synchronous ones. There are only a few asynchronous interfaces that need to call bm_thread_sync for synchronization.
 
 
 C Interface
@@ -421,7 +421,7 @@ Store mode
     BM_STORE_4N = 2,
   } bm_store_mode_t;
 
-bm_store_mode_t specifies how data is stored. You only need to focus on BM_STORE_1N. If you want to focus on the bottom layer and optimize performance, you need to focus on BM_STORE_2N and BM_STORE_4N. 
+bm_store_mode_t specifies how data is stored. You only need to focus on BM_STORE_1N. If you want to focus on the bottom layer and optimize performance, you need to focus on BM_STORE_2N and BM_STORE_4N.
 
 BM_STORE_1N is the default storage method for data types. It indicates data is stored as normal.
 
@@ -583,6 +583,22 @@ bmrt_create
 
 Create bmruntime and return the runtime pointer. For other interfaces (bmrt_xxxx class interfaces), the required handle is the runtime pointer.
 
+
+bmrt_create_ex
+>>>>>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+
+  /*
+  Parameters: [in] bm_handles   - BM handles. They must be initialized by using bmlib.
+  Parameters: [in] num_handles  - Number of bm_handles.
+  Returns:    void*             - The pointer of a bmruntime helper.
+  */
+  void *bmrt_create_ex(bm_handle_t *bm_handles, int num_handles);
+
+Create a bmruntime that supports passing in multiple bm_handle, used to run distributed bmodels.
+
+
 bmrt_destroy
 >>>>>>>>>>>>>>>>>>>>
 
@@ -721,6 +737,8 @@ Network information is expressed as follows:
   typedef struct bm_stage_info_s {
     bm_shape_t* input_shapes;   /* input_shapes[0] / [1] / ... / [input_num-1] */
     bm_shape_t* output_shapes;  /* output_shapes[0] / [1] / ... / [output_num-1] */
+    bm_device_mem_t *input_mems; /* input_mems[0] / [1] / ... / [input_num-1] */
+    bm_device_mem_t *output_mems; /* output_mems[0] / [1] / ... / [output_num-1] */
   } bm_stage_info_t;
 
   /* bm_tensor_info_t holds all information of one net */
@@ -739,6 +757,12 @@ Network information is expressed as follows:
     bm_stage_info_t* stages;       /* stages[0] / [1] / ... / [stage_num-1] */
     size_t * max_input_bytes;      /* max_input_bytes[0]/ [1] / ... / [input_num-1] */
     size_t * max_output_bytes;     /* max_output_bytes[0] / [1] / ... / [output_num-1] */
+    int* input_zero_point;         /* input_zero_point[0] / [1] / .../ [input_num-1] */
+    int* output_zero_point;        /* output_zero_point[0] / [1] / .../ [output_num-1] */
+    int *input_loc_devices;        /* input_loc_device[0] / [1] / .../ [input_num-1] */
+    int *output_loc_devices;       /* output_loc_device[0] / [1] / .../ [output_num-1] */
+    int core_num;                  /* core number */
+    int32_t addr_mode;             /* address assign mode */
   } bm_net_info_t;
 
 bm_net_info_t represents all information of a network and bm_stage_info_t represents the conditions of different shapes supported by the network.
@@ -751,6 +775,14 @@ input_scales and output_scales are only useful when they are integers and are 1.
 
 max_input_bytes represents the maximum number of bytes for each input and max_output_bytes represents the maximum number of bytes for each output.
 Each network may have multiple stages. The user may request the maximum number of bytes for each input/output and store the data of various stages.
+
+input_zero_point and output_zero_point record the zero_point values for inputs and outputs in the case of an asymmetric quantized int8 network.
+
+input_loc_devices and output_loc_devices record the device id for inputs and outputs in the case of a distributed network.
+
+core_num records the number of cores required by the network.
+
+addr_mode records the network's address allocation mode, where 1 indicates the basic mode, and 2 indicates the io_alone mode.
 
 bmrt_get_network_info gets the information of a given network according to the network name. The interface is declared as follows:
 
@@ -776,15 +808,15 @@ Print network information. It is required in debugging. The interface is declare
 bmrt_launch_tensor
 >>>>>>>>>>>>>>>>>>>>>>
 
-Infer npu for the designated network. The interface is declared as follows:
+Infer deep-learning processor for the designated network. The interface is declared as follows:
 
 .. code-block:: cpp
 
   /*
   To launch the inference of the neuron network with setting input tensors.
   This API supports the neuron nework, that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. The CPU program will not be blocked
-  if the neuron network is static-compiled and has no cpu layer. Otherwize, the CPU
+  After calling this API, inference on deep-learning processor is launched. The host program will not be blocked
+  if the neuron network is static-compiled and has no cpu layer. Otherwize, the host
   program will be blocked. This API support multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt - Bmruntime that had been created.
@@ -842,15 +874,15 @@ The example of the use method is shown as follows:
 bmrt_launch_tensor_ex
 >>>>>>>>>>>>>>>>>>>>>>
 
-Infer npu for a given network. The interface is declared as follows:
+Infer deep-learning processor for a given network. The interface is declared as follows:
 
 .. code-block:: cpp
 
   /*
   To launch the inference of the neuron network with setting input tensors.
   This API supports the neuron nework, that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. The CPU program will not be blocked
-  if the neuron network is static-compiled and has no cpu layer. Otherwize, the CPU
+  After calling this API, inference on deep-learning processor is launched. The host program will not be blocked
+  if the neuron network is static-compiled and has no cpu layer. Otherwize, the host
   program will be blocked. This API supports multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt - Bmruntime that had been created.
@@ -931,14 +963,14 @@ The example of the use method is shown as follows:
 bmrt_launch_data
 >>>>>>>>>>>>>>>>>
 
-Infer npu for a given network. The interface is declared as follows:
+Infer deep-learning processor for a given network. The interface is declared as follows:
 
 .. code-block:: cpp
 
   /*
   To launch the inference of the neuron network with setting input datas in system memory.
   This API supports the neuron nework, that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. And the CPU program will be blocked.
+  After calling this API, inference on deep-learning processor is launched. And the host program will be blocked.
   This API supports multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt       - Bmruntime that had been created.
@@ -1178,7 +1210,7 @@ The use reference is shown as follows:
 
 .. code-block:: cpp
 
-    //net1, the shapes of input tensors can be reshaped 
+    //net1, the shapes of input tensors can be reshaped
     Network net1(*p_ctx, "net1");
     //net2, the shape of stage [1] in bm_net_info_ is adopted and will not be reshaped later.
     Network net2(*p_ctx, "net2", 1);
@@ -1372,7 +1404,7 @@ Set the device mem of the tensor.
 
 Before inference, you can configure the device mem of the input to specify the store position of the input data or configure the device mem of output to indicate the store position of output.
 
-Both input and output will be stored in the device mem automatically requested by network if you set nothing. 
+Both input and output will be stored in the device mem automatically requested by network if you set nothing.
 
 Additionally, you can configure the size of device mem, which cannot be smaller than ByteSize (); otherwise, errors will be returned due to the failure in storing the data of the entire tensor.
 
@@ -1458,14 +1490,14 @@ The programming model is shown as follows:
 
 The figure uses the C interface as an example.
 
-For the C++ interface, create a single Context instance and then load the network model via load_bmodel. 
+For the C++ interface, create a single Context instance and then load the network model via load_bmodel.
 
-Next, create network instances in multiple threads for inference. The networks for the same instance may be the same or different. 
+Next, create network instances in multiple threads for inference. The networks for the same instance may be the same or different.
 
 multi runtime
 >>>>>>>>>>>>>>>>
 
-You can create multiple threads, each creating a bumruntime. The loading model of each bmruntime is independent, with the same model loaded among them. 
+You can create multiple threads, each creating a bumruntime. The loading model of each bmruntime is independent, with the same model loaded among them.
 
 The programming model is shown as follows:
 

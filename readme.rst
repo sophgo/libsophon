@@ -19,6 +19,7 @@ libsophon目前包含如下组件：
 
     sudo -E apt update
     sudo -E apt-get install -y \
+            bsdmainutils \
             build-essential \
             cmake \
             ninja-build \
@@ -31,6 +32,11 @@ libsophon目前包含如下组件：
             g++-aarch64-linux-gnu \
             git
 
+**获取git submodules：**
+
+::
+
+    git submodule update --init
 
 **编译：**
 
@@ -80,7 +86,8 @@ libsophon目前包含如下组件：
     sudo ln -s xxx/a53lite_pkg.bin /lib/firmware/bm1684x_firmware.bin.bin
     # where xxx is the path of firmware, if firmware is modify, ln new firmware to /lib/firmware/bm1684x_firmware.bin
 
-    insmod ./sg_x86_pcie_device/bmsophon.ko
+    sudo dpkg -i sophon-*.deb
+    source /etc/profile
     ./bm-smi/bm-smi
     ./tpu-runtime/bmrt_test --context static.int8
     ./tpu-runtime/bmrt_test --context static.int8.b4
@@ -102,7 +109,8 @@ libsophon目前包含如下组件：
     sudo ln -s xxx/a53lite_pkg.bin /lib/firmware/bm1684x_firmware.bin
     # where xxx is the path of firmware, if firmware is modify, ln new firmware to /lib/firmware/bm1684x_firmware.bin
 
-    insmod ./sg_x86_pcie_device/bmsophon.ko
+    sudo dpkg -i sophon-*.deb
+    source /etc/profile
     ./bm-smi/bm-smi
     ./tpu-runtime/bmrt_test --context static.int8
     ./tpu-runtime/bmrt_test --context static.int8.b4
@@ -294,7 +302,10 @@ libsophon目前包含如下组件：
 
 ::
 
+    cd /
+    git clone ssh://${your_name}@gerrit-ai.sophgo.vip:29418/libsophon
     cd libsophon
+    git submodule update --init
     mkdir build && cd build
     cmake -DPLATFORM=soc -DSOC_LINUX_DIR=/usr/src/${header}/  -DCMAKE_INSTALL_PREFIX=$PWD/../install ..
     make

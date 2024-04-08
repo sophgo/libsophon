@@ -70,7 +70,7 @@ class bm_mem_pool {
  public:
   bm_mem_pool(u64 total_size);
   ~bm_mem_pool();
-  pool_addr_t bm_mem_pool_alloc(pool_addr_t size);
+  pool_addr_t bm_mem_pool_alloc(pool_size_t size);
   void bm_mem_pool_free(pool_addr_t addr);
 
  private:

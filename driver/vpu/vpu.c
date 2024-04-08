@@ -1376,6 +1376,7 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				u32 intr_reason_in_q;
 				u32 interrupt_flag_in_q;
 				u32 core_idx;
+				u32 got_fifo_out = 0;
 
 				DPRINTK("[VPUDRV][+]VDI_IOCTL_WAIT_INTERRUPT\n");
 				ret = copy_from_user(&info, (vpudrv_intr_info_t *)arg, sizeof(vpudrv_intr_info_t));
@@ -1433,6 +1434,7 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 							&intr_reason_in_q, sizeof(u32), &bmdi->vpudrvctx.s_kfifo_lock[core_idx][intr_inst_index]);
 				if (interrupt_flag_in_q > 0) {
 					dev->interrupt_reason[core_idx][intr_inst_index] = intr_reason_in_q;
+					got_fifo_out = 1;
 				} else {
 					dev->interrupt_reason[core_idx][intr_inst_index] = 0;
 				}
@@ -1444,7 +1446,8 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 //INTERRUPT_REMAIN_IN_QUEUE:
 
 				info.intr_reason = dev->interrupt_reason[core_idx][intr_inst_index];
-				bmdi->vpudrvctx.interrupt_flag[core_idx][intr_inst_index] = 0;
+				if (got_fifo_out)
+					bmdi->vpudrvctx.interrupt_flag[core_idx][intr_inst_index] = 0;
 				dev->interrupt_reason[core_idx][intr_inst_index] = 0;
 				atomic_dec(&bmdi->vpudrvctx.s_vpu_usage_info.vpu_busy_status[core_idx]);
 
@@ -1843,6 +1846,23 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				if (reset_flag.core_idx >= get_max_num_vpu_core(bmdi))
 					return -EFAULT;
 				bmdi->vpudrvctx.reset_vpu_core_disable[reset_flag.core_idx] = reset_flag.reset_core_disable;
+				DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET\n");
+			}
+			break;
+		case VDI_IOCTL_GET_KERNEL_RESET_STATUS:
+			{
+				vpudrv_reset_flag reset_flag;
+				DPRINTK("[VPUDRV][+]VDI_IOCTL_CTRL_KERNEL_RESET\n");
+				ret = copy_from_user(&reset_flag, (vpudrv_reset_flag *)arg, sizeof(vpudrv_reset_flag));
+				if (ret != 0)
+					return -EFAULT;
+
+				if (reset_flag.core_idx >= get_max_num_vpu_core(bmdi))
+					return -EFAULT;
+				reset_flag.reset_core_disable = bmdi->vpudrvctx.reset_vpu_core_disable[reset_flag.core_idx];
+				ret = copy_to_user((void __user *)arg, &reset_flag, sizeof(vpudrv_reset_flag));
+				if (ret != 0)
+					return -EFAULT;
 				DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET\n");
 			}
 			break;

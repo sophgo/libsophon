@@ -18,7 +18,7 @@
 #else
 #endif
 
-static int bmlib_log_level = BMLIB_LOG_ERROR;
+static int bmlib_log_level = BMLIB_LOG_WARNING;
 #define BMLIB_LOG_LOG_TAG "bmlib_log"
 
 #ifdef __linux__

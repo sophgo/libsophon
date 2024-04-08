@@ -2,6 +2,7 @@
 #define _BM_PCIE_H_
 #include "bm1682_pcie.h"
 #include "bm1684_pcie.h"
+#include "bm1688_pcie.h"
 /*BM1684 PCIe end device info*/
 
 /**
@@ -38,9 +39,9 @@
 #define BOARD_TYPE_BM1684X_EVB    0x20
 #define BOARD_TYPE_SC7_PRO   0x21
 #define BOARD_TYPE_SC7_PLUS  0x22
-#define BOARD_TYPE_SM7_V0_0	 0x30
-#define BOARD_TYPE_SM7_MP1_1	 0x36
-#define BOARD_TYPE_CP24		 0x40
+
+#define BOARD_TYPE_BM1688_EVB	0X40
+#define BOARD_TYPE_BM1688_ACP	0X41
 
 #define DUMMY_PCIDEV_NAME	"dummy-bmcard-pci"
 

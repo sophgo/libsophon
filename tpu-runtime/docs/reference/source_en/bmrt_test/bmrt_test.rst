@@ -17,7 +17,7 @@ _____________________________________________
 
    .. table:: bmrt_test main parameter description
       :widths: 15 10 50
- 
+
       +---------------+------------+---------------------------------------------------------------------------------------------------------------------------------------------+
       |    args       |    type    |                                                           Description                                                                       |
       +===============+============+=============================================================================================================================================+
@@ -100,7 +100,7 @@ ____________________________________________
 Comparison Data Generation and Verification Example
 ___________________________________________________
 
-1. Upon the completion of model compilation, run with comparing the model. 
+1. Upon the completion of model compilation, run with comparing the model.
 
     When compiling the model, you must indicate \--cmp=True, which is enabled by default. input_ref_data.dat and output_ref_data.dat files will be generated in the compilation output folder.
 
@@ -128,7 +128,7 @@ ___________________________________________________
                 f.write(output_data.astype(np.float32).tobytes())  # astype will convert
                 # according to the output data type of bmodel
 
-    Put the generated input_ref_data.dat and output_ref_data.dat in the bmodel_dir file folder 
+    Put the generated input_ref_data.dat and output_ref_data.dat in the bmodel_dir file folder
     and then in 'bmrt_test \--context_dir bmodel_dir' to see if the result is a comparison error.
 
 FAQs

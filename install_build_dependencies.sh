@@ -7,6 +7,7 @@ if [ -f /etc/lsb-release ]; then
     $sudo apt update
     $sudo apt-get install -y \
             build-essential \
+            bsdmainutils \
             git \
             cmake \
             ninja-build \

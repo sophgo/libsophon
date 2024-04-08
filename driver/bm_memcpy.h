@@ -44,13 +44,13 @@ struct bm_memcpy_info {
 	struct completion cdma_done;
 	struct mutex cdma_mutex;
 	struct mutex p2p_mutex;
-	int p2p_available;
 	int cdma_max_payload;
 
 	struct iommu_ctrl iommuctl;
 	int (*bm_memcpy_init)(struct bm_device_info *);
 	void (*bm_memcpy_deinit)(struct bm_device_info *);
 	u32 (*bm_cdma_transfer)(struct bm_device_info *, struct file *, pbm_cdma_arg, bool);
+	u32 (*bm_dual_cdma_transfer)(struct bm_device_info *, struct file *, pbm_cdma_arg, pbm_cdma_arg, bool);
 	int (*bm_disable_smmu_transfer)(struct bm_memcpy_info *, struct iommu_region *, struct iommu_region *, struct bm_buffer_object **);
 	int (*bm_enable_smmu_transfer)(struct bm_memcpy_info *, struct iommu_region *, struct iommu_region *, struct bm_buffer_object **);
 };
@@ -59,8 +59,20 @@ struct bm_memcpy_param {
 	void __user *host_addr;
 	u64 src_device_addr;
 	u64 device_addr;
-	u32 size;
+	union {
+		u32 size;
+		struct {
+			u16 width;
+			u16 height;
+			u16 src_width;
+			u16 dst_width;
+			u16 format;   //2:2-byte format, others:1-byte format
+			u16 fixed_data;
+			bool flush;
+		};
+	};
 	MEMCPY_DIR dir;
+	MEMCPY_TYPE type;
 	bool intr;
 	bm_cdma_iommu_mode cdma_iommu_mode;
 };
@@ -85,11 +97,10 @@ int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppad
 int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size);
 int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
-int bmdev_memcpy_p2p_cdma(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
-int bmdev_test_p2p_available(struct bm_device_info *bmdi);
 int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size);
 int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size);
 int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,
 		uint64_t dst, void __user *src, u32 size, bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
+int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 
 #endif

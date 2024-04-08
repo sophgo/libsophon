@@ -6,6 +6,7 @@
 #include "bmlib_memory.h"
 #include "bmlib_utils.h"
 #include "bmlib_interface.h"
+#include "bmlib_runtime.h"
 
 #ifdef _WIN32
 	#include <stdlib.h>
@@ -241,8 +242,12 @@ bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
 }
 #endif
 
-bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api,
-                        u32 size) {
+bm_status_t bm_send_api_to_core(
+  bm_handle_t handle,
+  int api_id,
+  const u8 *api,
+  u32 size,
+  int core_id) {
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
@@ -253,33 +258,87 @@ bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api,
           "invalid size = 0x%x!\n", size);
     return BM_ERR_PARAM;
   }
-  bm_profile_record_send_api(handle, api_id);
+  bm_profile_record_send_api(handle, api_id, api, core_id);
 
 #ifdef USING_CMODEL
-#ifdef BM_TV_GEN
-  bm_device_sync(handle);
-#endif
-  return handle->bm_dev->bm_device_send_api(api_id, api, size);
+  return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
 #else
   /* bm api message struct
    * represent the api information to be sent to driver
    */
   typedef struct bm_api {
+    int core_id;
     int api_id;
     const u8* api_addr;
     u32 api_size;
   } bm_api_t;
 
-  bm_api_t bm_api = {api_id, api, size};
+  bm_api_t bm_api = {core_id, api_id, api, size};
   memset(&bm_api, 0, sizeof(bm_api));
+  bm_api.core_id = core_id;
   bm_api.api_id = api_id;
   bm_api.api_addr = api;
   bm_api.api_size = size;
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
+        "%s: %s: %d, core_id=%d\n",
+        __FILE__, __func__, __LINE__, bm_api.core_id);
   if (0 == platform_ioctl(handle, BMDEV_SEND_API, &bm_api))
     return BM_SUCCESS;
   else
     return BM_ERR_FAILURE;
 #endif
+}
+
+bm_status_t bm_send_api_multicores(
+  bm_handle_t handle,
+  int api_id,
+	tpu_launch_param_t *param_list,
+  int param_num)
+
+{
+#ifdef USING_CMODEL
+  return BM_SUCCESS;
+#else
+	int i;
+	int core_id;
+	tpu_kernel_function_t func_id;
+	void *param_data;
+	unsigned int param_size;
+  const u8 *api;
+
+	if (handle == nullptr){
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+				  "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+		return BM_ERR_DEVNOTREADY;
+	}
+
+	for (i = 0; i < param_num; i++) {
+		api = (u8 *)&param_list[i];
+    core_id = param_list[i].core_id;
+		bm_profile_record_send_api(handle, api_id, api, core_id);
+	}
+  typedef struct bm_api {
+    int core_id;
+    int api_id;
+    const u8* api_addr;
+    u32 api_size;
+  } bm_api_t;
+  bm_api_t bm_api;
+  memset(&bm_api, 0, sizeof(bm_api));
+  bm_api.core_id = 0; // not use
+  bm_api.api_id = api_id;
+  bm_api.api_addr = (u8 *)&param_list[0];
+  bm_api.api_size = (sizeof(tpu_launch_param_t) * param_num);
+  if (0 == platform_ioctl(handle, BMDEV_SEND_API, &bm_api))
+    return BM_SUCCESS;
+  else
+    return BM_ERR_FAILURE;
+#endif
+}
+
+bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api,
+                        u32 size) {
+   return bm_send_api_to_core(handle, api_id, api, size, 0);
 }
 
 bm_status_t bm_device_sync(bm_handle_t handle) {
@@ -299,7 +358,8 @@ bm_status_t bm_device_sync(bm_handle_t handle) {
 #endif
 }
 
-bm_status_t bm_handle_sync(bm_handle_t handle) {
+bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id)
+{
 #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_sync();
 #else
@@ -309,11 +369,16 @@ bm_status_t bm_handle_sync(bm_handle_t handle) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_HANDLE_SYNC_API, 0))
+  if (0 == platform_ioctl(handle, BMDEV_HANDLE_SYNC_API, &core_id))
     return BM_SUCCESS;
   else
     return BM_ERR_FAILURE;
 #endif
+}
+
+bm_status_t bm_handle_sync(bm_handle_t handle)
+{
+  return bm_handle_sync_from_core(handle, 0);
 }
 
 u64 bm_get_version(bm_handle_t handle) {
@@ -334,35 +399,68 @@ u64 bm_get_version(bm_handle_t handle) {
 #endif
 }
 
-bm_status_t bm_thread_sync(bm_handle_t handle) {
-    bm_profile_record_sync_begin(handle);
+bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
+    bm_profile_record_sync_begin(handle, core_id);
     bm_status_t status = BM_SUCCESS;
 #ifdef USING_CMODEL
-    status =  handle->bm_dev->bm_device_thread_sync();
+    status =  handle->bm_dev->bm_device_thread_sync_from_core(core_id);
 #else
     if (handle == nullptr) {
         bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
                   "handle is nullptr %s: %s: %d\n",
                   __FILE__, __func__, __LINE__);
         status = BM_ERR_DEVNOTREADY;
-    } else if (0 == platform_ioctl(handle, BMDEV_THREAD_SYNC_API, &status)) {
+    } else if (0 == platform_ioctl(handle, BMDEV_THREAD_SYNC_API, &core_id)) {
         status = BM_SUCCESS;
     } else {
         status = BM_ERR_FAILURE;
     }
 #endif
-    bm_profile_record_sync_end(handle);
+    bm_profile_record_sync_end(handle, core_id);
     return status;
 }
 
+bm_status_t bm_thread_sync(bm_handle_t handle)
+{
+  return bm_thread_sync_from_core(handle, 0);
+}
+
+
+bm_status_t bm_sync_api_from_core(bm_handle_t handle, int core_id) {
+  return bm_thread_sync_from_core(handle, core_id);
+}
+
 bm_status_t bm_sync_api(bm_handle_t handle) {
-    return bm_thread_sync(handle);
+  return bm_sync_api_from_core(handle, 0);
+}
+
+bm_status_t bm_reset_tpu(bm_handle_t handle){
+
+  #ifdef USING_CMODEL
+  return BM_SUCCESS;
+  #else
+    if (handle == nullptr){
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "handle is nullptr %s: %s: %d\n",
+                  __FILE__,
+                  __func__,
+                  __LINE__);
+        return BM_ERR_DEVNOTREADY;
+    }
+
+    if(0 == platform_ioctl(handle, BMDEV_FORCE_RESET_TPU, NULL)){
+        return BM_SUCCESS;
+    } else {
+        return BM_ERR_FAILURE;
+    }
+  #endif
 }
 
 bm_status_t bm_dev_getcount(int *count) {
   if (!count) return BM_ERR_PARAM;
 #ifdef USING_CMODEL
-  *count = MAX_NODECHIP_NUM;
+  *count = MAX_DEVICE_NUM;
 #else
   int fd;
   #ifdef __linux__
@@ -467,13 +565,13 @@ bm_status_t bm_create_ctx(bm_context_t *ctx, int devid) {
   }
   ctx->dev_fd = fd;
   ctx->vpp_fd.dev_fd = -1;
-  fd = open("/dev/bm-vpp", O_RDWR);
-  ctx->vpp_fd.dev_fd = fd;
-  if (fd > 0) {
-    ctx->vpp_fd.name = (char *)malloc(sizeof(char) * 7);
-    memset(ctx->vpp_fd.name, 0x0, sizeof(char) * 7);
-    memcpy(ctx->vpp_fd.name, "bm-vpp", sizeof("bm-vpp"));
-  }
+  // fd = open("/dev/bm-vpp", O_RDWR);
+  // ctx->vpp_fd.dev_fd = fd;
+  // if (fd > 0) {
+  //   ctx->vpp_fd.name = (char *)malloc(sizeof(char) * 7);
+  //   memset(ctx->vpp_fd.name, 0x0, sizeof(char) * 7);
+  //   memcpy(ctx->vpp_fd.name, "bm-vpp", sizeof("bm-vpp"));
+  // }
 
 #ifdef SOC_MODE
   fd = open("/dev/ion", O_RDWR);
@@ -482,12 +580,13 @@ bm_status_t bm_create_ctx(bm_context_t *ctx, int devid) {
     bm_get_carveout_heap_id(ctx);
   }
 
-  fd = open("/dev/bce-base", O_RDWR);
-  if (fd > 2) {
-    ctx->spacc_fd = fd;
-  }
+  // fd = open("/dev/bce-base", O_RDWR);
+  // if (fd > 2) {
+  //   ctx->spacc_fd = fd;
+  // }
 #endif
 #endif
+
   return BM_SUCCESS;
 }
 
@@ -552,13 +651,18 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
            ctx->misc_info.driver_version >> 16,
            (ctx->misc_info.driver_version >> 8) & 0xff,
            ctx->misc_info.driver_version & 0xff);
-    if(0x1686 == ctx->misc_info.chipid){
+    if (0x1686 == ctx->misc_info.chipid) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-            "the chip name is BM1684X, pcie_soc_mode is %s\n",
+            "the chip id is BM1684X, pcie_soc_mode is %s\n",
             (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
-    }else{
+    } else if (0x1686a200 == ctx->misc_info.chipid) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-            "the chip name is BM1684, pcie_soc_mode is %s\n",
+            "the chip id is bm1688, pcie_soc_mode is %s\n",
+            (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
+    } else {
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+            "the chip id is 0x%x, pcie_soc_mode is %s\n",
+            ctx->misc_info.chipid,
             (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
     }
   } else {
@@ -576,13 +680,20 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
     case 0x1686:
       // do something here.
       break;
+    case 0x1686a200:
+      // do something here.
+      break;
     default:
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
              "invalid chip id!\n");
       return BM_ERR_PARAM;
   }
   *handle = ctx;
-  bm_disable_iommu(*handle);
+  #ifdef SMMU_MODE
+    bm_enable_iommu(*handle);
+  #else
+    bm_disable_iommu(*handle);
+  #endif
 #endif
 #else
     if (!GetDevicePath(ctx)) {
@@ -624,6 +735,9 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
         case 0x1686:
             // do something here.
             break;
+        case 0x1686a200:
+            // do something here.
+            break;
         default:
             bmlib_log(
                 BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "invalid chip id!\n");
@@ -633,11 +747,10 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
     bm_disable_iommu(*handle);
     printf("Create sophon device %d success\n", ctx->dev_id);
 #endif
-  if (get_env_bool_value("BMLIB_ENABLE_ALL_PROFILE", false)) {
-      printf("entry bm_profile_init\n");
-      bm_profile_init(ctx, true);
-      printf("exit bm_profile_init\n");
- }
+    if (get_env_bool_value("BMLIB_ENABLE_ALL_PROFILE", false)) {
+        bm_profile_init(ctx, true);
+    }
+
     return BM_SUCCESS;
 }
 
@@ -653,6 +766,8 @@ void bm_dev_free(bm_handle_t handle) {
   }
 #ifdef __linux__
     #if defined USING_CMODEL
+      bm_device_manager *bm_dev_mgr = bm_device_manager::get_dev_mgr();
+      bm_dev_mgr->free_bm_device(handle->dev_id);
       handle->bm_dev = nullptr;
     #else
       switch (handle->misc_info.chipid) {
@@ -663,6 +778,9 @@ void bm_dev_free(bm_handle_t handle) {
           // bm1684_dev_free(handle);
           break;
         case 0x1686:
+          // do something here
+          break;
+        case 0x1686a200:
           // do something here
           break;
         default:
@@ -685,6 +803,7 @@ void bm_dev_free(bm_handle_t handle) {
     free(handle);
 #endif
 }
+
 bm_status_t bm_get_profile(bm_handle_t handle, bm_profile_t *profile) {
 #ifdef USING_CMODEL
   UNUSED(handle);
@@ -971,6 +1090,19 @@ int bm_get_devid(bm_handle_t handle) {
   return handle->dev_id;
 }
 
+bm_status_t bm_get_tpu_scalar_num(bm_handle_t handle, unsigned int *core_num) {
+#ifdef USING_CMODEL
+  *core_num = handle->bm_dev->bm_core_num();
+#else
+  struct bm_misc_info misc_info;
+  bm_status_t status = bm_get_misc_info(handle, &misc_info);
+  if (status != BM_SUCCESS) return status;
+  *core_num = misc_info.tpu_core_num;
+#endif
+
+  return BM_SUCCESS;
+}
+
 bm_status_t bm_get_boot_info(bm_handle_t handle, bm_boot_info *pboot_info) {
 #ifdef USING_CMODEL
   UNUSED(handle);
@@ -1071,7 +1203,7 @@ bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq) {
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(freq);
-
+  *freq = 1000;
   return BM_SUCCESS;
 #else
   if (handle == nullptr) {
@@ -1429,6 +1561,7 @@ bm_status_t bm_handle_i2c_write(bm_handle_t handle, struct bm_i2c_param *i2c_par
 bm_status_t bm_handle_i2c_access(bm_handle_t handle, struct bm_i2c_smbus_ioctl_info *i2c_buf) {
 #ifdef USING_CMODEL
   UNUSED(handle);
+  //UNUSED(i2c_param);
 
   return BM_SUCCESS;
 #else
@@ -1689,28 +1822,49 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
     return BM_ERR_DEVNOTREADY;
   }
 
+  unsigned int chip_id = 0;
+  bm_status_t ret = BM_SUCCESS;
+  int fd = 0;
   int cnt = 0;
-  int fd;
-  char boot1[] = "/sys/bus/nvmem/devices/1-006a0/nvmem";
-  struct product_config rd_header;
 
-  memset (&rd_header, 0, RDBUF_SIZE);
-  //open boot1 device
-  fd = open(boot1, O_RDWR);
-  if (fd < 0) {
-    printf("open boot failed when get sn !\n");
-    return BM_ERR_FAILURE;
-  }
+  ret = bm_get_chipid(handle, &chip_id);
+  if (ret != BM_SUCCESS)
+    return ret;
 
-  cnt = read(fd, &rd_header, RDBUF_SIZE);
-  if (cnt !=RDBUF_SIZE) {
-    printf("read rdbuf failed!\n");
+  if (chip_id == 0x1686a200) {
+    fd = open("/dev/mmcblk0boot1", O_RDONLY);
+    if (fd < 0) {
+        printf("open /dev/mmcblk0boot1 failed!\n");
+        return BM_ERR_FAILURE;
+    }
+    cnt = read(fd, sn, 17);
+    if (cnt < 0) {
+        printf("read /dev/mmcblk0boot1 failed!\n");
+        close(fd);
+        return BM_ERR_FAILURE;
+    }
     close(fd);
-    return BM_ERR_DATA;
-  }
-  snprintf(sn, 18, "%s", rd_header.sn);
-  close(fd);
+  } else {
+    char boot1[] = "/sys/bus/nvmem/devices/1-006a0/nvmem";
+    struct product_config rd_header;
 
+    memset(&rd_header, 0, RDBUF_SIZE);
+    //open boot1 device
+    fd = open(boot1, O_RDWR);
+    if (fd < 0) {
+      printf("open boot failed when get sn!\n");
+      return BM_ERR_FAILURE;
+    }
+
+    cnt = read(fd, &rd_header, RDBUF_SIZE);
+    if (cnt != RDBUF_SIZE) {
+      printf("read rdbuf failed!\n");
+      close(fd);
+      return BM_ERR_DATA;
+    }
+    snprintf(sn, 18, "%s", rd_header.sn);
+    close(fd);
+  }
   return BM_SUCCESS;
 #else
   if (handle == nullptr) {
@@ -2208,4 +2362,29 @@ bm_status_t bm_get_handle_fd(bm_handle_t handle,FD_ID id, int *fd){
       return BM_NOT_SUPPORTED;
   #endif
 #endif
+}
+
+bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
+#ifdef USING_CMODEL
+  UNUSED(handle);
+  UNUSED(bm_api_cfg_pwr_ctrl);
+  return BM_SUCCESS;
+#else
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+  if (0 == platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl))
+    return BM_SUCCESS;
+  else
+    return BM_ERR_FAILURE;
+#endif
+}
+DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {
+  #ifdef USING_CMODEL
+  int arch_code = handle->bm_dev->chip_id;
+#else
+  int arch_code = handle->misc_info.chipid;
+#endif
+  return arch_code == 0x1686 || arch_code == 0x1686a200;
 }

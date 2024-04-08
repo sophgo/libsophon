@@ -1,3 +1,0 @@
-#!/bin/bash
-make clean
-make TEST_CASE=uart NPU_EN=0 RUN_ENV=SRAM DEBUG=1 PLATFORM=PALLADIUM CHIP=BM1686

@@ -34,7 +34,7 @@
 #define __maybe_unused      __attribute__((unused))
 #endif
 
-//#define PR_DEBUG
+// #define PR_DEBUG
 
 #define BM_CHIP_VERSION 	PROJECT_VER_MAJOR
 #define BM_MAJOR_VERSION	PROJECT_VER_MINOR
@@ -70,11 +70,10 @@
 /* specify if platform is palladium */
 #define PALLADIUM_CLK_RATIO 4000
 #define DELAY_MS 20000
+#define DELAY_MS_WARING 15000
 #define POLLING_MS 1
 
-#define SRAM_RESERVE_BASE		0x101FB000
-#define BL1_VERSION_OFFSET		0x200
-#define BL1_VERSION_BASE		(SRAM_RESERVE_BASE + BL1_VERSION_OFFSET)
+#define BL1_VERSION_BASE		0x25050100
 #define BL1_VERSION_SIZE		0x40
 #define BL2_VERSION_BASE		(BL1_VERSION_BASE + BL1_VERSION_SIZE) // 0x101fb240
 #define BL2_VERSION_SIZE		0x40
@@ -151,15 +150,28 @@ struct chip_info {
 	unsigned int chip_id;
 	int chip_index;
 	struct bootloader_version version;
+	int tpu_core_num;
 #ifdef SOC_MODE
 	u32 irq_id_cdma;
+	u32 irq_id_cdma0;
+	u32 irq_id_cdma1;
 	u32 irq_id_msg;
+	u32 irq_id_msg0;
+	u32 irq_id_msg1;
 	struct platform_device *pdev;
 	struct reset_control *arm9;
 	struct reset_control *tpu;
 	struct reset_control *gdma;
 	struct reset_control *smmu;
 	struct reset_control *cdma;
+	struct reset_control *tpusys;
+	struct reset_control *tpu0;
+	struct reset_control *tpu1;
+	struct reset_control *gdma0;
+	struct reset_control *gdma1;
+	struct reset_control *tc906b0;
+	struct reset_control *tc906b1;
+	struct reset_control *hau;
 	struct clk *tpu_clk;
 	struct clk *gdma_clk;
 	struct clk *pcie_clk;
@@ -171,6 +183,9 @@ struct chip_info {
 	struct clk *arm9_clk;
 	struct clk *hau_ngs_clk;
 	struct clk *tpu_only_clk;
+	struct clk *top_fab0_clk;
+	struct clk *tc906b_clk;
+	struct clk *timer_clk;
 #else
 	int a53_enable;
 	unsigned long long heap2_size;
@@ -185,7 +200,7 @@ struct chip_info {
 	int board_version; /*bit [8:15] board type, bit [0:7] hardware version*/
 	int pcie_func_index;
 	int boot_loader_num;
-	bmdrv_submodule_irq_handler bmdrv_module_irq_handler[128];
+	bmdrv_submodule_irq_handler bmdrv_module_irq_handler[192];
 	void (*bmdrv_map_bar)(struct bm_device_info *, struct pci_dev *);
 	void (*bmdrv_unmap_bar)(struct bm_bar_info *);
 	void (*bmdrv_pcie_calculate_cdma_max_payload)(struct bm_device_info *);
@@ -194,6 +209,8 @@ struct chip_info {
 	void (*bmdrv_get_irq_status)(struct bm_device_info *bmdi,
 			unsigned int *status);
 	void (*bmdrv_unmaskall_intc_irq)(struct bm_device_info *bmdi);
+	int (*bmdrv_config_iatu_for_function_x)(struct pci_dev *,
+			struct bm_device_info *bmdi, struct bm_bar_info *bari);
 #endif
 	int (*bmdrv_setup_bar_dev_layout)(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
 
@@ -202,6 +219,7 @@ struct chip_info {
 
 	void (*bmdrv_clear_cdmairq)(struct bm_device_info *bmdi);
 	int (*bmdrv_clear_msgirq)(struct bm_device_info *bmdi);
+	int (*bmdrv_clear_msgirq_by_core)(struct bm_device_info *bmdi, int core_id);
 	int (*bmdrv_clear_cpu_msgirq)(struct bm_device_info *bmdi);
 
 	u32 (*bmdrv_pending_msgirq_cnt)(struct bm_device_info *bmdi);
@@ -210,6 +228,7 @@ struct chip_info {
 typedef int tpu_kernel_function_t;
 typedef struct
 {
+	int core_id;
 	tpu_kernel_function_t f_id;
     unsigned char md5[16];
     char func_name[64];
@@ -223,15 +242,30 @@ struct bmdrv_exec_func
 	bm_get_func_t exec_func;
 };
 
+typedef struct
+{
+	int core_id;
+	tpu_kernel_function_t func_id;
+	void *param_data;
+	unsigned int param_size;
+} tpu_launch_param_t;
+
+typedef struct{
+	tpu_launch_param_t *param_list;
+	int param_num;
+} tpu_launch_async_param_t;
+
 struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
+	u64 bm_send_api_seq1;
 	struct cdev cdev;
 	struct device *dev;
 	struct device *parent;
 	dev_t devno;
 	void *priv;
 	struct kobject kobj;
+	int core_id;
 
 	struct mutex device_mutex;
 	struct chip_info cinfo;
@@ -252,7 +286,7 @@ struct bm_device_info {
 
 	struct bmdrv_exec_func exec_func;
 
-	struct bm_api_info api_info[BM_MSGFIFO_CHANNEL_NUM];
+	struct bm_api_info api_info[BM_MAX_CORE_NUM][BM_MSGFIFO_CHANNEL_NUM];
 
 	struct bm_gmem_info gmem_info;
 

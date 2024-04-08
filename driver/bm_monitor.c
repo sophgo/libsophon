@@ -17,6 +17,8 @@
 #include "bm_monitor.h"
 
 #define SC7_PRO_HAS_VFS
+#define CORE_ID0 0
+#define CORE_ID1 1
 
 int bm_monitor_thread(void *date)
 {
@@ -28,10 +30,14 @@ int bm_monitor_thread(void *date)
 	int old_state = 0;
 #endif
 
-	set_current_state(TASK_INTERRUPTIBLE);
-	ret = bm_arm9fw_log_init(bmdi);
+	// set_current_state(TASK_INTERRUPTIBLE);
+	ret = bm_arm9fw_log_init(bmdi, CORE_ID0);
 	if (ret)
 		return ret;
+	ret = bm_arm9fw_log_init(bmdi, CORE_ID1);
+	if (ret)
+		return ret;
+
 
 	while (!kthread_should_stop()) {//every loop is about (10 + 10 + 10)ms
 	#ifdef PCIE_MODE_ENABLE_CPU
@@ -55,7 +61,7 @@ int bm_monitor_thread(void *date)
 		bmdrv_volt_freq_scaling(bmdi);
 #endif
 		count++;
-		if(count == 18){//30*18ms
+		if(count == 18) { // 30*18ms
 			count = 0;
 			is_setspeed = (is_setspeed == 0 ? 1: 0);
 		}
@@ -82,10 +88,12 @@ int bm_monitor_thread_init(struct bm_device_info *bmdi)
 
 int bm_monitor_thread_deinit(struct bm_device_info *bmdi)
 {
-	struct bm_arm9fw_log_mem *log_mem = &bmdi->monitor_thread_info.log_mem;
+	struct bm_arm9fw_log_mem *log_mem0 = &bmdi->monitor_thread_info.log_mem[CORE_ID0];
+	struct bm_arm9fw_log_mem *log_mem1 = &bmdi->monitor_thread_info.log_mem[CORE_ID0];
 
 	if (bmdi->monitor_thread_info.monitor_task != NULL) {
-		bmdrv_stagemem_free(bmdi, log_mem->host_paddr, log_mem->host_vaddr, log_mem->host_size);
+		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size);
+		bmdrv_stagemem_free(bmdi, log_mem1->host_paddr, log_mem1->host_vaddr, log_mem1->host_size);
 		kthread_stop(bmdi->monitor_thread_info.monitor_task);
 		pr_info("monitor thread bm_monitor-%d deinit done\n", bmdi->dev_index);
 		bmdi->monitor_thread_info.monitor_task = NULL;

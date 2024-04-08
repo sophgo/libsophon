@@ -856,56 +856,6 @@ static const struct BM_PROC_FILE_OPS bmdrv_tpu_power_file_ops = {
 	BM_PROC_RELEASE	= single_release,
 };
 
-static int bmdrv_max_tpu_power_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	struct bm_chip_attr *c_attr;
-	int max_tpu_power = 0;
-
-	c_attr = &bmdi->c_attr;
-	if (c_attr->bm_get_tpu_power != NULL) {
-		mutex_lock(&c_attr->attr_mutex);
-		max_tpu_power = c_attr->max_tpu_power;
-		mutex_unlock(&c_attr->attr_mutex);
-		seq_printf(m, "%d W\n", max_tpu_power);
-	} else {
-		seq_printf(m, "N/A\n");
-	}
-	return 0;
-}
-
-static ssize_t bmdrv_max_tpu_power_proc_write(struct file *file, const char __user *buffer,
-                             size_t count, loff_t *f_pos)
-{
-	struct bm_device_info *bmdi;
-	struct bm_chip_attr *c_attr;
-	struct seq_file *s = NULL;
-
-	s = file->private_data;
-	bmdi = s->private;
-	c_attr = &bmdi->c_attr;
-	if (c_attr->bm_get_tpu_power != NULL) {
-		mutex_lock(&c_attr->attr_mutex);
-		c_attr->max_tpu_power = 0;
-		mutex_unlock(&c_attr->attr_mutex);
-	}
-	return count;
-}
-
-static int bmdrv_max_tpu_power_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, bmdrv_max_tpu_power_proc_show, PDE_DATA(inode));
-}
-
-static const struct BM_PROC_FILE_OPS bmdrv_max_tpu_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
-	BM_PROC_OPEN		= bmdrv_max_tpu_power_proc_open,
-	BM_PROC_READ		= seq_read,
-	BM_PROC_LLSEEK		= seq_lseek,
-	BM_PROC_RELEASE		= single_release,
-	BM_PROC_WRITE		= bmdrv_max_tpu_power_proc_write,
-};
-
 static int bmdrv_vddc_power_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
@@ -1002,60 +952,6 @@ static const struct BM_PROC_FILE_OPS bmdrv_chip_power_file_ops = {
 	BM_PROC_RELEASE		= single_release,
 };
 
-static int bmdrv_max_chip_power_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	struct bm_chip_attr *c_attr;
-	int max_chip_power = 0;
-
-	c_attr = &bmdi->c_attr;
-	if ((c_attr->bm_get_vddphy_power != NULL) &&
-		(c_attr->bm_get_tpu_power != NULL) &&
-		(c_attr->bm_get_vddc_power != NULL)) {
-		mutex_lock(&c_attr->attr_mutex);
-		max_chip_power = c_attr->max_chip_power;
-		mutex_unlock(&c_attr->attr_mutex);
-		seq_printf(m, "%d W\n", max_chip_power);
-	} else {
-		seq_printf(m, "N/A\n");
-	}
-	return 0;
-}
-
-static ssize_t bmdrv_max_chip_power_proc_write(struct file *file, const char __user *buffer,
-                             size_t count, loff_t *f_pos)
-{
-	struct bm_device_info *bmdi;
-	struct bm_chip_attr *c_attr;
-	struct seq_file *s = NULL;
-
-	s = file->private_data;
-	bmdi = s->private;
-	c_attr = &bmdi->c_attr;
-	if ((c_attr->bm_get_vddphy_power != NULL) &&
-		(c_attr->bm_get_tpu_power != NULL) &&
-		(c_attr->bm_get_vddc_power != NULL)) {
-		mutex_lock(&c_attr->attr_mutex);
-		c_attr->max_chip_power = 0;
-		mutex_unlock(&c_attr->attr_mutex);
-	}
-	return count;
-}
-
-static int bmdrv_max_chip_power_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, bmdrv_max_chip_power_proc_show, PDE_DATA(inode));
-}
-
-static const struct BM_PROC_FILE_OPS bmdrv_max_chip_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
-	BM_PROC_OPEN		= bmdrv_max_chip_power_proc_open,
-	BM_PROC_READ		= seq_read,
-	BM_PROC_LLSEEK		= seq_lseek,
-	BM_PROC_RELEASE		= single_release,
-	BM_PROC_WRITE		= bmdrv_max_chip_power_proc_write,
-};
-
 static int bmdrv_firmware_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
@@ -1107,56 +1003,6 @@ static const struct BM_PROC_FILE_OPS bmdrv_board_power_file_ops = {
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
 	BM_PROC_RELEASE	= single_release,
-};
-
-static int bmdrv_max_board_power_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	struct bm_chip_attr *c_attr;
-	int max_board_power = 0;
-
-	c_attr = &bmdi->c_attr;
-	if (c_attr->bm_get_board_power != NULL) {
-		mutex_lock(&c_attr->attr_mutex);
-		max_board_power = c_attr->max_board_power;
-		mutex_unlock(&c_attr->attr_mutex);
-		seq_printf(m, "%d W\n", max_board_power);
-	} else {
-		seq_printf(m, "N/A\n");
-	}
-	return 0;
-}
-
-static ssize_t bmdrv_max_board_power_proc_write(struct file *file, const char __user *buffer,
-                             size_t count, loff_t *f_pos)
-{
-	struct bm_device_info *bmdi;
-	struct bm_chip_attr *c_attr;
-	struct seq_file *s = NULL;
-
-	s = file->private_data;
-	bmdi = s->private;
-	c_attr = &bmdi->c_attr;
-	if (c_attr->bm_get_board_power != NULL) {
-		mutex_lock(&c_attr->attr_mutex);
-		c_attr->max_board_power = 0;
-		mutex_unlock(&c_attr->attr_mutex);
-	}
-	return count;
-}
-
-static int bmdrv_max_board_power_proc_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, bmdrv_max_board_power_proc_show, PDE_DATA(inode));
-}
-
-static const struct BM_PROC_FILE_OPS bmdrv_max_board_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
-	BM_PROC_OPEN		= bmdrv_max_board_power_proc_open,
-	BM_PROC_READ		= seq_read,
-	BM_PROC_LLSEEK		= seq_lseek,
-	BM_PROC_RELEASE		= single_release,
-	BM_PROC_WRITE		= bmdrv_max_board_power_proc_write,
 };
 
 static int bmdrv_chip_temp_proc_show(struct seq_file *m, void *v)
@@ -1230,7 +1076,6 @@ static int bmdrv_board_sn_proc_show(struct seq_file *m, void *v)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if ((bmdi->bmcd->sc5p_mcu_bmdi) != NULL && (bmdi->bmcd != NULL))
 			tmp_bmdi = bmdi->bmcd->sc5p_mcu_bmdi;
@@ -1606,10 +1451,7 @@ static int bmdrv_versions_proc_show(struct seq_file *m, void *v)
 		j = 0;
 		for (i = bmdi->bmcd->dev_start_index; i < bmdi->bmcd->chip_num + bmdi->bmcd->dev_start_index; i++) {
 			seq_printf(m, "card%d bmsophon%d boot_loader_version:", bmdi->bmcd->card_index, i);
-			if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
-				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[0], m, v);
-			else
-				bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
+			bmdrv_boot_loader_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			seq_printf(m, "card%d bmsophon%d mcu_version:", bmdi->bmcd->card_index, i);
 			bmdrv_mcu_versions_proc_show(bmdi->bmcd->card_bmdi[j], m, v);
 			j++;
@@ -1862,7 +1704,6 @@ static int bmdrv_location_proc_show(struct seq_file *m, void *v)
 	if (bmdi->cinfo.chip_id != 0x1682) {
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 			value = gpio_reg_read(bmdi, 0x50);
 			value = value >> 0x5;
@@ -1982,14 +1823,35 @@ static int bmdrv_tpu_process_time_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int bmdrv_tpu1_process_time_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+
+	seq_printf(m, "%lld us\n", bmdi->profile.tpu1_process_time);
+	return 0;
+}
+
 static int bmdrv_tpu_process_time_proc_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, bmdrv_tpu_process_time_proc_show, PDE_DATA(inode));
 }
 
+static int bmdrv_tpu1_process_time_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bmdrv_tpu1_process_time_proc_show, PDE_DATA(inode));
+}
+
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_process_time_file_ops = {
 	BM_PROC_OWNER		= BM_PROC_MODULE,
 	BM_PROC_OPEN		= bmdrv_tpu_process_time_proc_open,
+	BM_PROC_READ		= seq_read,
+	BM_PROC_LLSEEK		= seq_lseek,
+	BM_PROC_RELEASE	= single_release,
+};
+
+static const struct BM_PROC_FILE_OPS bmdrv_tpu1_process_time_file_ops = {
+	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OPEN		= bmdrv_tpu1_process_time_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
 	BM_PROC_RELEASE	= single_release,
@@ -2143,8 +2005,6 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 			(void *)bmdi);
 		proc_create_data("board_power", 0444, bmdi->card_proc_dir, &bmdrv_board_power_file_ops,
 			(void *)bmdi);
-		proc_create_data("max_board_power", 0444, bmdi->card_proc_dir, &bmdrv_max_board_power_file_ops,
-			(void *)bmdi);
 		proc_create_data("fan_speed", 0644, bmdi->card_proc_dir, &bmdrv_fan_speed_file_ops,
 			(void *)bmdi);
 		proc_create_data("board_temp", 0444, bmdi->card_proc_dir, &bmdrv_board_temp_file_ops,
@@ -2198,8 +2058,6 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 		(void *)bmdi);
 	proc_create_data("tpu_power", 0444, bmdi->proc_dir, &bmdrv_tpu_power_file_ops,
 		(void *)bmdi);
-	proc_create_data("max_tpu_power", 0444, bmdi->proc_dir, &bmdrv_max_tpu_power_file_ops,
-		(void *)bmdi);
 	proc_create_data("firmware_info", 0444, bmdi->proc_dir, &bmdrv_firmware_file_ops,
 			(void *)bmdi);
 	proc_create_data("tpu_cur", 0444, bmdi->proc_dir, &bmdrv_tpu_cur_file_ops,
@@ -2217,8 +2075,6 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 	proc_create_data("vddphy_power", 0444, bmdi->proc_dir, &bmdrv_vddphy_power_file_ops,
 		(void *)bmdi);
 	proc_create_data("chip_power", 0444, bmdi->proc_dir, &bmdrv_chip_power_file_ops,
-		(void *)bmdi);
-	proc_create_data("max_chip_power", 0444, bmdi->proc_dir, &bmdrv_max_chip_power_file_ops,
 		(void *)bmdi);
 	if (bmdi->bmcd->chip_num != 8) {
 		proc_create_data("mcu_version", 0444, bmdi->proc_dir, &bmdrv_mcu_version_file_ops,
@@ -2250,6 +2106,8 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 	proc_create_data("cdma_out_counter", 0444, bmdi->proc_dir, &bmdrv_cdma_out_counter_file_ops,
 		(void *)bmdi);
 	proc_create_data("tpu_process_time", 0444, bmdi->proc_dir, &bmdrv_tpu_process_time_file_ops,
+		(void *)bmdi);
+	proc_create_data("tpu1_process_time", 0444, bmdi->proc_dir, &bmdrv_tpu1_process_time_file_ops,
 		(void *)bmdi);
 	proc_create_data("sent_api_counter", 0444, bmdi->proc_dir, &bmdrv_sent_api_counter_file_ops,
 		(void *)bmdi);
@@ -2283,7 +2141,6 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("pcie_cap_width", bmdi->proc_dir);
 	remove_proc_entry("pcie_region", bmdi->proc_dir);
 	remove_proc_entry("tpu_power", bmdi->proc_dir);
-	remove_proc_entry("max_tpu_power", bmdi->proc_dir);
 	remove_proc_entry("firmware_info", bmdi->proc_dir);
 	remove_proc_entry("tpu_cur", bmdi->proc_dir);
 	remove_proc_entry("tpu_volt", bmdi->proc_dir);
@@ -2292,7 +2149,6 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("vddc_power", bmdi->proc_dir);
 	remove_proc_entry("vddphy_power", bmdi->proc_dir);
 	remove_proc_entry("chip_power", bmdi->proc_dir);
-	remove_proc_entry("max_chip_power", bmdi->proc_dir);
 	remove_proc_entry("boot_loader_version", bmdi->proc_dir);
 	remove_proc_entry("clk", bmdi->proc_dir);
 	remove_proc_entry("pmu_infos", bmdi->proc_dir);
@@ -2307,6 +2163,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("cdma_out_time", bmdi->proc_dir);
 	remove_proc_entry("cdma_out_counter", bmdi->proc_dir);
 	remove_proc_entry("tpu_process_time", bmdi->proc_dir);
+	remove_proc_entry("tpu1_process_time", bmdi->proc_dir);
 	remove_proc_entry("sent_api_counter", bmdi->proc_dir);
 	remove_proc_entry("completed_api_counter", bmdi->proc_dir);
 	remove_proc_entry("arm9_cache", bmdi->proc_dir);
@@ -2323,7 +2180,6 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 		remove_proc_entry("maxboardp", bmsophon_card_proc_dir);
 		remove_proc_entry("fan_speed", bmsophon_card_proc_dir);
 		remove_proc_entry("board_power", bmsophon_card_proc_dir);
-		remove_proc_entry("max_board_power", bmsophon_card_proc_dir);
 		remove_proc_entry("board_temp", bmsophon_card_proc_dir);
 		remove_proc_entry("sn", bmsophon_card_proc_dir);
 		remove_proc_entry("board_type", bmsophon_card_proc_dir);
@@ -2344,30 +2200,39 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 
 #undef MAX_NAMELEN
 
-bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi)
+bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi, int core_id)
 {
 	int read_index = 0;
 	int write_index = 0;
 
-	read_index = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_RP);
-	write_index = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_WP);
+	read_index = bmdi->monitor_thread_info.log_mem[core_id].read_pos;
+	if (core_id == 1) {
+		write_index = gp_reg_read_enh(bmdi, GP_REG_FW1_LOG_WP);
+	} else {
+		write_index = gp_reg_read_enh(bmdi, GP_REG_FW0_LOG_WP);
+	}
 //	PR_TRACE("read_index = 0x%x, write_index = 0x%x\n", read_index, write_index);
 	return read_index == write_index;
 
 }
 
-int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
+int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 {
-	int read_p = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_RP);
-	int write_p = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_WP);
-	int arm9fw_buffer_size = bmdi->monitor_thread_info.log_mem.device_size;
-	int host_size = bmdi->monitor_thread_info.log_mem.host_size;
 	int size = 0;
-	u64 device_paddr = bmdi->monitor_thread_info.log_mem.device_paddr;
-	u64 host_paddr = bmdi->monitor_thread_info.log_mem.host_paddr;
+	int write_p = 0;
+	int read_p = bmdi->monitor_thread_info.log_mem[core_id].read_pos;
+	int arm9fw_buffer_size = bmdi->monitor_thread_info.log_mem[core_id].device_size;
+	int host_size = bmdi->monitor_thread_info.log_mem[core_id].host_size;
+	u64 device_paddr = bmdi->monitor_thread_info.log_mem[core_id].device_paddr;
+	u64 host_paddr = bmdi->monitor_thread_info.log_mem[core_id].host_paddr;
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 	bm_cdma_arg cdma_arg;
 
+	if (core_id == 1) {
+		write_p = gp_reg_read_enh(bmdi, GP_REG_FW1_LOG_WP);
+	} else {
+		write_p = gp_reg_read_enh(bmdi, GP_REG_FW0_LOG_WP);
+	}
 	PR_TRACE("wp = %d, rp = %d, device_paddr = %llx\n", write_p, read_p, device_paddr);
 	if (write_p < read_p) {
 		size = arm9fw_buffer_size - read_p;
@@ -2377,7 +2242,7 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
 				 host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
 			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("bm-sophon%d get arm9 log failed\n", bmdi->dev_index);
+				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
 				return 0;
 			}
 			read_p = read_p + size;
@@ -2387,7 +2252,7 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
 				host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
 			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("bm-sophon%d get arm9 log failed\n", bmdi->dev_index);
+				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
 				return 0;
 			}
 			read_p = 0;
@@ -2400,13 +2265,15 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 		bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
 			host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
 		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("bm-sophon%d get arm9 log failed\n", bmdi->dev_index);
+				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
 			return 0;
 		}
 		read_p = read_p + size;
 
 	}
-	gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, read_p);
+	// gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, read_p);
+	bmdi->monitor_thread_info.log_mem[core_id].read_size = size;
+	bmdi->monitor_thread_info.log_mem[core_id].read_pos = read_p;
 	PR_TRACE("size = 0x%x\n", size);
 	return size;
 }
@@ -2415,45 +2282,48 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 #define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 4)
 #define ARM9FW_LOG_LINE_SIZE 512
 
-void bm_print_arm9fw_log(struct bm_device_info *bmdi, int size)
+void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 {
 	char str[ARM9FW_LOG_LINE_SIZE] = "";
 	int i = 0;
-	char *p = bmdi->monitor_thread_info.log_mem.host_vaddr;
+	int size = bmdi->monitor_thread_info.log_mem[core_id].read_size;
+	char *p = bmdi->monitor_thread_info.log_mem[core_id].host_vaddr;
 
 	for (i = 0; i < size/ARM9FW_LOG_LINE_SIZE; i++) {
 		strncpy(str, p, ARM9FW_LOG_LINE_SIZE - 1);
-		pr_info("bm-sophon%d ARM9_LOG: %s", bmdi->dev_index, str);
+		pr_info("bm-sophon%d core_%d: %s", bmdi->dev_index, core_id, str);
 		p += ARM9FW_LOG_LINE_SIZE;
 	}
-	memset(bmdi->monitor_thread_info.log_mem.host_vaddr, 0, size);
+	memset(bmdi->monitor_thread_info.log_mem[core_id].host_vaddr, 0, size);
 }
 
-int bm_arm9fw_log_init(struct bm_device_info *bmdi)
+int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id)
 {
 	int ret = 0;
 
-	bmdi->monitor_thread_info.log_mem.host_size = ARM9FW_LOG_HOST_BUFFER_SIZE;
-	if (bmdi->cinfo.chip_id == 0x1686)
-		bmdi->monitor_thread_info.log_mem.device_paddr = bmdi->gmem_info.resmem_info.armreserved_addr + (bmdi->gmem_info.resmem_info.armreserved_size - ARM9FW_LOG_DEVICE_BUFFER_SIZE);
-	else
-		bmdi->monitor_thread_info.log_mem.device_paddr = bmdi->gmem_info.resmem_info.armfw_addr + (bmdi->gmem_info.resmem_info.armfw_size - ARM9FW_LOG_DEVICE_BUFFER_SIZE);
-	bmdi->monitor_thread_info.log_mem.device_size = ARM9FW_LOG_DEVICE_BUFFER_SIZE;
-	ret = bmdrv_stagemem_alloc(bmdi, bmdi->monitor_thread_info.log_mem.host_size,
-			&bmdi->monitor_thread_info.log_mem.host_paddr,
-			&bmdi->monitor_thread_info.log_mem.host_vaddr);
+	if (core_id == 0) {
+		bmdi->monitor_thread_info.log_mem[core_id].device_paddr = bmdi->gmem_info.resmem_info.armfw_addr + (bmdi->gmem_info.resmem_info.armfw_size>>1) - ARM9FW_LOG_DEVICE_BUFFER_SIZE;
+	} else {
+		bmdi->monitor_thread_info.log_mem[core_id].device_paddr = bmdi->gmem_info.resmem_info.armfw_addr + (bmdi->gmem_info.resmem_info.armfw_size - ARM9FW_LOG_DEVICE_BUFFER_SIZE);
+	}
+	bmdi->monitor_thread_info.log_mem[core_id].device_size = ARM9FW_LOG_DEVICE_BUFFER_SIZE;
+	bmdi->monitor_thread_info.log_mem[core_id].host_size = ARM9FW_LOG_HOST_BUFFER_SIZE;
+	ret = bmdrv_stagemem_alloc(bmdi, bmdi->monitor_thread_info.log_mem[core_id].host_size,
+			&bmdi->monitor_thread_info.log_mem[core_id].host_paddr,
+			&bmdi->monitor_thread_info.log_mem[core_id].host_vaddr);
 	if (ret) {
 		pr_err("bm-sophon%d alloc arm9fw log buffer failed\n", bmdi->dev_index);
 		return ret;
 	}
 
-	memset(bmdi->monitor_thread_info.log_mem.host_vaddr, 0,
-			bmdi->monitor_thread_info.log_mem.host_size);
+	memset(bmdi->monitor_thread_info.log_mem[core_id].host_vaddr, 0,
+			bmdi->monitor_thread_info.log_mem[core_id].host_size);
 
-	gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, 0);
+	// gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, 0);
+	bmdi->monitor_thread_info.log_mem[core_id].read_pos = 0;
 	PR_TRACE("host size = 0x%x, device_addr = 0x%llx, device size = 0x%x\n",
-		bmdi->monitor_thread_info.log_mem.host_size, bmdi->monitor_thread_info.log_mem.device_paddr,
-		bmdi->monitor_thread_info.log_mem.device_size);
+		bmdi->monitor_thread_info.log_mem[core_id].host_size, bmdi->monitor_thread_info.log_mem[core_id].device_paddr,
+		bmdi->monitor_thread_info.log_mem[core_id].device_size);
 
 	return ret;
 }
@@ -2563,17 +2433,20 @@ void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int count)
 	long start=0;
 	long end =0;
 	int delt = 0;
+	int core_id=0;
 
 	start = jiffies;
 	bm_npu_utilization_stat(bmdi);
 	if(count % 3 == 0) {
-		if (!bm_arm9fw_log_buffer_empty(bmdi)) {
-			size = bm_get_arm9fw_log_from_device(bmdi);
-			bm_print_arm9fw_log(bmdi, size);
-			end  = jiffies;
-			delt = jiffies_to_msecs(end-start);
-			//PR_TRACE("dev_index=%d,bm_dump_arm9fw_log time is %d ms\n",bmdi->dev_index, delt);
-			msleep_interruptible(((10-delt)>0)? 10-delt : 0);
+		for (core_id=0; core_id<2; core_id++) {
+			if (!bm_arm9fw_log_buffer_empty(bmdi, core_id)) {
+				size = bm_get_arm9fw_log_from_device(bmdi, core_id);
+				bm_print_arm9fw_log(bmdi, core_id);
+				end  = jiffies;
+				delt = jiffies_to_msecs(end-start);
+				//PR_TRACE("dev_index=%d,bm_dump_arm9fw_log time is %d ms\n",bmdi->dev_index, delt);
+				msleep_interruptible(((10-delt)>0)? 10-delt : 0);
+			}
 		}
 	} else if (count % 10 == 0x0) {
 #ifndef SOC_MODE

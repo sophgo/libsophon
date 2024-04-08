@@ -68,6 +68,10 @@ if("${PLATFORM}" STREQUAL "cmodel")
     target_link_libraries(${TARGET_NAME} dl pthread)
 endif()
 
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "riscv64")
+    add_definitions(-DSMMU_MODE=1)
+endif()
+
 install(TARGETS ${TARGET_NAME}
         LIBRARY DESTINATION lib
         COMPONENT libsophon)
@@ -87,6 +91,21 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
             PATTERN "*.hpp"
             PATTERN "*.h")
 
-add_subdirectory(tools)
+if(BUILD_STATIC_LIB)
+    set(STATIC_LIB_NAME ${TARGET_NAME}-static)
+    add_library(${STATIC_LIB_NAME} STATIC $<TARGET_OBJECTS:${PROJECT_NAME}>)
+    target_compile_options(${STATIC_LIB_NAME} PRIVATE -fPIC)
+    target_include_directories(${STATIC_LIB_NAME} PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    set_target_properties(${STATIC_LIB_NAME} PROPERTIES SOVERSION ${sover})
+    set_target_properties(${STATIC_LIB_NAME} PROPERTIES OUTPUT_NAME ${TARGET_NAME})
+    install(TARGETS ${STATIC_LIB_NAME}
+        LIBRARY DESTINATION lib
+        COMPONENT libsophon)
+endif()
+
+if(NOT "${PLATFORM}" STREQUAL "cmodel")
+    add_subdirectory(tools)
+endif()
 
 endif()

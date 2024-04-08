@@ -16,6 +16,8 @@
 #include "bm1684_card.h"
 #include "bm1684_clkrst.h"
 #include "bm1684_base64.h"
+#include "bm1688_base64.h"
+#include "bm1688_card.h"
 #include "bm_timer.h"
 #ifndef SOC_MODE
 #include "spi.h"
@@ -29,10 +31,62 @@
 #include "bm_pt.h"
 #include "efuse.h"
 #endif
+#include "base_cb.h"
 
 extern dev_t bm_devno_base;
 extern dev_t bm_ctl_devno_base;
 extern int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
+
+int bmdev_do_teaisp_cb(void *p, enum ENUM_MODULES_ID caller, u32 cmd, void *arg)
+{
+	struct file *file = (struct file *)p;
+	struct bm_device_info *bmdi = (struct bm_device_info *)file->private_data;
+	int ret = 0;
+	unsigned long api_addr = (unsigned long)arg;
+
+	switch (cmd)
+	{
+	case BMDEV_SEND_API:
+		if (bmdi->status_sync_api == 0) {
+			ret = bmdrv_send_api(bmdi, file, api_addr, false, false);
+		} else {
+			pr_err("[send_api]bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
+			ret = -EBUSY;
+		}
+		break;
+	case BMDEV_THREAD_SYNC_API:
+		if (bmdi->status_sync_api == 0) {
+			int core_id;
+			ret = copy_from_user(&core_id, (void __user *)api_addr, sizeof(int));
+			if (ret != 0) {
+				pr_err("error copy_from_user, ret is %d\n", ret);
+				return -EFAULT;
+			}
+			ret = bmdrv_thread_sync_api(bmdi, file, core_id);
+			bmdi->status_sync_api = ret;
+		} else {
+			pr_err("[sync_api]bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
+			ret = -EBUSY;
+		}
+		break;
+	default:
+		dev_err(bmdi->dev, "*************Invalid ioctl parameter************\n");
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int bmdev_register_teaisp_cb(struct file *file)
+{
+	struct base_m_cb_info reg_cb;
+
+	reg_cb.module_id = E_MODULE_BMTPU;
+	reg_cb.dev = (void *)file;
+	reg_cb.cb  = bmdev_do_teaisp_cb;
+
+	return base_reg_module_cb(&reg_cb);
+}
 
 static int bmdev_open(struct inode *inode, struct file *file)
 {
@@ -40,6 +94,8 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	pid_t open_pid;
 	struct bm_handle_info *h_info;
 	struct bm_thread_info *thd_info = NULL;
+	int i;
+	unsigned long irq_flags;
 
 	PR_TRACE("bmdev_open\n");
 
@@ -55,16 +111,16 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	}
 #endif
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	bmdi->dev_refcount++;
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	open_pid = current->pid;
 
 	h_info = kmalloc(sizeof(struct bm_handle_info), GFP_KERNEL);
 	if (!h_info) {
-		mutex_lock(&bmdi->gmem_info.gmem_mutex);
+		spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 		bmdi->dev_refcount--;
-		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 		return -ENOMEM;
 	}
 
@@ -72,26 +128,30 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	h_info->file = file;
 	h_info->open_pid = open_pid;
 	h_info->gmem_used = 0ULL;
-	h_info->h_send_api_seq = 0ULL;
-	h_info->h_cpl_api_seq = 0ULL;
+	for (i = 0; i < BM_MAX_CORE_NUM; i++) {
+		h_info->h_send_api_seq[i] = 0ULL;
+		h_info->h_cpl_api_seq[i] = 0ULL;
+	}
 	init_waitqueue_head(&h_info->h_msg_done);
 	mutex_init(&h_info->h_api_seq_mutex);
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	thd_info = bmdrv_create_thread_info(h_info, open_pid);
 	if (!thd_info) {
-		kfree(h_info);
+		spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 		bmdi->dev_refcount--;
-		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+		kfree(h_info);
 		return -ENOMEM;
 	}
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	list_add(&h_info->list, &bmdi->handle_list);
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 
 	file->private_data = bmdi;
+
+	bmdev_register_teaisp_cb(file);
+
 #ifndef SOC_MODE
 	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 		bm_vpu_open(inode, file);
@@ -110,7 +170,8 @@ static ssize_t bmdev_read(struct file *filp, char __user *buf, size_t len, loff_
 #ifndef SOC_MODE
 	return bm_vpu_read(filp, buf, len, ppos);
 #else
-	return -1;
+	pwr_ctrl_get(filp->private_data, NULL);
+	return 0;
 #endif
 }
 
@@ -137,19 +198,22 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	struct bm_device_info *bmdi = file->private_data;
 	struct bm_handle_info *h_info, *h_node;
 	int handle_num = 0;
+	int core = 0;
+	int core_num = bmdi->cinfo.tpu_core_num;
+	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
 		return -EINVAL;
 	}
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	list_for_each_entry(h_node, &bmdi->handle_list, list) {
 		if (h_node->open_pid == h_info->open_pid) {
 			handle_num++;
 		}
 	}
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 
 	if (handle_num == 1)
 		bmdrv_api_clear_lib(bmdi, file);
@@ -161,23 +225,23 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	}
 #endif
 	/* invalidate pending APIs in msgfifo */
-	bmdev_invalidate_pending_apis(bmdi, h_info);
+	for (core = 0; core < core_num; core++)
+		bmdev_invalidate_pending_apis(bmdi, h_info, core);
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	bmdrv_delete_thread_info(h_info);
 	list_del(&h_info->list);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	kfree(h_info);
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
-
 	file->private_data = NULL;
 
 #ifdef USE_RUNTIME_PM
 	pm_runtime_put_sync(bmdi->cinfo.device);
 #endif
 	PR_TRACE("bmdev_close\n");
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	bmdi->dev_refcount--;
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	return 0;
 }
 
@@ -385,7 +449,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			pr_err("BMDEV_SET_FW_MODE copy_from_user wrong, ret is %d\n", ret);
 			return -EFAULT;
 		}
-		gp_reg_write_enh(bmdi, GP_REG_ARM9_FW_MODE, mode);
+		if (bmdi->cinfo.chip_id == 0x1686a200)
+			gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, mode);
+		else
+			gp_reg_write_enh(bmdi, GP_REG_ARM9_FW_MODE, mode);
 		break;
 	};
 
@@ -563,11 +630,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = bm_i2c_smbus_access(bmdi, arg);
 		break;
 
-	case BMDEV_MEMCPY_P2P:
-		if (bmdi->memcpy_info.p2p_available)
-			ret = bmdev_memcpy_p2p(bmdi, file, arg);
-		else
-			ret = bmdev_memcpy_p2p_cdma(bmdi, file, arg);
+	case BMDEV_MEMCPY_P2P :
+		ret = bmdev_memcpy_p2p(bmdi, file, arg);
 		break;
 #endif
 	case BMDEV_MEMCPY:
@@ -594,20 +658,26 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = put_user(bmdrv_gmem_avail_size(bmdi), (u64 __user *)arg);
 		break;
 
+	case BMDEV_FORCE_RESET_TPU:
+		ret = bm1688_reset_tpu(bmdi);
+		if (!ret)
+			bmdi->status_sync_api = 0;
+		break;
+
 	case BMDEV_SEND_API:
 		if (bmdi->status_sync_api == 0) {
-			ret = bmdrv_send_api(bmdi, file, arg, false);
+			ret = bmdrv_send_api(bmdi, file, arg, false, true);
 		} else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
 		}
 		break;
 
 	case BMDEV_SEND_API_EXT:
 		if (bmdi->status_sync_api == 0)
-			ret = bmdrv_send_api(bmdi, file, arg, true);
+			ret = bmdrv_send_api(bmdi, file, arg, true, true);
 		else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
 		}
 		break;
@@ -616,28 +686,34 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (bmdi->status_sync_api == 0)
 			ret = bmdrv_query_api(bmdi, file, arg);
 		else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
 		}
 		break;
 
 	case BMDEV_THREAD_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
-			ret = bmdrv_thread_sync_api(bmdi, file);
+			int core_id;
+			ret = copy_from_user(&core_id, (void __user *)arg, sizeof(int));
+			if (ret != 0) {
+				pr_err("error copy_from_user, ret is %d\n", ret);
+				return -EFAULT;
+			}
+			ret = bmdrv_thread_sync_api(bmdi, file, core_id);
 			bmdi->status_sync_api = ret;
 		} else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
 		}
 		break;
 
 	case BMDEV_HANDLE_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
-			ret = bmdrv_handle_sync_api(bmdi, file);
+			ret = bmdrv_handle_sync_api(bmdi, file, arg);
 			bmdi->status_sync_api = ret;
 		} else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
-			  ret = -EBUSY;
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
+			ret = -EBUSY;
 		}
 		break;
 
@@ -646,7 +722,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			ret = bmdrv_device_sync_api(bmdi);
 			bmdi->status_sync_api = ret;
 		} else {
-			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
+			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
 		}
 		break;
@@ -751,7 +827,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				if (bmdi->bmcd->sc5p_mcu_bmdi != NULL && bmdi->bmcd != NULL)
 					ctx.uart.bmdi= bmdi->bmcd->sc5p_mcu_bmdi;
@@ -822,7 +897,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				pr_err("bmsophon %d, sc5p not support mcu sheck sum\n", bmdi->dev_index);
 				return -ENOSYS;
@@ -942,6 +1016,9 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		case 0x1686:
 			snprintf(board_name, 20, "1684X-SOC");
+			break;
+		case 0x1686a200:
+			snprintf(board_name, 20, base_get_chip_id(bmdi));
 			break;
 		}
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));
@@ -1083,16 +1160,16 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				return -EINVAL;
 			}
 
-			mutex_lock(&bmdi->gmem_info.gmem_mutex);
+			// spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 			api_pid = current->pid;
 			thd_info = bmdrv_find_thread_info(h_info, api_pid);
-
+			// spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 			if (!thd_info)
 				ret = -EFAULT;
 			else
 				ret = copy_to_user((unsigned long __user *)arg,
 						&thd_info->profile, sizeof(bm_profile_t));
-			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+
 			break;
 		}
 	case BMDEV_GET_VERSION:
@@ -1370,6 +1447,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			break;
 		}
+	case BMDEV_PWR_CTRL:
+	{
+		pwr_ctrl_ioctl(bmdi, (void __user *)arg);
+		break;
+	}
 #endif
 
 	default:
@@ -1385,6 +1467,7 @@ static long bmdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct bm_device_info *bmdi = (struct bm_device_info *)file->private_data;
 	int ret = 0;
 
+	PR_TRACE("[%s: %d] _IOC_TYPE(cmd)=0x%x, cmd=0x%x\n", __func__, __LINE__, _IOC_TYPE(cmd), cmd);
 	if ((_IOC_TYPE(cmd)) == BMDEV_IOCTL_MAGIC)
 		ret = bm_ioctl(file, cmd, arg);
 #ifndef SOC_MODE
@@ -1520,6 +1603,7 @@ int bmdev_register_device(struct bm_device_info *bmdi)
 	cdev_add(&bmdi->cdev, bmdi->devno, 1);
 
 	dev_set_drvdata(bmdi->dev, bmdi);
+
 	dev_dbg(bmdi->dev, "%s\n", __func__);
 	return 0;
 }

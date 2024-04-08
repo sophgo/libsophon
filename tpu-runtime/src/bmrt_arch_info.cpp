@@ -27,8 +27,12 @@ bmrt_arch_info::bmrt_arch_info(const string& arch_name)
       target_bmtpu_arch = BM1880;
     } else if (arch_name == "BM1684X") {
       target_bmtpu_arch = BM1684X;
-    } else if (arch_name == "BM1686") {
-      target_bmtpu_arch = BM1686;
+    } else if (arch_name == "BM1688") {
+      target_bmtpu_arch = BM1688;
+    } else if (arch_name == "BM1690") {
+      target_bmtpu_arch = BM1690;
+    } else if (arch_name == "MARS3") {
+      target_bmtpu_arch = MARS3;
     } else {
       BMRT_LOG(FATAL, "Error: unknown processor name [%s]",  arch_name.c_str());
     }
@@ -47,9 +51,11 @@ int bmrt_arch_info::get_npu_num()
       npu_num = 64;
       break;
     case BM1880:
-    case BM1686:
+    case BM1688:
       npu_num = 32;
       break;
+    case BM1690:
+      npu_num = 64;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
   }
@@ -68,8 +74,12 @@ int bmrt_arch_info::get_eu_num(bm_data_type_t dtype)
     case BM1684X:
       eu_num = 16;
       break;
-    case BM1686:
+    case BM1688:
       eu_num = 4;
+      break;
+    case BM1690:
+      eu_num = 32;
+      break;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
   }
@@ -87,11 +97,13 @@ int bmrt_arch_info::get_lmem_size()
     case BM1684:
       lmem_size = (1<<19);  //512KB
       break;
-    case BM1686:
+    case BM1688:
       lmem_size = (1<<17);  //128KB
     case BM1880:
       lmem_size = (1<<16);  //64KB
       break;
+    case BM1690:
+      lmem_size = 1 << 18; // 256KB
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
   }
@@ -110,8 +122,11 @@ u64 bmrt_arch_info::get_gmem_start()
     case BM1684:
     case BM1880:
     case BM1684X:
-    case BM1686:
+    case BM1688:
       gmem_start = 0x100000000;
+      break;
+    case BM1690:
+      gmem_start = 0x0;
       break;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
@@ -148,7 +163,8 @@ u64 bmrt_arch_info::get_gmem_offset_soc()
     case BM1684:
     case BM1880:
     case BM1684X:
-    case BM1686:
+    case BM1688:
+    case BM1690:
       gmem_offset = 0x0;
       break;
     default:
@@ -167,7 +183,8 @@ int bmrt_arch_info::get_lmem_banks()
       lmem_banks = 8;
       break;
     case BM1684X:
-    case BM1686:
+    case BM1688:
+    case BM1690:
       lmem_banks = 16;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
@@ -189,7 +206,9 @@ u64 bmrt_arch_info::get_gmem_cmd_start_offset()
     case BM1684:
     case BM1880:
     case BM1684X:
-    case BM1686:
+    case MARS3:
+    case BM1688:
+    case BM1690:
       gmem_start = 0x0;
       break;
     default:
@@ -213,7 +232,8 @@ u64 bmrt_arch_info::get_ctx_start_addr()
       ctx_start_addr = (get_gmem_start() + 0x5000000 + 0x100000);
       break;
     case BM1684X:
-    case BM1686:
+    case BM1688:
+    case BM1690:
       // BM1684X does not has arm reserved and const memory
       ctx_start_addr = get_gmem_start();
       break;
@@ -301,6 +321,17 @@ u32 bmrt_arch_info::get_gdma_cmd_num()
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
   }
   return num;
+}
+
+u64 bmrt_arch_info::addr_mask() {
+  u64 mask = 0xffffffffffffffff;
+  if (sta_bmtpu_ptr->target_bmtpu_arch == BM1688) {
+    // relative address, only lower 35bit is valie
+    mask = (1ull << 35) - 1;
+  } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690) {
+    mask = (1ull << 40) - 1;
+  }
+  return mask;
 }
 
 }

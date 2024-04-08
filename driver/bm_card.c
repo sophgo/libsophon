@@ -5,7 +5,6 @@
 #ifndef SOC_MODE
 #include "bm_pcie.h"
 #include "bm_attr.h"
-#include "bm_memcpy.h"
 #endif
 
 static struct bm_card *g_bmcd[BM_MAX_CARD_NUM] = {NULL};
@@ -63,7 +62,6 @@ static int bm_update_sc5p_mcu_bmdi_to_card(struct bm_device_info *bmdi)
 {
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if (bmdrv_sc5pro_uart_is_connect_mcu(bmdi) != 0x1)
 			return -1;
@@ -82,7 +80,6 @@ static int bm_update_sc5p_mcu_bmdi_to_card(struct bm_device_info *bmdi)
 int bm_card_update_sn(struct bm_device_info *bmdi, char *sn)
 {
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if (bmdi->cinfo.chip_index != 0)
 			return -1;
@@ -189,10 +186,6 @@ int bmdrv_card_init(struct bm_device_info *bmdi)
 
 	for (i = 0; i < 17; i++)
 		dev_info_write_byte(bmdi, bmdi->cinfo.dev_info.sn_reg + i, bmdi->bmcd->sn[i]);
-
-#ifndef SOC_MODE
-	bmdev_test_p2p_available(bmdi);
-#endif
 
 	return ret;
 }

@@ -10,13 +10,31 @@ typedef enum memcpy_dir
     CHIP2CHIP
 } MEMCPY_DIR;
 
+typedef enum memcpy_type
+{
+    TRANS_1D,
+    TRANS_2D
+} MEMCPY_TYPE;
+
 typedef struct bm_cdma_arg {
 	u64 src;
 	u64 dst;
-	u64 size;
+	union {
+		u64 size;
+		struct {
+			u16 width;
+			u16 height;
+			u16 src_width;
+			u16 dst_width;
+			u16 format;   //2:2-byte format, others:1-byte format
+			u16 fixed_data;
+			bool flush;
+		};
+	};
 	MEMCPY_DIR dir;
+	MEMCPY_TYPE type;
 	bool intr;
-        bool use_iommu;
+	bool use_iommu;
 } bm_cdma_arg, *pbm_cdma_arg;
 
 typedef enum {
@@ -92,6 +110,8 @@ irqreturn_t bmdrv_irq_handler_cdma(int irq, void *data);
 void bmdrv_cdma_irq_handler(struct bm_device_info *bmdi);
 #include "bm1682_cdma.h"
 #include "bm1684_cdma.h"
+#include "bm1688_cdma.h"
 #include "bm1682_smmu.h"
 #include "bm1684_smmu.h"
+#include "bm1688_smmu.h"
 #endif

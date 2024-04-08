@@ -12,6 +12,7 @@
 #include "bm_genalloc.h"
 #include "bm1682_gmem.h"
 #include "bm1684_gmem.h"
+#include "bm1688_gmem.h"
 #include "bm_debug.h"
 
 int heap_id;
@@ -45,13 +46,17 @@ int bmdrv_gmem_init(struct bm_device_info *bmdi)
 		if (bmdrv_bm1684_parse_reserved_mem_info(bmdi))
 			return -EINVAL;
 		break;
+	case 0x1686a200:
+		if (bmdrv_bm1688_parse_reserved_mem_info(bmdi))
+			return -EINVAL;
+		break;
 	default:
 		return -EINVAL;
 	}
 
 	heap_id = 0;
 
-	mutex_init(&gmem_info->gmem_mutex);
+	spin_lock_init(&gmem_info->gmem_spinlock);
 
 	npu_heap.type = ION_HEAP_TYPE_CARVEOUT;
 	npu_heap.name = "npu-heap";
@@ -215,13 +220,13 @@ int bmdrv_gmem_vir_to_phy(struct bm_device_info *bmdi, struct bm_gmem_addr *addr
 	int ret = 0x0;
 
 	offset = addr->vir_addr & ~PAGE_MASK;
-	down_read(&mm->mmap_sem);
+	// down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, addr->vir_addr);
 
 	if (!vma) {
 		pr_info("find vma fail, vir addr = 0x%lx\n", addr->vir_addr);
-		up_read(&current->mm->mmap_sem);
+		// up_read(&current->mm->mmap_sem);
 		return -1;
 	}
 
@@ -229,11 +234,11 @@ int bmdrv_gmem_vir_to_phy(struct bm_device_info *bmdi, struct bm_gmem_addr *addr
 
 	if (ret) {
 		pr_info("fllow_pfn fail, vir addr = 0x%lx, ret = %d\n", addr->vir_addr, ret);
-		up_read(&current->mm->mmap_sem);
+		// up_read(&current->mm->mmap_sem);
 		return -1;
 	}
 
-	up_read(&current->mm->mmap_sem);
+	// up_read(&current->mm->mmap_sem);
 
 	addr->phy_addr = (pa_pfn << PAGE_SHIFT) + offset;
 
@@ -246,16 +251,17 @@ int bmdev_gmem_get_handle_info(struct bm_device_info *bmdi, struct file *file,
 		struct bm_handle_info **f_list)
 {
 	struct bm_handle_info *h_info;
+	unsigned long irq_flags;
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	list_for_each_entry(h_info, &bmdi->handle_list, list) {
 		if (h_info->file == file) {
 			*f_list = h_info;
-			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+			spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 			return 0;
 		}
 	}
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	return -EINVAL;
 }
 
@@ -301,27 +307,31 @@ int bmdrv_gmem_ioctl_alloc_mem(struct bm_device_info *bmdi, struct file *file,
 	int ret = 0;
 	struct ion_allocation_data alloc_data;
 	struct bm_handle_info *h_info;
+	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: bm-sophon%d file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+
 	if (copy_from_user(&alloc_data, (struct ion_allocation_data __user *)arg, sizeof(alloc_data))) {
-		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 		return -EFAULT;
 	}
+
 	if (!bmdrv_gmem_alloc(bmdi, h_info, &alloc_data)) {
 		ret = copy_to_user((void __user *)arg, &alloc_data, sizeof(alloc_data));
-		if (!ret)
+		if (!ret) {
+			spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 			h_info->gmem_used += BGM_4K_ALIGN(alloc_data.len);
-		else
+			spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+		} else {
 			pr_err("bm-sophon%d %s: copy_to_user failed\n", bmdi->dev_index, __func__);
+		}
 	} else {
 		ret = -ENOMEM;
 		pr_err("bm-sophon%d bmdrv_gmem_ioctl_alloc_mem alloc failed!\n", bmdi->dev_index);
 	}
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+
 	return ret;
 }
 
@@ -331,18 +341,21 @@ int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *fil
 	int ret = 0;
 	bm_device_mem_t device_mem;
 	struct bm_handle_info *h_info;
+	unsigned long irq_flags;
+
+	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
+		return -EFAULT;
+	}
+
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
-	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
-		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
-		return -EFAULT;
-	}
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	h_info->gmem_used += BGM_4K_ALIGN(device_mem.size);
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+
 	PR_TRACE("bmdrv: gmem ion alloc %x\n", device_mem.size);
 
 	return ret;
@@ -354,20 +367,20 @@ int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	int ret = 0;
 	bm_device_mem_t device_mem;
 	struct bm_handle_info *h_info;
+	unsigned long irq_flags;
+
+	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
+		return -EFAULT;
+	}
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
 
-	mutex_lock(&bmdi->gmem_info.gmem_mutex);
-	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
-		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
-		return -EFAULT;
-	}
-
+	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	h_info->gmem_used -= BGM_4K_ALIGN(device_mem.size);
-	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 
 	PR_TRACE("%s 0x%lx, size 0x%x\n", __func__, device_mem.u.device.device_addr, device_mem.size);
 	return ret;

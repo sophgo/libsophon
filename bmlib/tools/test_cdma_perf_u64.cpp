@@ -184,7 +184,7 @@ int test_cdma_stod_transfer(int chip_num, u64 transfer_size, unsigned long long 
   #endif
   srand(tp.tv_nsec);
   if (transfer_size == 0x0)
-    transfer_size = 0x20000000;//0.5g
+    transfer_size = 0x10000000;//0.5g
     // transfer_size = 0x120008000;//4.5g
     // transfer_size = 0x130088800;//4.75g
     // transfer_size = 0x140000000;//5g

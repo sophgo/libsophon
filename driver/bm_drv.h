@@ -14,5 +14,5 @@ int bmdev_unregister_device(struct bm_device_info *bmdi);
 int bmdev_ctl_register_device(struct bm_ctrl_info *bmci);
 int bmdev_ctl_unregister_device(struct bm_ctrl_info *bmci);
 void bmdrv_post_api_process(struct bm_device_info *bmdi,
-		struct api_fifo_entry api_entry, u32 channel);
+		struct api_fifo_entry api_entry, u32 channel, int core_id);
 #endif

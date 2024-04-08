@@ -7,8 +7,8 @@ int bmdrv_proc_init(void);
 void bmdrv_proc_deinit(void);
 int bmdrv_proc_file_init(struct bm_device_info *bmdi);
 void bmdrv_proc_file_deinit(struct bm_device_info *bmdi);
-int bm_arm9fw_log_init(struct bm_device_info *bmdi);
-void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int count);
+int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id);
+void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int core_id);
 char *bmdrv_get_error_string(int error);
 int i2c2_deinit(struct bm_device_info *bmdi);
 
@@ -18,6 +18,8 @@ struct bm_arm9fw_log_mem {
 	u32 host_size;
 	u64 device_paddr;
 	u32 device_size;
+	u32 read_pos;
+	u32 read_size;
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)

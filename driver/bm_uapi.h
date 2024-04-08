@@ -5,12 +5,14 @@
 #include "vpp/vpp_platform.h"
 
 typedef struct bm_api {
+	int core_id;
 	bm_api_id_t    api_id;
 	u8 *api_addr;
 	u32 api_size;
 } bm_api_t;
 
 typedef struct bm_api_ext {
+	int core_id;
 	bm_api_id_t    api_id;
 	u8 *api_addr;
 	u32 api_size;
@@ -30,6 +32,7 @@ typedef struct bm_profile {
 	u64 cdma_out_time;
 	u64 cdma_out_counter;
 	u64 tpu_process_time;
+	u64 tpu1_process_time;
 	u64 sent_api_counter;
 	u64 completed_api_counter;
 } bm_profile_t;
@@ -69,9 +72,11 @@ struct bm_misc_info {
 	long long ddr1_size;
 	long long ddr2_size;
 	unsigned int chipid;
+	int tpu_core_num;
 #define BM1682_CHIPID_BIT_MASK	(0X1 << 0)
 #define BM1684_CHIPID_BIT_MASK	(0X1 << 1)
 #define BM1684X_CHIPID_BIT_MASK	(0X1 << 2)
+#define BM1688_CHIPID_BIT_MASK	(0X1 << 3)
 	unsigned long chipid_bit_mask;
 	unsigned int driver_version;
 	int domain_bdf; /*[31:16]-domin,[15:8]-bus_id,[7:3]-device_id,[2:0]-func_num*/
@@ -223,6 +228,7 @@ struct bm_reg {
 #define BMDEV_COMM_SET_CARDID           _IOWR('p', 0xAA, unsigned long)
 #define BMDEV_SET_IP			_IOWR('p', 0xAC, unsigned long)
 #define BMDEV_SET_GATE                  _IOWR('p', 0xAD, unsigned long)
+#define BMDEV_FORCE_RESET_TPU           _IOWR('p', 0xAE, unsigned long)
 
 #define BMDEV_GET_TPUC                  _IOWR('p', 0x81, unsigned long)
 #define BMDEV_GET_MAXP                  _IOWR('p', 0x82, unsigned long)
@@ -246,6 +252,7 @@ struct bm_reg {
 #define BMDEV_GET_VERSION           	_IOR('p', 0x94, unsigned long)
 #define BMDEV_LOADED_LIB		_IOR('p', 0x95, unsigned long)
 #define BMDEV_GET_SMI_ATTR              _IOR('p', 0x96, unsigned long)
+#define BMDEV_PWR_CTRL              _IOR('p', 0x97, unsigned long)
 
 #define BMCTL_GET_DEV_CNT               _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR              _IOWR('q', 0x01, unsigned long)
