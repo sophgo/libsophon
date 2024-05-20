@@ -1825,6 +1825,7 @@ typedef struct bootloader_version{
 	char *bl2_version;
 	char *bl31_version;
 	char *uboot_version;
+	char *chip_version;
 } boot_loader_version;
 
 /**

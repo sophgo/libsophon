@@ -10,6 +10,7 @@
 #include "api.h"
 #include "bmlib_log.h"
 #include "bmlib_internal.h"
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 #ifdef __linux__
     #include "linux/bmlib_ioctl.h"
     #include <asm/ioctl.h>
@@ -50,8 +51,10 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 
   unsigned int core_num;
   bm_get_tpu_scalar_num(handle, &core_num);
+  pthread_mutex_lock(&mutex);
 
   if (g_init_basic_func_flag == 0x5a) {
+	pthread_mutex_unlock(&mutex);
     return BM_SUCCESS;
   }
   g_init_basic_func_flag = 0x5a;
@@ -66,6 +69,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
   const char key[64] = KERNEL_MODULE_NAME;
   if (0 != find_tpufirmware_path(lib_path, key)) {
     printf("%s does not exist\n", KERNEL_MODULE_NAME);
+	pthread_mutex_unlock(&mutex);
     return BM_ERR_FAILURE;
   }
   #endif
@@ -77,12 +81,14 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
     bm_module0 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 0);
     if(bm_module0 == NULL) {
         printf("bm_module0 is null!\n");
+		pthread_mutex_unlock(&mutex);
         return BM_ERR_FAILURE;
     }
     if (core_num != 1) {
       bm_module1 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 1);
       if(bm_module1 == NULL) {
           printf("bm_module1 is null!\n");
+		  pthread_mutex_unlock(&mutex);
           return BM_ERR_FAILURE;
       }
     }
@@ -97,6 +103,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
       free(bm_module1);
     bm_module1 = NULL;
   }
+  pthread_mutex_unlock(&mutex);
 
   return BM_SUCCESS;
 }
@@ -2407,7 +2414,7 @@ bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mo
 
 bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
                                  bm_device_mem_t mem) {
-  return bm_memset_device_ext_to_core(handle, value, 4, mem, 0);
+  return bm_memset_device_ext_to_core(handle, value, mode, mem, 0);
 }
 
 bm_status_t bm_memset_device_to_core(bm_handle_t     handle,
@@ -2787,7 +2794,7 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 	bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
 	if(0 != res) return BM_ERR_FAILURE;
   } else {
-    //TODO SoC mode    
+    //TODO SoC mode
   }
   return BM_SUCCESS;
 #endif

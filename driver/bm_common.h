@@ -81,6 +81,8 @@
 #define BL31_VERSION_SIZE		0x40
 #define UBOOT_VERSION_BASE		(BL31_VERSION_BASE + BL31_VERSION_SIZE) // 0x101fb2c0
 #define UBOOT_VERSION_SIZE		0x50
+#define CHIP_VERSION_BASE		0x27102014
+#define CHIP_VERSION_SIZE		0x4
 
 // after kernel 5.17, PDE_DATA() has been deleted
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
@@ -134,6 +136,7 @@ struct bootloader_version{
 	char *bl2_version;
 	char *bl31_version;
 	char *uboot_version;
+	char *chip_version;
 };
 
 struct chip_info {

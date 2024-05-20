@@ -370,6 +370,11 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 	if (ret)
 		goto err_uboot_version;
 
+	bmdi->cinfo.version.chip_version = kmalloc(CHIP_VERSION_SIZE, GFP_KERNEL);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.chip_version, CHIP_VERSION_BASE, CHIP_VERSION_SIZE);
+	if (ret)
+		goto err_chip_version;
+
 	return ret;
 
 err_uboot_version:
@@ -380,6 +385,8 @@ err_bl2_version:
 	kfree(bmdi->cinfo.version.bl2_version);
 err_bl1_version:
 	kfree(bmdi->cinfo.version.bl1_version);
+err_chip_version:
+	kfree(bmdi->cinfo.version.chip_version);
 	return -EBUSY;
 }
 
@@ -389,6 +396,7 @@ static void bmdrv_free_boot_loader_version(struct bm_device_info *bmdi)
 	kfree(bmdi->cinfo.version.bl2_version);
 	kfree(bmdi->cinfo.version.bl31_version);
 	kfree(bmdi->cinfo.version.uboot_version);
+	kfree(bmdi->cinfo.version.chip_version);
 }
 
 static int bmdrv_probe(struct platform_device *pdev)

@@ -1178,6 +1178,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl2_version, bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl31_version, bmdi->cinfo.version.bl31_version, BL31_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->uboot_version, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_SIZE);
+			ret |= copy_to_user(((struct bootloader_version __user *)arg)->chip_version, bmdi->cinfo.version.chip_version, CHIP_VERSION_SIZE);
 			break;
 		}
 	case BMDEV_LOADED_LIB:

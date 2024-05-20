@@ -9,7 +9,7 @@ static int                     win_y_offset;
 static int                     proc_y;
 static bool                    proc_show;
 static char                    bm_smi_version[10] = PROJECT_VER;
-static char                    board_name[20] = "";
+static char                    board_name[25] = "";
 static std::ofstream           target_file;
 static struct bm_smi_attr      g_attr[64];
 static struct bm_smi_proc_gmem proc_gmem[64];
@@ -1263,7 +1263,7 @@ int bm_smi_display::run_opmode() {
         return -EINVAL;
     chip_mode = misc_info.pcie_soc_mode;
     bm_dev_free(handle1);
-  if (g_cmdline.m_text_format) {
+    if (g_cmdline.m_text_format) {
         if (chip_mode == 1) {
             printf("text_format failed!\n");
             printf("this parameter is not support on SOC mode\n");
