@@ -10,14 +10,14 @@ bm_dev_getcount
 
 Function prototype: bm_status_t bm_dev_getcount(int *count)
 
-Function: obtain the number of sophon devices in the current system. If the number of devices obtained is N, the legal value of devid is [0, N-1].
+Function: obtain the number of SOPHON devices in the current system. If the number of devices obtained is N, the legal value of devid is [0, N-1].
 
 Parameter introduction:
 
 +--------------+---------------+-------------------------------------------------+
 | Parameter    | Input / output| Description                                     |
 +==============+===============+=================================================+
-| count        | Output        | Pointer for storing the number of sophon devices|
+| count        | Output        | Pointer for storing the number of SOPHON devices|
 +--------------+---------------+-------------------------------------------------+
 
 Return value: BM_SUCCESS indicates getting the correct number; 
@@ -1250,7 +1250,7 @@ bm_set_clk_tpu_freq
 
 Function prototype: bm_status_t bm_set_clk_tpu_freq(bm_handle_t handle, int freq);
 
-Function: set the working frequency of the current TPU, which is only valid in PCIe mode
+Function: set the working frequency of the current Tensor Computing Processor, which is only valid in PCIe mode
 
 Parameter introduction:
 
@@ -1259,7 +1259,7 @@ Parameter introduction:
 +==============+===============+=================================================+
 | handle       | input         | Device handle                                   |
 +--------------+---------------+-------------------------------------------------+
-| freq         | input         | Pointer to save TPU current operating frequency |
+| freq         | input         | Pointer to save Tensor Computing Processor current operating frequency |
 +--------------+---------------+-------------------------------------------------+
 
 Return value: BM_SUCCESS indicates success; Other error codes represent failure
@@ -1269,17 +1269,17 @@ bm_get_clk_tpu_freq
 
 Function prototype: bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq);
 
-Function: obtain the working frequency of the current TPU
+Function: obtain the working frequency of the current Tensor Computing Processor
 
 Parameter introduction:
 
-+--------------+---------------+-------------------------------------------------+
-| Parameter    | Input / output| Description                                     |
-+==============+===============+=================================================+
-| handle       | input         | Device handle                                   |
-+--------------+---------------+-------------------------------------------------+
-| freq         | output        | Pointer to save current TPU operating frequency |
-+--------------+---------------+-------------------------------------------------+
++--------------+---------------+------------------------------------------------------------------------+
+| Parameter    | Input / output| Description                                                            |
++==============+===============+========================================================================+
+| handle       | input         | Device handle                                                          |
++--------------+---------------+------------------------------------------------------------------------+
+| freq         | output        | Pointer to save current Tensor Computing Processor operating frequency |
++--------------+---------------+------------------------------------------------------------------------+
 
 Return value: BM_SUCCESS indicates success; Other error codes represent failure
 
@@ -1310,7 +1310,7 @@ bm_get_chipid
 
 Function prototype: bm_status_t bm_get_chipid(bm_handle_t handle, unsigned int *p_chipid);
 
-Function: obtain the chip ID corresponding to the device
+Function: obtain the processor ID corresponding to the device
 
 Parameter introduction:
 
@@ -1319,7 +1319,7 @@ Parameter introduction:
 +==============+===============+=================================================+
 | handle       | input         | Device handle                                   |
 +--------------+---------------+-------------------------------------------------+
-| p_chipid     | output        | Pointer to save chip ID                         |
+| p_chipid     | output        | Pointer to save processor ID                         |
 +--------------+---------------+-------------------------------------------------+
 
 Return value: BM_SUCCESS indicates success; Other error codes represent failure
@@ -1417,7 +1417,7 @@ bm_set_debug_mode
 
 Function prototype: void bm_set_debug_mode(bm_handle_t handle, int mode);
 
-Function: set debug mode for tpu fw log 
+Function: set debug mode for Tensor Computing Processor fw log 
 
 Note: this function is used in SC3
 
@@ -1671,7 +1671,7 @@ bm_get_board_name
 
 Function prototype: bm_status_t bm_get_board_name(bm_handle_t handle, char *name);
 
-Function: obtain the name of the current board, format: chip id - board type (e.g., 1684-SC5+).
+Function: obtain the name of the current board, format: processor id - board type (e.g., 1684-SC5+).
 
 Parameter introduction:
 

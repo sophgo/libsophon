@@ -18,11 +18,11 @@ Term Interpretation
    * - BM1684X
      - The fourth-generation tensor processor unit for deep learning developed by SOPHGO
 
-   * - TPU
+   * - Tensor Computing Processor
      - Neural network processing unit in BM1684
 
    * - SOC Mode
-     - A product form, the SDK runs on A53 AARCH64 platform, and TPU is used as the platform bus device
+     - A product form, the SDK runs on A53 AARCH64 platform, and Tensor Computing Processor is used as the platform bus device
 
    * - PCIE Mode
      - A product form, SDK runs on the host platform ( it can be X86 or AARCH64 server), BM1684 serves as deep learning computing accelerator card in PCIe interface

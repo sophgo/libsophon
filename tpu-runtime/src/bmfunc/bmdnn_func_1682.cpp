@@ -6,110 +6,128 @@
 
 namespace bmruntime {
 
+void bmdnn_func_1682::fill_api_info(const tpu_net_info_t &net_info,
+                                    api_info_t &api_info) {
+  const std::vector<tpu_tensor_info_t> &input_info = net_info.input_info;
+  const std::vector<tpu_tensor_info_t> &output_info = net_info.output_info;
+  const std::vector<tpu_cmd_info_t> &cmd_info = net_info.core_commands[0].cmd_info;
+
+  u32 api_buffer_size =
+      sizeof(int) +
+      (input_info.size() *
+       (sizeof(u64) * 2 + sizeof(int))) + // api buffer size for input
+      sizeof(int) +
+      (output_info.size() *
+       (sizeof(u64) * 2 + sizeof(int))) + // api buffer size for output
+      sizeof(u64) * 3 +
+      sizeof(int) * 3 * cmd_info.size() + sizeof(int);
+
+  api_info.api_id.push_back(b_enable_profile ? BM_API_ID_MULTI_FULLNET_PROFILE
+                                             : BM_API_ID_MULTI_FULLNET);
+  api_info.api_data.resize(1);
+  api_info.api_data[0].assign(api_buffer_size, 0);
+  api_info.input_addr_offset.assign(input_info.size(), 0);
+  api_info.output_addr_offset.assign(output_info.size(), 0);
+  void *p_api = api_info.api_data[0].data();
+
+  // input global offset process
+  *(int *)p_api = (int)input_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < input_info.size(); ++i) {
+    api_info.input_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = input_info.at(i).user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = input_info.at(i).compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    int dtype_size =
+        bmrt_data_type_size((bm_data_type_t)input_info.at(i).dtype);
+    const int32_t length = (input_info.at(i).n * input_info.at(i).c *
+                            input_info.at(i).h * input_info.at(i).w) /
+                           dtype_size;
+    if (dtype_size == 1) {
+      *(int *)p_api = (length + 3) / 4;
+    } else if (dtype_size == 2) {
+      *(int *)p_api = (length + 1) / 2;
+    } else if (dtype_size == 4) {
+      *(int *)p_api = length;
+    } else {
+      BMRT_ASSERT_INFO(0, "Unsupported input data type %d\n",
+                       input_info.at(i).dtype);
+    }
+    p_api = (int *)p_api + 1;
+  }
+
+  // output global offset process
+  *(int *)p_api = (int)output_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < output_info.size(); ++i) {
+    api_info.output_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = output_info.at(i).user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = output_info.at(i).compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    int dtype_size =
+        bmrt_data_type_size((bm_data_type_t)output_info.at(i).dtype);
+    const int32_t length = (output_info.at(i).n * output_info.at(i).c *
+                            output_info.at(i).h * output_info.at(i).w) /
+                           dtype_size;
+    if (dtype_size) {
+      *(int *)p_api = (length + 3) / 4;
+    } else if (dtype_size) {
+      *(int *)p_api = (length + 1) / 2;
+    } else if (dtype_size) {
+      *(int *)p_api = length;
+    } else {
+      BMRT_ASSERT_INFO(0, "Unsupported input data type %d\n",
+                       output_info.at(i).dtype);
+    }
+    p_api = (int *)p_api + 1;
+  }
+
+  // memcpy cmd offset and num
+  *(u64 *)p_api = net_info.core_commands[0].bdc_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(u64 *)p_api = net_info.core_commands[0].gdma_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(u64 *)p_api = net_info.core_commands[0].cdma_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(int *)p_api = (int)cmd_info.size();
+  for (size_t i = 0; i < cmd_info.size(); i++) {
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).bdc_cmd_num;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).gdma_cmd_num;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).cdma_cmd_num;
+  }
+}
 /* multiple fullnet mode
  */
-bm_status_t bmdnn_func_1682::_bmdnn_multi_fullnet_(
-        bm_handle_t handle,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        int* input_tensor_size,  // unit: float word
-        unsigned short* input_dtype,
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        int* output_tensor_size, // unit: float word
-        unsigned short* output_dtype,
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        u64 cdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        int* cdma_cmd_num,
-        int cmdgroup_num
-        )
-{
-    BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
-    
+bm_status_t
+bmdnn_func_1682::_bmdnn_multi_fullnet_(bm_handle_t handle,
+                                       const tpu_net_info_t &net_info) {
+  BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
+  api_info_t api_info;
+  fill_api_info(net_info, api_info);
 
-    u32 api_buffer_size = sizeof(int) + (input_num * (sizeof(u64) * 2 + sizeof(int))) + //api buffer size for input
-                          sizeof(int) + (output_num * (sizeof(u64) * 2 + sizeof(int))) + //api buffer size for output
-                          sizeof(u64) * 3 + sizeof(int) * 3 * cmdgroup_num + sizeof(int);
-
-    u8* api_buffer = new u8 [api_buffer_size];
-    void* p_api = api_buffer;
-
-    //input global offset process
-    *(int*)p_api = input_num;
-    p_api = (int*)p_api + 1;
-    for (int i = 0; i < input_num; ++i) {
-        *(u64*)p_api = user_input_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(u64*)p_api = cmd_input_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        if(input_dtype[i] == BM_INT8 || input_dtype[i] == BM_UINT8){
-            *(int*)p_api = (input_tensor_size[i]+3)/4;
-        } else if(input_dtype[i] == BM_INT16 || input_dtype[i] == BM_FLOAT16 || input_dtype[i] == BM_UINT16){
-            *(int*)p_api = (input_tensor_size[i]+1)/2;
-        } else if(input_dtype[i] == BM_INT32 || input_dtype[i] == BM_FLOAT32){
-            *(int*)p_api = input_tensor_size[i];
-        } else {
-            BMRT_ASSERT_INFO(0,"Unsupported input data type %d\n",input_dtype[i]);
-        }
-        p_api = (int*)p_api + 1;
-    }
-
-    //output global offset process
-    *(int*)p_api = output_num;
-    p_api = (int*)p_api + 1;
-    for (int i = 0; i < output_num; ++i) {
-        *(u64*)p_api = user_output_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(u64*)p_api = cmd_output_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        if(output_dtype[i] == BM_INT8 || output_dtype[i] == BM_UINT8){
-            *(int*)p_api = (output_tensor_size[i]+3)/4;
-        } else if(output_dtype[i] == BM_INT16 || output_dtype[i] == BM_FLOAT16 || output_dtype[i] == BM_UINT16){
-            *(int*)p_api = (output_tensor_size[i]+1)/2;
-        } else if(output_dtype[i] == BM_INT32 || output_dtype[i] == BM_FLOAT32){
-            *(int*)p_api = output_tensor_size[i];
-        } else {
-            BMRT_ASSERT_INFO(0,"Unsupported input data type %d\n",input_dtype[i]);
-        }
-        p_api = (int*)p_api + 1;
-    }
-
-    //memcpy cmd offset and num
-    *(u64*)p_api = bdc_cmd_offset;
-    p_api = (u64*)p_api + 1;
-    *(u64*)p_api = gdma_cmd_offset;
-    p_api = (u64*)p_api + 1;
-    *(u64*)p_api = cdma_cmd_offset;
-    p_api = (u64*)p_api + 1;
-    *(int*)p_api = cmdgroup_num;
-    for (int i = 0; i < cmdgroup_num; i++) {
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = bdc_cmd_num[i];
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = gdma_cmd_num[i];
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = cdma_cmd_num[i];
-    }
-
-    bm_api_id_t tmp_api_id = (bm_api_id_t)((b_enable_profile) ? BM_API_ID_MULTI_FULLNET_PROFILE
-                                                              : BM_API_ID_MULTI_FULLNET);
-    bm_status_t status = bm_send_api(handle, tmp_api_id, api_buffer, api_buffer_size);
+  bm_status_t status =
+      bm_send_api(handle, (bm_api_id_t)api_info.api_id[0],
+                  api_info.api_data[0].data(),
+                  api_info.api_data[0].size());
+  if (BM_SUCCESS != status) {
+    BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", api_info.api_id[0],
+             status);
+  } else {
+    status = bm_sync_api(handle);
     if (BM_SUCCESS != status) {
-      BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", tmp_api_id, status);
-    } else {
-      status = bm_sync_api(handle);
-      if (BM_SUCCESS != status) {
-        BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", tmp_api_id, status);
-      }
+      BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", api_info.api_id[0],
+               status);
     }
+  }
 
-    delete[] api_buffer;
-    return status;
+  return status;
 }
 
 /*

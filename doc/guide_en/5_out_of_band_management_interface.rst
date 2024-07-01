@@ -38,7 +38,7 @@ SC5+ MCU protocol command
    ===================== ========== ========== =============================================
    Meaning               Address    Attribute     Description
    --------------------- ---------- ---------- ---------------------------------------------
-   Chip temperature      0x00       RO            unsigned byte, unit: centigrade
+   Processor temperature 0x00       RO            unsigned byte, unit: centigrade
    --------------------- ---------- ---------- ---------------------------------------------
    Card temperature      0x01       RO            unsigned byte, unit: centigrade
    --------------------- ---------- ---------- ---------------------------------------------
@@ -50,7 +50,7 @@ SC5+ MCU protocol command
    --------------------- ---------- ---------- ---------------------------------------------
    Hardware Version      0x14       RO            unsigned byte
    --------------------- ---------- ---------- ---------------------------------------------
-   Firmware Version      0x18       RO            unsigned int;[7:0]Minor version;[15:8]Major version;[31:16]chip version
+   Firmware Version      0x18       RO            unsigned int;[7:0]Minor version;[15:8]Major version;[31:16]processor version
    --------------------- ---------- ---------- ---------------------------------------------
    Kind of card          0x1c       RO            unsigned byte(Kind of card, SC5+ is 7)
    --------------------- ---------- ---------- ---------------------------------------------
@@ -84,7 +84,7 @@ SC7Pro MCU protocol command
    ==================== ========== ========== =============================================
    Meaning              Address    Attribute   Description
    -------------------- ---------- ---------- ---------------------------------------------
-   Chip temperature     0x00       RO          unsigned byte, unit: centigrade
+   Processor temperature 0x00       RO          unsigned byte, unit: centigrade
    -------------------- ---------- ---------- ---------------------------------------------
    Card temperature     0x01       RO          unsigned byte, unit: centigrade
    -------------------- ---------- ---------- ---------------------------------------------
@@ -96,7 +96,7 @@ SC7Pro MCU protocol command
    -------------------- ---------- ---------- ---------------------------------------------
    Hardware Version     0x14       RO          unsigned byte
    -------------------- ---------- ---------- ---------------------------------------------
-   Firmware Version     0x18       RO          unsigned int;[7:0]Minor version;[15:8]Major version;[31:16]chip version
+   Firmware Version     0x18       RO          unsigned int;[7:0]Minor version;[15:8]Major version;[31:16]processor version
    -------------------- ---------- ---------- ---------------------------------------------
    Kind of card         0x1c       RO          unsigned byte(Kind of card,sc7pro is 0x21)
    -------------------- ---------- ---------- ---------------------------------------------

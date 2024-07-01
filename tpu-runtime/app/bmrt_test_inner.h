@@ -36,6 +36,8 @@
 #include "bmruntime_bmnet.h"
 #include "bmruntime_cpp.h"
 #include "bmruntime_interface.h"
+#include "bmruntime_legacy.h"
+#include "bmruntime_common.h"
 
 using bmodel::ModelCtx;
 using bmruntime::Bmruntime;
@@ -48,6 +50,7 @@ using std::vector;
 #define INPUT_REF_DATA "input_ref_data.dat"
 #define OUTPUT_REF_DATA "output_ref_data.dat"
 
+extern vector<vector<int>> core_lists;
 extern vector<string> CONTEXT_DIR_V;
 extern bool b_bmodel_dir;
 extern string TEST_CASE;

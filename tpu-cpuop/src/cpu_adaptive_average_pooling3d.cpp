@@ -31,14 +31,14 @@ void cpu_adaptive_average_pooling3dlayer::adaptive_average_pooling(
     }
     beginH[0] = 0;
     endH[osizeh-1] = in_shape[3];
-    for (int i=0; i<osizeh; ++i) {
+    for (int i=1; i<osizeh; ++i) {
         float point = begin_index(i, osizeh, in_shape[3]);
         beginH[i] = (int)std::floor(point);
         endH[i-1] = (int)std::ceil(point);
     }
     beginW[0] = 0;
     endW[osizew-1] = in_shape[4];
-    for (int i=0; i<osizew; ++i) {
+    for (int i=1; i<osizew; ++i) {
         float point = begin_index(i, osizew, in_shape[4]);
         beginW[i] = (int)std::floor(point);
         endW[i-1] = (int)std::ceil(point);

@@ -105,7 +105,11 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+static char *bmdrv_class_devnode(const struct device *dev, umode_t *mode)
+#else
 static char *bmdrv_class_devnode(struct device *dev, umode_t *mode)
+#endif
 {
 	if (!mode || !dev)
 		return NULL;
@@ -191,9 +195,11 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 }
 
 struct class bmdev_class = {
-	.name		= BM_CLASS_NAME,
-	.owner		= THIS_MODULE,
-	.devnode = bmdrv_class_devnode,
+	.name	    = BM_CLASS_NAME,
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(6, 5, 0)
+	.owner	    = THIS_MODULE,
+#endif
+	.devnode    = bmdrv_class_devnode,
 };
 
 int bmdrv_class_create(void)

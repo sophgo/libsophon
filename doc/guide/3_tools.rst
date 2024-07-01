@@ -19,7 +19,7 @@ proc文件系统使用说明
 
    3_2_proc_description
 
-Tpu驱动sysfs文件系统使用说明
+智能视觉深度学习处理器驱动sysfs文件系统使用说明
 ~~~~~~~~~~~~~~
 
 .. toctree::

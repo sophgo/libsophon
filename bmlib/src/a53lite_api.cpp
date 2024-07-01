@@ -350,7 +350,9 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
     else
         tmp = (const char *)module_file;
 
-    if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
+    size_t len = strlen(tmp);
+
+    if (len > LIB_MAX_NAME_LEN - 1)
     {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -359,7 +361,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
         free(p_module);
         return NULL;
     }
-    strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
+    strncpy((char *)api_load_lib.lib_name, tmp, len);
     api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
     api_load_lib.size = file_size;
     read_md5((unsigned char *)module_file, api_load_lib.md5);
@@ -388,7 +390,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
         free(p_module);
         return nullptr;
     }
-    strncpy(p_module->lib_name, tmp, strlen(tmp));
+    strncpy(p_module->lib_name, tmp, len);
     memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
 
     bm_free_device(handle, dev_mem);
@@ -438,7 +440,9 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
     else
         tmp = (const char *)module_file;
 
-    if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
+    size_t len = strlen(tmp);
+
+    if (len > LIB_MAX_NAME_LEN - 1)
     {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -450,7 +454,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
 
     if (loaded_lib.loaded == 1)
     {
-        strncpy(p_module->lib_name, tmp, strlen(tmp));
+        strncpy(p_module->lib_name, tmp, len);
         memcpy(p_module->md5, loaded_lib.md5, MD5SUM_LEN);
         return p_module;
     }
@@ -476,7 +480,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
         return nullptr;
     }
 
-    strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
+    strncpy((char *)api_load_lib.lib_name, tmp, len);
     api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
     api_load_lib.size = file_size;
     calc_md5((unsigned char *)key, size, api_load_lib.md5);
@@ -505,7 +509,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
         free(p_module);
         return nullptr;
     }
-    strncpy(p_module->lib_name, tmp, strlen(tmp));
+    strncpy(p_module->lib_name, tmp, len);
     memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
 
     bm_free_device(handle, dev_mem);
@@ -784,4 +788,14 @@ bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_mod
     free(p_module);
     return BM_SUCCESS;
 #endif
+}
+
+bm_status_t tpu_kernel_launch_async_multicores(bm_handle_t handle, tpu_launch_param_t *param_list, int param_num) {
+    for(int i=0; i<param_num; i++){
+        bm_status_t status = tpu_kernel_launch_async_from_core(handle, param_list[i].func_id, param_list[i].param_data, param_list[i].param_size, param_list[i].core_id);
+        if(status != BM_SUCCESS) {
+            return status;
+        }
+    }
+    return BM_SUCCESS;
 }

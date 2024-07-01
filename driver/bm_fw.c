@@ -40,10 +40,11 @@ static int bmdrv_compare_fw(struct bm_device_info *bmdi, struct file *file, cons
 	mutex_lock(&stagemem_d2s->stage_mutex);
 
 	for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
-		if ((pass_idx + 1) * realmem_size < size)
+		if ((pass_idx + 1) * realmem_size < size){
 			size_step = realmem_size;
-		else
-		size_step = size - pass_idx * realmem_size;
+		}else{
+			size_step = size - pass_idx * realmem_size;
+		}
 
 		memset(stagemem_d2s->v_addr, 0, size_step);
 
@@ -200,10 +201,12 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 		break;
 	case 0x1686:
 #ifndef SOC_MODE
-		if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)
+		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X)){
 			ret = bmdrv_load_firmware(bmdi, file, fw_ddr_array, fw_ddr_size / sizeof(u32), a53lite_park);
-		else
+		}else{
 			ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
+		}
 #else
 		ret = bmdrv_request_and_load_firmware(bmdi, file, bm1684x_dyn_fw, a53lite_park);
 #endif
@@ -231,7 +234,7 @@ static int bmdrv_fw_download_user(struct bm_device_info *bmdi, struct file *file
 		firmware_header_copy = (struct firmware_header *)fw->ddr_fw;
 		firmware_header_check = kmalloc(sizeof(struct firmware_header), GFP_KERNEL);
 		ret = copy_from_user(firmware_header_check, fw->ddr_fw, sizeof(struct firmware_header));
-		if(ret) pr_info("%s copy from user fail!\n",__func__);
+		if(ret) {pr_info("%s copy from user fail!\n",__func__);}
 
 		if(firmware_header_check->magic[0] == 's' && firmware_header_check->magic[1] == 'g' &&
 		   firmware_header_check->magic[2] == 'f' && firmware_header_check->magic[3] == 'w') {
@@ -257,7 +260,7 @@ static int bmdrv_fw_download_user(struct bm_device_info *bmdi, struct file *file
 		firmware_header_copy = (struct firmware_header *)fw->itcm_fw;
 		firmware_header_check = kmalloc(sizeof(struct firmware_header), GFP_KERNEL);
 		ret = copy_from_user(firmware_header_check, fw->itcm_fw, sizeof(struct firmware_header));
-		if(ret) pr_info("%s copy from user fail!\n",__func__);
+		if(ret) {pr_info("%s copy from user fail!\n",__func__);}
 
 		if(firmware_header_check->magic[0] == 's' && firmware_header_check->magic[1] == 'g' &&
 		   firmware_header_check->magic[2] == 'f' && firmware_header_check->magic[3] == 'w') {
@@ -271,8 +274,9 @@ static int bmdrv_fw_download_user(struct bm_device_info *bmdi, struct file *file
 		} else {
 			ret = bmdev_memcpy_s2d(bmdi, file, 0, (int __user *)fw->itcm_fw,
 						fw->itcmfw_size, false, 0);
-			if (ret)
+			if (ret){
 				return ret;
+			}
 
 			pr_info("bmdrv: firmware loaded to itcm\n");
 		}
@@ -301,8 +305,9 @@ static int bmdrv_eu_table_load(struct bm_device_info *bmdi)
 	u32 address_shift;
 	u32 *eu_cmd_warp = kmalloc_array(EU_CMD_LEN, sizeof(u32), GFP_KERNEL);
 
-	if (!eu_cmd_warp)
+	if (!eu_cmd_warp){
 		return -ENOMEM;
+	}
 	for (i = 0; i < EU_CMD_LEN / 4; i++) {
 		eu_cmd_warp[i * 4 + 0] = eu_cmd[i * 4 + 3];
 		eu_cmd_warp[i * 4 + 1] = eu_cmd[i * 4 + 2];
@@ -325,8 +330,8 @@ static int bmdrv_eu_table_load(struct bm_device_info *bmdi)
 
 	cnt = 1000000;
 	while (((bdc_reg_read(bmdi, 0x4) & 0x1) != 0) &&
-			--cnt != 0)
-		;
+			--cnt != 0){
+	}
 	if (cnt) {
 		pr_info("bmdrv: load eu table done!\n");
 		return 0;

@@ -17,7 +17,7 @@ _____________________________________________
 
    .. table:: bmrt_test main parameter description
       :widths: 15 10 50
- 
+
       +---------------+------------+---------------------------------------------------------------------------------------------------------------------------------------------+
       |    args       |    type    |                                                           Description                                                                       |
       +===============+============+=============================================================================================================================================+
@@ -89,6 +89,11 @@ ____________________________________________
       bmrt_test --bmodel xxx.bmodel --stage_idx 0  --shapes "[1,3,224,224]" # Run the
       # multi-stage bmodel model and specify the bmodel for running stage 0.
 
+      bmrt_test --bmodel xxx.bmodel --core_list 0,1
+      # run the bmodel on the deep learning processor core0 and core1 at the same time
+      # note that the bmodel is multi-core compiled and can be architected to support multi-core
+      # the value in core_list is at least 0 and cannot be greater than the number of ( deep learning processor cores - 1 ).
+
       # The following instructions are functions provided by using environmental variables
       # and bmruntime and can be used by other applications.
       BMRUNTIME_ENABLE_PROFILE=1 bmrt_test --bmodel xxx.bmodel # Generate
@@ -100,7 +105,7 @@ ____________________________________________
 Comparison Data Generation and Verification Example
 ___________________________________________________
 
-1. Upon the completion of model compilation, run with comparing the model. 
+1. Upon the completion of model compilation, run with comparing the model.
 
     When compiling the model, you must indicate \--cmp=True, which is enabled by default. input_ref_data.dat and output_ref_data.dat files will be generated in the compilation output folder.
 
@@ -128,7 +133,7 @@ ___________________________________________________
                 f.write(output_data.astype(np.float32).tobytes())  # astype will convert
                 # according to the output data type of bmodel
 
-    Put the generated input_ref_data.dat and output_ref_data.dat in the bmodel_dir file folder 
+    Put the generated input_ref_data.dat and output_ref_data.dat in the bmodel_dir file folder
     and then in 'bmrt_test \--context_dir bmodel_dir' to see if the result is a comparison error.
 
 FAQs

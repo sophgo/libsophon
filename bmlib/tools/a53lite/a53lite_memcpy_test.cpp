@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
     ret = bm_malloc_device_dword(handle, &device_buffer, transfer_size / 4);
     if (ret != BM_SUCCESS)
     {
-        printf("malloc device memory size = %llu failed, ret = %d\n", transfer_size, ret);
+        printf("malloc device memory size = %u failed, ret = %d\n", transfer_size, ret);
         return -1;
     }
 

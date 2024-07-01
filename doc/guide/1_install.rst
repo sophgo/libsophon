@@ -1,7 +1,7 @@
 安装libsophon
 --------------
 
-.. |ver| replace:: 0.5.0
+.. |ver| replace:: 0.5.1
 
 libsophon在不同的Linux发行版上提供不同类型的安装方式。请根据您的系统选择对应的方式，不要在一台机器上混用多种安装方式。
 以下描述中“|ver|”仅为示例，视当前实际安装版本会有变化。
@@ -17,8 +17,8 @@ libsophon在不同的Linux发行版上提供不同类型的安装方式。请根
   sudo rm -f /lib/modules/$(uname -r)/kernel/drivers/pci/bmsophon.ko
 
 
-**如果使用Debian/Ubuntu系统：**
-
+Debian/Ubuntu系统
+~~~~~~~~~~~~~~~~~~~
 
 安装包由三个文件构成，其中“$arch”为当前机器的硬件架构，使用以下命令可以获取当前服务器的arch：
 
@@ -75,7 +75,7 @@ deb包安装方式并不允许您安装同一个包的多个不同版本，但�
   sudo modprobe bmsophon
 
 
-卸载方式：
+**卸载方式：**
 
 注意：如果安装了sophon-mw及sophon-rpc，因为它们对libsophon有依赖关系，请先卸载它们。
 
@@ -104,8 +104,8 @@ deb包安装方式并不允许您安装同一个包的多个不同版本，但�
   sudo apt purge sophon-libsophon
 
 
-**如果使用Centos系统, 当前版本仅支持x86_64：**
-
+Centos系统, 当前版本仅支持x86_64
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 安装包由三个文件构成，其中“$arch”为当前机器的硬件架构，使用以下命令可以获取当前服务器的arch：
 
@@ -124,7 +124,6 @@ x86_64机器对应的安装包名称为：
 .. parsed-literal::
 
   安装依赖库，只需要执行一次:
-  sudo yum install -y epel-release
   sudo yum install -y dkms
   sudo yum install -y ncurses*
   安装libsophon：
@@ -134,7 +133,7 @@ x86_64机器对应的安装包名称为：
   在终端执行如下命令，或者登出再登入当前用户后即可使用bm-smi等命令：
   source /etc/profile
 
-卸载方式：
+**卸载方式：**
 
 .. parsed-literal::
 
@@ -142,7 +141,45 @@ x86_64机器对应的安装包名称为：
   sudo rpm -e sophon-libsophon-dev-\ |ver|\ -1.x86_64
   sudo rpm -e sophon-libsophon-\ |ver|\ -1.x86_64
 
-**如果使用其它Linux系统：**
+Fedora系统, 当前版本仅支持riscv架构
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+安装包由三个文件构成，其中“$arch”为当前机器的硬件架构，使用以下命令可以获取当前服务器的arch：
+
+.. parsed-literal::
+
+  uname -m
+
+x86_64机器对应的安装包名称为：
+ - sophon-driver-\ |ver|\ -1.$arch.rpm
+ - sophon-libsophon-\ |ver|\ -1.$arch.rpm
+ - sophon-libsophon-dev-\ |ver|\ -1.$arch.rpm
+
+
+安装前需要通过后面“卸载方式”中的步骤卸载旧版本libsophon，可以通过如下步骤安装：
+
+.. parsed-literal::
+
+  安装依赖库，只需要执行一次:
+  sudo yum install -y dkms
+  sudo yum install -y ncurses*
+  安装libsophon：
+  sudo  rpm -ivh sophon-driver-\ |ver|\ -1.riscv64.rpm
+  sudo  rpm -ivh sophon-libsophon-\ |ver|\ -1.riscv64.rpm
+  sudo  rpm -ivh --force sophon-libsophon-dev-\ |ver|\ -1.riscv64.rpm
+  在终端执行如下命令，或者登出再登入当前用户后即可使用bm-smi等命令：
+  source /etc/profile
+
+**卸载方式：**
+
+.. parsed-literal::
+
+  sudo rpm -e sophon-driver-\ |ver|\ -1.riscv64
+  sudo rpm -e sophon-libsophon-dev-\ |ver|\ -1.riscv64
+  sudo rpm -e sophon-libsophon-\ |ver|\ -1.riscv64
+
+其它Linux系统
+~~~~~~~~~~~~~~~
 
 安装包由一个文件构成，其中“$arch”为当前机器的硬件架构，使用以下命令可以获取当前服务器的arch：
 
@@ -202,7 +239,7 @@ x86_64机器对应的安装包名称为：
   sudo mkdir -p /usr/lib/cmake/libsophon
   sudo cp /opt/sophon/libsophon-current/data/libsophon-config.cmake /usr/lib/cmake/libsophon/
 
-卸载方式：
+**卸载方式：**
 
 .. parsed-literal::
 

@@ -30,7 +30,8 @@ int bm1684_card_get_chip_index(struct bm_device_info *bmdi)
 	int mode = 0x0;
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
-	    (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO)) {
+	    (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150)) {
 		parent = bm_pci_upstream_bridge(bmdi->cinfo.pcidev);
 		if (parent != NULL)
 			bmdi->cinfo.chip_index = PCI_SLOT(parent->devfn);
@@ -48,7 +49,10 @@ int bm1684_card_get_chip_index(struct bm_device_info *bmdi)
 			bmdi->cinfo.chip_index = 0x2;
 		else
 			bmdi->cinfo.chip_index = 0x0;
-	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) {
+	} else if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
 		mode = bmdrv_pcie_get_mode(bmdi) & 0x7;
 		if ((mode == 0x7) || (mode == 0x6))
 			bmdi->cinfo.chip_index = 0x0;
@@ -98,6 +102,9 @@ int bm1684_card_get_chip_num(struct bm_device_info *bmdi)
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO))
 		return 0x8;
 
+	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150)
+		return 0x6;
+
 	mode = bmdrv_pcie_get_mode(bmdi) & 0x7;
 
 	switch (mode) {
@@ -117,6 +124,9 @@ int bm1684_card_get_chip_num(struct bm_device_info *bmdi)
 			}
 		}
 		num = 0x3;
+		break;
+	case 0x5:
+		num = 0x2;
 		break;
 	case 0x4:
 	case 0x3:
@@ -262,10 +272,22 @@ int bm1684_get_board_type_by_id(struct bm_device_info *bmdi, char *s_board_type,
 		strncpy(s_board_type, "EVB", 10);
 		break;
 	case BOARD_TYPE_SC7_PRO:
-		strncpy(s_board_type, "SC7P", 10);
+		strncpy(s_board_type, "SC7-224T", 10);
+		break;
+	case BOARD_TYPE_SC7_FP150:
+		strncpy(s_board_type, "SC7-FP150", 10);
 		break;
 	case BOARD_TYPE_SC7_PLUS:
 		strncpy(s_board_type, "SC7+", 10);
+		break;
+	case BOARD_TYPE_AIV03X:
+		strncpy(s_board_type, "AIV03X", 10);
+		break;
+	case BOARD_TYPE_AIV02X:
+		strncpy(s_board_type, "AIV02X", 10);
+		break;
+	case BOARD_TYPE_AIV01X:
+		strncpy(s_board_type, "AIV01X", 10);
 		break;
 	case BOARD_TYPE_CP24:
 		strncpy(s_board_type, "CP24", 10);
@@ -363,11 +385,23 @@ int bm1684_get_board_version_by_id(struct bm_device_info *bmdi, char *s_board_ve
 		else
 			snprintf(s_board_version, 10, "V1_%d", board_version);
 		break;
+	case BOARD_TYPE_SC7_FP150:
+		strncpy(s_board_version, "V0_0",10);
+		break;
 	case BOARD_TYPE_SC7_PLUS:
 		if (board_version == 0x11)
 			strncpy(s_board_version, "V1_0", 10);
 		else
 			snprintf(s_board_version, 10, "V1_%d", board_version);
+		break;
+	case BOARD_TYPE_AIV01X:
+		strncpy(s_board_version, "V0_0", 10);
+		break;
+	case BOARD_TYPE_AIV02X:
+		strncpy(s_board_version, "V0_0", 10);
+		break;
+	case BOARD_TYPE_AIV03X:
+		strncpy(s_board_version, "V0_0", 10);
 		break;
 	case BOARD_TYPE_CP24:
 		if (board_version == 0x11)
@@ -407,9 +441,9 @@ void bm1684_get_clk_temperature(struct bm_device_info *bmdi)
                 }
 	case BOARD_TYPE_SC7_PRO:
 		{
-			bmdi->c_attr.thermal_info.half_clk_tmp = 65;
+			bmdi->c_attr.thermal_info.half_clk_tmp = 85;
 			bmdi->c_attr.thermal_info.min_clk_tmp = 95;
-			bmdi->c_attr.thermal_info.max_clk_tmp = 60;
+			bmdi->c_attr.thermal_info.max_clk_tmp = 80;
 			bmdi->c_attr.thermal_info.extreme_tmp = 105;
 			break;
 		}

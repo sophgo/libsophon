@@ -5,12 +5,9 @@ BModel
 BModel 介绍
 _____________
 
-bmodel是面向算能TPU处理器的深度神经网络模型文件格式。
+bmodel是面向算能深度学习处理器的深度神经网络模型文件格式。
 通过模型编译器工具(如bmnetc/bmnett等)生成，包含一个至多个网络的参数信息，如输入输出等信息。
 并在runtime阶段作为模型文件被加载和使用。
-
-bmodel也作为BMLang编程语言的编译输出文件，由BMLang编译阶段生成，包含一个或多个BMLang功能Function的
-参数、输入输出等信息。
 
 多stage bmodel说明：
 
@@ -22,18 +19,18 @@ bmodel也作为BMLang编程语言的编译输出文件，由BMLang编译阶段�
   也可以分别以[1,3,200,200]，[1,3,100,100]的输入编译出两个bmodel，达到支持200x200和100x100输入的模型
 
 静态bmodel说明：
-  
-1. 静态bmodel保存的是芯片上可直接使用的固定参数原子操作指令，TPU可以自动读取该原子操作指令，流水执行，中间无中断。
+
+1. 静态bmodel保存的是芯片上可直接使用的固定参数原子操作指令，深度学习处理器可以自动读取该原子操作指令，流水执行，中间无中断。
 
 2. 静态bmodel被执行时，模型输入大小必须和编译时的大小相同。
 
-3. 由于静态接口简单稳定，在新的sdk下编译出来的模型通常能在旧机器上运行，不用更新firmware刷机。需要注意的是，有些模型虽然指定的是静态编译，但有些算子必需有TPU内部mcu参与或host cpu参与，如排序、nms、where、detect_out这类逻辑运算比较多的算子，该部分会被切分成子网，用动态方式实现。如果更新sdk重新编译的这类部分是动态的模型，最好刷机或更新firmware，以保证sdk和runtime是一致的。（可以通过tpu_model \--info xx.bmodel的输出来判断，如果是static且subnet number为1时，是纯静态网络，具体可见tpu_model使用章节）。
+3. 由于静态接口简单稳定，在新的sdk下编译出来的模型通常能在旧机器上运行，不用更新firmware刷机。需要注意的是，有些模型虽然指定的是静态编译，但有些算子必需有深度学习处理器内部mcu参与或主机处理器参与，如排序、nms、where、detect_out这类逻辑运算比较多的算子，该部分会被切分成子网，用动态方式实现。如果更新sdk重新编译的这类部分是动态的模型，最好刷机或更新firmware，以保证sdk和runtime是一致的。（可以通过tpu_model \--info xx.bmodel的输出来判断，如果是static且subnet number为1时，是纯静态网络，具体可见tpu_model使用章节）。
 
 4. 如果输入的shape只有固定离散的几种情况，可以使用上面说的多stage bmodel来达到动态模型的效果。
 
 动态bmodel说明：
 
-1. 动态bmodel保存的是每个算子的参数信息，并不能直接在TPU上运行。需要TPU内部的mcu逐层解析参数，进行shape及dtype推理，调用原子操作来实现具体的功能，故运行效率比静态bmodel稍差。
+1. 动态bmodel保存的是每个算子的参数信息，并不能直接在深度学习处理器上运行。需要深度学习处理器内部的mcu逐层解析参数，进行shape及dtype推理，调用原子操作来实现具体的功能，故运行效率比静态bmodel稍差。
 
 2. 在bm168x平台上运行时，最好打开icache，否则运行比较慢。
 
@@ -59,12 +56,12 @@ _____________
 
     bmodel version: B.2.2                         # bmodel的格式版本号
     chip: BM1684                                  # 支持的芯片类型
-    create time: Mon Apr 11 13:37:45 2022         # 创建时间
+    create time: Mon Apr 11 13:37:45 2024         # 创建时间
 
     ==========================================    # 网络分割线，如果有多个net，会有多条分割线
     net 0: [informer_frozen_graph]  static        # 网络名称为informer_frozen_graph， 为static类型网络（即静态网络），如果是dynamic，为动态编译网络
     ------------                                  # stage分割线，如果每个网络有多个stage，会有多个分割线
-    stage 0:                                      # 第一个stage信息
+    stage 0, core_num: x                          # 第一个stage信息和对应的深度学习处理器core数量
     subnet number: 41                             # 该stage中子网个数，这个是编译时切分的，以支持在不同设备切换运行。通常子网个数
                                                   # 越少越好
     input: x_1, [1, 600, 9], float32, scale: 1    # 输入输出信息：名称、形状、量化的scale值
@@ -73,7 +70,7 @@ _____________
     input: x_2, [1, 500, 9], float32, scale: 1
     output: Identity, [1, 400, 7], float32, scale: 1
 
-    device mem size: 942757216 (coeff: 141710112, instruct: 12291552, runtime: 788755552)  # 该模型在TPU上内存占用情况（以byte为单位)，格式为： 总占用内存大小（常量内存大小，指令内存大小, 运行时数据内存占用大小)
+    device mem size: 942757216 (coeff: 141710112, instruct: 12291552, runtime: 788755552)  # 该模型在深度学习处理器上内存占用情况（以byte为单位），格式为： 总占用内存大小（常量内存大小，指令内存大小, 运行时数据内存占用大小）
     host mem size: 8492192 (coeff: 32, runtime: 8492160)   # 宿主机上内存占用情况（以byte为单位），格式为： 总占用内存大小（常量内存大小，运行时数据内存大小）
 
 

@@ -13,11 +13,12 @@ void *bmcpu_pre_start(void *arg) {
     bm_handle_t handle;
     bm_status_t ret;
     int dev_id = *(int *)arg;
-    char* dev = "/dev/bm-sophon";
-    char*       kernel_path = "/opt/sophon/libsophon-current/data";
+    const char* dev = "/dev/bm-sophon";
+    const char*       kernel_path = "/opt/sophon/libsophon-current/data";
     char fip_path[100];
     char ramdisk_path[100];
     char dev_path[30];
+    bm_cpu_status_t status;
 
     sprintf(dev_path, "%s%d", dev, dev_id);
     sprintf(fip_path, "%s%s", kernel_path, "/fip.bin");
@@ -33,6 +34,16 @@ void *bmcpu_pre_start(void *arg) {
     if ((ret != BM_SUCCESS) || (handle == NULL)) {
         printf("bm_dev_request error, ret = %d\r\n", ret);
         return (void *)BM_ERR_FAILURE;
+    }
+
+    status = bmcpu_get_cpu_status(handle);
+    if (status != BMCPU_IDLE) {
+        printf("chip %d bmcpu status is not idle!\n", dev_id);
+        ret = bmcpu_reset_cpu(handle);
+        if (ret != BM_SUCCESS) {
+            printf("reset cpu failed!\r\n");
+            return (void *)BM_ERR_FAILURE;
+        }
     }
 
     ret = bmcpu_start_cpu(handle, fip_path, ramdisk_path);

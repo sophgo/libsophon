@@ -1,13 +1,13 @@
 BMRuntime
 ================
 
-BMRuntime用于读取BMCompiler的编译输出(.bmodel)，驱动其在SOPHON TPU芯片中执行。BMRuntime向用户提供了丰富的接口，便于用户移植算法，其软件架构如下:
+BMRuntime用于读取BMCompiler的编译输出(.bmodel)，驱动其在深度学习处理器中执行。BMRuntime向用户提供了丰富的接口，便于用户移植算法，其软件架构如下:
 
 .. image:: ../_static/bmruntime.png
 
 BMRuntime有C和C++两种接口；另外为了兼容上一代应用程序，保留一些接口，但不推荐新的应用程序继续使用。
 
-本章节中的接口默认都是同步接口，有个别是异步接口(由NPU执行功能，CPU可以继续往下执行)，会特别说明。
+本章节中的接口默认都是同步接口，有个别是异步接口(由深度学习处理器执行功能，主机处理器可以继续往下执行)，会特别说明。
 
 本章节分4个部分:
 
@@ -578,6 +578,22 @@ bmrt_create
 
 创建bmruntime，返回runtime指针。其他接口(bmrt_xxxx类接口)，需要的句柄都是该runtime指针。
 
+
+bmrt_create_ex
+>>>>>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+
+  /*
+  Parameters: [in] bm_handles   - BM handles. They must be initialized by using bmlib.
+  Parameters: [in] num_handles  - Number of bm_handles.
+  Returns:    void*             - The pointer of a bmruntime helper.
+  */
+  void *bmrt_create_ex(bm_handle_t *bm_handles, int num_handles);
+
+创建bmruntime，支持传入多个bm_handle，用于运行分布式的bmodel。
+
+
 bmrt_destroy
 >>>>>>>>>>>>>>>>>>>>
 
@@ -716,6 +732,8 @@ bmrt_get_network_info
   typedef struct bm_stage_info_s {
     bm_shape_t* input_shapes;   /* input_shapes[0] / [1] / ... / [input_num-1] */
     bm_shape_t* output_shapes;  /* output_shapes[0] / [1] / ... / [output_num-1] */
+    bm_device_mem_t *input_mems; /* input_mems[0] / [1] / ... / [input_num-1] */
+    bm_device_mem_t *output_mems; /* output_mems[0] / [1] / ... / [output_num-1] */
   } bm_stage_info_t;
 
   /* bm_tensor_info_t holds all information of one net */
@@ -734,6 +752,12 @@ bmrt_get_network_info
     bm_stage_info_t* stages;       /* stages[0] / [1] / ... / [stage_num-1] */
     size_t * max_input_bytes;      /* max_input_bytes[0]/ [1] / ... / [input_num-1] */
     size_t * max_output_bytes;     /* max_output_bytes[0] / [1] / ... / [output_num-1] */
+    int* input_zero_point;         /* input_zero_point[0] / [1] / .../ [input_num-1] */
+    int* output_zero_point;        /* output_zero_point[0] / [1] / .../ [output_num-1] */
+    int *input_loc_devices;        /* input_loc_device[0] / [1] / .../ [input_num-1] */
+    int *output_loc_devices;       /* output_loc_device[0] / [1] / .../ [output_num-1] */
+    int core_num;                  /* core number */
+    int32_t addr_mode;             /* address assign mode */
   } bm_net_info_t;
 
 bm_net_info_t表示一个网络的全部信息，bm_stage_info_t表示该网络支持的不同的shape情况。
@@ -746,6 +770,14 @@ input_scales和output_scales只有整型时有用；浮点型时为默认值1.0�
 
 max_input_bytes表示每个input最大的字节数，max_output_bytes表示每个output最大的字节数。
 每个网络可能有多个stage，用户可能需要申请每个input/output的最大字节数，存放各种stage的数据。
+
+input_zero_point和output_zero_point记录在非对称量化int8网络的情况下输入和输出的zero_point值。
+
+input_loc_devices和output_loc_devices记录在分布式网络的情况下输入和输出设备号。
+
+core_num记录网络所需的core数量。
+
+addr_mode记录网络的地址分配模式，0表示基础模式，1表示io_alone模式，2 表示 io_tag 模式。
 
 bmrt_get_network_info根据网络名，得到某个网络的信息，接口声明如下：
 
@@ -771,15 +803,15 @@ bmrt_print_network_info
 bmrt_launch_tensor
 >>>>>>>>>>>>>>>>>>>>>>
 
-对指定的网络，进行npu推理。接口声明如下：
+对指定的网络，进行推理。接口声明如下：
 
 .. code-block:: cpp
 
   /*
   To launch the inference of the neuron network with setting input tensors.
   This API supports the neuron nework that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. The CPU program will not be blocked
-  if the neuron network is static-compiled and has no cpu layer. Otherwize, the CPU
+  After calling this API, inference on deep-learning processor is launched. The host processor program will not be blocked
+  if the neuron network is static-compiled and has no cpu layer. Otherwize, the host processor
   program will be blocked. This API support multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt - Bmruntime that had been created.
@@ -837,15 +869,15 @@ bmrt_launch_tensor
 bmrt_launch_tensor_ex
 >>>>>>>>>>>>>>>>>>>>>>
 
-对指定的网络，进行npu推理。接口声明如下：
+对指定的网络，进行推理。接口声明如下：
 
 .. code-block:: cpp
 
   /*
   To launch the inference of the neuron network with setting input tensors.
   This API supports the neuron nework that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. The CPU program will not be blocked
-  if the neuron network is static-compiled and has no cpu layer. Otherwize, the CPU
+  After calling this API, inference on deep-learning processor is launched. The host program will not be blocked
+  if the neuron network is static-compiled and has no cpu layer. Otherwize, the host
   program will be blocked. This API support multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt - Bmruntime that had been created.
@@ -884,6 +916,7 @@ bmrt_luanch_tensor == bmrt_launch_tensor_ex(user_mem = false, user_stmode = fals
 * 当user_mem为true时，接口不会为output_tensor申请device mem，用户需要在外部申请，申请的大小可以通过bm_net_info_t中的max_output_bytes指定。
 * 当user_stmode为false时，输出数据以BM_STROE_1N排列。
 * 当user_stmode为true时，输出数据根据各个output_tensor中的st_mode指定。
+* 当深度学习处理器硬件架构支持多核时，该接口默认使用从core0开始的N个core来做推理，如果需要指定使用具体的深度学习处理器core，需要使用 bmrt_launch_tensor_multi_cores 来完成。N由当前bmodel决定。
 
 **需要注意:** 该接口为异步接口，用户需要调用bm_thread_sync确保推理完成。
 
@@ -933,7 +966,7 @@ bmrt_launch_data
   /*
   To launch the inference of the neuron network with setting input datas in system memory.
   This API supports the neuron nework that is static-compiled or dynamic-compiled.
-  After calling this API, inference on TPU is launched. And the CPU program will be blocked.
+  After calling this API, inference on deep-learning processor is launched. And the host program will be blocked.
   This API support multiple inputs, and multi thread safety.
 
   Parameters: [in] p_bmrt       - Bmruntime that had been created.
@@ -969,6 +1002,82 @@ bmrt_launch_data
 * 输入和输出都存储在系统内存。
 * 为同步接口。接口返回的时候推理已经完成。
 
+bmrt_launch_tensor_multi_cores
+>>>>>>>>>>>>>>>>>>>>>>
+
+对指定的网络，选择指定的深度学习处理器core推理。接口声明如下：
+
+.. code-block:: cpp
+
+  /*
+  To launch the inference of the neuron network with setting input tensors, and support multi core inference.
+  This API supports the neuron nework that is static-compiled or dynamic-compiled
+  After calling this API, inference on deep-learning processor is launched. And the host program will not
+  be blocked. bm_thread_sync_from_core should be called to make sure inference is finished.
+  This API support multiple inputs, and multi thread safety.
+
+  Parameters: [in] p_bmrt - Bmruntime that had been created.
+              [in] net_name - The name of the neuron network.
+              [in] input_tensors - Array of input tensor.
+                                   Defined like bm_tensor_t input_tensors[input_num].
+                                   User should initialize each input tensor.
+              [in] input_num - Input number.
+              [out] output_tensors - Array of output tensor.
+                                     Defined like bm_tensor_t output_tensors[output_num].
+                                     User can set device_mem or stmode of output tensors.
+                                     If user_mem is true, this interface will use device mem of
+                                     output_tensors, and will not alloc device mem; Or this
+                                     interface will alloc devcie mem to store output.
+                                     User should free each device mem by bm_free_device after
+                                     the result data is useless.
+              [in] output_num - Output number.
+              [in] user_mem - true: device_mem in output_tensors have been allocated.
+                              false: have not been allocated.
+              [in] user_stmode - true: output will use store mode that set in output_tensors.
+                                 false: output will use BM_STORE_1N.
+              [in] core_list         core id list those will be used to inference
+              [in] core_num          number of the core list
+  Returns:    bool - true: Launch success. false: Launch failed.
+  */
+  bool bmrt_launch_tensor_multi_cores(void* p_bmrt, const char * net_name,
+                                      const bm_tensor_t input_tensors[], int input_num,
+                                      bm_tensor_t output_tensors[], int output_num,
+                                      bool user_mem, bool user_stmode,
+                                      const int *core_list, int core_num);
+
+具体说明如下：
+
+* 该函数可以选择推理时的深度学习处理器core，仅对于支持多核深度学习处理器的硬件架构有效。其余参数使用同 bmrt_launch_tensor_ex 接口。
+
+**需要注意:** 该接口为异步接口，用户需要调用bm_thread_sync_from_core确保推理完成。
+
+bmrt_pre_alloc_neuron_multi_cores
+>>>>>>>>>>>>>>>>>>>>>>
+
+对指定的网络，预先申请深度学习处理器推理计算所需要的设备内存。接口声明如下:
+
+.. code-block:: cpp
+
+  /*
+  To pre-allocate the neuron network compute memory during multi-cores arch inference.
+  This API only used for multi-cores arch runtime, need call before bmrt_launch_tensor_multi_cores API.
+  After calling this API, the memory during neuron network inference is pre-allocated, can reduce first bmrt_launch_tensor_multi_cores API time cost.
+  If no use this API, is also OK, bmrt will auto alloc compute memory during first launch tensor.
+
+  Parameters: [in] p_bmrt - Bmruntime that had been created.
+              [in] net_name - The name of the neuron network.
+              [in] stage_idx - Witch network stage need to be pre-allocate.
+              [in] core_list         core id list those will be used to inference
+              [in] core_num          number of the core list
+  Returns:    bool - true: Pre-allocate success. false: Pre-allocate failed.
+  */
+  bool bmrt_pre_alloc_neuron_multi_cores(void *p_bmrt, const char *net_name, int stage_idx,
+                                        const int *core_list, int core_num);
+具体说明如下：
+
+* 该函数仅对于支持多核深度学习处理器的硬件架构有效，可以减少第一次调用bmrt_launch_tensor_multi_cores接口时的时间。
+* 默认不使用该函数的情况下，在指定模型第一次调用bmrt_launch_tensor_multi_cores时会自动地花费时间申请深度学习处理器推理计算所需要的设备内存。
+
 bmrt_trace
 >>>>>>>>>>>>>>>>>>>>
 
@@ -982,6 +1091,45 @@ bmrt_trace
   void bmrt_trace(void* p_bmrt);
 
 该接口用于DEBUG。它会校验runtime的数据，打印runtime的一些信息，方便调试。
+
+get_bmodel_api_info_c
+>>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+   /*
+    * This API only supports the neuron nework that is static-compiled.
+    * After calling this API, api info will be setted and return,
+    * and then you can call `bm_send_api` to start deep-learning processor inference.
+    * When you no longer need the memory, call bmrt_free_api_info to avoid memory leaks.
+    *
+    * @param [in]    p_bmrt            Bmruntime that had been created
+    * @param [in]    net_name          The name of the neuron network
+    * @param [in]    input_tensors     Array of input tensor, defined like bm_tensor_t input_tensors[input_num],
+    *                                  User should initialize each input tensor.
+    * @param [in]    input_num         Input number
+    * @param [in]    output_tensors    Array of output tensor, defined like bm_tensor_t output_tensors[output_num].
+    *                                  User can set device_mem or stmode of output tensors. If user_mem is true, this interface
+    *                                  will use device mem of output_tensors to store output data, and not alloc device mem;
+    *                                  Or it will alloc device mem to store output. If user_stmode is true, it will use stmode in
+    *                                  each output tensor; Or stmode will be BM_STORE_1N as default.
+    * @param [in]    output_num        Output number
+    * @param [in]    user_mem          whether device_mem of output tensors are set
+    * @param [in]    user_stmode       whether stmode of output tensors are set
+    */
+   api_info_c *get_bmodel_api_info_c(void *p_bmrt, const char *net_name,
+                                     const bm_tensor_t *input_tensors, int input_num,
+                                     bm_tensor_t *output_tensors, int output_num,
+                                     bool user_mem, bool user_stmode);
+* 该函数使用方法类似 bmrt_launch_tensor_ex，但是它只是返回 bmodel 推理前需要下发给深度学习处理器的推理信息，并不会启动推理。该函数返回的信息可以通过 bm_send_api 发送给深度学习处理器启动推理，因此 get_bmodel_api_info + bm_send_api 和 bmrt_launc_tensor_ex 作用是等价的。
+* **在该 api_info 使用结束后需要调用 bmrt_free_api_info 来释放内存。**
+
+bmrt_free_api_info
+>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+   void bmrt_free_api_info(api_info_c *api_info);
+
+* 释放 api_info 所申请的内存空间。
 
 C++ Interface
 _____________________

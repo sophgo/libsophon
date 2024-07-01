@@ -36,6 +36,9 @@ typedef enum {
 #define BIT_SW_RESET_SMMU	12
 #define BIT_SW_RESET_CDMA	11
 
+#define TPU_MIN_CLK	25
+#define TPU_MAX_CLK	1000
+
 void bmdrv_clk_set_tpu_divider(struct bm_device_info *bmdi, int devider_factor);
 void bmdrv_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int devider_factor);
 void bmdrv_clk_set_close(struct bm_device_info *bmdi);

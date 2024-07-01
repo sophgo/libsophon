@@ -54,7 +54,7 @@
 #define VDI_IOCTL_GET_CHIP_ID                    _IO(VDI_IOCTL_MAGIC, 32)
 #define VDI_IOCTL_GET_MAX_CORE_NUM               _IO(VDI_IOCTL_MAGIC, 33)
 #define VDI_IOCTL_CTRL_KERNEL_RESET              _IO(VDI_IOCTL_MAGIC, 34)
-
+#define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
 typedef struct vpudrv_syscxt_info_s {
 	unsigned int core_idx;
 	unsigned int inst_idx;
@@ -74,7 +74,10 @@ typedef struct vpudrv_buffer_t {
 	unsigned long virt_addr;    /* virtual user space address */
 
 	unsigned int  core_idx;
-	unsigned int  reserved;
+	unsigned int  ion_fd;
+	struct dma_buf_attachment *attach;
+	struct sg_table *table;
+	struct dma_buf *dma_buf;
 } vpudrv_buffer_t;
 
 typedef struct vpu_bit_firmware_info_t {
@@ -183,8 +186,14 @@ typedef struct vpu_statistic_info {
 
 typedef struct {
     int core_idx;
-    pid_t reset_core_disable;
+    pid_t pid;
+    int reset;
 } vpudrv_reset_flag;
+
+typedef struct vpudrv_reset_flag_node_t {
+    vpudrv_reset_flag reset_flag;
+    struct list_head list;
+} vpudrv_reset_flag_node_t;
 
 typedef struct vpu_drv_context {
 	struct fasync_struct *async_queue;
@@ -192,6 +201,7 @@ typedef struct vpu_drv_context {
 	struct semaphore s_vpu_sem;
 	struct list_head s_vbp_head;
 	struct list_head s_inst_list_head;
+	struct list_head s_reset_flag_head;
 	struct proc_dir_entry *entry[64];
 	u32 open_count;                     /*!<< device reference count. Not instance count */
 	u32 max_num_vpu_core;

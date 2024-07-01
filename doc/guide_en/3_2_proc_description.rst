@@ -505,7 +505,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: chip id (0x1684x/0x1684/0x1682).
+   Meaning: processor id (0x1684x/0x1684/0x1682).
 
 -  chip_temp
 
@@ -513,7 +513,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: chip temperature.
+   Meaning: processor temperature.
 
 -  dbdf
 
@@ -529,7 +529,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read and write.
 
-   Meaning: Enable or disable the dynamic tpu frequency modulation function; 0/1 is valid, other values are invalid.
+   Meaning: Enable or disable the dynamic Tensor Computing Processor frequency modulation function; 0/1 is valid, other values are invalid.
 
 -  ecc
 
@@ -601,7 +601,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: tpu ID (0/1/2/3⋯⋯).
+   Meaning: Tensor Computing Processor ID (0/1/2/3⋯⋯).
 
 -  tpu_maxclk
 
@@ -609,7 +609,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: maximum work frequency of tpu.
+   Meaning: maximum work frequency of Tensor Computing Processor.
 
 -  tpu_minclk
 
@@ -617,7 +617,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: minimum work frequency of tpu.
+   Meaning: minimum work frequency of Tensor Computing Processor.
 
 -  tpu_freq
 
@@ -625,7 +625,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read and write.
 
-   Meaning: work frequency of the tpu, which can be changed by writing parameters. 0 should be written into dynfreq to turn off the dynamic TPU frequency modulation before writing parameters.
+   Meaning: work frequency of the Tensor Computing Processor, which can be changed by writing parameters. 0 should be written into dynfreq to turn off the dynamic Tensor Computing Processor frequency modulation before writing parameters.
 
 -  tpu_power
 
@@ -633,7 +633,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: instantaneous power of tpu.
+   Meaning: instantaneous power of Tensor Computing Processor.
 
 -  firmware_info
 
@@ -737,7 +737,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: the time spent in tpu processing.
+   Meaning: the time spent in Tensor Computing Processor processing.
 
 -  completed_api_counter
 
@@ -761,7 +761,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read and write.
 
-   Meaning: tpu voltage, the voltage can be changed by writing a parameter.
+   Meaning: Tensor Computing Processor voltage, the voltage can be changed by writing a parameter.
 
 -  tpu_cur
 
@@ -769,7 +769,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read only.
 
-   Meaning: tpu current.
+   Meaning: Tensor Computing Processor current.
 
 -  fan_speed
 
@@ -857,7 +857,7 @@ Detailed Information of Devices in PCIe Mode
 
    Readwrite property: read and write.
 
-   Meaning: Dump register, input 1 is dumped to tpu register, input 2 is dumped to gdma register.
+   Meaning: Dump register, input 1 is dumped to Tensor Computing Processor register, input 2 is dumped to gdma register.
 
 -  heap
 
@@ -926,7 +926,7 @@ In SOC mode, only JPU  and  VPU  supports  proc  interface, and the correspondin
 
    Readwrite property: read only.
 
-   JPU loadbalance : recording JPU0-JPU1(1684x),JPU0-JPU3(1684) encoding/decoding times, JPU* is JPEG encoder/decoder inside chip, value range: 0~2147483647
+   JPU loadbalance : recording JPU0-JPU1(1684x),JPU0-JPU3(1684) encoding/decoding times, JPU* is JPEG encoder/decoder inside processor, value range: 0~2147483647
 
 
 -  vpuinfo

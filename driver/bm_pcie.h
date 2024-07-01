@@ -34,13 +34,22 @@
 #define BOARD_TYPE_SC5_PLUS  0x7
 #define BOARD_TYPE_SC5_H     0x8
 #define BOARD_TYPE_SC5_PRO   0x9
+#define BOARD_TYPE_AIV01T    0x10
+#define BOARD_TYPE_AIV02T    0x11
+#define BOARD_TYPE_AIV03T    0x12
+#define BOARD_TYPE_AIV03T_24G    0x13
+
 #define BOARD_TYPE_SM5M_P    0xb
 #define BOARD_TYPE_BM1684X_EVB    0x20
 #define BOARD_TYPE_SC7_PRO   0x21
 #define BOARD_TYPE_SC7_PLUS  0x22
+#define BOARD_TYPE_SC7_FP150  0x23
 #define BOARD_TYPE_SM7_V0_0	 0x30
 #define BOARD_TYPE_SM7_MP1_1	 0x36
 #define BOARD_TYPE_CP24		 0x40
+#define BOARD_TYPE_AIV01X	 0x50
+#define BOARD_TYPE_AIV02X	 0x51
+#define BOARD_TYPE_AIV03X	 0x52
 
 #define DUMMY_PCIDEV_NAME	"dummy-bmcard-pci"
 

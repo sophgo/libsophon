@@ -642,15 +642,11 @@ static ssize_t bmdrv_tpu_freq_proc_write(struct file *file, const char __user *b
 		kfree(buf);
 		return -EFAULT;
 	}
-	if ((res < 750) || (res > 1000)) {
-		pr_err("Error, valid value range is 750MHz ~ 1GHz\n");
-		kfree(buf);
-		return -1;
-	} else {
-		bmdrv_clk_set_tpu_target_freq(bmdi,res);
-		kfree(buf);
-		return count;
-	}
+
+	bmdrv_clk_set_tpu_target_freq(bmdi,res);
+	kfree(buf);
+
+	return count;
 }
 
 static int bmdrv_tpu_freq_proc_open(struct inode *inode, struct file *file)
@@ -705,15 +701,10 @@ static ssize_t bmdrv_tpu_volt_proc_write(struct file *file, const char __user *b
 		kfree(buf);
 		return -EFAULT;
 	}
-	if ((res < 550) || (res > 820)) {
-		pr_err("Error, valid value range is 550mv ~ 820mv\n");
-		kfree(buf);
-		return -1;
-	} else {
-		bm_set_vdd_tpu_voltage(bmdi,res);
-		kfree(buf);
-		return count;
-	}
+
+	bm_set_vdd_tpu_voltage(bmdi,res);
+	kfree(buf);
+	return count;
 }
 
 static int bmdrv_tpu_volt_proc_open(struct inode *inode, struct file *file)
@@ -1225,12 +1216,15 @@ static int bmdrv_board_sn_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
 	struct bm_chip_attr *c_attr;
-	char sn[18] = "";
 	struct bm_device_info *tmp_bmdi = bmdi;
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if ((bmdi->bmcd->sc5p_mcu_bmdi) != NULL && (bmdi->bmcd != NULL))
 			tmp_bmdi = bmdi->bmcd->sc5p_mcu_bmdi;
@@ -1241,11 +1235,8 @@ static int bmdrv_board_sn_proc_show(struct seq_file *m, void *v)
 	}
 
 	c_attr = &tmp_bmdi->c_attr;
-	mutex_lock(&c_attr->attr_mutex);
-	bm_get_sn(tmp_bmdi, sn);
-	mutex_unlock(&c_attr->attr_mutex);
 
-	seq_printf(m, "%s\n", sn);
+	seq_printf(m, "%s\n", bmdi->bmcd->sn);
 	return 0;
 }
 
@@ -1677,9 +1668,12 @@ static int bmdrv_bmcpu_status_proc_show(struct seq_file *m, void *v)
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686) {
 		if (bmdi->status_bmcpu == BMCPU_IDLE)
 			seq_printf(m, "idle\n");
-		else if (bmdi->status_bmcpu == BMCPU_RUNNING)
-			seq_printf(m, "running\n");
-		else
+		else if (bmdi->status_bmcpu == BMCPU_RUNNING) {
+			if (gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE) == 0x2)
+				seq_printf(m, "running(mix mode)\n");
+			else
+				seq_printf(m, "running\n");
+		} else
 			seq_printf(m, "fault\n");
 	} else {
 		seq_printf(m, "unsupport\n");
@@ -1862,7 +1856,11 @@ static int bmdrv_location_proc_show(struct seq_file *m, void *v)
 	if (bmdi->cinfo.chip_id != 0x1682) {
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 			value = gpio_reg_read(bmdi, 0x50);
 			value = value >> 0x5;

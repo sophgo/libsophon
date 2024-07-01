@@ -649,24 +649,28 @@ int bmdev_test_p2p_available(struct bm_device_info *bmdi)
 	int init_index;
 	struct bm_device_info *chip_bmdi = NULL;
 	int i;
+	int chip_num;
 
-	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO)
+	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO &&
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150)
 		return -1;
+
+	chip_num = bmdi->bmcd->chip_num;
 
 	chip_bmdi = bmdi->bmcd->card_bmdi[0];
 	init_index = chip_bmdi->dev_index;
 
-	if (bmdi->dev_index - init_index != 7)
+	if (bmdi->dev_index - init_index != chip_num - 1)
 		return -1;
 
 	if (bmdev_memcpy_p2p_test(bmdi, chip_bmdi)) {
 		pr_info("p2p is unavailable\n");
-		for (i = 0; i <= 7; i++) {
+		for (i = 0; i < chip_num; i++) {
 			bmdi->bmcd->card_bmdi[i]->memcpy_info.p2p_available = 0;
 		}
 	} else {
 		pr_info("p2p is available\n");
-		for (i = 0; i <= 7; i++) {
+		for (i = 0; i < chip_num; i++) {
 			bmdi->bmcd->card_bmdi[i]->memcpy_info.p2p_available = 1;
 		}
 	}
