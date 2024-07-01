@@ -1341,6 +1341,7 @@ typedef struct TestDecConfig_struct {
     Uint32              feedingSize;
     Uint32              loopCount;
     BOOL                errorInject;
+    Int32               framebuf_from_user;
 } TestDecConfig;
 
 #ifdef __cplusplus
@@ -1357,9 +1358,8 @@ struct option* ConvertOptions(
     );
 
 void ReleaseVideoMemory(
-    bm_handle_t     handle,
     Uint32          coreIndex,
-    bm_device_mem_t*memoryArr,
+    vpu_buffer_t*memoryArr,
     Uint32          count
     );
 BOOL AllocateDecFrameBuffer(
@@ -1368,7 +1368,7 @@ BOOL AllocateDecFrameBuffer(
     Uint32          tiledFbCount,
     Uint32          linearFbCount,
     FrameBuffer*    retFbArray,
-    bm_device_mem_t*retFbAddrs,
+    vpu_buffer_t*retFbAddrs,
     Uint32*         retStride,
     int             enable_cache
     );

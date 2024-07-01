@@ -1,11 +1,11 @@
 PCIe CPU
 ==========
 
-对于不方便使用 TPU 加速的操作，需要 CPU 配合来完成。
+对于不方便使用 Tensor Computing Processor 加速的操作，需要 Processor 配合来完成。
 
-如果是 SoC 模式，host端即为片上的ARM A53处理器，由它来完成CPU操作。
+如果是 SoC 模式，host端即为片上的ARM A53处理器，由它来完成Processor操作。
 
-如果是 PCIe 模式，host端为用户的主机，CPU 操作可以选择在host端完成，也可以使用片上的ARM A53处理器来完成。两种实现方式各有优缺点：前者需要在device和host之间搬运输入输出数据，但运算性能可能优于ARM，所以用户可以根据自身host处理器性能、负载等实际情况选择最优的方式。默认情况下为前者，如果需要使用片上处理器可按照以下方式开启。
+如果是 PCIe 模式，host端为用户的主机，Processor 操作可以选择在host端完成，也可以使用片上的ARM A53处理器来完成。两种实现方式各有优缺点：前者需要在device和host之间搬运输入输出数据，但运算性能可能优于ARM，所以用户可以根据自身host处理器性能、负载等实际情况选择最优的方式。默认情况下为前者，如果需要使用片上处理器可按照以下方式开启。
 
 
 准备工作
@@ -21,11 +21,11 @@ ________
 
 $ export BMCV_CPU_KERNEL_PATH=/path/to/kernel_fils/
 
-BMCV所有需要CPU操作的实现均在库 libbmcv_cpu_func.so 中，需要将该文件所在路径添加到程序运行的环境变量 BMCV_CPU_LIB_PATH 中，如下：
+BMCV所有需要Processor操作的实现均在库 libbmcv_cpu_func.so 中，需要将该文件所在路径添加到程序运行的环境变量 BMCV_CPU_LIB_PATH 中，如下：
 
 $ export BMCV_CPU_LIB_PATH=/path/to/lib/
 
-目前需要CPU参与实现的API如下所示，如果没有使用以下API可忽略该功能。
+目前需要Processor参与实现的API如下所示，如果没有使用以下API可忽略该功能。
 
 +-----+-----------------------------------+
 | num |       API                         |

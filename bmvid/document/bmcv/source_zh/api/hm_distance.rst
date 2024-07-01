@@ -17,6 +17,11 @@ bmcv_hm_distance
             int input1_num,
             int input2_num);
 
+**处理器型号支持：**
+
+该接口仅支持BM1684X。
+
+
 **参数说明：**
 
 * bm_handle_t handle
@@ -53,10 +58,6 @@ bmcv_hm_distance
 * BM_SUCCESS: 成功
 
 * 其他:失败
-
-**注意：**
-
-该接口仅支持BM1684X。
 
 
 **示例代码**

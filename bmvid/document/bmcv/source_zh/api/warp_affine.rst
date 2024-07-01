@@ -40,6 +40,11 @@ bmcv_affine_matrix 定义了一个坐标变换矩阵，其顺序为 float m[6] =
         } bmcv_affine_image_matrix;
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式一:**
 
     .. code-block:: c
@@ -65,7 +70,7 @@ bmcv_affine_matrix 定义了一个坐标变换矩阵，其顺序为 float m[6] =
                 bm_image* output,
                 int use_bilinear = 0
         );
-本接口是对齐opencv仿射变换的接口。
+本接口是对齐opencv仿射变换的接口， 该矩阵是从输入图像坐标推导输出图像坐标的系数矩阵。
 
 **输入参数说明**
 

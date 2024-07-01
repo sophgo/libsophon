@@ -78,6 +78,7 @@ bm_image 介绍
    bm_image/bm_image_get_plane_num
    bm_image/bm_image_is_attached
    bm_image/bm_image_get_handle
+   bm_image/bm_image_zeros
 
 
 bm_image device memory 管理

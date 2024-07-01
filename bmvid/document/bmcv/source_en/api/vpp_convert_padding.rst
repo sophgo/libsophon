@@ -15,6 +15,12 @@ bmcv_image_vpp_convert_padding
             bmcv_rect_t *         crop_rect = NULL,
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Description of incoming parameters:**
 
 * bm_handle_t handle

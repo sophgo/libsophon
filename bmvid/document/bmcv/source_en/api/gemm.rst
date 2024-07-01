@@ -28,6 +28,10 @@ The format of the interface is as follows:
                                bm_device_mem_t C,
                                int             ldc);
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Input parameter description:**
 

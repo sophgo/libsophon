@@ -3,6 +3,7 @@
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 #include "bm1684x/bmcv_1684x_vpp_ext.h"
+#include <stdio.h>
 
 static void check_rectangle_parameter(int rect_num,
     bmcv_rect *rects,
@@ -46,11 +47,11 @@ static bm_status_t bmcv_draw_solid_rectangle(bm_handle_t handle,
 
     if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_MEMSET_BYTE, (uint8_t *)&api, sizeof(api))) {
         BMCV_ERR_LOG("draw rectangle send api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("draw rectangle sync api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     return BM_SUCCESS;
 }
@@ -65,7 +66,7 @@ bm_status_t bmcv_image_draw_rectangle_(bm_handle_t handle,
 {
     if(image.data_type != DATA_TYPE_EXT_1N_BYTE)
     {
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     if(rect.crop_h <= 0 || rect.crop_w <= 0)
         return BM_SUCCESS;
@@ -462,7 +463,7 @@ bm_status_t bmcv_image_draw_rectangle_(bm_handle_t handle,
     else
     {
         BMCV_ERR_LOG("error currently not support this format draw rectangle\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -500,6 +501,8 @@ bm_status_t bmcv_image_draw_rectangle_(bm_handle_t   handle,
                                       unsigned char g,
                                       unsigned char b)
 {
+    bm_status_t ret;
+
     if(rect_num == 0)
         return BM_SUCCESS;
     if(rect_num < 0)
@@ -510,23 +513,23 @@ bm_status_t bmcv_image_draw_rectangle_(bm_handle_t   handle,
     if(!image.image_private)
     {
         BMCV_ERR_LOG("invalidate image, not created\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(image.data_type != DATA_TYPE_EXT_1N_BYTE)
     {
         BMCV_ERR_LOG("invalidate image, data type should be DATA_TYPE_EXT_1N_BYTE\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(!bm_image_is_attached(image))
     {
         BMCV_ERR_LOG("invalidate image, please attach device memory\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
 
     if(image.height >= (1 << 16) || image.width >= (1 << 16))
     {
         BMCV_ERR_LOG("Not support such big size image\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     check_rectangle_parameter(rect_num, rects, line_width);
@@ -535,10 +538,10 @@ bm_status_t bmcv_image_draw_rectangle_(bm_handle_t   handle,
     {
         bmcv_rect_t rect =
             refine_rect(rects[i], image.height, image.width, line_width);
-        if (bmcv_image_draw_rectangle_(handle, image, rect, line_width, r, g, b) != BM_SUCCESS)
-        {
+        ret = bmcv_image_draw_rectangle_(handle, image, rect, line_width, r, g, b);
+        if (ret != BM_SUCCESS) {
             BMCV_ERR_LOG("error call draw rectangle\n");
-            return BM_ERR_FAILURE;
+            return ret;
         }
     }
     return BM_SUCCESS;
@@ -556,7 +559,7 @@ bm_status_t bmcv_image_draw_rectangle(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_1(handle, image);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -576,7 +579,7 @@ bm_status_t bmcv_image_draw_rectangle(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

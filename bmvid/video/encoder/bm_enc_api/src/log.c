@@ -12,12 +12,12 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "bmvpuapi.h"
-#include "bmvpuapi_internal.h"
+#include "bm_vpuenc_interface.h"
+#include "bm_vpuenc_internal.h"
 #include "bmvpu_logging.h"
 
 
-static void default_logging_fn(BmVpuLogLevel level, char const *file,
+static void default_logging_fn(BmVpuEncLogLevel level, char const *file,
                                int const line, char const *fn,
                                const char *format, ...)
 {
@@ -28,21 +28,21 @@ static void default_logging_fn(BmVpuLogLevel level, char const *file,
     BMVPUAPI_UNUSED_PARAM(format);
 }
 
-BmVpuLogLevel bmvpu_cur_log_level_threshold = BM_VPU_LOG_LEVEL_ERROR;
-BmVpuLoggingFunc bmvpu_cur_logging_fn = default_logging_fn;
+BmVpuEncLogLevel bmvpu_cur_log_level_threshold = BMVPU_ENC_LOG_LEVEL_ERROR;
+BmVpuEncLoggingFunc bmvpu_cur_logging_fn = default_logging_fn;
 
-void bmvpu_set_logging_function(BmVpuLoggingFunc logging_fn)
+void bmvpu_enc_set_logging_function(BmVpuEncLoggingFunc logging_fn)
 {
     bmvpu_cur_logging_fn = (logging_fn != NULL) ? logging_fn : default_logging_fn;
 }
 
-void bmvpu_set_logging_threshold(BmVpuLogLevel threshold)
+void bmvpu_enc_set_logging_threshold(BmVpuEncLogLevel threshold)
 {
     bmvpu_cur_log_level_threshold = threshold;
     vpu_set_logging_threshold(threshold);
 }
 
-BmVpuLogLevel bmvpu_get_logging_threshold()
+BmVpuEncLogLevel bmvpu_enc_get_logging_threshold()
 {
     return bmvpu_cur_log_level_threshold;
 }

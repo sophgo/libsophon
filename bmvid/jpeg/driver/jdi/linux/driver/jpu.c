@@ -913,7 +913,7 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
             {
                 ret = -EFAULT;
                 break;
-            } 
+            }
 #ifdef JPU_SUPPORT_CLOCK_CONTROL
             if (clkgate)
                 jpu_clk_enable(jpu_pwm_ctrl.jpu_clk);
@@ -1041,6 +1041,7 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
         break;
 #endif
     case JDI_IOCTL_RESET:
+    #if 0
         {
             u32 core_idx;
             if (get_user(core_idx, (u32 __user *) arg))
@@ -1048,6 +1049,33 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
                 return -EFAULT;
             }
             jpu_hw_reset(core_idx);
+        }
+        break;
+    #endif
+    case JDI_IOCTL_RESET_ALL:
+        {
+            u32 i, core_num;
+
+            DPRINTK("[JPUDRV][+]JDI_IOCTL_RESET_ALL\n");
+            if (get_user(core_num, (u32 __user *) arg))
+            {
+                return -EFAULT;
+            }
+
+            // get all cores
+            i = core_num;
+            while (i > 0) {
+                if ((ret = down_interruptible(&s_jpu_sem)) == 0) {
+                    i--;
+                }
+                udelay(1);
+            }
+
+            for (i = 0; i < core_num; i++) {
+                jpu_hw_reset(i);
+                up(&s_jpu_sem);
+            }
+            DPRINTK("[JPUDRV][-]JDI_IOCTL_RESET_ALL\n");
         }
         break;
     case JDI_IOCTL_GET_REGISTER_INFO:
@@ -1601,7 +1629,7 @@ static int jpu_probe(struct platform_device *pdev)
     err = bm_jpu_register_cdev(pdev);
     if (err < 0)
     {
-        printk(KERN_ERR "bm_jpu_register_cdev\n");
+        printk(KERN_ERR "jpu_register_cdev\n");
         goto ERROR_PROVE_DEVICE;
     }
 

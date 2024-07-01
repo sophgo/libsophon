@@ -138,7 +138,7 @@ bm_status_t bmcv_convert_to_internal(bm_handle_t          handle,
         if (BM_SUCCESS !=
             bm_image_tensor_alloc_dev_mem(output, BMCV_HEAP0_ID)) {
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_image_tensor_get_device_mem(output, &output_img_addr);
@@ -178,26 +178,28 @@ bm_status_t bmcv_convert_to_internal(bm_handle_t          handle,
     switch (chipid)
     {
     case 0x1684:{
+
         if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_CONVERT_TO, (uint8_t *)&arg, sizeof(arg))) {
             BMCV_ERR_LOG("convert_to send api error\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_TIMEOUT;
         }
        if(BM_SUCCESS != bm_sync_api(handle)){
         BMCV_ERR_LOG("convert_to sync api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
        }
        break;
     }
     case BM1684X:{
         if(BM_SUCCESS != bm_tpu_kernel_launch(handle, "cv_convert_to", &arg, sizeof(arg))){
             BMCV_ERR_LOG("convert_to sync api error\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_TIMEOUT;
         }
         // tpu_kernel_launch_sync(handle, "cv_convert_to", &arg, sizeof(arg));
         break;
     }
     default:
         printf("ChipID is NOT supported\n");
+        return BM_ERR_NOFEATURE;
         break;
     }
 
@@ -213,6 +215,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                                         bm_device_mem_t output_img_addr_2,
                                         bm_device_mem_t convert_to_attr_addr,
                                         int             times) {
+    bm_status_t ret = BM_SUCCESS;
     bm_api_cv_convert_to_inter_t arg;
     bm_device_mem_t              input_img_buf_device[MAX_INTERGRATED_NUM];
     bm_device_mem_t              output_img_buf_device[MAX_INTERGRATED_NUM];
@@ -238,7 +241,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                                   &convert_to_attr_buf_device,
                                   sizeof(bmcv_convert_to_attr_t) * times)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err0;
         }
         if (BM_SUCCESS !=
@@ -246,7 +249,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                           convert_to_attr_buf_device,
                           bm_mem_get_system_addr(convert_to_attr_addr))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err1;
         }
     } else {
@@ -255,6 +258,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                   "convert_to_attr must be sys memory:%s:%d\n",
                   filename(__FILE__),
                   __LINE__);
+        ret = BM_ERR_DATA;
         goto err0;
     }
     for (int idx = 0; idx < times; idx++) {
@@ -294,7 +298,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                         bm_free_device(handle, output_img_addr[free_idx]);
                     }
                 }
-
+                ret = BM_ERR_NOMEM;
                 goto err1;
             }
             if (BM_SUCCESS !=
@@ -314,7 +318,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                         bm_free_device(handle, output_img_addr[free_idx]);
                     }
                 }
-
+                ret = BM_ERR_NOMEM;
                 goto err1;
             }
         } else {
@@ -337,7 +341,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                         bm_free_device(handle, output_img_addr[free_idx]);
                     }
                 }
-
+                ret = BM_ERR_NOMEM;
                 goto err1;
             }
             if (BM_SUCCESS !=
@@ -355,7 +359,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                         bm_free_device(handle, output_img_addr[free_idx]);
                     }
                 }
-
+                ret = BM_ERR_NOMEM;
                 goto err1;
             }
         } else {
@@ -373,10 +377,12 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
     arg.times = times;
     if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_CONVERT_TO_INTERGRATED, (uint8_t *)&arg, sizeof(arg))) {
         BMCV_ERR_LOG("convert_to_intergrated send api error\r\n");
+        ret = BM_ERR_TIMEOUT;
         goto err1;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("convert_to_intergrated sync api error\r\n");
+        ret = BM_ERR_TIMEOUT;
         goto err1;
     }
     for (int idx = 0; idx < times; idx++) {
@@ -396,6 +402,7 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
                         bm_free_device(handle, input_img_buf_device[free_idx]);
                     }
                 }
+                ret = BM_ERR_NOMEM;
                 goto err1;
             }
             bm_free_device(handle, output_img_buf_device[idx]);
@@ -408,14 +415,14 @@ bm_status_t bmcv_convert_to_intergrated(bm_handle_t     handle,
         bm_free_device(handle, convert_to_attr_buf_device);
     }
 
-    return BM_SUCCESS;
+    return ret;
 
 err1:
     if (bm_mem_get_type(convert_to_attr_addr) == BM_MEM_TYPE_SYSTEM) {
         bm_free_device(handle, convert_to_attr_buf_device);
     }
 err0:
-    return BM_ERR_FAILURE;
+    return ret;
 }
 
 static bm_status_t bm_convert_to_get_stride(bm_image input, int &w_stride) {
@@ -446,7 +453,7 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
     UNUSED(convert_to_attr);
     if (handle == NULL) {
         bmlib_log("CONVERT TO", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     if (image_num == 0) {
         // bmlib_log(BMCV_LOG_TAG,
@@ -455,21 +462,21 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
         //           image_num);
         BMCV_ERR_LOG("input image num not support:%d\n", image_num);
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num; i++) {
         if ((input[i].width != output[i].width) ||
             (input[i].height != output[i].height)) {
             BMCV_ERR_LOG("input size must be same to output\n");
 
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         int width_stride = 0;
         bm_convert_to_get_stride(output[i], width_stride);
         if (output[i].width != width_stride) {
             BMCV_ERR_LOG("output width must be equal to stride\n");
 
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         // this limit maybe too strict
         // if (0 != memcmp(handle,
@@ -496,7 +503,7 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
             (output[i].data_type != output[i + 1].data_type)) {
             BMCV_ERR_LOG("input attr must be same to output\n");
 
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
     }
     if (!(((input[0].data_type == DATA_TYPE_EXT_1N_BYTE) &&
@@ -517,7 +524,7 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
            (output[0].data_type == DATA_TYPE_EXT_4N_BYTE)))) {
         BMCV_ERR_LOG("data type not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((input[0].data_type == DATA_TYPE_EXT_FP16) ||
         (output[0].data_type == DATA_TYPE_EXT_FP16)||
@@ -525,7 +532,7 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
         (output[0].data_type == DATA_TYPE_EXT_BF16)){
         BMCV_ERR_LOG("data type not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (((input[0].image_format != FORMAT_BGR_PLANAR) &&
@@ -534,7 +541,7 @@ static bm_status_t bmcv_convert_to_check(bm_handle_t          handle,
         (input[0].image_format != output[0].image_format)) {
         BMCV_ERR_LOG("image format not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -545,11 +552,12 @@ bm_status_t bmcv_image_convert_to_(bm_handle_t          handle,
                                    bmcv_convert_to_attr convert_to_attr,
                                    bm_image *           input,
                                    bm_image *           output) {
-    if (BM_SUCCESS != bmcv_convert_to_check(
-                          handle, input_num, convert_to_attr, input, output)) {
+    bm_status_t ret = bmcv_convert_to_check(
+                          handle, input_num, convert_to_attr, input, output);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("bm_memcpy_d2s error\r\n");
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
     int             in_concat_status  = 0;
     int             out_concat_status = 0;
@@ -573,7 +581,7 @@ bm_status_t bmcv_image_convert_to_(bm_handle_t          handle,
                     bm_free_device(handle, dmem);
                 }
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
         }
     }
@@ -624,7 +632,7 @@ bm_status_t bmcv_image_convert_to(
     unsigned int chipid = BM1684X;
     int loop = (input_num + 3) / 4;
     int i = 0;
-
+    bm_handle_check_2(handle, input[0], output[0]);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -644,7 +652,7 @@ bm_status_t bmcv_image_convert_to(
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
             "not support, %s: %s: %d\n",
             filename(__FILE__), __func__, __LINE__);
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_PARAM;
         } else if(input->data_type == DATA_TYPE_EXT_FLOAT32 || input->data_type == DATA_TYPE_EXT_1N_BYTE_SIGNED){
             for (i = 0; i < loop; i++) {
                 int num = (i == loop - 1) ? (input_num - (loop - 1) * 4) : 4;
@@ -657,7 +665,7 @@ bm_status_t bmcv_image_convert_to(
         break;
       }
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
       }
 

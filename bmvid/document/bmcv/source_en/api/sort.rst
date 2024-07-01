@@ -3,6 +3,12 @@ bmcv_sort
 
 This interface can sort floating-point data (ascending/descending), and support the index corresponding to the original data after sorting.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

@@ -3,7 +3,7 @@
 # Project: C&M Video decoder sample
 #
 # ----------------------------------------------------------------------
-.PHONY: CREATE_DIR
+.PHONY: CREATE_DIR COPY_HEADERS
 
 PRODUCT := WAVE511
 ifneq ($(PRODUCTFORM), pcie)
@@ -12,7 +12,6 @@ else
     BUILD_CONFIGURATION = NativeLinux
 endif
 #BUILD_CONFIGURATION = NonOS
-$(shell cp sample_v2/component_list_decoder.h sample_v2/component/component_list.h)
 
 USE_FFMPEG  = no
 USE_PTHREAD = yes
@@ -165,12 +164,12 @@ endif
 OBJECTNAMES_DECTEST=$(patsubst %.c,%.o,$(patsubst %.cpp,%.o,$(SOURCES_DECTEST))) 
 OBJECTPATHS_DECTEST=$(addprefix $(OBJDIR)/,$(notdir $(OBJECTNAMES_DECTEST))) $(OBJECTPATHS_COMMON)
 
-all: $(BUILDLIST) 
+all: COPY_HEADERS $(BUILDLIST) 
 
 ifeq ($(USE_RTL_SIM), yes)
-DECTEST: CREATE_DIR $(OBJECTPATHS_DECTEST) 
+DECTEST: CREATE_DIR COPY_HEADERS $(OBJECTPATHS_DECTEST) 
 else
-DECTEST: CREATE_DIR $(OBJECTPATHS_DECTEST) 
+DECTEST: CREATE_DIR COPY_HEADERS $(OBJECTPATHS_DECTEST) 
 	$(LINKER) -o $(DECTEST) $(LDFLAGS) -Wl,-gc-section -Wl,--start-group $(OBJECTPATHS_DECTEST) $(LDLIBS) -Wl,--end-group
 endif
 
@@ -183,6 +182,9 @@ clean:
 
 CREATE_DIR:
 	-mkdir -p $(OBJDIR)
+
+COPY_HEADERS:
+	cp sample_v2/component_list_decoder.h sample_v2/component/component_list.h
 
 obj/%.o: %.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -Wall -Werror -c $< -o $@ -MD -MF $(@:.o=.dep)

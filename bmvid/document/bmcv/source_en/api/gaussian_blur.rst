@@ -3,6 +3,10 @@ bmcv_image_gaussian_blur
 
 Gaussian blur of the image.
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form:**
 
@@ -77,13 +81,6 @@ The interface currently supports the following image_format:
 +-----+------------------------+------------------------+
 | 7   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 8   | FORMAT_YUV420P         | FORMAT_YUV420P         |
-+-----+------------------------+------------------------+
-| 9   | FORMAT_YUV422P         | FORMAT_YUV422P         |
-+-----+------------------------+------------------------+
-| 10  | FORMAT_YUV444P         | FORMAT_YUV444P         |
-+-----+------------------------+------------------------+
-
 
 The interface currently supports the following data_type:
 
@@ -100,9 +97,9 @@ The interface currently supports the following data_type:
 
 2. The data_type and image_format of input and must be the same.
 
-3. The currently supported maximum image width is (2048 - kw).
+3. The maximum width of the image supported by BM1684 is (2048 - kw), the maximum width supported by BM1684X is 4096, and the maximum height is 8192.
 
-
+4. The maximum convolution kernel width and height supported by BM1684 is 31, and the maximum convolution kernel width and height supported by BM1684X is 3.
 **Code example:**
 
     .. code-block:: c

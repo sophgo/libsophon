@@ -184,6 +184,22 @@ typedef struct {
   int padding_r;
 } sg_api_crop_resize_t;
 
+typedef struct {
+    u64   XR;
+    u64   XI;
+    u64   YR;
+    u64   YI;
+    u64   ER;
+    int   EI;
+    int   batch;
+    int   len;
+    int   forward;
+    int   realInput;
+    int   trans;
+    int   factorSize;
+    int   factors[10];
+} sg_api_cv_fft_t;
+
 typedef struct bm_api_cv_feature_match_1684x {
   u64 input_data_global_addr;
   u64 db_data_global_addr;
@@ -214,11 +230,13 @@ typedef struct bm_api_cv_bayer2rgb {
     int width;
     int height;
     int dst_fmt;
+    int src_type;
     u64 input_addr;
     u64 output_addr;
     u64 sys_mem_addr_temp_ul;
     u64 sys_mem_addr_temp_br;
     u64 sys_mem_addr_temp_g;
+    u64 sys_mem_addr_temp_b;
     u64 input_addr_padding_up_left;
     u64 input_addr_padding_bottom_right;
     u64 kernel_addr;
@@ -253,6 +271,20 @@ typedef struct bm_matrix_log{
   int s_dtype;
   int d_dtype;
 }bm_matrix_log_t;
+
+typedef struct bm_api_cv_hist_balance1 {
+    u64 Xaddr;
+    int len;
+    u64 cdf_addr;
+} bm_api_cv_hist_balance_t1;
+
+typedef struct bm_api_cv_hist_balance2 {
+    u64 Xaddr;
+    int len;
+    float cdf_min;
+    u64 cdf_addr;
+    u64 Yaddr;
+} bm_api_cv_hist_balance_t2;
 
 #pragma pack(pop)
 

@@ -1,5 +1,6 @@
 #include <memory>
 #include <vector>
+#include <stdio.h>
 #include <iostream>
 #ifdef __linux__
   #include <sys/time.h>
@@ -202,7 +203,7 @@ static bm_status_t bmcv_draw_line_check(
         int thickness) {
     if (handle == NULL) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (thickness <= 0) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "thickness should greater than 0!\r\n");
@@ -210,7 +211,7 @@ static bm_status_t bmcv_draw_line_check(
     }
     if (!IS_CS_YUV(image.image_format) && image.image_format != FORMAT_GRAY) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "image format not supported %d !\r\n", image.image_format);
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -223,6 +224,8 @@ bm_status_t bmcv_image_draw_lines(
         int line_num,
         bmcv_color_t color,
         int thickness) {
+    bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_1(handle, image);
     if (BM_SUCCESS != bmcv_draw_line_check(handle, image, thickness)) {
         return BM_ERR_FAILURE;
     }
@@ -279,14 +282,14 @@ bm_status_t bmcv_image_draw_lines(
             return ret;
         }
         u64 param_addr_mapped = get_mapped_addr(handle, &param_mem);
-        int ret = bmcpu_exec_function_ext(handle,
+        ret = (bm_status_t)bmcpu_exec_function_ext(handle,
                                       process_id,
                                       (char*)"bmcv_cpu_draw_line",
                                       (void*)&param_addr_mapped,
                                       sizeof(void*),
                                       1,
                                       timeout);
-        if (ret != 0) {
+        if (ret != BM_SUCCESS) {
             bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "exec function failed! return %d\r\n", ret);
             return BM_ERR_FAILURE;
         }

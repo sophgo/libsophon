@@ -19,6 +19,11 @@ For one-dimensional FFT, multi-batch operation is supported. The interface form 
                 bool forward,
                 void *&plan);
 
+**Processor model support**
+
+This interface only supports BM1684.
+
+
 **Input parameter description:**
 
 * bm_handle_t handle

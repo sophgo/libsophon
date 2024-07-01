@@ -9,6 +9,9 @@
 #define DC_TABLE_INDEX1             2
 #define AC_TABLE_INDEX1             3
 
+#ifndef BOOL
+typedef int BOOL;
+#endif
 
 //------------------------------------------------------------------------------
 // common struct and definition
@@ -60,7 +63,8 @@ typedef enum {
     JPG_RET_INVALID_STRIDE,
     JPG_RET_WRONG_CALL_SEQUENCE,
     JPG_RET_CALLED_BEFORE,
-    JPG_RET_NOT_INITIALIZED
+    JPG_RET_NOT_INITIALIZED,
+    JPG_RET_BS_BUFFER_FULL
 } JpgRet;
 
 typedef enum {
@@ -284,10 +288,12 @@ DECL_EXPORT int jpu_DecOpen(DecHandle *, DecOpenParam *);
 DECL_EXPORT int jpu_DecClose(DecHandle);
 DECL_EXPORT int jpu_DecGetInitialInfo(DecHandle handle, DecInitialInfo * info);
 
+DECL_EXPORT int jpu_DecSetResolutionInfo(DecHandle handle, int width, int height);
 DECL_EXPORT int jpu_DecRegisterFrameBuffer(DecHandle handle,
                                FrameBuffer * bufArray, int num, int stride, void* par0);
 DECL_EXPORT int jpu_DecUpdateBitstreamBuffer(DecHandle handle, uint32_t size);
 
+DECL_EXPORT int jpu_DecSetRdPtrEx(DecHandle handle, PhysicalAddress addr, BOOL updateWrPtr);
 DECL_EXPORT int jpu_DecSetBsPtr(DecHandle handle, uint8_t *data, int data_size);
 
 DECL_EXPORT int jpu_DecStartOneFrame(DecHandle handle, DecParam * param);
@@ -297,6 +303,7 @@ DECL_EXPORT int jpu_DecGiveCommand(DecHandle handle, CodecCommand cmd, void *par
 DECL_EXPORT int jpu_DecWaitForInt(DecHandle handle, int timeout_in_ms, int timeout_counts);
 
 DECL_EXPORT int jpu_GetDump();
+DECL_EXPORT int jpu_HWReset();
 DECL_EXPORT int vpp_Init(int32_t device_index);
 #endif /* __BM_JPU_LIB_H__ */
 

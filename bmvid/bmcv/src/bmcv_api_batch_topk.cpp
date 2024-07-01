@@ -171,7 +171,7 @@ bm_status_t bmcv_batch_topk(
     break;
   }
   default:
-    ret = BM_NOT_SUPPORTED;
+    ret = BM_ERR_NOFEATURE;
     break;
   }
 
@@ -198,7 +198,7 @@ free_devmem:
     bm_free_device(handle, *mem);
   }
 
-  return (ret == BM_SUCCESS) ? BM_SUCCESS : BM_ERR_FAILURE;
+  return ret;
 }
 
 

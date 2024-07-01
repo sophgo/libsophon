@@ -1,6 +1,13 @@
 bmcv_image_watermark_superpose
 =========================
+
 This interface is used to overlay one or more watermarks on the image.
+
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form 1：**
     .. code-block:: c
@@ -149,10 +156,8 @@ This interface is used to overlay one or more watermarks on the image.
 
 Returns a failure if the input and output format requirements are not met.
 
-2. bm1684: bm1684 Watermark function is not supported。
+2. All input and output bm_image structures must be created in advance, or a failure will be returned.
 
-3. All input and output bm_image structures must be created in advance, or a failure will be returned.
+3. The maximum number of watermarks can be 512.
 
-4. The maximum number of watermarks can be 512.
-
-5. If the watermark area exceeds the width and height of the original image, a failure will be returned.
+4. If the watermark area exceeds the width and height of the original image, a failure will be returned.

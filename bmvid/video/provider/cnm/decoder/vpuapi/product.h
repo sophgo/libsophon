@@ -196,7 +196,7 @@ extern RetCode ProductVpuAllocateFramebuffer(
     BOOL                cbcrInterleave,
     BOOL                nv21,
     Int32               endian,
-    bm_device_mem_t*       vb,
+    vpu_buffer_t*       vb,
     Int32               gdiIndex,
     FramebufferAllocType fbType
     );

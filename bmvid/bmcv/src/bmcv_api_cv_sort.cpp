@@ -15,6 +15,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                            int             location,
                            int             data_cnt,
                            int             sort_cnt) {
+    bm_status_t ret;
     bm_api_cv_sort_test_t arg;
     bm_device_mem_t       src_index_buf_device;
     bm_device_mem_t       src_data_buf_device;
@@ -26,7 +27,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                                 &src_index_buf_device,
                                                 sizeof(int) * data_cnt)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err0;
         }
         if (BM_SUCCESS !=
@@ -34,7 +35,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                           src_index_buf_device,
                           bm_mem_get_system_addr(src_index_addr))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err1;
         }
     } else {
@@ -46,7 +47,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                   &src_data_buf_device,
                                   sizeof(bm_sort_data_type_t) * data_cnt)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err1;
         }
         if (BM_SUCCESS !=
@@ -54,7 +55,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                           src_data_buf_device,
                           bm_mem_get_system_addr(src_data_addr))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err2;
         }
     } else {
@@ -65,7 +66,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                                 &dst_index_buf_device,
                                                 sizeof(int) * sort_cnt)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err2;
         }
         if (BM_SUCCESS !=
@@ -73,7 +74,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                           dst_index_buf_device,
                           bm_mem_get_system_addr(dst_index_addr))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err3;
         }
     } else {
@@ -85,7 +86,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                   &dst_data_buf_device,
                                   sizeof(bm_sort_data_type_t) * sort_cnt)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err3;
         }
         if (BM_SUCCESS !=
@@ -93,7 +94,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                           dst_data_buf_device,
                           bm_mem_get_system_addr(dst_data_addr))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err4;
         }
     } else {
@@ -111,10 +112,12 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
 
     if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_SROT_TEST, (uint8_t *)&arg, sizeof(arg))) {
         BMCV_ERR_LOG("sort_test send api error\r\n");
+        ret = BM_ERR_TIMEOUT;
         goto err4;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("sort_test sync api error\r\n");
+        ret = BM_ERR_TIMEOUT;
         goto err4;
     }
 
@@ -123,7 +126,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                         bm_mem_get_system_addr(dst_data_addr),
                                         dst_data_buf_device)) {
             BMCV_ERR_LOG("bm_memcpy_d2s error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err4;
         }
         bm_free_device(handle, dst_data_buf_device);
@@ -133,7 +136,7 @@ bm_status_t bmcv_sort_test_bm1684(bm_handle_t     handle,
                                         bm_mem_get_system_addr(dst_index_addr),
                                         dst_index_buf_device)) {
             BMCV_ERR_LOG("bm_memcpy_d2s error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err3;
         }
         bm_free_device(handle, dst_index_buf_device);
@@ -164,7 +167,7 @@ err1:
         bm_free_device(handle, src_index_buf_device);
     }
 err0:
-    return BM_ERR_FAILURE;
+    return ret;
 }
 
 bm_status_t bmcv_sort_test(bm_handle_t     handle,
@@ -199,12 +202,12 @@ bm_status_t bmcv_sort_test(bm_handle_t     handle,
         break;
 
       case BM1684X:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

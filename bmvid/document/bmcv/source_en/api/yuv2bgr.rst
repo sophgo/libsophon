@@ -3,6 +3,12 @@ bmcv_image_yuv2bgr_ext
 
 This interface convert YUV format to RGB format.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

@@ -16,15 +16,15 @@
 
 #include "bmvpu.h"
 
-#include "bmvpuapi.h"
-#include "bmvpuapi_internal.h"
+#include "bm_vpuenc_interface.h"
+#include "bm_vpuenc_internal.h"
 
-
-int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuColorFormat color_format,
+int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuEncPixFormat pix_format,
                                   int frame_width, int frame_height,
-                                  int chroma_interleave, BmVpuFbInfo *info)
+                                  BmVpuFbInfo *info)
 {
     int fb_fmt = FB_FMT_420;
+    BmVpuEncChromaFormat chroma_interleave = BM_VPU_ENC_CHROMA_NO_INTERLEAVE;
     if((info == NULL) || (frame_width <= 0) || (frame_height <= 0)){
         BM_VPU_ERROR("bmvpu_calc_framebuffer_sizes params err: info(0X%x), frame_width(%d), frame_height(%d).",info, frame_width, frame_height);
         return -1;
@@ -35,15 +35,35 @@ int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuColorFormat color_format,
     info->width  = BM_VPU_ALIGN_VAL_TO(frame_width, FRAME_ALIGN);
     info->height = BM_VPU_ALIGN_VAL_TO(frame_height, FRAME_ALIGN);
 
-    switch (color_format)
+    switch (pix_format)
     {
-    case BM_VPU_COLOR_FORMAT_YUV420: fb_fmt = FB_FMT_420; break;
-    case BM_VPU_COLOR_FORMAT_YUV422: fb_fmt = FB_FMT_422; break;
-    case BM_VPU_COLOR_FORMAT_YUV444: fb_fmt = FB_FMT_444; break;
-    case BM_VPU_COLOR_FORMAT_YUV400: fb_fmt = FB_FMT_400; break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV420P:
+        fb_fmt = FB_FMT_420;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV422P:
+        fb_fmt = FB_FMT_422;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV444P:
+        fb_fmt = FB_FMT_444;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV400:
+        fb_fmt = FB_FMT_400;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_NV12:
+        fb_fmt = FB_FMT_420;
+        chroma_interleave = BM_VPU_ENC_CHROMA_INTERLEAVE_CBCR;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_NV16:
+        fb_fmt = FB_FMT_422;
+        chroma_interleave = BM_VPU_ENC_CHROMA_INTERLEAVE_CBCR;
+        break;
+    case BM_VPU_ENC_PIX_FORMAT_NV24:
+        fb_fmt = FB_FMT_444;
+        chroma_interleave = BM_VPU_ENC_CHROMA_INTERLEAVE_CBCR;
+        break;
     default:
       {
-        BM_VPU_ERROR("bmvpu_calc_framebuffer_sizes color_format(%d) err.", color_format);
+        BM_VPU_ERROR("bmvpu_calc_framebuffer_sizes pix_format(%s) err.", bmvpu_pix_format_string(pix_format));
         return -1;
       }
     }
@@ -61,20 +81,25 @@ int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuColorFormat color_format,
                                      fb_fmt, chroma_interleave);
 
     /* TODO */
-    switch (color_format)
+    switch (pix_format)
     {
-    case BM_VPU_COLOR_FORMAT_YUV420: info->c_stride = info->y_stride / 2; break;
-    case BM_VPU_COLOR_FORMAT_YUV422: info->c_stride = info->y_stride / 2; break;
-    case BM_VPU_COLOR_FORMAT_YUV444: info->c_stride = info->y_stride;     break;
-    case BM_VPU_COLOR_FORMAT_YUV400: info->c_stride = 0;                  break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV420P: info->c_stride = info->y_stride / 2; break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV422P: info->c_stride = info->y_stride / 2; break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV444P: info->c_stride = info->y_stride;     break;
+    case BM_VPU_ENC_PIX_FORMAT_YUV400:  info->c_stride = 0;                  break;
+    case BM_VPU_ENC_PIX_FORMAT_NV12:    info->c_stride = info->y_stride / 2; break;
+    case BM_VPU_ENC_PIX_FORMAT_NV16:    info->c_stride = info->y_stride / 2; break;
+    case BM_VPU_ENC_PIX_FORMAT_NV24:    info->c_stride = info->y_stride;     break;
     default:
       {
-        BM_VPU_ERROR("bmvpu_calc_framebuffer_sizes color_format(%d) err.", color_format);
+        BM_VPU_ERROR("bmvpu_calc_framebuffer_sizes pix_format(%s) err.", bmvpu_pix_format_string(pix_format));
         return -1;
       }
     }
 
-    if (chroma_interleave)
+    if ((pix_format == BM_VPU_ENC_PIX_FORMAT_NV12) || \
+        (pix_format == BM_VPU_ENC_PIX_FORMAT_NV16) || \
+        (pix_format == BM_VPU_ENC_PIX_FORMAT_NV24))
         info->c_stride *= 2;
     return 0;
 }
@@ -82,7 +107,7 @@ int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuColorFormat color_format,
 
 int bmvpu_fill_framebuffer_params(BmVpuFramebuffer *fb,
                                    BmVpuFbInfo *info,
-                                   bm_device_mem_t *fb_dma_buffer,
+                                   BmVpuEncDMABuffer *fb_dma_buffer,
                                    int fb_id, void* context)
 {
     if((fb == NULL) || (info == NULL)){
@@ -108,27 +133,149 @@ int bmvpu_fill_framebuffer_params(BmVpuFramebuffer *fb,
     return 0;
 }
 
-char const *bmvpu_color_format_string(BmVpuColorFormat color_format)
+/**
+ * Upload data from HOST to a VPU core
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_enc_upload_data(int vpu_core_idx,
+                      const uint8_t* host_va, int host_stride,
+                      uint64_t vpu_pa, int vpu_stride,
+                      int width, int height)
 {
-    switch (color_format)
+    int size = vpu_stride*height;
+    int ret = 0;
+
+    if (vpu_stride != host_stride)
     {
-    case BM_VPU_COLOR_FORMAT_YUV420: return "YUV 4:2:0";
-    case BM_VPU_COLOR_FORMAT_YUV422: return "YUV 4:2:2";
-    case BM_VPU_COLOR_FORMAT_YUV444: return "YUV 4:4:4";
-    case BM_VPU_COLOR_FORMAT_YUV400: return "YUV 4:0:0 (8-bit grayscale)";
+        const uint8_t *s0 = host_va;
+        uint8_t *buffer, *s1;
+        int i;
+
+        buffer = calloc(size, sizeof(uint8_t));
+        if (buffer == NULL)
+        {
+            BM_VPU_ERROR("calloc failed!");
+            return -1;
+        }
+
+        s1 = buffer;
+        for (i=0; i<height; i++)
+        {
+            memcpy(s1, s0, width);
+            s0 += host_stride;
+            s1 += vpu_stride;
+        }
+
+        ret = vpu_write_memory(buffer, size, vpu_core_idx, vpu_pa);
+        if (ret < 0)
+        {
+            BM_VPU_ERROR("vpu_write_memory failed!");
+            free(buffer);
+            return -1;
+        }
+
+        free(buffer);
+    }
+    else
+    {
+        ret = vpu_write_memory(host_va, size, vpu_core_idx, vpu_pa);
+        if (ret < 0)
+        {
+            BM_VPU_ERROR("vpu_write_memory failed!");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Download data from a VPU core to HOST
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_enc_download_data(int vpu_core_idx,
+                        uint8_t* host_va, int host_stride,
+                        uint64_t vpu_pa, int vpu_stride,
+                        int width, int height)
+{
+    int size = vpu_stride*height;
+    int ret = 0;
+
+    if (host_stride != vpu_stride)
+    {
+        uint8_t *buffer, *d0, *d1;
+        int i;
+
+        buffer = calloc(size, sizeof(uint8_t));
+        if (buffer == NULL)
+        {
+            BM_VPU_ERROR("calloc failed!");
+            return -1;
+        }
+
+        ret = vpu_read_memory(buffer, size, vpu_core_idx, vpu_pa);
+        if (ret < 0)
+        {
+            BM_VPU_ERROR("vpu_write_memory failed!");
+            free(buffer);
+            return -1;
+        }
+
+        d0 = buffer;
+        d1 = host_va;
+        for (i=0; i<height; i++)
+        {
+            memcpy(d1, d0, width);
+            d0 += vpu_stride;
+            d1 += host_stride;
+        }
+
+        free(buffer);
+    }
+    else
+    {
+        ret = vpu_read_memory(host_va, size, vpu_core_idx, vpu_pa);
+        if (ret < 0)
+        {
+            BM_VPU_ERROR("vpu_write_memory failed!");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+char const *bmvpu_pix_format_string(BmVpuEncPixFormat pix_format)
+{
+    switch (pix_format)
+    {
+    case BM_VPU_ENC_PIX_FORMAT_YUV420P: return "yuv420p YUV 4:2:0";
+    case BM_VPU_ENC_PIX_FORMAT_YUV422P: return "yuv422p YUV 4:2:2";
+    case BM_VPU_ENC_PIX_FORMAT_YUV444P: return "yuv444p YUV 4:4:4";
+    case BM_VPU_ENC_PIX_FORMAT_YUV400:  return "yuv400 YUV 4:0:0 (8-bit grayscale)";
+    case BM_VPU_ENC_PIX_FORMAT_NV12:    return "nv12 YUV 4:2:0";
+    case BM_VPU_ENC_PIX_FORMAT_NV16:    return "nv16 YUV 4:2:2";
+    case BM_VPU_ENC_PIX_FORMAT_NV24:    return "nv24 YUV 4:4:4";
+
     default:
                                      return "<unknown>";
     }
 }
 
-char const *bmvpu_frame_type_string(BmVpuFrameType frame_type)
+char const *bmvpu_frame_type_string(BmVpuEncFrameType frame_type)
 {
     switch (frame_type)
     {
-    case BM_VPU_FRAME_TYPE_I: return "I";
-    case BM_VPU_FRAME_TYPE_P: return "P";
-    case BM_VPU_FRAME_TYPE_B: return "B";
-    case BM_VPU_FRAME_TYPE_IDR: return "IDR";
+    case BM_VPU_ENC_FRAME_TYPE_I: return "I";
+    case BM_VPU_ENC_FRAME_TYPE_P: return "P";
+    case BM_VPU_ENC_FRAME_TYPE_B: return "B";
+    case BM_VPU_ENC_FRAME_TYPE_IDR: return "IDR";
     default: return "<unknown>";
     }
 }
@@ -209,13 +356,13 @@ int bmvpu_enc_param_parse(BmVpuEncOpenParams *p, const char *name, const char *v
          * 2 : Boost mode (normal encoding speed, normal picture quality),
          * 3 : Fast mode (high encoding speed, low picture quality) */
         if (!strcmp(value, "fast") || !strcmp(value, "0"))
-            p->enc_mode = 3;
+            p->enc_mode = BM_VPU_ENC_FAST_MODE;
         else if (!strcmp(value, "medium") || !strcmp(value, "1"))
-            p->enc_mode = 2;
+            p->enc_mode = BM_VPU_ENC_BOOST_MODE;
         else if (!strcmp(value, "slow") || !strcmp(value, "2"))
-            p->enc_mode = 1;
+            p->enc_mode = BM_VPU_ENC_RECOMMENDED_MODE;
         else {
-            p->enc_mode = 2; /* TODO change to custom after lots of cfg parameters are added. */
+            p->enc_mode = BM_VPU_ENC_BOOST_MODE; /* TODO change to custom after lots of cfg parameters are added. */
             BM_VPU_WARNING("Invalid preset:%s. Use slow encoding preset instead.", value);
         }
     }
@@ -286,192 +433,166 @@ END:
     return b_error ? -1 : 0;
 }
 
-int bmvpu_malloc_device_byte_heap(bm_handle_t bm_handle, bm_device_mem_t *pmem, unsigned int size, int heap_id_mask, int high_bit_first)
-{
-    int ret = 0;
-    int i = 0;
-    int heap_num = 0;
-    ret = bm_get_gmem_total_heap_num(bm_handle, &heap_num);
-    if (ret != 0)
-    {
-        BM_VPU_ERROR("bmvpu_malloc_device_byte_heap failed!\n");
-        return -1;
-    }
-
-    int available_heap_mask = 0;
-    for (i=0; i<heap_num; i++){
-        available_heap_mask = available_heap_mask | (0x1 << i);
-    }
-
-    int enable_heap_mask = available_heap_mask & heap_id_mask;
-    if (enable_heap_mask == 0x0)
-    {
-        BM_VPU_ERROR("bmvpu_malloc_device_byte_heap failed! \n");
-        return -1;
-    }
-    if (high_bit_first)
-    {
-        for (i=(heap_num-1); i>=0; i--)
-        {
-            if ((enable_heap_mask & (0x1<<i)))
-            {
-                ret = bm_malloc_device_byte_heap(bm_handle, pmem, i, size);
-                if (ret != 0)
-                {
-                    BM_VPU_ERROR("bm_malloc_device_byte_heap failed \n");
-                }
-                return ret;
-            }
-        }
-    }
-    else
-    {
-        for (i=0; i<heap_num; i++)
-        {
-            if ((enable_heap_mask & (0x1<<i)))
-            {
-                ret = bm_malloc_device_byte_heap(bm_handle, pmem, i, size);
-                if (ret != 0)
-                {
-                    BM_VPU_ERROR("bm_malloc_device_byte_heap failed \n");
-                }
-                return ret;
-            }
-        }
-    }
-    return ret;
-}
-
+/************************************************************************************
+ *                    encoder device memory management
+ *************************************************************************************/
 /**
- * Upload data from HOST to a VPU core
+ * Allocate device memory
  *
  * return value:
  *   -1, failed
  *    0, done
  */
-int bmvpu_upload_data(int soc_idx,
-                      const uint8_t* host_va, int host_stride,
-                      uint64_t vpu_pa, int vpu_stride,
-                      int width, int height)
+int bmvpu_enc_dma_buffer_allocate(int vpu_core_idx, BmVpuEncDMABuffer *buf, unsigned int size)
 {
-#if !defined(BM_PCIE_MODE)
-    BM_VPU_ERROR("Unsupported for now!");
-    return -1;
-#else
-    int size = vpu_stride*height;
     int ret = 0;
 
-    if (vpu_stride != host_stride)
-    {
-        const uint8_t *s0 = host_va;
-        uint8_t *buffer, *s1;
-        int i;
-
-        buffer = calloc(size, sizeof(uint8_t));
-        if (buffer == NULL)
-        {
-            BM_VPU_ERROR("calloc failed!");
-            return -1;
-        }
-
-        s1 = buffer;
-        for (i=0; i<height; i++)
-        {
-            memcpy(s1, s0, width);
-            s0 += host_stride;
-            s1 += vpu_stride;
-        }
-
-        bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
-        ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(soc_idx), vpu_mem, buffer, size);
-        if (ret != 0)
-        {
-            BM_VPU_ERROR("vpu_write_memory failed!");
-            free(buffer);
-            return -1;
-        }
-
-        free(buffer);
-    }
-    else
-    {
-        bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
-        ret = bm_memcpy_s2d_partial(bmvpu_enc_get_bmlib_handle(soc_idx), vpu_mem, host_va, size);
-        if (ret != 0)
-        {
-            BM_VPU_ERROR("vpu_write_memory failed!");
-            return -1;
-        }
+    ret = vpu_EncAllocateDMABuffer(vpu_core_idx, (BmVpuDMABuffer *)buf, size);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncAllocateDMABuffer failed!");
+        return -1;
     }
 
     return 0;
-#endif
 }
 
 /**
- * Download data from a VPU core to HOST
+ * DeAllocate device memory
  *
  * return value:
  *   -1, failed
  *    0, done
  */
-int bmvpu_download_data(int soc_idx,
-                        uint8_t* host_va, int host_stride,
-                        uint64_t vpu_pa, int vpu_stride,
-                        int width, int height)
+int bmvpu_enc_dma_buffer_deallocate(int vpu_core_idx, BmVpuEncDMABuffer *buf)
 {
-#if !defined(BM_PCIE_MODE)
-    BM_VPU_ERROR("Unsupported for now!");
-    return -1;
-#else
-    int size = vpu_stride*height;
-    int ret = 0;
+    int ret;
 
-    if (host_stride != vpu_stride)
-    {
-        uint8_t *buffer, *d0, *d1;
-        int i;
-
-        buffer = calloc(size, sizeof(uint8_t));
-        if (buffer == NULL)
-        {
-            BM_VPU_ERROR("calloc failed!");
-            return -1;
-        }
-
-        bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
-        ret = bm_memcpy_d2s_partial(bmvpu_enc_get_bmlib_handle(soc_idx), buffer, vpu_mem, size);
-        if (ret != 0)
-        {
-            BM_VPU_ERROR("vpu_write_memory failed!");
-            free(buffer);
-            return -1;
-        }
-
-        d0 = buffer;
-        d1 = host_va;
-        for (i=0; i<height; i++)
-        {
-            memcpy(d1, d0, width);
-            d0 += vpu_stride;
-            d1 += host_stride;
-        }
-
-        free(buffer);
-    }
-    else
-    {
-        bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
-        ret = bm_memcpy_d2s_partial(bmvpu_enc_get_bmlib_handle(soc_idx), host_va, vpu_mem, size);
-        if (ret != 0)
-        {
-            BM_VPU_ERROR("vpu_write_memory failed!");
-            return -1;
-        }
+    ret = vpu_EncDeAllocateDMABuffer(vpu_core_idx, (BmVpuDMABuffer *)buf);
+    if (ret != 0){
+        BM_VPU_ERROR("vpu_EncDeAllocateDMABuffer failed!");
+        return -1;
     }
 
     return 0;
-#endif
 }
 
+/**
+ * Attach external DMA buffer to buffer_pool
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_enc_dma_buffer_attach(int vpu_core_idx, uint64_t paddr, unsigned int size)
+{
+    int ret = 0;
 
+    BmVpuDMABuffer buf;
+    /* The size of EXTERNAL DMA buffer */
+    buf.size      =  size;
+    /* The EXTERNAL DMA buffer physical address */
+    buf.phys_addr = paddr;
+
+    ret = vpu_EncAttachDMABuffer(vpu_core_idx, &buf);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncAllocateDMABuffer failed!");
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
+ * DeAttach external DMA buffer from buffer_pool
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_enc_dma_buffer_deattach(int vpu_core_idx,  uint64_t paddr, unsigned int size)
+{
+    int ret = 0;
+    BmVpuDMABuffer buf;
+
+    buf.size      = size;
+    buf.phys_addr = paddr;
+
+    ret = vpu_EncDeattachDMABuffer(vpu_core_idx, &buf);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncAllocateDMABuffer failed!");
+        return -1;
+    }
+
+    return 0;
+}
+
+/**
+ * Mmap operation
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_dma_buffer_map(int vpu_core_idx, BmVpuEncDMABuffer* buf, int port_flag)
+{
+    int ret = 0;
+
+    ret = vpu_EncMmap(vpu_core_idx, (BmVpuDMABuffer*)buf, port_flag);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncMmap failed, core=%d", vpu_core_idx);
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * Munmap operation
+ *
+ * return value:
+ *   -1, failed
+ *    0, done
+ */
+int bmvpu_dma_buffer_unmap(int vpu_core_idx, BmVpuEncDMABuffer* buf)
+{
+    int ret = 0;
+    ret = vpu_EncMunmap(vpu_core_idx, (BmVpuDMABuffer*)buf);
+    if (ret != 0){
+        BM_VPU_ERROR("vpu_EncMunmap failed");
+        return -1;
+    }
+    return 0;
+}
+
+uint64_t bmvpu_enc_dma_buffer_get_physical_address(BmVpuEncDMABuffer* buf)
+{
+    return buf->phys_addr;
+}
+
+unsigned int bmvpu_enc_dma_buffer_get_size(BmVpuEncDMABuffer* buf)
+{
+    return buf->size;
+}
+
+int bmvpu_enc_dma_buffer_flush(int vpu_core_idx, BmVpuEncDMABuffer* buf)
+{
+    int ret;
+    ret = vpu_EncFlushDecache(vpu_core_idx, (BmVpuDMABuffer*)buf);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncFlushDecache failed");
+        return -1;
+    }
+
+    return 0;
+}
+
+int bmvpu_enc_dma_buffer_invalidate(int vpu_core_idx, BmVpuEncDMABuffer* buf)
+{
+    int ret;
+    ret = vpu_EncInvalidateDecache(vpu_core_idx, (BmVpuDMABuffer*)buf);
+    if (ret != 0) {
+        BM_VPU_ERROR("vpu_EncInvalidateDecache failed");
+        return -1;
+    }
+
+    return 0;
+}

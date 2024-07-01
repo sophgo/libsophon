@@ -5,6 +5,15 @@ endif()
 
 project(bmvid_win C CXX)
 
+# update commit and branch
+execute_process(
+    COMMAND bash -c "find \"$(git rev-parse --show-toplevel)\" -type f -name \"update_bmvid_version.sh\" -exec bash {} \\;"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE error_output
+)
+#end
+
 if(CMAKE_HOST_WIN32)
     set(WINDOWS 1)
 elseif(CMAKE_HOST_APPLE)
@@ -140,7 +149,7 @@ if (CHIP_NAME STREQUAL bm1684)
 
         if(${CHIP_NAME} STREQUAL "bm1684")
             ADD_TARGET_ION_LIB(ion_lib ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} libsophon ${BMVID_OUT_PATH})
-            ADD_TARGET_BMCV_LIB(bmcv_lib ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} 
+            ADD_TARGET_BMCV_LIB(bmcv_lib ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION}
                 libsophon ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH})
 
             add_dependencies(vpp_lib ion_lib)
@@ -177,6 +186,7 @@ if (CHIP_NAME STREQUAL bm1684)
 
     elseif(WINDOWS)
         message(STATUS "entry WINDOW")
+        add_definitions(-DBM_PCIE_MODE=1)
 
         if(NOT CACHED_INSTALL_PATH)
             set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_SOURCE_DIR}/release)

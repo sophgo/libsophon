@@ -7,6 +7,7 @@
   #include <time.h>
 #endif
 #include <float.h>
+#include <stdio.h>
 #include <math.h>
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
@@ -546,7 +547,7 @@ static bm_status_t bmcv_put_text_check(
         int thickness) {
     if (handle == NULL) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (thickness <= 0) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "thickness should greater than 0!\r\n");
@@ -554,7 +555,7 @@ static bm_status_t bmcv_put_text_check(
     }
     if (!IS_CS_YUV(image.image_format) && image.image_format != FORMAT_GRAY) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "image format not supported %d !\r\n", image.image_format);
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -567,6 +568,8 @@ bm_status_t bmcv_image_put_text(
         bmcv_color_t color,
         float fontScale,
         int thickness) {
+
+    bm_handle_check_1(handle, image);
     if (BM_SUCCESS != bmcv_put_text_check(handle, image, thickness)) {
         return BM_ERR_FAILURE;
     }

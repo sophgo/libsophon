@@ -78,6 +78,7 @@ typedef enum {
     GET_BS_RD_PTR       = 5,    // for decoder
     GET_BS_WR_PTR       = 6,    // for encoder
     GET_SCHED_INFO      = 9,
+    GET_INSTANCE_INFO   = 0x60,
     GET_DEBUG_INFO      = 0x61,
 } QUERY_OPT;
 
@@ -472,6 +473,10 @@ enum {
 /************************************************************************/
 #define W5_RET_QUERY_DEC_BS_RD_PTR          (W5_REG_BASE + 0x011C)
 
+/************************************************************************/
+/* DECODER - QUERY : GET_INSTANCE_INFO                                  */
+/************************************************************************/
+#define W5_RET_QUERY_DEC_GET_INSTANCE_INFO  (W5_REG_BASE + 0x01D4)
 
 //#ifdef FIX_WAVE_SW_RESET_V3
 /************************************************************************/

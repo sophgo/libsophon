@@ -6,6 +6,7 @@
 #include <float.h>
 #include <memory>
 #include <vector>
+#include <stdio.h>
 #include <cmath>
 
 #ifdef __linux__
@@ -22,24 +23,24 @@ static bm_status_t bmcv_lkpyramid_check(
         bm_image next) {
     if (handle == NULL) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (prev.width != next.width || prev.height != next.height) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "previous image and next image size should be same!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (prev.width + 5 - 1 >= 2048) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "image width is too large!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (prev.image_format != FORMAT_GRAY || next.image_format != FORMAT_GRAY) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "Image format only support GRAY\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (prev.data_type != DATA_TYPE_EXT_1N_BYTE ||
         next.data_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "Not supported image data type\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -263,7 +264,7 @@ bm_status_t bmcv_image_lkpyramid_create_plan(
     P->maxLevel = maxLevel;
     if (maxLevel > 5) {
         bmlib_log("LKPYRAMID", BMLIB_LOG_ERROR, "Not supported maxLevel greater 5\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     // in order to use same size kernel, gradient kernel pad 0
     int ksize = 5 * 5 * 3;  // pyramid-down + x-grad + y-grad
@@ -528,7 +529,7 @@ bm_status_t bmcv_image_lkpyramid_execute(
 
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, prevImg, nextImg);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -541,12 +542,12 @@ bm_status_t bmcv_image_lkpyramid_execute(
         break;
 
       case BM1684X:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

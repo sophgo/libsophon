@@ -3,6 +3,7 @@
 #include "bmcv_common_bm1684.h"
 #include <memory>
 #include <vector>
+#include <stdio.h>
 
 static bm_status_t bmcv_threshold_check(
         bm_handle_t handle,
@@ -67,6 +68,7 @@ bm_status_t bmcv_image_threshold(
         unsigned char max_value,
         bm_thresh_type_t type) {
     bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_2(handle, input, output);
     ret = bmcv_threshold_check(handle, input, output, type);
     if (BM_SUCCESS != ret) {
         return ret;

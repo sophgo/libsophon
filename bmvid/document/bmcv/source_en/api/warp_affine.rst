@@ -40,6 +40,11 @@ bmcv_affine_image_matrix defines that there are several transformation matrices 
         } bmcv_affine_image_matrix;
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form 1:**
 
     .. code-block:: c

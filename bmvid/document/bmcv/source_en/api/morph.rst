@@ -14,6 +14,11 @@ Users can use the following interface to obtain the Device Memory of Kernel duri
 The function passes in the size and shape of the required Kernel and returns the corresponding Device Memory to the subsequent morphological operation interface. In the end, users need to manually free the space.
 
 
+**Processor model support**
+
+This interface only supports BM1684.
+
+
 **Interface form:**
 
     .. code-block:: c

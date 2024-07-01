@@ -4,6 +4,11 @@ bmcv_image_threshold
 图像阈值化操作。
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c

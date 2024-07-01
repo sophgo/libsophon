@@ -62,14 +62,24 @@ bm_status_t compare_result_with_faiss_ADC(
     faiss::IndexPQ index(m * dsub, M, nbits, metric);
     index.pq.verbose = 1; // training log
     // index.pq.cp.spherical = true; //normalize centroids
-    index.train(ntotal, database_input_sys);
-    index.reset();
-    index.add(ntotal, database_input_sys);
-
     std::cout << "------------set input-----------" << std::endl;
     std::mt19937 rng;
     rng.seed(seed);
     std::uniform_real_distribution<float> dist_value(-10, 10);
+
+    for (int i = 0; i < ny; i++)
+    {
+        for (int j = 0; j < d; j++)
+        {
+            database_input_sys[i * d + j] = dist_value(rng);
+        }
+    }
+    std::cout << "set database, done" << std::endl;
+
+    index.train(ntotal, database_input_sys);
+    index.reset();
+    index.add(ntotal, database_input_sys);
+
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < d; j++)
@@ -79,14 +89,6 @@ bm_status_t compare_result_with_faiss_ADC(
     }
     // faiss::fvec_renorm_L2(d, 1, query_input_sys);         //normalize query
     std::cout << "set query, done" << std::endl;
-    for (int i = 0; i < ny; i++)
-    {
-        for (int j = 0; j < d; j++)
-        {
-            database_input_sys[i * d + j] = dist_value(rng);
-        }
-    }
-    std::cout << "set database, done" << std::endl;
     for (size_t i = 0; i < M; i++)
     {
         for (size_t j = 0; j < ks; j++)
@@ -156,8 +158,8 @@ bm_status_t compare_result_with_faiss_ADC(
         std::cout << "tpu:   index:" << index_output_sys[i] << "\t";
         std::cout << "distance:" << distance_output_sys[i];
         std::cout << std::endl;
-        std::cout << "faiss: index:" << index_output_sys[i] << "\t";
-        std::cout << "distance:" << distance_output_sys[i];
+        std::cout << "faiss: index:" << fs_index_output[i] << "\t";
+        std::cout << "distance:" << fs_distance_output[i];
         std::cout << std::endl;
     }
 
@@ -225,6 +227,21 @@ bm_status_t compare_result_with_faiss_SDC(
     faiss::IndexPQ index(d, M, nbits, metric);
     index.pq.verbose = 1; // training log
     // index.pq.cp.spherical = true;               //normalize centroids
+    std::cout << "------------set input-----------\n"
+              << std::endl;
+    std::mt19937 rng;
+    rng.seed(seed);
+    std::uniform_real_distribution<float> dist_value(-10, 10);
+    for (int i = 0; i < ny; i++)
+    {
+        for (int j = 0; j < d; j++)
+        {
+            database_input_sys[i * d + j] = dist_value(rng);
+        }
+    }
+    std::cout << "set database, done\n"
+              << std::endl;
+
     index.train(ntotal, database_input_sys);
     index.reset();
     index.add(ntotal, database_input_sys);
@@ -232,11 +249,7 @@ bm_status_t compare_result_with_faiss_SDC(
     index.pq.compute_codes(query_input_sys, fs_query_codes, nx);
     index.pq.compute_sdc_table();
 
-    std::cout << "------------set input-----------\n"
-              << std::endl;
-    std::mt19937 rng;
-    rng.seed(seed);
-    std::uniform_real_distribution<float> dist_value(-10, 10);
+
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < d; j++)
@@ -247,15 +260,7 @@ bm_status_t compare_result_with_faiss_SDC(
     // faiss::fvec_renorm_L2(d, 1, query_input_sys);         //normalize query
     std::cout << "set query, done\n"
               << std::endl;
-    for (int i = 0; i < ny; i++)
-    {
-        for (int j = 0; j < d; j++)
-        {
-            database_input_sys[i * d + j] = dist_value(rng);
-        }
-    }
-    std::cout << "set database, done\n"
-              << std::endl;
+
     for (size_t i = 0; i < M; i++)
     {
         for (size_t j = 0; j < ks; j++)

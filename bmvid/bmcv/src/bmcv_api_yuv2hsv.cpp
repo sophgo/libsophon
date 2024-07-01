@@ -2,6 +2,7 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
+#include <stdio.h>
 
 static bm_status_t bmcv_yuv2hsv_check(
         bm_handle_t handle,
@@ -57,6 +58,7 @@ bm_status_t bmcv_image_yuv2hsv(bm_handle_t     handle,
     }
 
     bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_2(handle, input, output);
     ret = bmcv_yuv2hsv_check(handle, rect, input, output);
     if (BM_SUCCESS != ret) {
         return ret;

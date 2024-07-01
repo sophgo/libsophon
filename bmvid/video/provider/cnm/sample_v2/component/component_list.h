@@ -26,6 +26,9 @@
 #define __COMPONENT_LIST_H__
 
 static ComponentImpl* componentList[] = {
+    &feederComponentImpl,
+    &decoderComponentImpl,
+    &rendererComponentImpl,
     &yuvFeederComponentImpl,
     &encoderComponentImpl,
     &readerComponentImpl,

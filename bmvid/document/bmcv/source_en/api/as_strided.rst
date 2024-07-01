@@ -3,6 +3,10 @@ bmcv_as_strided
 
 This interface can create a view matrix based on the existing matrix and the given step size.
 
+**Processor model support**
+
+This interface only supports BM1684X.
+
 
 **Interface form:**
 
@@ -109,7 +113,7 @@ This interface can create a view matrix based on the existing matrix and the giv
                               output_row, output_col,
                               row_stride, col_stride);
         gettimeofday_(&t2);
-        std::cout << "as_strided TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+        std::cout << "as_strided Tensor Computing Processor using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
         if (ret != BM_SUCCESS) {
         printf("as_strided failed. ret = %d\n", ret);
         goto exit;

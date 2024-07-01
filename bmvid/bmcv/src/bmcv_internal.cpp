@@ -1,16 +1,15 @@
 #include <stdarg.h>
-
+#include <stdio.h>
 #ifdef __linux__
 #include <sys/ioctl.h>
 #include <unistd.h>
-#endif
-#ifdef _WIN32
+#else
 #include <time.h>
 #include <windows.h>
 #include <io.h>
 #include <shlwapi.h>
 #endif
-
+#include <stdlib.h>
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 #ifndef USING_CMODEL
@@ -31,12 +30,20 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
 
 #include <map>
+
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT __attribute__((visibility("default")))
+#endif
+#define COMMIT_HASH "3cb9ecce6b778c1dd716fc675504903c43f66b60"
+#define BRANCH_NAME "(头指针分离于 origin/release)"
 #define FIRMWARE_NAME "libbm1684x_kernel_module.so"
 
 bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size) {
     if (BM_SUCCESS != bm_malloc_device_byte(handle, &(pmem->bm_device_mem), size)) {
         pmem->flag = 0;
-        return BM_ERR_DEVNOTREADY;
+        return BM_ERR_NOMEM;
     }
     pmem->flag = 1;
     return BM_SUCCESS;
@@ -44,7 +51,7 @@ bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, uns
 
 bm_status_t sg_image_alloc_dev_mem(bm_image image, int heap_id) {
     if (BM_SUCCESS != bm_image_alloc_dev_mem(image, heap_id)) {
-        return BM_ERR_DEVNOTREADY;
+        return BM_ERR_NOMEM;
     }
     return BM_SUCCESS;
 }
@@ -214,6 +221,242 @@ static std::map<std::pair<bm_image_format_ext, bm_image_format_ext>, vpp_limitat
 
 };
 
+extern "C" {
+    //__attribute__((visibility("default")))
+    DLLEXPORT const char* libbmcv_version() {
+        static const char* version_string = "libbmcv_version:1.0.0, branch:" BRANCH_NAME ", commit:" COMMIT_HASH ", compiled on " __DATE__ " at " __TIME__", ";
+        return version_string;
+    }
+}
+
+bm_status_t bm_image_check(bm_image image)
+{
+    if (image.image_private == NULL) {
+        return BM_ERR_FAILURE;
+    }
+    if (image.image_private->handle == NULL) {
+        return BM_ERR_FAILURE;
+    }
+    return BM_SUCCESS;
+}
+
+bm_status_t bm_image_zeros(bm_image image)
+{
+    //tpu memset
+    unsigned long long device_addr = 0;
+    if(bm_image_check(image) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "please check image.image_private or image.image_private->handle %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    for (int i = 0; i < image.image_private->plane_num; i++) {
+      device_addr = bm_mem_get_device_addr(image.image_private->data[i]);
+      if((device_addr > 0x4ffffffff) || (device_addr < 0x100000000))
+        {
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+            "device memory should between 0x100000000 and 0x4ffffffff  %s: %s: %d\n",
+            filename(__FILE__), __func__, __LINE__);
+            return BM_ERR_FAILURE;
+        }
+      bm_memset_device(image.image_private->handle, 0, image.image_private->data[i]);
+    }
+    return BM_SUCCESS;
+}
+
+int bm_image_zeros_soc(bm_image image)
+{
+    //memory connect
+    bm_device_mem_t dmem;
+    unsigned long long virt_addr = 0;
+    unsigned long long total_size = 0;
+    dmem = image.image_private->data[0];
+    for (int i = 0; i < image.image_private->plane_num; i++) {
+        total_size += image.image_private->memory_layout[i].size;
+    }
+    bm_mem_flush_device_mem(image.image_private->handle, &dmem);
+    bm_mem_mmap_device_mem(image.image_private->handle, &dmem, &virt_addr);
+    memset((void*)(uintptr_t)virt_addr, 0, total_size);
+    bm_mem_unmap_device_mem(image.image_private->handle, (void *)&virt_addr, total_size);
+    bm_mem_flush_device_mem(image.image_private->handle, &dmem);
+    return 0;
+}
+
+int bm_image_zero_cdma(bm_image image)
+{
+    int image_byte_size[4] = {0};
+    unsigned char * image_malloc_ptr = nullptr;
+    for (int i = 0; i < image.image_private->plane_num; i++) {
+        image_byte_size[i] = image.image_private->memory_layout[i].size;
+        image_malloc_ptr = (unsigned char *)malloc(image_byte_size[i]);
+        memset(image_malloc_ptr, 0, image_byte_size[i]);
+        bm_memcpy_s2d(image.image_private->handle, image.image_private->data[i], image_malloc_ptr);
+    }
+    free(image_malloc_ptr);
+    return 0;
+}
+
+bm_status_t bm_handle_check_1(bm_handle_t handle,
+                            bm_image image1)
+{
+    int dev_id = bm_get_devid(handle);
+    if (dev_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for handle  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if(bm_image_check(image1) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image1 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+
+    int image1_id = bm_get_devid(image1.image_private->handle);
+    if (image1_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image1  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image1_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    return BM_SUCCESS;
+}
+bm_status_t bm_handle_check_2(bm_handle_t handle,
+                            bm_image image1,
+                            bm_image image2)
+{
+    int dev_id = bm_get_devid(handle);
+    if (dev_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for handle  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    if(bm_image_check(image1) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image1 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+    int image1_id = bm_get_devid(image1.image_private->handle);
+    if (image1_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image1  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image1_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    if(bm_image_check(image2) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image2 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+    int image2_id = bm_get_devid(image2.image_private->handle);
+    if (image2_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image2  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image2_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    return BM_SUCCESS;
+}
+
+bm_status_t bm_handle_check_3(bm_handle_t handle,
+                            bm_image image1,
+                            bm_image image2,
+                            bm_image image3)
+{
+    int dev_id = bm_get_devid(handle);
+    if (dev_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for handle  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    if(bm_image_check(image1) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image1 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+    int image1_id = bm_get_devid(image1.image_private->handle);
+    if (image1_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image1  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image1_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    if(bm_image_check(image2) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image2 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+    int image2_id = bm_get_devid(image2.image_private->handle);
+    if (image2_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image2  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image2_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    if(bm_image_check(image3) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, image3 is not properly initialized  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+          return BM_ERR_FAILURE;
+    }
+    int image3_id = bm_get_devid(image3.image_private->handle);
+    if (image3_id < 0) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, bm_get_devid failed for image3  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (dev_id != image3_id){
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+          "Error, please check if the handle used for handle and bm_image are the same  %s: %s: %d\n",
+          filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+
+    return BM_SUCCESS;
+}
 
 static bm_status_t bm_image_get_heap_id(bm_image image, int *heap_location) {
     bm_device_mem_t dev_mem[3];
@@ -243,7 +486,7 @@ bm_status_t bm_vpp_query_limitation(bm_image_format_ext input_format,
                 (input_format, output_format);
 
     if(vpp_format_allowed_map.find(key) == vpp_format_allowed_map.end())
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_DATA;
     else
         limit = vpp_format_allowed_map[key];
 
@@ -268,7 +511,7 @@ bm_status_t concat_images_to_tensor(bm_handle_t      handle,
 
     if (bm_image_get_plane_num(images[0]) != 1) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "NOT supported image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     bm_device_mem_t first_dev_mem;
     bm_image_get_device_mem(images[0], &first_dev_mem);
@@ -280,11 +523,11 @@ bm_status_t concat_images_to_tensor(bm_handle_t      handle,
         bm_image_get_device_mem(images[i + 1], &dev_mem);
         u64 dev_addr = bm_mem_get_device_addr(dev_mem);
         if (dev_addr != last_dev_addr + last_image_size) {
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         if ((images[i].width != images[i + 1].width) ||
             (images[i].height != images[i + 1].height)) {
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         last_dev_addr = dev_addr;
     }
@@ -307,11 +550,12 @@ bm_status_t concat_images_to_tensor(bm_handle_t      handle,
 bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
                                        bm_image    input_image,
                                        bm_image    output_image) {
+    bm_status_t ret;
     // keep same heap location with before
     if (!bm_image_is_attached(input_image)) {
         BMCV_ERR_LOG("image should be attached memory firstly\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     // check and alloc output mem
     int input_heap_id[3], output_heap_id[3];
@@ -322,7 +566,7 @@ bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
         if (input_heap_id[i] != input_heap_id[i - 1]) {
             BMCV_ERR_LOG("all planes should be in same heap\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     if (bm_image_is_attached(output_image)) {
@@ -332,20 +576,20 @@ bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
             if (output_heap_id[i] != output_heap_id[i - 1]) {
                 BMCV_ERR_LOG("all planes should be in same heap\n");
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
         if (input_heap_id[0] != output_heap_id[0]) {
             BMCV_ERR_LOG("output and input should be allocated in same heap\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     } else {
         // keep same heap location with input
         if (BM_SUCCESS != bm_image_alloc_dev_mem(output_image, input_heap_id[0])) {
             BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     // do copyTo
@@ -356,8 +600,8 @@ bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
     copy_to_attr.padding_g  = 0;
     copy_to_attr.padding_r  = 0;
     copy_to_attr.if_padding = 1;
-    if (BM_SUCCESS !=
-        bmcv_image_copy_to(handle, copy_to_attr, input_image, output_image)) {
+    ret = bmcv_image_copy_to(handle, copy_to_attr, input_image, output_image);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
         bm_device_mem_t dev_mem[3];
         bm_image_get_device_mem(output_image, dev_mem);
@@ -365,7 +609,7 @@ bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
             bm_free_device(handle, dev_mem[i]);
         }
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
 
     return BM_SUCCESS;
@@ -545,10 +789,11 @@ bm_status_t bm_shape_align(bm_image  image,
                            bm_image *out_image,
                            int       align_option,
                            int       align_num) {
+    bm_status_t ret;
     if (bm_image_is_attached(*out_image)) {
         BMCV_ERR_LOG("out_image should not be attached firstly\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     int      plane_num = bm_image_get_plane_num(image);
     #ifdef __linux__
@@ -640,7 +885,7 @@ bm_status_t bm_shape_align(bm_image  image,
         default: {
             BMCV_ERR_LOG("image format not support\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     int width_align = (align_option == DO_HEIGHT_ALIGN) ? (width[0]) : (ALIGN(width[0], align_num));
@@ -721,7 +966,7 @@ bm_status_t bm_shape_align(bm_image  image,
         default: {
             BMCV_ERR_LOG("image format not support\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     #ifdef __linux__
@@ -747,17 +992,18 @@ bm_status_t bm_shape_align(bm_image  image,
     if (BM_SUCCESS != bm_image_alloc_dev_mem(*out_image, input_heap_id[0])) {
         BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     bm_image_get_device_mem(*out_image, out_dev_mem);
     for (int i = 0; i < plane_num; i++) {
         // create input image of gray
-        if (BM_SUCCESS != bm_image_create(handle,
-                                          height[i],
-                                          width[i],
-                                          FORMAT_GRAY,
-                                          DATA_TYPE_EXT_1N_BYTE,
-                                          &tmp_in_image[i])) {
+        ret = bm_image_create(handle,
+                            height[i],
+                            width[i],
+                            FORMAT_GRAY,
+                            DATA_TYPE_EXT_1N_BYTE,
+                            &tmp_in_image[i]);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("bm_image_create error\n");
             for (int free_idx = 0; free_idx < i; free_idx++) {
                 bm_image_destroy(tmp_in_image[free_idx]);
@@ -765,16 +1011,17 @@ bm_status_t bm_shape_align(bm_image  image,
             }
             bm_image_destroy(*out_image);
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
         bm_image_attach(tmp_in_image[i], &dev_mem[i]);
         // create output image of gray
-        if (BM_SUCCESS != bm_image_create(handle,
-                                          aligned_height[i],
-                                          aligned_width[i],
-                                          FORMAT_GRAY,
-                                          DATA_TYPE_EXT_1N_BYTE,
-                                          &tmp_out_image[i])) {
+        ret = bm_image_create(handle,
+                            aligned_height[i],
+                            aligned_width[i],
+                            FORMAT_GRAY,
+                            DATA_TYPE_EXT_1N_BYTE,
+                            &tmp_out_image[i]);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("bm_image_create error\n");
             for (int free_idx = 0; free_idx <= i; free_idx++) {
                 bm_image_destroy(tmp_in_image[free_idx]);
@@ -784,7 +1031,7 @@ bm_status_t bm_shape_align(bm_image  image,
             }
             bm_image_destroy(*out_image);
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
         bm_image_attach(tmp_out_image[i], &out_dev_mem[i]);
         if (1 != bm_image_get_plane_num(tmp_out_image[i])) {
@@ -795,11 +1042,12 @@ bm_status_t bm_shape_align(bm_image  image,
             }
             bm_image_destroy(*out_image);
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         // change layout
-        if (BM_SUCCESS != bm_image_mem_layout_adjust(
-                              handle, tmp_in_image[i], tmp_out_image[i])) {
+        ret = bm_image_mem_layout_adjust(
+                              handle, tmp_in_image[i], tmp_out_image[i]);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("image format not support\n");
             for (int free_idx = 0; free_idx <= i; free_idx++) {
                 bm_image_destroy(tmp_in_image[free_idx]);
@@ -807,7 +1055,7 @@ bm_status_t bm_shape_align(bm_image  image,
             }
             bm_image_destroy(*out_image);
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
     }
     for (int free_idx = 0; free_idx < plane_num; free_idx++) {
@@ -851,13 +1099,13 @@ bm_status_t bm_shape_dealign(bm_image in_image,
                                                  out_plane_size[i])) {
                 BMCV_ERR_LOG("bm_memcpy_d2d_byte error\n");
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
         }
     } else {
-        BMCV_ERR_LOG("align_option  not support\n");
+        BMCV_ERR_LOG("align_option not support\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
 
     return BM_SUCCESS;
@@ -887,18 +1135,18 @@ bm_status_t bm_separate_to_planar(bm_handle_t handle,
     if (input_image.image_format != FORMAT_BGRP_SEPARATE &&
         input_image.image_format != FORMAT_RGBP_SEPARATE) {
         BMCV_ERR_LOG("bm_separate_to_planar input should be FORMAT_BGRP_SEPARATE or FORMAT_RGBP_SEPARATE\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     if (output_image.image_format != FORMAT_BGR_PLANAR &&
         output_image.image_format != FORMAT_RGB_PLANAR) {
         BMCV_ERR_LOG("bm_separate_to_planar output should be FORMAT_BGR_PLANAR or FORMAT_RGB_PLANAR\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     if ((input_image.data_type != output_image.data_type) ||
         (input_image.width != output_image.width) ||
         (input_image.height != output_image.height)) {
         BMCV_ERR_LOG("bm_separate_to_planar input and output should be same data_type, width and height\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     int stride_i[3];
     int stride_o[3];
@@ -907,14 +1155,14 @@ bm_status_t bm_separate_to_planar(bm_handle_t handle,
     for (int k = 0; k < bm_image_get_plane_num(output_image); k++) {
         if(stride_i[k] != stride_o[k]) {
             BMCV_ERR_LOG("bm_separate_to_planar input and output should be same stride!\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     int height = input_image.height;
     if(!bm_image_is_attached(output_image)) {
         if(BM_SUCCESS != bm_image_alloc_dev_mem(output_image, BMCV_HEAP_ANY)) {
             BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_device_mem_t mem_i[3], mem_o;
@@ -932,18 +1180,18 @@ bm_status_t bm_planar_to_separate(bm_handle_t handle,
     if (input_image.image_format != FORMAT_BGR_PLANAR &&
         input_image.image_format != FORMAT_RGB_PLANAR) {
         BMCV_ERR_LOG("bm_separate_to_planar input should be FORMAT_BGR_PLANAR or FORMAT_RGB_PLANAR\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     if (output_image.image_format != FORMAT_BGRP_SEPARATE &&
         output_image.image_format != FORMAT_RGBP_SEPARATE) {
         BMCV_ERR_LOG("bm_separate_to_planar output should be FORMAT_BGRP_SEPARATE or FORMAT_RGBP_SEPARATE\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     if ((input_image.data_type != output_image.data_type) ||
         (input_image.width != output_image.width) ||
         (input_image.height != output_image.height)) {
         BMCV_ERR_LOG("bm_separate_to_planar input and output should be same data_type, width and height\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     int stride_i[3];
     int stride_o[3];
@@ -952,14 +1200,14 @@ bm_status_t bm_planar_to_separate(bm_handle_t handle,
     for (int k = 0; k < bm_image_get_plane_num(input_image); k++) {
         if(stride_i[k] != stride_o[k]) {
             BMCV_ERR_LOG("bm_separate_to_planar input and output should be same stride!\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     int height = input_image.height;
     if(!bm_image_is_attached(output_image)) {
         if(BM_SUCCESS != bm_image_alloc_dev_mem(output_image, BMCV_HEAP_ANY)) {
             BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_device_mem_t mem_i, mem_o[3];
@@ -1057,14 +1305,14 @@ bm_status_t layout::update_memory_layout(bm_handle_t     handle,
     switch(chipid){
         case 0x1684:
             if(bm_send_api(handle,  BM_API_ID_CV_CORRECT_LAYOUT, (u8 *)&api, sizeof(api)) != BM_SUCCESS || bm_sync_api(handle) != BM_SUCCESS)
-                return BM_ERR_FAILURE;
+                return BM_ERR_TIMEOUT;
             break;
         case BM1684X:
             bm_tpu_kernel_launch(handle, "cv_width_align", (u8 *)&api, sizeof(api));
             break;
         default:
-            printf("BM_NOT_SUPPORT !\n");
-            return BM_NOT_SUPPORTED;
+            printf("BM_NOT_SUPPORT!\n");
+            return BM_ERR_NOFEATURE;
             break;
     }
     return BM_SUCCESS;
@@ -1102,37 +1350,37 @@ bm_status_t bmcv_warp_affine_bilinear_bm1684(bm_handle_t       handle,
 {
     if (src.data_type != dst[0].data_type) {
         bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "src and dst data type is not same!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src.image_format != dst[0].image_format) {
         bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "src and dst data format is not same!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src.data_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "data type only support DATA_TYPE_EXT_1N_BYTE!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src.image_format != FORMAT_RGB_PLANAR && src.image_format != FORMAT_BGR_PLANAR) {
         bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "format only support RGB_PLANAR and BGR_PLANAR!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (!bm_image_is_attached(src)) {
         bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "src image not attached data !\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     for (int i = 0; i < output_num; i++) {
         if (dst[0].data_type != dst[i].data_type) {
             bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "dst images' data type not same !\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (dst[0].image_format != dst[i].image_format) {
             bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "dst images' format not same !\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (!bm_image_is_attached(dst[i])) {
             if (bm_image_alloc_dev_mem(dst[i]) != BM_SUCCESS) {
                 bmlib_log("AFFINE BILINEAR", BMLIB_LOG_ERROR, "alloc dst dev_mem failed !\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
         }
     }
@@ -1171,11 +1419,11 @@ bm_status_t bmcv_warp_affine_bilinear_bm1684(bm_handle_t       handle,
 
                 if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_WARP_BILINEAR, (u8 *)&api, sizeof(api))) {
                     BMCV_ERR_LOG("warp_bilinear send api error\r\n");
-                    return BM_ERR_FAILURE;
+                    return BM_ERR_TIMEOUT;
                 }
                 if (BM_SUCCESS != bm_sync_api(handle)) {
                     BMCV_ERR_LOG("warp_bilinear sync api error\r\n");
-                    return BM_ERR_FAILURE;
+                    return BM_ERR_TIMEOUT;
                 }
             }
         }
@@ -1195,7 +1443,7 @@ typedef float bm_gen_proposal_data_type_t;
                       "addr must be in sys memory:%s:%d\n",                    \
                       __FILE__,                                                \
                       __LINE__);                                               \
-            return BM_ERR_PARAM;                                               \
+            return BM_ERR_DATA;                                                \
         }                                                                      \
     } while (0)
 
@@ -1220,9 +1468,10 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                               float           filter_threshold,
                               bm_device_mem_t filter_output,
                               bm_device_mem_t filter_shape_output) {
+    bm_status_t ret;
     if (handle == NULL) {
         bmlib_log("GEN_PROP_NMS", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     bm_api_cv_gen_proposal_and_nms_t arg;
     bm_device_mem_t                  scores_buf_device_0, scores_buf_device_1,
@@ -1274,7 +1523,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                       bmcv_gen_proposal_attr_0->feat_h *
                                       data_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err0;
         }
         if (BM_SUCCESS !=
@@ -1282,7 +1531,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           scores_buf_device_0,
                           bm_mem_get_system_addr(scores_addr_0))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err1;
         }
     } else {
@@ -1293,7 +1542,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                                 &bbox_deltas_buf_device_0,
                                                 bbox_deltas_size_0)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err1;
         }
         if (BM_SUCCESS !=
@@ -1301,7 +1550,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           bbox_deltas_buf_device_0,
                           bm_mem_get_system_addr(bbox_deltas_addr_0))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err2;
         }
     } else {
@@ -1314,7 +1563,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                 &anchor_scales_buf_device_0,
                 data_size * bmcv_gen_proposal_attr_0->anchor_scale_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err2;
         }
         if (BM_SUCCESS !=
@@ -1322,7 +1571,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           anchor_scales_buf_device_0,
                           bm_mem_get_system_addr(anchor_scales_addr_0))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err3;
         }
     } else {
@@ -1338,7 +1587,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                       bmcv_gen_proposal_attr_1->feat_h *
                                       data_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err3;
         }
         if (BM_SUCCESS !=
@@ -1346,7 +1595,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           scores_buf_device_1,
                           bm_mem_get_system_addr(scores_addr_1))) {
             BMCV_ERR_LOG("bm_memcpy_s2d  error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err4;
         }
     } else {
@@ -1357,7 +1606,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                                 &bbox_deltas_buf_device_1,
                                                 bbox_deltas_size_1)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err4;
         }
         if (BM_SUCCESS !=
@@ -1365,7 +1614,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           bbox_deltas_buf_device_1,
                           bm_mem_get_system_addr(bbox_deltas_addr_1))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err5;
         }
     } else {
@@ -1378,7 +1627,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                 &anchor_scales_buf_device_1,
                 data_size * bmcv_gen_proposal_attr_1->anchor_scale_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err5;
         }
         if (BM_SUCCESS !=
@@ -1386,7 +1635,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           anchor_scales_buf_device_1,
                           bm_mem_get_system_addr(anchor_scales_addr_1))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err6;
         }
     } else {
@@ -1402,7 +1651,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                       bmcv_gen_proposal_attr_2->feat_h *
                                       data_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err6;
         }
         if (BM_SUCCESS !=
@@ -1410,7 +1659,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           scores_buf_device_2,
                           bm_mem_get_system_addr(scores_addr_2))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err7;
         }
     } else {
@@ -1421,7 +1670,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                                 &bbox_deltas_buf_device_2,
                                                 bbox_deltas_size_2)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err7;
         }
         if (BM_SUCCESS !=
@@ -1429,7 +1678,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           bbox_deltas_buf_device_2,
                           bm_mem_get_system_addr(bbox_deltas_addr_2))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err8;
         }
     } else {
@@ -1442,7 +1691,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                 &anchor_scales_buf_device_2,
                 data_size * bmcv_gen_proposal_attr_2->anchor_scale_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err8;
         }
         if (BM_SUCCESS !=
@@ -1450,7 +1699,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           anchor_scales_buf_device_2,
                           bm_mem_get_system_addr(anchor_scales_addr_2))) {
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err9;
         }
     } else {
@@ -1461,7 +1710,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                             &prop_output_buf_device,
                                             sizeof(m_proposal_t))) {
         BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+        ret = BM_ERR_NOMEM;
         goto err9;
     }
     // if( BM_SUCCESS !=bm_malloc_device_byte(
@@ -1471,7 +1720,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                                 &filter_output_buf_device,
                                                 sizeof(nms_proposal_t))) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err10;
         }
     } else {
@@ -1483,7 +1732,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                   &filter_output_shape_buf_device,
                                   score_shape_0->n * sizeof(int))) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err11;
         }
     } else {
@@ -1572,7 +1821,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                           bm_mem_get_system_addr(filter_shape_output),
                           filter_output_shape_buf_device)) {
             BMCV_ERR_LOG("bm_memcpy_d2s error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err12;
         }
         bm_free_device(handle, filter_output_shape_buf_device);
@@ -1582,7 +1831,7 @@ bm_status_t bmcv_gen_prop_nms_bm1684(bm_handle_t     handle,
                                         bm_mem_get_system_addr(filter_output),
                                         filter_output_buf_device)) {
             BMCV_ERR_LOG("bm_memcpy_d2s error\r\n");
-
+            ret = BM_ERR_NOMEM;
             goto err11;
         }
         bm_free_device(handle, filter_output_buf_device);
@@ -1666,7 +1915,7 @@ err1:
         bm_free_device(handle, scores_buf_device_0);
     }
 err0:
-    return BM_ERR_FAILURE;
+    return ret;
 }
 
 void format_to_str(bm_image_format_ext format, char* res)
@@ -1786,12 +2035,12 @@ bm_status_t bmcv_warp_affine_bilinear(bm_handle_t       handle,
         break;
 
       case BM1684X:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -1854,12 +2103,12 @@ bm_status_t bmcv_gen_prop_nms(bm_handle_t     handle,
         break;
 
       case BM1684X:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -1952,7 +2201,7 @@ void data_type_conversion(bm_image_data_format_ext bmcv_data_type, int *tpu_data
       *tpu_data_type = DT_BFP16;
       break;
     default:
-      bmlib_log("BMCV", BMLIB_LOG_ERROR, "1684x bmcv_data_type not support %s: %s: %d\n",
+      bmlib_log("BMCV", BMLIB_LOG_ERROR, "current card bmcv_data_type not support %s: %s: %d\n",
         __FILE__, __func__, __LINE__);
       break;
     }

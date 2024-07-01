@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include "bmcv_api.h"
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
@@ -55,6 +56,7 @@ bm_status_t bmcv_image_split(bm_handle_t         handle,
         BMCV_ERR_LOG("[Split] Can not get handle!\r\n");
         return BM_ERR_FAILURE;
     }
+    bm_handle_check_2(handle, input, output[0]);
     bm_status_t ret = BM_SUCCESS;
     ret = bmcv_split_check(input, output);
     if (BM_SUCCESS != ret) {

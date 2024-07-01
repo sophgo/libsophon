@@ -1,8 +1,13 @@
 bmcv_image_resize
 =================
 
-
 The interface is used to change image size, such as zoom in, zoom out, matting and other functions.
+
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form:**
 

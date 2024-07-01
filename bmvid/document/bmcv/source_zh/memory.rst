@@ -34,7 +34,7 @@ bm_image 结构需要关联相关 device memory，并且 device memory 中有你
 
 2. bm_image 调用 bm_image_alloc_dev_mem 所申请的内存都由内部自动管理，在调用 bm_image_destroy、 bm_image_detach 或者 bm_image_attach 其他 device memory 时自动释放，无需调用者管理。相反，如果 bm_image_attach 一块 device memory 时，表示这块 memory 将由调用者自己管理。无论是 bm_image_destroy、bm_image_detach，或者再调用 bm_image_attach 其他 device memory，均不会释放，需要调用者手动释放。
 
-3. 目前 device memory 分为三块内存空间：heap0、heap1和heap2。三者的区别在于bm1684 芯片的硬件 VPP 模块是否有读取权限，其他完全相同，因此如果某一 API 需要指定使用bm1684 硬件VPP模块来实现，则必须保证该 API 的输入 bm_image 保存在 heap1 或者 heap2 空间上。  bm1684x vpp无此限制。
+3. 目前 device memory 分为三块内存空间：heap0、heap1和heap2。三者的区别在于bm1684 处理器的硬件 VPP 模块是否有读取权限，其他完全相同，因此如果某一 API 需要指定使用bm1684 硬件VPP模块来实现，则必须保证该 API 的输入 bm_image 保存在 heap1 或者 heap2 空间上。  bm1684x vpp无此限制。
 
 +------------------+------------------+------------------+
 |    heap id       |   bm1684 VPP     |   bm1684x VPP    |

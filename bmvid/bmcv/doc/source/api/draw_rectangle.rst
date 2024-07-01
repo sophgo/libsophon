@@ -63,11 +63,11 @@ bmcv_image_draw_rectangle
 
     .. code-block:: c
 
-        typedef struct bmcv_rect {  
+        typedef struct bmcv_rect {
             int start_x;
             int start_y;
             int crop_w;
-            int crop_h;             
+            int crop_h;
         } bmcv_rect_t;
 
 
@@ -110,8 +110,6 @@ bmcv_image_draw_rectangle
 
 6. 如果line_width小于零，则返回失败。
 
-7. 所有输入矩形对象部分在image之外，则只会画出在image之内的线条，并返回成功。
-
 
 **代码示例**
 
@@ -126,15 +124,15 @@ bmcv_image_draw_rectangle
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
-         
+
          int main(int argc, char *argv[]) {
              bm_handle_t handle;
              bm_dev_request(&handle, 0);
-         
+
              int image_h = 1080;
              int image_w = 1920;
              bm_image src;
-             bm_image_create(handle, image_h, image_w, FORMAT_NV12, 
+             bm_image_create(handle, image_h, image_w, FORMAT_NV12,
                      DATA_TYPE_EXT_1N_BYTE, &src);
              std::shared_ptr<u8*> y_ptr = std::make_shared<u8*>(
                      new u8[image_h * image_w]);

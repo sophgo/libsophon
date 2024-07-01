@@ -432,7 +432,6 @@ RetCode Wave5VpuBuildUpDecParam(CodecInst* instance, DecOpenParam* param)
     VpuAttr*    pAttr = &g_VpuCoreAttributes[instance->coreIdx];
     Uint32      bsEndian = 0;
     vpu_buffer_t vb;
-    bm_handle_t bm_handle;
     pDecInfo    = VPU_HANDLE_TO_DECINFO(instance);
     int core_idx = instance->coreIdx;
     int inst_idx = instance->instIndex;
@@ -465,48 +464,43 @@ RetCode Wave5VpuBuildUpDecParam(CodecInst* instance, DecOpenParam* param)
     default:
         return RETCODE_NOT_SUPPORTED_FEATURE;
     }
-    bm_handle=bmvpu_dec_get_bmlib_handle(core_idx);
     pDecInfo->scaleWidth              = 0;
     pDecInfo->scaleHeight             = 0;
 
     pDecInfo->targetSubLayerId       = (param->bitstreamFormat == STD_AVS2) ? AVS2_MAX_SUB_LAYER_ID : HEVC_MAX_SUB_LAYER_ID;
 
-    if (param->devMemInfoVbWork.size > 0) {
-        pDecInfo->vbDevWork = param->devMemInfoVbWork;
+    if (param->vbWork.size > 0) {
+        pDecInfo->vbWork = param->vbWork;
         pDecInfo->workBufferAllocExt = TRUE;
         vdi_attach_dma_memory(instance->coreIdx, &param->vbWork);
     }
     else {
         if (instance->productId == PRODUCT_ID_512) {
-            pDecInfo->vbDevWork.size       = WAVE512DEC_WORKBUF_SIZE;
+            pDecInfo->vbWork.size       = WAVE512DEC_WORKBUF_SIZE;
         }
         else if (instance->productId == PRODUCT_ID_515) {
-            pDecInfo->vbDevWork.size       = WAVE515DEC_WORKBUF_SIZE;
+            pDecInfo->vbWork.size       = WAVE515DEC_WORKBUF_SIZE;
         }
         else if (instance->productId == PRODUCT_ID_525) {
             if (param->bitstreamFormat == STD_SVAC)
-                pDecInfo->vbDevWork.size       = WAVE525_SVAC_DEC_WORKBUF_SIZE;
+                pDecInfo->vbWork.size       = WAVE525_SVAC_DEC_WORKBUF_SIZE;
             else
-                pDecInfo->vbDevWork.size       = (Uint32)WAVE525DEC_WORKBUF_SIZE;
+                pDecInfo->vbWork.size       = (Uint32)WAVE525DEC_WORKBUF_SIZE;
         }
         else if (instance->productId == PRODUCT_ID_521) {
-            pDecInfo->vbDevWork.size       = (Uint32)WAVE521DEC_WORKBUF_SIZE;  // FIX ME
+            pDecInfo->vbWork.size       = (Uint32)WAVE521DEC_WORKBUF_SIZE;  // FIX ME
         }
         else if (instance->productId == PRODUCT_ID_511) {
-            pDecInfo->vbDevWork.size       = (Uint32)WAVE521DEC_WORKBUF_SIZE;  // FIX ME
+            pDecInfo->vbWork.size       = (Uint32)WAVE521DEC_WORKBUF_SIZE;  // FIX ME
         }
          pDecInfo->workBufferAllocExt    = FALSE;
-        if (bmvpu_malloc_device_byte_heap(bm_handle,&pDecInfo->vbDevWork, pDecInfo->vbDevWork.size,HEAP_MASK,1) !=BM_SUCCESS) {
-            pDecInfo->vbDevWork.u.device.device_addr = 0;
-            pDecInfo->vbDevWork.size       = 0;
-            pDecInfo->vbWorkVaddr = 0;
+        if (vdi_allocate_dma_memory(instance->coreIdx, &pDecInfo->vbWork) < 0) {
+            pDecInfo->vbWork.base       = 0;
+            pDecInfo->vbWork.phys_addr  = 0;
+            pDecInfo->vbWork.size       = 0;
+            pDecInfo->vbWork.virt_addr  = 0;
             VLOG(ERR,"in there %d\n",__LINE__);
             return RETCODE_INSUFFICIENT_RESOURCE;
-        }
-        else
-        {
-
-            bm_vdi_mmap(bm_handle,&pDecInfo->vbDevWork,&pDecInfo->vbWorkVaddr);
         }
     }
 
@@ -517,15 +511,12 @@ RetCode Wave5VpuBuildUpDecParam(CodecInst* instance, DecOpenParam* param)
     pDecInfo->vbTemp.phys_addr = vb.phys_addr + WAVE5_TEMPBUF_OFFSET;
     pDecInfo->vbTemp.size      = WAVE5_TEMPBUF_SIZE;
 
-    Uint8*  zero;
-    zero=osal_malloc(pDecInfo->vbDevWork.size);
-    osal_memset(zero, 0, pDecInfo->vbDevWork.size);
-    bm_memcpy_s2d(bm_handle,pDecInfo->vbDevWork,zero);
-    VpuWriteReg(instance->coreIdx, W5_ADDR_WORK_BASE, pDecInfo->vbDevWork.u.device.device_addr);
-    VpuWriteReg(instance->coreIdx, W5_WORK_SIZE,      pDecInfo->vbDevWork.size);
+    vdi_clear_memory(instance->coreIdx, pDecInfo->vbWork.phys_addr, pDecInfo->vbWork.size, 0);
+    VpuWriteReg(instance->coreIdx, W5_ADDR_WORK_BASE, pDecInfo->vbWork.phys_addr);
+    VpuWriteReg(instance->coreIdx, W5_WORK_SIZE,      pDecInfo->vbWork.size);
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_BS_START_ADDR, pDecInfo->streamBufStartAddr);
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_BS_SIZE, pDecInfo->streamBufSize);
-    osal_free(zero);
+
     bsEndian = vdi_convert_endian(instance->coreIdx, param->streamEndian);
     /* NOTE: When endian mode is 0, SDMA reads MSB first */
     bsEndian = (~bsEndian&VDI_128BIT_ENDIAN_MASK);
@@ -538,15 +529,16 @@ RetCode Wave5VpuBuildUpDecParam(CodecInst* instance, DecOpenParam* param)
     if (vdi_wait_vpu_busy(instance->coreIdx, __VPU_BUSY_TIMEOUT, W5_VPU_BUSY_STATUS) == -1) {   // Check QUEUE_DONE
         if (instance->loggingEnable)
             vdi_log(instance->coreIdx, W5_CREATE_INSTANCE, 2);
-        bm_free_mem(bm_handle,pDecInfo->vbDevWork,pDecInfo->vbWorkVaddr);
+        vdi_free_dma_memory(instance->coreIdx, &pDecInfo->vbWork);
         return RETCODE_VPU_RESPONSE_TIMEOUT;
     }
 #ifdef WAVE512_FVP
     VpuWriteReg(instance->coreIdx, W5_RET_SUCCESS, 1);
 #endif
     if (VpuReadReg(instance->coreIdx, W5_RET_SUCCESS) == FALSE) {           // FAILED for adding into VCPU QUEUE
-        bm_free_mem(bm_handle,pDecInfo->vbDevWork,pDecInfo->vbWorkVaddr);
+        vdi_free_dma_memory(instance->coreIdx, &pDecInfo->vbWork);
         ret = RETCODE_FAILURE;
+        return ret;
     }
 //  0-31:instance index;
     vpu_inst_flag = 1 << inst_idx;
@@ -842,7 +834,7 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
     Uint32       endian, yuvFormat = 0;
     Uint32       addrY, addrCb, addrCr;
     Uint32       mvColSize, fbcYTblSize, fbcCTblSize;
-    bm_device_mem_t vbBuffer;
+    vpu_buffer_t vbBuffer;
     Uint32       stride;
     Uint32       colorFormat  = 0;
     Uint32       outputFormat = 0;
@@ -850,7 +842,6 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
     Uint32       initPicWidth = 0, initPicHeight = 0;
     Uint32 scalerFlag = 0;
     Uint32 bwbFlag = 0;
-    bm_handle_t    bm_handle;
 
     coreIdx        = inst->coreIdx;
     axiID          = pDecInfo->openParam.virtAxiID;
@@ -860,7 +851,6 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
 
     initPicWidth   = pDecInfo->initialInfo.picWidth;
     initPicHeight  = pDecInfo->initialInfo.picHeight;
-    bm_handle=bmvpu_dec_get_bmlib_handle(coreIdx);
     if (inst->codecMode == W_SVAC_DEC && mapType == COMPRESSED_FRAME_MAP_SVAC_SVC_BL) {
         initPicWidth   = pDecInfo->initialInfo.picWidth>>1;      // BL size is half as EL
         initPicHeight  = pDecInfo->initialInfo.picHeight>>1;
@@ -884,25 +874,20 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
         }
 
         mvColSize          = VPU_ALIGN16(mvColSize);
-        vbBuffer.u.device.device_addr = 0;
-        vbBuffer.size = ((mvColSize+4095)&~4095)+4096;
+        vbBuffer.phys_addr = 0;
         if (inst->codecMode == W_HEVC_DEC || inst->codecMode == W_AVS2_DEC || inst->codecMode == W_VP9_DEC || inst->codecMode == W_AVC_DEC) {
+            vbBuffer.size = ((mvColSize+4095)&~4095)+4096;
             mvCount = count;
 
             APIDPRINT("ALLOC MEM - MV\n");
             for (k=0  ; k<mvCount ; k++) {
-                if ( pDecInfo->vbDevMV[k].size == 0) {
-                    if(bmvpu_malloc_device_byte_heap(bm_handle, &vbBuffer,((mvColSize+4095)&~4095)+4096 ,HEAP_MASK,1) !=BM_SUCCESS)
-                        {
-                            VLOG(ERR,"in there %d\n",__LINE__);
-                            return -1;
-                        }
-                    else
-                        {
-                            pDecInfo->vbDevMV[k] = vbBuffer;
-
-                            bm_vdi_mmap(bm_handle,&pDecInfo->vbDevMV[k],&pDecInfo->vbMVVaddr[k]);
-                        }
+                if ( pDecInfo->vbMV[k].size == 0) {
+                    if (vdi_allocate_dma_memory(inst->coreIdx, &vbBuffer) < 0)
+                    {
+                        VLOG(ERR,"in there %d\n",__LINE__);
+                        return -1;
+                    }
+                    pDecInfo->vbMV[k] = vbBuffer;
                 }
             }
         }
@@ -935,21 +920,19 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
             fbcYTblSize        = VPU_ALIGN16(fbcYTblSize);
         }
 
-        vbBuffer.u.device.device_addr = 0;
+        vbBuffer.phys_addr = 0;
         vbBuffer.size      = ((fbcYTblSize+4095)&~4095)+4096;
         APIDPRINT("ALLOC MEM - FBC Y TBL\n");
-        for (k=0  ; k<count ; k++) {
-            if ( pDecInfo->vbDevFbcYTbl[k+svcBLbaseIdx].size == 0) {
-                if(bmvpu_malloc_device_byte_heap(bm_handle, &vbBuffer, vbBuffer.size,HEAP_MASK,1) !=BM_SUCCESS)
+        if(pDecInfo->framebuf_from_user == 0)
+        {
+            for (k=0  ; k<count ; k++) {
+                if ( pDecInfo->vbDevFbcYTbl[k+svcBLbaseIdx].size == 0) {
+                    if (vdi_allocate_dma_memory(inst->coreIdx, &vbBuffer) < 0)
                     {
                         VLOG(ERR,"in there %d\n",__LINE__);
                         return -1;
                     }
-                else
-                {
-                    pDecInfo->vbDevFbcYTbl[k+svcBLbaseIdx] = vbBuffer;
-
-                    bm_vdi_mmap(bm_handle,&pDecInfo->vbDevFbcYTbl[k+svcBLbaseIdx],&pDecInfo->vbFbcYTblVaddr[k+svcBLbaseIdx]);
+                    pDecInfo->vbFbcYTbl[k+svcBLbaseIdx] = vbBuffer;
                 }
             }
         }
@@ -982,20 +965,19 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
             fbcCTblSize        = VPU_ALIGN16(fbcCTblSize);
         }
 
-        vbBuffer.u.device.device_addr = 0;
+        vbBuffer.phys_addr = 0;
         vbBuffer.size      = ((fbcCTblSize+4095)&~4095)+4096;
         APIDPRINT("ALLOC MEM - FBC C TBL\n");
-        for (k=0  ; k<count ; k++) {
-            if ( pDecInfo->vbDevFbcCTbl[k+svcBLbaseIdx].size == 0) {
-                if(bmvpu_malloc_device_byte_heap(bm_handle, &pDecInfo->vbDevFbcCTbl[k+svcBLbaseIdx], vbBuffer.size,HEAP_MASK,1) !=BM_SUCCESS)
+        if(pDecInfo->framebuf_from_user == 0)
+        {
+            for (k=0  ; k<count ; k++) {
+                if ( pDecInfo->vbDevFbcCTbl[k+svcBLbaseIdx].size == 0) {
+                    if (vdi_allocate_dma_memory(inst->coreIdx, &vbBuffer) < 0)
                     {
                         VLOG(ERR,"in there %d\n",__LINE__);
                         return -1;
                     }
-                else
-                {
-
-                    bm_vdi_mmap(bm_handle,&pDecInfo->vbDevFbcCTbl[k+svcBLbaseIdx],&pDecInfo->vbFbcCTblVaddr[k+svcBLbaseIdx]);
+                    pDecInfo->vbFbcCTbl[k+svcBLbaseIdx] = vbBuffer;
                 }
             }
         }
@@ -1120,13 +1102,13 @@ RetCode Wave5VpuDecRegisterFramebuffer(CodecInst* inst, FrameBuffer* fbArr, Tile
             VpuWriteReg(coreIdx, W5_ADDR_CB_BASE0    + (i<<4), addrCb);
             APIDPRINT("REGISTER FB[%02d] Y(0x%08x), Cb(0x%08x) ", i, addrY, addrCb);
             if (mapType >= COMPRESSED_FRAME_MAP) {
-                VpuWriteReg(coreIdx, W5_ADDR_FBC_Y_OFFSET0 + (i<<4), pDecInfo->vbDevFbcYTbl[idx+svcBLbaseIdx].u.device.device_addr); /* Luma FBC offset table */
-                VpuWriteReg(coreIdx, W5_ADDR_FBC_C_OFFSET0 + (i<<4), pDecInfo->vbDevFbcCTbl[idx+svcBLbaseIdx].u.device.device_addr);        /* Chroma FBC offset table */
-                VpuWriteReg(coreIdx, W5_ADDR_MV_COL0  + (i<<2), pDecInfo->vbDevMV[idx+svcBLbaseIdx].u.device.device_addr);
+                VpuWriteReg(coreIdx, W5_ADDR_FBC_Y_OFFSET0 + (i<<4), pDecInfo->vbFbcYTbl[idx+svcBLbaseIdx].phys_addr); /* Luma FBC offset table */
+                VpuWriteReg(coreIdx, W5_ADDR_FBC_C_OFFSET0 + (i<<4), pDecInfo->vbFbcCTbl[idx+svcBLbaseIdx].phys_addr);        /* Chroma FBC offset table */
+                VpuWriteReg(coreIdx, W5_ADDR_MV_COL0  + (i<<2), pDecInfo->vbMV[idx+svcBLbaseIdx].phys_addr);
                 APIDPRINT("Yo(0x%08x) Co(0x%08x), Mv(0x%08x)\n",
-                    pDecInfo->vbDevFbcYTbl[idx].u.device.device_addr,
-                    pDecInfo->vbDevFbcCTbl[idx].u.device.device_addr,
-                    pDecInfo->vbDevMV[idx].u.device.device_addr);
+                    pDecInfo->vbFbcYTbl[idx].phys_addr,
+                    pDecInfo->vbFbcCTbl[idx].phys_addr,
+                    pDecInfo->vbMV[idx].phys_addr);
             }
             else {
                 if(addrCr == 0xFFFFFFFF)  //Maybe this is a bug of firmware. In some stream, In the invaild Cr address, VPU will make the bus hang. So Now I change it to a reserved address. When fixed the firmware issue, We need remove the code.
@@ -1169,13 +1151,12 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     Uint32          coreIdx, regVal;
     Uint32          mvColSize, fbcYTblSize, fbcCTblSize;
     Uint32          linearStride, fbcStride;
-    bm_device_mem_t*   pvbMv = NULL;
-    bm_device_mem_t*   pvbFbcYOffset = NULL;
-    bm_device_mem_t*   pvbFbcCOffset = NULL;
+    vpu_buffer_t*   pvbMv = NULL;
+    vpu_buffer_t*   pvbFbcYOffset = NULL;
+    vpu_buffer_t*   pvbFbcCOffset = NULL;
     CodStd          codec;
     u64   fbcYoffsetAddr = 0;
     u64   fbcCoffsetAddr = 0;
-    bm_handle_t     bm_handle;
     coreIdx     = inst->coreIdx;
     linearIndex = (linearFb == NULL) ? -1 : linearFb->myIndex - pDecInfo->numFbsForDecoding;
     fbcIndex    = (fbcFb  == NULL) ? -1 : fbcFb->myIndex;
@@ -1184,7 +1165,6 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     if (codec != STD_VP9) {
         return RETCODE_NOT_SUPPORTED_FEATURE;
     }
-    bm_handle=bmvpu_dec_get_bmlib_handle(coreIdx);
     mvColSize = WAVE5_DEC_VP9_MVCOL_BUF_SIZE(picWidth, picHeight);
 
     if ((fbcFb != NULL) && (fbcIndex >= 0)) {
@@ -1195,13 +1175,12 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     }
 
     if (mvIndex >= 0) {
-        pvbMv = &pDecInfo->vbDevMV[mvIndex];
-        bm_free_mem(bm_handle,pDecInfo->vbDevMV[mvIndex],pDecInfo->vbMVVaddr[mvIndex]);
+        pvbMv = &pDecInfo->vbMV[mvIndex];
+        vdi_free_dma_memory(inst->coreIdx, pvbMv);
         pvbMv->size = ((mvColSize+4095)&~4095) + 4096;
-        if(bmvpu_malloc_device_byte_heap(bm_handle,pvbMv,pvbMv->size,HEAP_MASK,1)!=BM_SUCCESS)
+        if (vdi_allocate_dma_memory(inst->coreIdx, pvbMv) < 0) {
             return RETCODE_INSUFFICIENT_RESOURCE;
-
-     bm_vdi_mmap(bm_handle,pvbMv,&pDecInfo->vbMVVaddr[mvIndex]);
+        }
     }
 
     /* Reallocate FBC offset tables */
@@ -1224,15 +1203,15 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     }
 
     if (fbcIndex >= 0) {
-        pvbFbcYOffset = &pDecInfo->vbDevFbcYTbl[fbcIndex];
-        bm_free_mem(bm_handle,*pvbFbcYOffset,pDecInfo->vbFbcYTblVaddr[fbcIndex]);
-        pvbFbcYOffset->u.device.device_addr = 0;
+        pvbFbcYOffset = &pDecInfo->vbFbcYTbl[fbcIndex];
+        vdi_free_dma_memory(inst->coreIdx, pvbFbcYOffset);
+        pvbFbcYOffset->phys_addr = 0;
         pvbFbcYOffset->size      = ((fbcYTblSize+4095)&~4095)+4096;
-        if(bmvpu_malloc_device_byte_heap(bm_handle,pvbFbcYOffset,pvbFbcYOffset->size,HEAP_MASK,1)!=BM_SUCCESS)
+        if (vdi_allocate_dma_memory(inst->coreIdx, pvbFbcYOffset) < 0) {
             return RETCODE_INSUFFICIENT_RESOURCE;
+        }
 
-        bm_vdi_mmap(bm_handle,pvbFbcYOffset,&pDecInfo->vbFbcYTblVaddr[fbcIndex]);
-        fbcYoffsetAddr =  pvbFbcYOffset->u.device.device_addr;
+        fbcYoffsetAddr =  pvbFbcYOffset->phys_addr;
     }
 
     if (codec == STD_HEVC) {
@@ -1253,14 +1232,14 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     }
 
     if (fbcIndex >= 0) {
-        pvbFbcCOffset = &pDecInfo->vbDevFbcCTbl[fbcIndex];
-        bm_free_mem(bm_handle,*pvbFbcCOffset,pDecInfo->vbFbcCTblVaddr[fbcIndex]);
-        pvbFbcCOffset->u.device.device_addr = 0;
+        pvbFbcCOffset = &pDecInfo->vbFbcCTbl[fbcIndex];
+        vdi_free_dma_memory(inst->coreIdx, pvbFbcCOffset);
+        pvbFbcCOffset->phys_addr = 0;
         pvbFbcCOffset->size      = ((fbcCTblSize+4095)&~4095)+4096;
-        if(bmvpu_malloc_device_byte_heap(bm_handle,pvbFbcCOffset,pvbFbcCOffset->size,HEAP_MASK,1)!=BM_SUCCESS)
+        if (vdi_allocate_dma_memory(inst->coreIdx, pvbFbcCOffset) < 0) {
             return RETCODE_INSUFFICIENT_RESOURCE;
-        bm_vdi_mmap(bm_handle,pvbFbcCOffset,&pDecInfo->vbFbcCTblVaddr[fbcIndex]);
-        fbcCoffsetAddr = pvbFbcCOffset->u.device.device_addr;
+        }
+        fbcCoffsetAddr = pvbFbcCOffset->phys_addr;
     }
 
     linearStride = linearFb == NULL ? 0 : linearFb->stride;
@@ -1281,7 +1260,7 @@ RetCode Wave5VpuDecUpdateFramebuffer(CodecInst* inst, FrameBuffer* fbcFb, FrameB
     VpuWriteReg(coreIdx, W5_ADDR_LUMA_BASE,     linearFb == NULL ? 0 : linearFb->bufY);
     VpuWriteReg(coreIdx, W5_ADDR_CB_BASE,       linearFb == NULL ? 0 : linearFb->bufCb);
     VpuWriteReg(coreIdx, W5_ADDR_CR_BASE,       linearFb == NULL ? 0 : linearFb->bufCr);
-    VpuWriteReg(coreIdx, W5_ADDR_MV_COL,        pvbMv == NULL ? 0 : pvbMv->u.device.device_addr);
+    VpuWriteReg(coreIdx, W5_ADDR_MV_COL,        pvbMv == NULL ? 0 : pvbMv->phys_addr);
     VpuWriteReg(coreIdx, W5_ADDR_FBC_Y_BASE,    fbcFb == NULL ? 0 : fbcFb->bufY);
     VpuWriteReg(coreIdx, W5_ADDR_FBC_C_BASE,    fbcFb == NULL ? 0 : fbcFb->bufCb);
     VpuWriteReg(coreIdx, W5_ADDR_FBC_Y_OFFSET,  fbcYoffsetAddr);

@@ -337,6 +337,7 @@ static bm_status_t per_image_deal(bm_handle_t handle,
     param.output_image_addr = bm_mem_get_device_addr(tensor_output);
     param.input_image_addr = bm_mem_get_device_addr(tensor_input);
     ret = bm_malloc_device_byte(handle, &tensor_temp, input.height * input.width * 2);
+    int index_size_temp = image_dw > image_dh ? ALIGN(image_dw, 64) : ALIGN(image_dh, 64);
     if (BM_SUCCESS != ret) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "bm_malloc error, %s: %s: %d\n",
@@ -365,7 +366,8 @@ static bm_status_t per_image_deal(bm_handle_t handle,
     }
 
     bm_image_get_stride(input, &(param.src_w_stride));
-    ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    ret = bm_malloc_device_byte(handle, &tensor_S, index_size_temp * index_size_temp * image_c * 4);
+    // ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
     if(BM_SUCCESS != ret) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "bm_malloc error, %s: %s: %d\n",
@@ -424,6 +426,7 @@ static bm_status_t per_image_deal(bm_handle_t handle,
 
     std::vector<bm_device_mem_t*> internal_mem_v;
     ret = bm_malloc_device_byte(handle, &tensor_temp_r, input.height * input.width * 2);
+    int index_size_temp = image_dw > image_dh ? ALIGN(image_dw, 64) : ALIGN(image_dh, 64);
     if (BM_SUCCESS != ret) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "bm_malloc error, %s: %s: %d\n",
@@ -486,7 +489,8 @@ static bm_status_t per_image_deal(bm_handle_t handle,
         param.m.m[i] = matrix.matrix->m[i];
     }
 
-    ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    // ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    ret = bm_malloc_device_byte(handle, &tensor_S, index_size_temp * index_size_temp * image_c * 4);
     if(BM_SUCCESS != ret) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "bm_malloc error, %s: %s: %d\n",
@@ -587,6 +591,10 @@ free_devmem:
     }
 
     for (int num = 0;num < image_num;num++){
+        int stride = 0;
+        bm_image_get_stride(input[num], &stride);
+        input[num].width = stride;
+
         if(use_bilinear){
             bm_image_data_format_ext input_format = input[0].data_type;
             bm_image_data_format_ext output_format = output[0].data_type;
@@ -605,6 +613,7 @@ free_devmem:
             return ret;
         }
     }
+
     return BM_SUCCESS;
 }
 
@@ -732,6 +741,7 @@ bm_status_t bmcv_image_warp_affine_similar_to_opencv(
     bm_image *output,
     int use_bilinear)
 {
+    bm_handle_check_2(handle, input[0], output[0]);
     UNUSED(use_bilinear);
     float matrix_tem[3][3];
     float matrix_tem_inv[2][3];
@@ -767,6 +777,7 @@ bm_status_t bmcv_image_warp_affine(
     bm_image *output,
     int use_bilinear)
 {
+    bm_handle_check_2(handle, input[0], output[0]);
     if(BM_SUCCESS !=bmcv_warp_check(handle, image_num, matrix, input, output)) {
         BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
         return BM_ERR_FAILURE;
@@ -802,5 +813,6 @@ bm_status_t bmcv_image_warp(bm_handle_t            handle,
                             bmcv_affine_image_matrix matrix[4],
                             bm_image *             input,
                             bm_image *             output) {
+    bm_handle_check_2(handle, input[0], output[0]);
     return bmcv_image_warp_affine(handle, image_num, matrix, input, output);
 }

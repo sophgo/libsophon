@@ -4,6 +4,11 @@ bmcv_image_sobel
 Sobel operator for edge detection.
 
 
+**Processor model support**
+
+This interface only supports BM1684.
+
+
 **Interface form:**
 
     .. code-block:: c

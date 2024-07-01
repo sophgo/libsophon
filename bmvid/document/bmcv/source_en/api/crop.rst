@@ -5,6 +5,11 @@ bmcv_image_crop
 The interface can crop out several small images from an original image.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

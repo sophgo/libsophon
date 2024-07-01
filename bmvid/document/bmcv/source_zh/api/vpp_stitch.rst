@@ -15,6 +15,12 @@ bmcv_image_vpp_stitch
             bmcv_rect_t*          src_crop_rect = NULL,
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
 
+
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **传入参数说明:**
 
 * bm_handle_t handle

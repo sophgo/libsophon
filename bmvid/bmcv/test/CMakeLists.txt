@@ -147,10 +147,9 @@ test_bmcv(
     test_resize.cpp
     test_cv_laplacian.cpp
     test_cv_axpy.cpp
-    test_bm1686_vpp_convert.cpp
     test_cv_bayer2rgb.cpp
     test_cv_as_strided.cpp
-
+    test_cv_hist_balance.cpp
 )
 elseif(WINDOWS)
 
@@ -173,54 +172,34 @@ test_bmcv(
     test_cv_absdiff.cpp
     test_cv_add_weighted.cpp
     test_cv_bitwise.cpp
-    test_cv_base64.cpp
-    test_cv_batch_topk.cpp
     test_cv_bgrsplit.cpp
     test_cv_calc_hist.cpp
-    test_cv_canny.cpp
     test_cv_cmulp.cpp
     test_cv_copy_to.cpp
     test_cv_crop.cpp
     test_cv_dct.cpp
     test_cv_distance.cpp
-    test_cv_draw_lines.cpp
-    test_cv_draw_rectangle.cpp
     test_cv_feature_match.cpp
-    test_cv_fft_1d.cpp
-    test_cv_fft_2d.cpp
     test_cv_fill_rectangle.cpp
-    test_cv_gaussian_blur.cpp
     test_cv_gemm.cpp
-    test_cv_image_align.cpp
-    test_cv_image_transpose.cpp
-    test_cv_img_scale.cpp
     test_cv_jpeg.cpp
     test_cv_json.cpp
-    test_cv_lkpyramid.cpp
     test_cv_matmul.cpp
     test_cv_min_max.cpp
     test_cv_morph.cpp
     test_cv_nms.cpp
     test_cv_put_text.cpp
     test_cv_pyramid.cpp
-    test_cv_sobel.cpp
     test_cv_sort.cpp
-    test_cv_split.cpp
-    test_cv_storage_convert.cpp
     test_cv_threshold.cpp
     test_cv_transpose.cpp
     test_cv_vpp.cpp
     test_cv_vpp_border.cpp
     test_cv_vpp_loop.cpp
-    test_cv_vpp_random.cpp
     test_cv_vpp_stitch.cpp
-    test_cv_warp.cpp
-    test_cv_warp_bilinear.cpp
     test_cv_warp_perspective.cpp
     test_cv_warp_perspective_bilinear.cpp
     test_cv_width_align.cpp
-    test_cv_yuv2hsv.cpp
-    test_cv_yuv2rgb.cpp
     test_perf_bmcv.cpp
     test_perf_vpp.cpp
     test_resize.cpp
@@ -228,6 +207,7 @@ test_bmcv(
     test_cv_axpy.cpp
     test_cv_bayer2rgb.cpp
     test_cv_as_strided.cpp
+    test_cv_hist_balance.cpp
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_INSTALL_PREFIX}/bin/bm1684x)
@@ -243,7 +223,7 @@ test_bmcv(
 	bm1684x/test_bm1684x_vpp_resize.cpp
 	bm1684x/test_bm1684x_vpp_stitch.cpp
 	bm1684x/test_bm1684x_vpp_convert.cpp
-	bm1684x/test_bm1684x_vpp_padding.cpp
+	bm1684x/test_bm1684x_vpp_dst_position.cpp
 	bm1684x/test_bm1684x_vpp_comparison.cpp
 	bm1684x/test_bm1684x_vpp_border_comapre.cpp
 	bm1684x/test_bm1684x_vpp_fill_rectangle.cpp

@@ -14,6 +14,12 @@ bmcv_image_vpp_csc_matrix_convert
             csc_matrix_t * matrix = nullptr,
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Description of incoming parameters:**
 
 * bm_handle_t handle

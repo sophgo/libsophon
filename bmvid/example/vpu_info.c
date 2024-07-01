@@ -26,8 +26,8 @@
 #include "windows/libusb-1.0.18/examples/getopt/getopt.h"
 #endif
 
-#include "bm_video_interface.h"
-#include "bm_video_internal.h"
+#include "bm_vpudec_interface.h"
+#include "bm_vpudec_internal.h"
 #include "vpuapifunc.h"
 #include "main_helper.h"
 

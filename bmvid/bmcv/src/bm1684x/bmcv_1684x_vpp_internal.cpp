@@ -1,5 +1,6 @@
 #include <vector>
 #include <memory>
+#include <stdio.h>
 #include <functional>
 #include "bmlib_interface.h"
 #include "bmcv_api_ext.h"
@@ -116,17 +117,17 @@ static bm_status_t simple_check_bm1684x_input_param(
   if (handle == NULL)
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr");
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
   }
   if (input_or_output == NULL)
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input or output is nullptr");
-    return BM_ERR_FAILURE;
+    return BM_ERR_DATA;
   }
   if((frame_number > VPP1684X_MAX_CROP_NUM) || (frame_number <= 0))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input num should less than 512");
-    return BM_NOT_SUPPORTED;
+    return BM_ERR_PARAM;
   }
 
   return BM_SUCCESS;;
@@ -198,16 +199,16 @@ static bm_status_t check_bm1684x_bm_image_param(
        !bm_image_is_attached(output[frame_idx]))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create bm_image ,frame [%d] input or output not attache mem %s: %s: %d\n",
-        frame_idx,filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_PARAM;
+        "not correctly create bm_image ,frame [%d] input or output not attache mem check_bm_image_param: %d\n",
+        frame_idx, __LINE__);
+      return BM_ERR_DATA;
     }
     if(input[frame_idx].data_type != DATA_TYPE_EXT_1N_BYTE)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp input only support DATA_TYPE_EXT_1N_BYTE,frame [%d], %s: %s: %d\n",
-        frame_idx, filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+        "vpp input only support DATA_TYPE_EXT_1N_BYTE,frame [%d], check_bm_image_param: %d\n",
+        frame_idx, __LINE__);
+      return BM_ERR_DATA;
     }
 
      if((output[frame_idx].data_type != DATA_TYPE_EXT_FLOAT32) &&
@@ -217,27 +218,27 @@ static bm_status_t check_bm1684x_bm_image_param(
         (output[frame_idx].data_type != DATA_TYPE_EXT_BF16))
      {
        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-         "bm1684x vpp[%d] output data type %d not support %s: %s: %d\n",
-         frame_idx ,output[frame_idx].data_type, filename(__FILE__), __func__, __LINE__);
-       return BM_NOT_SUPPORTED;
+         "vpp[%d] output data type %d not support check_bm_image_param: %d\n",
+         frame_idx ,output[frame_idx].data_type, __LINE__);
+       return BM_ERR_DATA;
      }
 
     if((bm_image_get_stride(input[frame_idx], stride) != BM_SUCCESS) ||
        (bm_image_get_stride(output[frame_idx], stride) != BM_SUCCESS))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create input bm_image , frame [%d],input or output get stride err %s: %s: %d\n",
-        frame_idx,filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "not correctly create input bm_image , frame [%d],input or output get stride err check_bm_image_param: %d\n",
+        frame_idx, __LINE__);
+      return BM_ERR_DATA;
     }
 
     plane_num = bm_image_get_plane_num(input[frame_idx]);
     if(plane_num == 0 || bm_image_get_device_mem(input[frame_idx], device_mem) != BM_SUCCESS)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create input[%d] bm_image, get plane num or device mem err %s: %s: %d\n",
-        frame_idx, filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "not correctly create input[%d] bm_image, get plane num or device mem err check_bm_image_param: %d\n",
+        frame_idx, __LINE__);
+      return BM_ERR_DATA;
     }
 #ifndef USING_CMODEL
     u64 device_addr = 0;
@@ -248,9 +249,9 @@ static bm_status_t check_bm1684x_bm_image_param(
       if((device_addr > 0x4ffffffff) || (device_addr < 0x100000000))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "input[%d] device memory should between 0x100000000 and 0x4ffffffff  %s: %s: %d\n",
-          frame_idx, filename(__FILE__), __func__, __LINE__);
-        return BM_ERR_FAILURE;
+          "input[%d] device memory should between 0x100000000 and 0x4ffffffff  check_bm_image_param: %d\n",
+          frame_idx, __LINE__);
+        return BM_ERR_DATA;
       }
     }
 #endif
@@ -258,9 +259,9 @@ static bm_status_t check_bm1684x_bm_image_param(
     if(plane_num == 0 || bm_image_get_device_mem(output[frame_idx], device_mem) != BM_SUCCESS)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create output[%d] bm_image, get plane num or device mem err %s: %s: %d\n",
-        frame_idx, filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "not correctly create output[%d] bm_image, get plane num or device mem err check_bm_image_param: %d\n",
+        frame_idx, __LINE__);
+      return BM_ERR_DATA;
     }
 #ifndef USING_CMODEL
     for (i = 0; i < plane_num; i++) {
@@ -268,9 +269,9 @@ static bm_status_t check_bm1684x_bm_image_param(
       if((device_addr > 0x4ffffffff) || (device_addr < 0x100000000))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "output[%d] device memory should between 0x100000000 and 0x4ffffffff  %s: %s: %d\n",
-          frame_idx, filename(__FILE__), __func__, __LINE__);
-        return BM_ERR_FAILURE;
+          "output[%d] device memory should between 0x100000000 and 0x4ffffffff  check_bm_image_param: %d\n",
+          frame_idx, __LINE__);
+        return BM_ERR_DATA;
       }
     }
 #endif
@@ -297,11 +298,10 @@ static bm_status_t check_bm1684x_vpp_csctype(
     if((is_csc_yuv_or_rgb(input[0].image_format) != is_csc_yuv_or_rgb(input[idx].image_format)) ||
       (is_csc_yuv_or_rgb(output[0].image_format) != is_csc_yuv_or_rgb(output[idx].image_format)))
     {
-      ret = BM_ERR_PARAM;
+      ret = BM_ERR_DATA;
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x vpp Input and output color space changes will cause hardware hang,"
-        " %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
+        "vpp Input and output color space changes will cause hardware hang,"
+        " check_vpp_csctype: %d\n", __LINE__);
       break;
     }
 
@@ -313,14 +313,14 @@ static bm_status_t check_bm1684x_vpp_csctype(
       case CSC_YCbCr2RGB_BT709:
         if(COLOR_SPACE_YUV != input_color_space)
         {
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           break;
         }
         if((COLOR_SPACE_RGB != output_color_space) &&
            (COLOR_SPACE_HSV != output_color_space) &&
            (COLOR_SPACE_RGBY != output_color_space))
         {
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           break;
         }
         break;
@@ -330,13 +330,13 @@ static bm_status_t check_bm1684x_vpp_csctype(
       case CSC_RGB2YPbPr_BT709:
         if(COLOR_SPACE_RGB != input_color_space)
         {
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           break;
         }
         if((COLOR_SPACE_YUV != output_color_space) &&
            (COLOR_SPACE_RGBY != output_color_space))
         {
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           break;
         }
         break;
@@ -346,19 +346,19 @@ static bm_status_t check_bm1684x_vpp_csctype(
       case CSC_USER_DEFINED_MATRIX:
         if(NULL == matrix)
         {
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-            "bm1684x vpp csc_type param %d is CSC_USER_DEFINED_MATRIX ,"
-            "matrix can not be null, %s: %s: %d\n",
-            csc_type, filename(__FILE__), __func__, __LINE__);
+            "vpp csc_type param %d is CSC_USER_DEFINED_MATRIX ,"
+            "matrix can not be null, check_vpp_csctype: %d\n",
+            csc_type, __LINE__);
           return ret;
         }
         break;
       default:
-          ret = BM_NOT_SUPPORTED;
+          ret = BM_ERR_PARAM;
           bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-            "bm1684x vpp csc_type param %d not support,%s: %s: %d\n",
-            csc_type, filename(__FILE__), __func__, __LINE__);
+            "vpp csc_type param %d not support,check_vpp_csctype: %d\n",
+            csc_type, __LINE__);
           return ret;
       }
   }
@@ -386,10 +386,6 @@ static bm_status_t check_bm1684x_vpp_input_format(
       case FORMAT_NV61:
       case FORMAT_YUV444_PACKED:
       case FORMAT_YVU444_PACKED:
-      case FORMAT_YUV422_YUYV:
-      case FORMAT_YUV422_YVYU:
-      case FORMAT_YUV422_UYVY:
-      case FORMAT_YUV422_VYUY:
       case FORMAT_RGBP_SEPARATE:
       case FORMAT_BGRP_SEPARATE:
       case FORMAT_RGB_PLANAR:
@@ -398,11 +394,23 @@ static bm_status_t check_bm1684x_vpp_input_format(
       case FORMAT_BGR_PACKED:
       case FORMAT_COMPRESSED:
         break;
+      case FORMAT_YUV422_YUYV:
+      case FORMAT_YUV422_YVYU:
+      case FORMAT_YUV422_UYVY:
+      case FORMAT_YUV422_VYUY:
+        if (input[frame_idx].width % 2 != 0) {
+          ret = BM_ERR_PARAM;
+          bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+            "vpp input[%d] width %d is odd, which is not supported by format %d, check_vpp_input_format: %d\n",
+            frame_idx, input[frame_idx].width, input[frame_idx].image_format, __LINE__);
+          return ret;
+        }
+        break;
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_DATA;
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "1684x vpp input[%d] format %d not support %s: %s: %d\n",
-          frame_idx,input[frame_idx].image_format,filename(__FILE__), __func__, __LINE__);
+          "vpp input[%d] format %d not support, check_vpp_input_format: %d\n",
+          frame_idx,input[frame_idx].image_format, __LINE__);
         return ret;
     }
   }
@@ -435,10 +443,10 @@ static bm_status_t check_bm1684x_vpp_output_format(
       case FORMAT_HSV256_PACKED:
          break;
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_DATA;
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "1684x vpp output[%d] format %d not support %s: %s: %d\n",
-          frame_idx,output[frame_idx].image_format,filename(__FILE__), __func__, __LINE__);
+          "vpp output[%d] format %d not support check_vpp_output_format: %d\n",
+          frame_idx,output[frame_idx].image_format, __LINE__);
         return ret;
     }
   }
@@ -461,9 +469,8 @@ static bm_status_t check_bm1684x_vpp_image_param(
   if((frame_number > VPP1684X_MAX_CROP_NUM) || (frame_number <= 0))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      " input num should less than 256  %s: %s: %d\n",
-      filename(__FILE__), __func__, __LINE__);
-    return BM_NOT_SUPPORTED;
+      "input num (%d) should less than 256,  check_vpp_image_param: %d\n", frame_number, __LINE__);
+    return BM_ERR_PARAM;
   }
   for (frame_idx = 0; frame_idx < frame_number; frame_idx++)
   {
@@ -489,8 +496,8 @@ static bm_status_t check_bm1684x_vpp_image_param(
       if((padding_attr[frame_idx].if_memset != 0) && (padding_attr[frame_idx].if_memset != 1))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "frame [%d], padding_attr if_memset wrong  %s: %s: %d\n",
-          frame_idx, filename(__FILE__), __func__, __LINE__);
+          "frame [%d], padding_attr if_memset wrong  check_vpp_image_param: %d\n",
+          frame_idx, __LINE__);
         return BM_ERR_PARAM;
       }
       if(padding_attr[frame_idx].if_memset == 1)
@@ -500,9 +507,9 @@ static bm_status_t check_bm1684x_vpp_image_param(
             (output[frame_idx].height- padding_attr[frame_idx].dst_crop_h - padding_attr[frame_idx].dst_crop_sty > 255) )
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-              "frame [%d], padding_attr  x,y,w,h may be > 255  %s: %s: %d\n",
-              frame_idx, filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+              "frame [%d], padding_attr  x,y,w,h may be > 255  check_vpp_image_param: %d\n",
+              frame_idx, __LINE__);
+            return BM_ERR_PARAM;
         }
         dst_crop_rect.start_x = 0;
         dst_crop_rect.start_y = 0;
@@ -526,8 +533,6 @@ static bm_status_t check_bm1684x_vpp_image_param(
        (src_crop_rect.crop_h > VPP1684X_MAX_H) ||
        (src_crop_rect.crop_w < VPP1684X_MIN_W) ||
        (src_crop_rect.crop_h < VPP1684X_MIN_H) ||
-       (output[frame_idx].width  > VPP1684X_MAX_W) ||
-       (output[frame_idx].height > VPP1684X_MAX_H) ||
        (output[frame_idx].width  < VPP1684X_MIN_W) ||
        (output[frame_idx].height < VPP1684X_MIN_H) ||
        (dst_crop_rect.crop_w > VPP1684X_MAX_W) ||
@@ -536,17 +541,16 @@ static bm_status_t check_bm1684x_vpp_image_param(
        (dst_crop_rect.crop_h < VPP1684X_MIN_H) )
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,\
-        "bm1684x vpp frame_idx %d, width or height abnormal,"
+        "vpp frame_idx %d, width or height abnormal,"
         "input[frame_idx].width %d,input[frame_idx].height %d,"
         "src_crop_rect[frame_idx].crop_w %d,src_crop_rect[frame_idx].crop_h %d,"
         "output[frame_idx].width %d, output[frame_idx].height %d,"
         "dst_crop_rect[frame_idx].crop_w %d, dst_crop_rect[frame_idx].crop_h %d,"
-        "%s: %s: %d\n",\
+        "check_vpp_image_param: %d\n",\
         frame_idx,input[frame_idx].width,input[frame_idx].height,src_crop_rect.crop_w,
         src_crop_rect.crop_h, output[frame_idx].width, output[frame_idx].height,
-        dst_crop_rect.crop_w,dst_crop_rect.crop_h,
-        filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        dst_crop_rect.crop_w,dst_crop_rect.crop_h, __LINE__);
+        return BM_ERR_PARAM;
     }
 
     if((src_crop_rect.start_x < 0) ||
@@ -560,9 +564,16 @@ static bm_status_t check_bm1684x_vpp_image_param(
     )
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "frame [%d], input or output  crop is out of range  %s: %s: %d\n",
-        frame_idx, filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+        "frame [%d], input or output crop is out of range: src_crop_rect=(start_x: %d, "
+        "start_y: %d, crop_w: %d, crop_h: %d), input=(width: %d, height: %d), "
+        "dst_crop_rect=(start_x: %d, start_y: %d, crop_w: %d, crop_h: %d), "
+        "output=(width: %d, height: %d) check_vpp_image_param: %d\n",
+        frame_idx, src_crop_rect.start_x, src_crop_rect.start_y, src_crop_rect.crop_w,
+        src_crop_rect.crop_h, input[frame_idx].width, input[frame_idx].height,
+        dst_crop_rect.start_x, dst_crop_rect.start_y, dst_crop_rect.crop_w,
+        dst_crop_rect.crop_h, output[frame_idx].width, output[frame_idx].height,
+        __LINE__);
+      return BM_ERR_PARAM;
     }
   }
 
@@ -581,13 +592,17 @@ static bm_status_t check_bm1684x_vpp_image_param(
   {
     if(border_param[0].rect_border_enable == 1)
     {
-      if((border_param[0].st_x > input[0].width) ||
-         (border_param[0].st_y > input[0].height) ||
+      if((border_param[0].st_x + border_param[0].width > input[0].width) ||
+         (border_param[0].st_y + border_param[0].height > input[0].height) ||
          (output[0].data_type != DATA_TYPE_EXT_1N_BYTE))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm1684x vpp draw rectangle param wrong,maybe st_x,st_y wrong or data_type not supported, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
+          "vpp draw rectangle param wrong: st_x=%d, st_y=%d, rect_width=%d, rect_height=%d, input_width=%d, input_height=%d, output_data_type=%d. check_vpp_image_param: %d\n",
+          border_param[0].st_x, border_param[0].st_y,
+          border_param[0].width, border_param[0].height,
+          input[0].width, input[0].height,
+          output[0].data_type,
+          __LINE__);
         return BM_ERR_PARAM;
       }
     }
@@ -614,8 +629,8 @@ static bm_status_t check_bm1684x_vpp_param(
   if((input == NULL) || (output == NULL))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "input or output is nullptr , %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-    return BM_ERR_PARAM;
+      "input or output is nullptr , check_vpp_param: %d\n", __LINE__);
+    return BM_ERR_DATA;
   }
 
   ret = check_bm1684x_bm_image_param(frame_number, input, output);
@@ -633,17 +648,17 @@ static bm_status_t check_bm1684x_vpp_param(
   if((algorithm != BMCV_INTER_NEAREST) && (algorithm != BMCV_INTER_LINEAR))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "bm1684x vpp not support algorithm %d,%s: %s: %d\n",
-      algorithm, filename(__FILE__), __func__, __LINE__);
-    return BM_NOT_SUPPORTED;
+      "vpp not support algorithm %d, check_vpp_param: %d\n",
+      algorithm, __LINE__);
+    return BM_ERR_PARAM;
   }
 
   ret = check_bm1684x_vpp_csctype(frame_number, input,output,csc_type, matrix);
   if(ret != BM_SUCCESS)
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "bm1684x vpp csctype %d, %s: %s: %d\n",
-      csc_type, filename(__FILE__), __func__, __LINE__);
+      "vpp csctype %d, check_vpp_param: %d\n",
+      csc_type, __LINE__);
     return ret;
   }
 
@@ -664,9 +679,8 @@ static bm_status_t check_bm1684x_vpp_continuity(
     if(input_or_output[i].image_private== NULL)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm_image image_private cannot be empty, %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+        "bm_image image_private cannot be empty, check_vpp_continuity: %d\n", __LINE__);
+      return BM_ERR_DATA;
     }
   }
   return BM_SUCCESS;
@@ -687,8 +701,7 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        (vpp_param[idx].post_padding_param.post_padding_enable == 1))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x vpp postpadding left right top bottom all is 0 , %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
+        "vpp postpadding left right top bottom all is 0 , check_vpp_internal_param: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
     if(((vpp_input[idx].cropW+ vpp_param[idx].padding_param.left + vpp_param[idx].padding_param.right) > VPP1684X_MAX_W) ||
@@ -697,8 +710,7 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        ((vpp_output[idx].cropH - vpp_param[idx].post_padding_param.top - vpp_param[idx].post_padding_param.bottom) <= 0))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x vpp after padding > 8192, or after postpadding < 0 , %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
+        "vpp after padding > 8192, or after postpadding < 0 , check_vpp_internal_param: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
     scl_x = (float)(vpp_input[idx].cropW+ vpp_param[idx].padding_param.left + vpp_param[idx].padding_param.right) / (float)(vpp_output[idx].cropW - vpp_param[idx].post_padding_param.left - vpp_param[idx].post_padding_param.right);
@@ -709,9 +721,8 @@ static bm_status_t bm1684x_check_vpp_internal_param(
         (scl_y > ((float)VPP1684X_MAX_SCALE_RATIO)))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x vpp not support: scaling ratio greater than 128,pay attention to postpadding, %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+        "vpp not support: scaling ratio greater than 128,pay attention to postpadding, check_vpp_internal_param: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
 
     if(vpp_param[idx].border_param.rect_border_enable == 1)
@@ -737,8 +748,7 @@ static bm_status_t bm1684x_check_vpp_internal_param(
          (vpp_output[idx].wdma_form != DATA_TYPE_1N_BYTE))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm1684x vpp border_param wrong, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
+          "vpp border_param wrong, check_vpp_internal_param: %d\n", __LINE__);
         return BM_ERR_PARAM;
       }
     }
@@ -746,23 +756,20 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        ((vpp_input[idx].format == IN_FBC) && (vpp_output[idx].format == OUT_HSV256)))
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm1684x vpp direct conversion from compressed format to HSV is not supported, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
-        return BM_ERR_PARAM;
+          "vpp direct conversion from compressed format to HSV is not supported, check_vpp_internal_param: %d\n", __LINE__);
+        return BM_ERR_DATA;
     }
     if((vpp_param[idx].csc_scale_order == 1) && (vpp_output[idx].format == OUT_RGBYP))
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm1684x vpp rgbyp does not support CSC before sacle, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
-        return BM_ERR_PARAM;
+          "vpp rgbyp does not support CSC before sacle, check_vpp_internal_param: %d\n", __LINE__);
+        return BM_ERR_DATA;
     }
     if((vpp_input[idx].format == IN_FBC) && ((vpp_input[idx].cropW % 16 != 0) ||
        (vpp_input[idx].cropH % 4 != 0) || (vpp_input[idx].axisX % 32 != 0) || (vpp_input[idx].axisY % 2 != 0)))
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm1684x vpp When compressing the format, cropw requires 16 alignment, croph requires 4 alignment, and start_x requires 32 alignment.start_y requires 2 alignment, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
+          "vpp When compressing the format, cropw requires 16 alignment, croph requires 4 alignment, and start_x requires 32 alignment.start_y requires 2 alignment, check_vpp_internal_param: %d\n", __LINE__);
         return BM_ERR_PARAM;
     }
 
@@ -772,9 +779,8 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        ((vpp_output[idx].format != OUT_RGBP) && (vpp_output[idx].format != OUT_YUV444P) && (vpp_output[idx].format != OUT_YUV400P)))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x vpp fp32,bf16,fp16 only supprot yuv444p, yonly and rgbp, %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_PARAM;
+        "vpp fp32,bf16,fp16 only supprot yuv444p, yonly and rgbp, check_vpp_internal_param: %d\n", __LINE__);
+      return BM_ERR_DATA;
     }
   }
   return BM_SUCCESS;
@@ -785,7 +791,7 @@ static void vpp1684x_dump(struct vpp_batch_n *batch)
   int idx = 0;
   descriptor *pdes = NULL;
 
-  bmlib_log("BMCV VPP DUMP", BMLIB_LOG_ERROR, " %s: %s: %d\n", __FILE__, __func__, __LINE__);
+  bmlib_log("BMCV VPP DUMP", BMLIB_LOG_ERROR, " vpp_dump: %d\n", __LINE__);
   for (idx = 0; idx < batch->num; idx++) {
     pdes = (batch->cmd + idx);
     bmlib_log("BMCV VPP DUMP", BMLIB_LOG_ERROR, " idx %d, batch->num  %d\n",idx, batch->num);
@@ -1010,9 +1016,8 @@ static bm_status_t input_format_match(bm_image *input,uint8* input_format)
       *input_format = IN_FBC;
       break;
     default:
-      ret = BM_NOT_SUPPORTED;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "1684x vpp input format not support %s: %s: %d\n",
-        __FILE__, __func__, __LINE__);
+      ret = BM_ERR_DATA;
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input format not support : %d\n", __LINE__);
       break;
 }
 
@@ -1062,9 +1067,8 @@ static bm_status_t output_format_match(bm_image *output,uint8* output_format)
       *output_format = OUT_HSV256;
        break;
     default:
-      ret = BM_NOT_SUPPORTED;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "1684x vpp output format not support %s: %s: %d\n",
-        __FILE__, __func__, __LINE__);
+      ret = BM_ERR_DATA;
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format not support : %d\n", __LINE__);
       break;
   }
 
@@ -1100,9 +1104,8 @@ static bm_status_t default_csc_type(bm1684x_vpp_mat *input, bm1684x_vpp_mat *out
     color_space_in = COLOR_IN_RGB;
     break;
   default:
-    ret = BM_NOT_SUPPORTED;
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "1684x vpp input format not support %s: %s: %d\n",
-      __FILE__, __func__, __LINE__);
+    ret = BM_ERR_DATA;
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp input format not support : %d\n", __LINE__);
     break;
 }
 
@@ -1132,9 +1135,8 @@ static bm_status_t default_csc_type(bm1684x_vpp_mat *input, bm1684x_vpp_mat *out
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "1684x vpp output format not support %s: %s: %d\n",
-        __FILE__, __func__, __LINE__);
+      ret = BM_ERR_DATA;
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format not support : %d\n", __LINE__);
       break;
   }
 
@@ -1185,8 +1187,7 @@ static bm_status_t bm_image_to_1684x_vpp_input_mat(
 
   ret = input_format_match(input, &(mat->format));
   if(BM_SUCCESS != ret ) {
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "1684x vppinput not support this format %s: %s: %d\n",
-              filename(__FILE__), __func__, __LINE__);
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vppinput not support this format : %d\n", __LINE__);
   //  return BM_NOT_SUPPORTED;
   }
   mat->frm_w  = input->width;
@@ -1279,8 +1280,7 @@ static bm_status_t bm_image_to_1684x_vpp_output_mat(
 
   ret = output_format_match(output,&(mat->format));
   if(BM_SUCCESS != ret ) {
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "1684x vppinput not support this format %s: %s: %d\n",
-              filename(__FILE__), __func__, __LINE__);
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vppinput not support this format bm_image_to_vpp_output_mat: %d\n", __LINE__);
   //  return BM_NOT_SUPPORTED;
   }
 
@@ -1348,9 +1348,8 @@ static bm_status_t bm_image_to_1684x_vpp_output_mat(
       mat->wdma_form = DATA_TYPE_FLOAT32;
       break;
     default:
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "1684x vpp output data type wrong %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
-      ret = BM_ERR_PARAM;
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp output data_type(%d) wrong bm_image_to_vpp_output_mat: %d\n", output->data_type, __LINE__);
+      ret = BM_ERR_DATA;
       break;
   }
  return ret;
@@ -1374,9 +1373,9 @@ bm_status_t vpp_algorithm_config(
     vpp_param->resize_param.scl_init_y = 1;
     break;
   default:
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "1684x vpp not support  algorithm %d ,%s: %s: %d\n",
-      algorithm,filename(__FILE__), __func__, __LINE__);
-    ret = BM_NOT_SUPPORTED;
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp not support algorithm %d ,bm_image_to_vpp_output_mat: %d\n",
+      algorithm, __LINE__);
+    ret = BM_ERR_PARAM;
     break;
   }
   return ret;
@@ -1474,8 +1473,7 @@ static bm_status_t bm1684x_vpp_misc(
   batch.cmd = new descriptor [batch.num * (sizeof(descriptor))];
   if (batch.cmd == NULL) {
     ret = BM_ERR_NOMEM;
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp malloc failed %s: %s: %d\n",
-      __FILE__, __func__, __LINE__);
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp malloc failed vpp_misc: %d\n", __LINE__);
     return ret;
   }
 
@@ -1700,7 +1698,6 @@ static bm_status_t bm1684x_vpp_misc(
 
   UNUSED(cmodel_flag);
 
-#ifdef __linux__
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(vpp_dev_fd);
@@ -1712,21 +1709,20 @@ static bm_status_t bm1684x_vpp_misc(
   {
     ret = bm_get_handle_fd(handle, VPP_FD, &vpp_dev_fd);
     if ((ret != 0 ) || (vpp_dev_fd < 0)){
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "invalid vpp fd %s: %s: %d\n",
-        __FILE__, __func__, __LINE__);
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "invalid vpp fd vpp_misc: %d\n", __LINE__);
       delete[] batch.cmd;
       return ret;
     }
 
     if(0 != ioctl(vpp_dev_fd, VPP_UPDATE_BATCH_FD_PA, &batch))
     {
-      printf("1684x vpp soc run failed\n");
+      printf("vpp soc run failed\n");
       vpp1684x_dump(&batch);
-      ret = BM_ERR_FAILURE;
+      ret = BM_ERR_TIMEOUT;
     }
   } else if(cmodel_flag == 1)
   {
-    bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output,vpp_param);
+    bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output, vpp_param);
   }
 #endif
 
@@ -1737,17 +1733,18 @@ static bm_status_t bm1684x_vpp_misc(
     {
       if(0 != bm_trigger_vpp(handle, &batch))
       {
-        printf("1684x vpp pcie run failed\n");
+        printf("vpp pcie run failed\n");
+#ifndef _WIN32
         vpp1684x_dump(&batch);
-        ret = BM_ERR_FAILURE;
+#endif
+        ret = BM_ERR_TIMEOUT;
       }
-    }
-    else if(cmodel_flag == 1)
-    {
-      bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output,vpp_param);
+    }else if(cmodel_flag == 1){
+#ifndef _WIN32
+      bm1684x_vpp_cmodel(&batch, vpp_input, vpp_output, vpp_param);
+#endif
     }
 
-#endif
 #endif
 
   delete[] batch.cmd;
@@ -1876,9 +1873,9 @@ static bm_status_t bm1684x_vpp_multi_parameter_processing(
     if (!bm_image_is_attached(output[i])) {
       if (bm_image_alloc_dev_mem(output[i], BMCV_HEAP_ANY) != BM_SUCCESS) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-          "output dev alloc fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
+          "output dev alloc fail vpp_multi_parameter_processing: %d\n", __LINE__);
         free_dmem();
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
       }
     }
   }
@@ -1887,8 +1884,8 @@ static bm_status_t bm1684x_vpp_multi_parameter_processing(
     frame_number, input, output, input_crop_rect, padding_attr, algorithm, csc_type, matrix, border_param);
   if(ret != BM_SUCCESS)
   {
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "bm1684x vpp error parameters found,%s: %s: %d\n",
-      filename(__FILE__), __func__, __LINE__);
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp error parameters found, vpp_multi_parameter_processing: %d\n",
+      __LINE__);
     return ret;
   }
 
@@ -1905,9 +1902,11 @@ static bm_status_t check_bm1684x_convert_to_param(bm_image* input,
   for(int i=0; i<input_num; i++){
     if((input[0].image_format != input[i].image_format) || (output[0].image_format != output[i].image_format)){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "input and output different formats not supported, %s: %s: %d\n",
-          filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+          "input and output different formats not supported,"
+          "input[0].image_format = %d, input[%d].image_format = %d,"
+          "output[0].image_format = %d, output[%d].image_format = %d. "
+          "check_convert_to_param: %d\n", input[0].image_format, i, input[i].image_format, output[0].image_format, i, output[i].image_format, __LINE__);
+        return BM_ERR_DATA;
     }
   }
   return BM_SUCCESS;
@@ -2006,7 +2005,7 @@ static bm_status_t bm1684x_vpp_multi_input_multi_output(
           if(ret != BM_SUCCESS)
           {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-              "bm1684x_vpp_convert_to error , %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+              "vpp_convert_to error , vpp_multi_input_multi_output: %d\n", __LINE__);
             return BM_ERR_PARAM;
           }
         }
@@ -2120,15 +2119,15 @@ bm_status_t bm1684x_vpp_compressed2yuv(
     bm_image_create(handle, input->height, input->width, FORMAT_YUV420P, DATA_TYPE_EXT_1N_BYTE, input_temp);
     if(BM_SUCCESS != bm_image_alloc_dev_mem(input_temp[0])) {
       BMCV_ERR_LOG("bm_image_alloc_dev_mem error\n");
-      return BM_ERR_FAILURE;
+      return BM_ERR_NOMEM;
     }
 
     ret = bm1684x_vpp_single_input_multi_output(handle, 1, input[0], input_temp, NULL, NULL, algorithm, CSC_MAX_ENUM, matrix);
     if(ret != BM_SUCCESS)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm1684x_vpp_single_input_multi_output error , %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "vpp_single_input_multi_output error , vpp_compressed2yuv: %d\n", __LINE__);
+      return ret;
     }
     *input = *input_temp;
   }
@@ -2189,7 +2188,7 @@ bm_status_t bm1684x_vpp_cvt_padding(
 
   if (padding_attr == NULL) {
       bmlib_log("VPP_PADDING", BMLIB_LOG_ERROR, "vpp padding info is nullptr");
-      return BM_ERR_FAILURE;
+      return BM_ERR_PARAM;
   }
 
   int compressed_flag = 0;
@@ -2252,11 +2251,17 @@ bm_status_t bm1684x_vpp_basic(
     return ret;
   }
 
+  int compressed_flag = 0;
+  bm_image input_temp;
+  ret = bm1684x_vpp_compressed2yuv(handle, in_img_num, input, &input_temp, matrix, algorithm, crop_rect, &compressed_flag);
+  if(ret != BM_SUCCESS)
+    goto failed;
+
   if (crop_rect == NULL) {
     if (crop_num_vec != NULL) {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-        "crop_num_vec should be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "crop_num_vec should be NULL err vpp_basic: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
 
     out_img_num = in_img_num;
@@ -2265,8 +2270,8 @@ bm_status_t bm1684x_vpp_basic(
   } else {
     if (crop_num_vec == NULL) {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-        "crop_num_vec should not be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "crop_num_vec should not be NULL err vpp_basic: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
 
     for (i = 0; i < in_img_num; i++) {
@@ -2300,6 +2305,12 @@ bm_status_t bm1684x_vpp_basic(
   {
     delete [] input_inner;
   }
+failed:
+  if(1 == compressed_flag)
+  {
+    bm_image_destroy(input_temp);
+    input_temp.image_private = NULL;
+  }
   return ret;
 }
 
@@ -2325,7 +2336,7 @@ bm_status_t bm1684x_vpp_stitch(
 
   if (dst_crop_rect == NULL) {
     bmlib_log("VPP-STITCH", BMLIB_LOG_ERROR, "dst_crop_rect is nullptr");
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
   }
 
 
@@ -2360,8 +2371,10 @@ bm_status_t bm1684x_vpp_draw_rectangle(
 {
   int i = 0;
   bm_status_t ret = BM_SUCCESS;
+  int draw_num = 0;
   /*check border param*/
 
+  draw_num = (rect_num + 31) >> 5;
   border_t* border_param = new border_t [rect_num];
   for(i = 0; i < rect_num; i++)
   {
@@ -2383,8 +2396,14 @@ bm_status_t bm1684x_vpp_draw_rectangle(
     border_image[i] = image;
   }
 
-  ret = bm1684x_vpp_multi_parameter_processing(
-    handle, rect_num, border_image, border_image, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param,NULL);
+  for(i = 0; i < draw_num; i++) {
+    int draw_num_current = 32;
+    if (i == draw_num - 1) {
+      draw_num_current = rect_num - 32 * i;
+    }
+    ret = bm1684x_vpp_multi_parameter_processing(
+      handle, draw_num_current, border_image + 32 * i, border_image + 32 * i, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param + 32 * i,NULL);
+  }
 
   delete [] border_image;
   delete [] border_param;
@@ -2435,9 +2454,8 @@ bm_status_t bm1684x_vpp_resize(
     if(resize_attr[0].stretch_fit!= resize_attr[input_idx].stretch_fit)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "expected consistant input image stretch_fit %s: %s: %d\n",
-        filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+        "expected consistant input image stretch_fit, vpp_resize: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
   }
 
@@ -2499,7 +2517,7 @@ bm_status_t bm1684x_vpp_resize(
       else
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-          "resize_attr.stretch_fit must be 0 or 1 %s: %s: %d\n", __FILE__, __func__, __LINE__);
+          "resize_attr.stretch_fit(%u) must be 0 or 1, vpp_resize: %d\n", resize_attr[0].stretch_fit, __LINE__);
       }
       output_idx++;
     }
@@ -2541,8 +2559,8 @@ bm_status_t bm1684x_vpp_storage_convert(
     (output_[0].data_type == DATA_TYPE_EXT_4N_BYTE || output_[0].data_type == DATA_TYPE_EXT_4N_BYTE_SIGNED))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "1684x vpp not support 4N mode %s: %s: %d\n", __FILE__, __func__, __LINE__);
-    ret = BM_NOT_SUPPORTED;
+      "vpp not support 4N mode, vpp_storage_convert: %d\n", __LINE__);
+    ret = BM_ERR_DATA;
     goto done;
   }
 
@@ -2597,9 +2615,9 @@ bm_status_t bm1684x_vpp_put_text(
     if(font_rects[i].start_x < 0 || font_rects[i].start_y < 0 || font_rects[i].start_x + font_rects[i].crop_w > image[i].width || \
           font_rects[i].start_y + font_rects[i].crop_h > image[i].height){
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "rects out of range, idx = %d, stx = %d, sty = %d, crop_w = %d, crop_h = %d, %s: %s: %d\n", i, font_rects[i].start_x, font_rects[i].start_y, \
-            font_rects[i].crop_w, font_rects[i].crop_h, __FILE__, __func__, __LINE__);
-      ret = BM_ERR_FAILURE;
+      "rects out of range, idx = %d, stx = %d, sty = %d, crop_w = %d, crop_h = %d, vpp_put_text: %d\n", i, font_rects[i].start_x, font_rects[i].start_y, \
+            font_rects[i].crop_w, font_rects[i].crop_h, __LINE__);
+      ret = BM_ERR_PARAM;
       goto fail;
     }
 #ifdef USING_CMODEL
@@ -2696,7 +2714,7 @@ void bm1684x_vpp_read_bin(bm_image src, const char *input_name)
                      (void*)((char*)input_ptr + image_byte_size[0] + image_byte_size[1] + image_byte_size[2])};
 
 
-  FILE *fp_src = fopen(input_name, "rb+");
+  FILE *fp_src = fopen(input_name, "rb");
 
   if (fread((void *)input_ptr, 1, byte_size, fp_src) < (unsigned int)byte_size){
       printf("file size is less than %d required bytes\n", byte_size);
@@ -2805,6 +2823,7 @@ bm_status_t bm1684x_vpp_fill_rectangle(
   unsigned char        b)
 {
   bm_status_t ret = BM_SUCCESS;
+  bm_handle_check_2(handle, *input, *output);
   ret = simple_check_bm1684x_input_param(handle, input, input_num);
   if(ret != BM_SUCCESS)
     return ret;
@@ -2853,6 +2872,7 @@ bm_status_t bm1684x_vpp_cmodel_csc_resize_convert_to(
   bmcv_convert_to_attr*   convert_to_attr)
 {
   bm_status_t ret = BM_SUCCESS;
+  bm_handle_check_2(handle, *input, *output);
   ret = bm1684x_vpp_asic_and_cmodel(
     handle, frame_number, input, output, input_crop_rect, padding_attr, algorithm, csc_type, matrix, convert_to_attr, NULL, NULL, USE_CMODEL);
   return ret;
@@ -2870,6 +2890,7 @@ bm_status_t bm1684x_vpp_cmodel_border(
   unsigned char           b)
 {
   bm_status_t ret = BM_SUCCESS;
+  bm_handle_check_2(handle, *input, *output);
   border_t* border_param = new border_t [rect_num];
   for(int i = 0; i < rect_num; i++){
     border_param[i].rect_border_enable = 1;
@@ -2925,7 +2946,7 @@ bm_status_t bm1684x_vpp_mosaic_special(bm_handle_t          handle,
     ret = bm_image_alloc_dev_mem(masaic_pad[i]);
     if(ret != BM_SUCCESS){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "bm_image alloc dev mem fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
+      "bm_image alloc dev mem fail, vpp_mosaic_special: %d\n", __LINE__);
       goto fail2;
     }
   }
@@ -2941,7 +2962,7 @@ bm_status_t bm1684x_vpp_mosaic_special(bm_handle_t          handle,
     ret = bm_image_alloc_dev_mem(masaic_narrow[i]);
     if(ret != BM_SUCCESS){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "bm_image alloc dev mem fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
+      "bm_image alloc dev mem fail, vpp_mosaic_special: %d\n", __LINE__);
       goto fail1;
     }
     padding_enlarge[i].dst_crop_stx = mosaic_rect[i].start_x;
@@ -3007,7 +3028,7 @@ bm_status_t bm1684x_vpp_mosaic_normal(bm_handle_t           handle,
     ret = bm_image_alloc_dev_mem(masaic_narrow[i]);
     if(ret != BM_SUCCESS){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "bm_image alloc dev mem fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
+      "bm_image alloc dev mem fail, vpp_mosaic_normal: %d\n", __LINE__);
       goto fail;
     }
   }
@@ -3093,16 +3114,16 @@ bm_status_t bm1684x_vpp_basic_v2(
   if (crop_rect == NULL) {
     if (crop_num_vec != NULL) {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-        "crop_num_vec should be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "crop_num_vec should be NULL err, vpp_basic_v2: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
 
     out_crop_num = img_num;
   } else {
     if (crop_num_vec == NULL) {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
-        "crop_num_vec should not be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-      return BM_ERR_FAILURE;
+        "crop_num_vec should not be NULL err, vpp_basic_v2: %d\n", __LINE__);
+      return BM_ERR_PARAM;
     }
     for (i = 0; i < img_num; i++) {
       out_crop_num += crop_num_vec[i];
@@ -3111,31 +3132,25 @@ bm_status_t bm1684x_vpp_basic_v2(
 
   bmcv_convert_to_attr black_attr;
 
-  if(NULL != padding_attr)
-  {
-    for (i = 0; i < out_crop_num; i++)
-    {
-      padding_attr[i].padding_r = 0;
-      padding_attr[i].padding_g = 0;
-      padding_attr[i].padding_b = 0;
-      padding_attr[i].if_memset = 1;
-      if ((padding_attr[i].dst_crop_stx > 255) || (padding_attr[i].dst_crop_sty > 255) ||
-          (output[i].width - padding_attr[i].dst_crop_w - padding_attr[i].dst_crop_stx > 255) ||
-          (output[i].height- padding_attr[i].dst_crop_h - padding_attr[i].dst_crop_sty > 255) )
-      {
-        black_attr.alpha_0 = 0;
-        black_attr.alpha_1 = 0;
-        black_attr.alpha_2 = 0;
-        black_attr.beta_0 = padding_attr[i].padding_r;
-        black_attr.beta_1 = padding_attr[i].padding_g;
-        black_attr.beta_2 = padding_attr[i].padding_b;
-        padding_attr[i].if_memset = 0;
-        ret = bm1684x_vpp_convert_to(handle, 1, black_attr, input, &output[i]);
-        if(ret != BM_SUCCESS)
-        {
-          bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-            "bm1684x_vpp_convert_to error , %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-          return BM_ERR_PARAM;
+  if(NULL != padding_attr) {
+    for (i = 0; i < out_crop_num; i++) {
+      if(padding_attr[i].if_memset == 1) {
+        if ((padding_attr[i].dst_crop_stx > 255) || (padding_attr[i].dst_crop_sty > 255) ||
+            (output[i].width - padding_attr[i].dst_crop_w - padding_attr[i].dst_crop_stx > 255) ||
+            (output[i].height- padding_attr[i].dst_crop_h - padding_attr[i].dst_crop_sty > 255) ) {
+          black_attr.alpha_0 = 0;
+          black_attr.alpha_1 = 0;
+          black_attr.alpha_2 = 0;
+          black_attr.beta_0 = padding_attr[i].padding_r;
+          black_attr.beta_1 = padding_attr[i].padding_g;
+          black_attr.beta_2 = padding_attr[i].padding_b;
+          padding_attr[i].if_memset = 0;
+          ret = bm1684x_vpp_convert_to(handle, 1, black_attr, input, &output[i]);
+          if(ret != BM_SUCCESS) {
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+              "vpp_convert_to error , vpp_basic_v2: %d\n", __LINE__);
+            return ret;
+          }
         }
       }
     }
@@ -3171,4 +3186,13 @@ bm_status_t bm1684x_vpp_basic_v2(
   }
   delete [] convert_to_attr;
   return ret;
+}
+
+unsigned long long bmcv_calc_cbcr_addr(unsigned long long y_addr, unsigned int y_stride, unsigned int frame_height)
+{
+  u64 c_addr = 0, y_len=0;
+
+  y_len = y_stride * ALIGN(frame_height,32);
+  c_addr = y_addr + y_len;
+  return c_addr;
 }

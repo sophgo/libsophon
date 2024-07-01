@@ -104,7 +104,8 @@ if(WIN32)
         src/bm1684/bmcv_1684_vpp_internal.cpp
         src/bm1684x/bmcv_1684x_vpp_internal.cpp
         src/bmcv_api_bayer2rgb.cpp
-	src/bmcv_api_as_strided.cpp
+        src/bmcv_api_as_strided.cpp
+        src/bmcv_api_hist_balance.cpp
         # src/md5.cpp
     )
 endif()

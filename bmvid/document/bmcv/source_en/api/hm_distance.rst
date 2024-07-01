@@ -4,6 +4,11 @@ bmcv_hm_distance
 Calculates the Hamming distance of each element in two vectors.
 
 
+**Processor model support**
+
+This interface only supports BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c
@@ -53,10 +58,6 @@ Calculates the Hamming distance of each element in two vectors.
 * BM_SUCCESS: success
 
 * Other: failed
-
-**Note:**
-
-This interface only supports BM1684X.
 
 
 **Code example:**

@@ -18,6 +18,7 @@ INCLUDE_DIR += -I$(TEST_BMCV_DIR)
 
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
 TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
+					 $(TEST_BMCV_DIR)/test_csc_convert_to.cpp  \
                      $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_as_strided.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_bayer2rgb.cpp  \
@@ -28,9 +29,11 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_batch_topk.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_bgrsplit.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_calc_hist.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_hist_balance.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_canny.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_cmulp.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_copy_to.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_copy_to_param.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_crop.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_dct.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_distance.cpp \
@@ -58,6 +61,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_nms.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_put_text.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_pyramid.cpp   \
+					 $(TEST_BMCV_DIR)/test_cv_quantify.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_sobel.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_sort.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_split.cpp  \
@@ -87,6 +91,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_yolov3_detect_out.cpp  \
 					 $(TEST_BMCV_DIR)/test_matrix_log.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_fbd.cpp  \
+					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_fbd_param.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_slt.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_ax+b.cpp   \
@@ -95,9 +100,10 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_random.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_resize.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_stitch.cpp  \
+					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_stitch_2way.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_mosaic.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_convert.cpp    \
-					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_padding.cpp      \
+					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_dst_position.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_comparison.cpp    \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_border_comapre.cpp \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_fill_rectangle.cpp  \
@@ -107,6 +113,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_convert_to_comparison.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_mul_crop_resize_haikang.cpp  \
 			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_point.cpp\
+			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_multi_thread.cpp\
 
 TEST_BMCV_CXX_EXE1 = $(patsubst %.cpp,%,$(TEST_BMCV_SRCS_CXX))
 TEST_BMCV_CXX_EXE2 = $(patsubst $(BMVID_ROOT)/%,%,$(TEST_BMCV_CXX_EXE1))

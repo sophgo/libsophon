@@ -13,6 +13,9 @@ The format of the interface is as follows:
                 bm_image output,
                 bool is_inversed);
 
+**Processor model support**
+
+This interface only supports BM1684.
 
 
 **Description of input parameters:**

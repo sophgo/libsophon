@@ -145,6 +145,7 @@ typedef enum bm_image_format_ext_ {
     FORMAT_HSV180_PACKED,
     FORMAT_HSV256_PACKED,
     FORMAT_BAYER,
+    FORMAT_BAYER_RG8,
 } bm_image_format_ext;
 
 typedef enum bmcv_resize_algorithm_ {
@@ -579,13 +580,15 @@ DECL_EXPORT bm_status_t bmcv_image_jpeg_enc(
         bm_image *  src,
         void **     p_jpeg_data,
         size_t *    out_size,
-        int         quality_factor);
+        int         quality_factor,
+        int         bs_in_device);
 DECL_EXPORT bm_status_t bmcv_image_jpeg_dec(
         bm_handle_t handle,
         void **     p_jpeg_data,
         size_t *    in_size,
         int         image_num,
-        bm_image *  dst);
+        bm_image *  dst,
+        int         bs_in_device);
 
 DECL_EXPORT bm_status_t bmcv_nms(
         bm_handle_t     handle,
@@ -1106,6 +1109,13 @@ DECL_EXPORT bm_status_t bmcv_calc_hist_with_weight(bm_handle_t handle,
                                        const float *ranges,
                                        int inputDtype);
 
+DECL_EXPORT bm_status_t bmcv_hist_balance(
+        bm_handle_t handle,
+        bm_device_mem_t input,
+        bm_device_mem_t output,
+        int H,
+        int W);
+
 DECL_EXPORT bm_status_t bmcv_distance(bm_handle_t handle,
                           bm_device_mem_t input,
                           bm_device_mem_t output,
@@ -1220,6 +1230,11 @@ DECL_EXPORT bm_status_t bmcv_image_threshold(
         unsigned char thresh,
         unsigned char max_value,
         bm_thresh_type_t type);
+
+DECL_EXPORT bm_status_t bmcv_image_quantify(
+        bm_handle_t handle,
+        bm_image input,
+        bm_image output);
 
 DECL_EXPORT bm_status_t bmcv_image_gaussian_blur(
         bm_handle_t handle,
@@ -1538,6 +1553,11 @@ DECL_EXPORT bm_status_t bmcv_matrix_log(
   bm_handle_t handle,
   bm_image src,
   bm_image dst);
+
+DECL_EXPORT bm_status_t bm_image_zeros(bm_image image);
+DECL_EXPORT unsigned long long bmcv_calc_cbcr_addr(unsigned long long y_addr, unsigned int y_stride, unsigned int frame_height);
+
+
 #if defined(__cplusplus)
 }
 #endif

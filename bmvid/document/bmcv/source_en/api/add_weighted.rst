@@ -9,6 +9,11 @@ Fusion of two images of the same size by weighted, as follows:
     \end{array}
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

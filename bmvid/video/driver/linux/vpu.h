@@ -57,6 +57,7 @@
 #define VDI_IOCTL_GET_MAX_CORE_NUM               _IO(VDI_IOCTL_MAGIC, 33)
 #define VDI_IOCTL_CTRL_KERNEL_RESET              _IO(VDI_IOCTL_MAGIC, 34)
 #define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
+
 typedef struct vpudrv_syscxt_info_s {
     unsigned int core_idx;
     unsigned int inst_idx;
@@ -80,8 +81,8 @@ typedef struct vpudrv_buffer_t {
     int    enable_cache;
 #endif
 
-#ifdef BM_ION_MEM
-    int    ion_fd;
+#if defined(BM_PCIE_MODE) || defined(BM_ION_MEM)
+    unsigned int    ion_fd;
     struct dma_buf_attachment *attach;
     struct sg_table *table;
     struct dma_buf *dma_buf;
@@ -119,7 +120,8 @@ typedef struct vpudrv_regrw_info_t {
 
 typedef struct {
     int core_idx;
-    pid_t reset_core_disable;
+    pid_t pid;
+    int reset;
 } vpudrv_reset_flag;
 
 #ifdef BM_PCIE_MODE

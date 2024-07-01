@@ -1,8 +1,10 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_common_bm1684.h"
+#include "bmcv_internal.h"
 #include <memory>
 #include <vector>
 #include <cstring>
+#include <stdio.h>
 
 
 #define IS_YUV(a) (a == FORMAT_NV12 || a == FORMAT_NV21 || a == FORMAT_NV16 ||     \
@@ -90,7 +92,7 @@ static bm_status_t bmcv_sobel_check(
         int ksize) {
     if (handle == NULL) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (ksize % 2 == 0 || ksize > 31) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "The kernel size must be odd and not greater than 31\n" );
@@ -110,31 +112,31 @@ static bm_status_t bmcv_sobel_check(
     int image_dw = output.width;
     if (image_sw + ksize - 1 >= 2048) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "image width is too large!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (ksize > 9) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "ksize is too large!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (!IS_YUV(src_format) &&
         !IS_RGB(src_format) &&
         src_format != FORMAT_GRAY) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "Not supported input image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((IS_YUV(src_format) && dst_format != FORMAT_GRAY) &&
         (dst_format != src_format)) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "Not supported output image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src_type != DATA_TYPE_EXT_1N_BYTE ||
         dst_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "Not supported image data type\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (image_sh != image_dh || image_sw != image_dw) {
         bmlib_log("SOBEL", BMLIB_LOG_ERROR, "input and output image size should be same\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -263,7 +265,7 @@ bm_status_t bmcv_image_sobel(
         float delta) {
     unsigned int chipid = 0x1686;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -276,12 +278,12 @@ bm_status_t bmcv_image_sobel(
         break;
 
       case 0x1686:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

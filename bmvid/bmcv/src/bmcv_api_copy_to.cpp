@@ -36,7 +36,7 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
             "[CopyTo] input data_type and image_format must be same to "
             "output!\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     // image format check
     if ((input.image_format != FORMAT_RGB_PLANAR) &&
@@ -46,7 +46,7 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
         (input.image_format != FORMAT_GRAY)) {
         BMCV_ERR_LOG("[CopyTo] image format not support\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (((input.image_format == FORMAT_RGB_PACKED) ||
          (input.image_format == FORMAT_BGR_PACKED)) &&
@@ -54,7 +54,7 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
          (input.data_type == DATA_TYPE_EXT_4N_BYTE_SIGNED))) {
         BMCV_ERR_LOG("[CopyTo] 4n image should match planner\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((input.data_type == DATA_TYPE_EXT_FP16) ||
         (output.data_type == DATA_TYPE_EXT_FP16)||
@@ -62,7 +62,7 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
         (output.data_type == DATA_TYPE_EXT_BF16)){
         BMCV_ERR_LOG("data type not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     // shape check
@@ -70,14 +70,14 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
         BMCV_ERR_LOG(
             "[CopyTo] input.with should be less than or equal to output's\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.height > output.height) {
         BMCV_ERR_LOG(
             "[CopyTo] input.height should be less than or equal to "
             "output's\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     int in_image_stride[3] = {0};
     bm_image_get_stride(input, in_image_stride);
@@ -88,13 +88,13 @@ bm_status_t bmcv_copy_to_check(bmcv_copy_to_atrr_t copy_to_attr,
         out_image_stride[0]) {
         BMCV_ERR_LOG("[CopyTo] width exceeds range\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     // compare by elems
     if ((copy_to_attr.start_y + input.height) > output.height) {
         BMCV_ERR_LOG("[CopyTo] height exceeds range\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
 
     return BM_SUCCESS;
@@ -104,10 +104,11 @@ bm_status_t bmcv_image_copy_to_(bm_handle_t         handle,
                                bmcv_copy_to_atrr_t copy_to_attr,
                                bm_image            input,
                                bm_image            output) {
+    bm_status_t ret = BM_SUCCESS;
     if (handle == NULL) {
         BMCV_ERR_LOG("[CopyTo] Can not get handle!\r\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     int data_size         = 1;
     int data_type         = STORAGE_MODE_1N_INT8;
@@ -115,7 +116,6 @@ bm_status_t bmcv_image_copy_to_(bm_handle_t         handle,
     int channel           = 3;
     int planner_or_packed = PLANNER;
     unsigned int chipid = BM1684X;
-    bm_status_t ret = BM_SUCCESS;
 
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret){
@@ -183,17 +183,17 @@ bm_status_t bmcv_image_copy_to_(bm_handle_t         handle,
     }
     int elem_byte_stride =
         (planner_or_packed == PACKED) ? (data_size * 3) : (data_size);
-    if (BM_SUCCESS !=
-        bmcv_copy_to_check(copy_to_attr, input, output, elem_byte_stride)) {
+    ret = bmcv_copy_to_check(copy_to_attr, input, output, elem_byte_stride);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("[CopyTo] bmcv_copy_to_check error!\r\n");
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
     if (!bm_image_is_attached(output)) {
         if (BM_SUCCESS != bm_image_alloc_dev_mem(output, BMCV_HEAP_ANY)) {
             BMCV_ERR_LOG("[CopyTo] bm_image_alloc_dev_mem error!\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_device_mem_t in_dev_mem, out_dev_mem;
@@ -232,11 +232,11 @@ bm_status_t bmcv_image_copy_to_(bm_handle_t         handle,
         case 0x1684:{
             if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_COPY_TO, (uint8_t *)&arg, sizeof(arg))) {
                 BMCV_ERR_LOG("copy_to send api error\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_TIMEOUT;
             }
             if (BM_SUCCESS != bm_sync_api(handle)) {
                 BMCV_ERR_LOG("copy_to sync api error\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_TIMEOUT;
             }
             break;
         }
@@ -245,12 +245,12 @@ bm_status_t bmcv_image_copy_to_(bm_handle_t         handle,
             // tpu_kernel_launch_sync(handle, "sg_cv_copy_to", &arg, sizeof(arg));
             if(BM_SUCCESS != bm_tpu_kernel_launch(handle, "sg_cv_copy_to", &arg, sizeof(arg))){
                 BMCV_ERR_LOG("copy_to launch api error\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_TIMEOUT;
             }
             break;
 
         default:
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_NOFEATURE;
             break;
     }
     return BM_SUCCESS;
@@ -264,7 +264,7 @@ bm_status_t bmcv_image_copy_to(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -286,13 +286,13 @@ bm_status_t bmcv_image_copy_to(
                 bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "not support, %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
-                ret = BM_NOT_SUPPORTED;
+                ret = BM_ERR_PARAM;
             }
             break;
         }
 
         default:
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_NOFEATURE;
             break;
     }
     return ret;

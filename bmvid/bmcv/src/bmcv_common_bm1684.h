@@ -627,6 +627,16 @@ typedef struct bm_api_cv_threshold {
   u32 max_value;
 } bm_api_cv_threshold_t;
 
+typedef struct bm_api_cv_quantify {
+  int channel;
+  u64 input_addr[3];
+  u64 output_addr[3];
+  int width[3];
+  int height[3];
+  int input_str[3];
+  int output_str[3];
+} bm_api_cv_quantify_t;
+
 typedef struct bm_api_cv_pyramid {
   u64 input_addr;
   u64 kernel_addr;
@@ -1006,6 +1016,7 @@ INLINE static int ceiling_func_shift(int numerator, int shift) { return (numerat
 #define  BM_API_ID_CV_FUSION                 533
 #define  BM_API_ID_CV_BITWISE                534
 #define  BM_API_ID_CV_BAYER2RGB              535
+#define  BM_API_ID_CV_QUANTIFY               536
 
 /******************bmlib*********************/
 
