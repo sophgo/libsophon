@@ -18,7 +18,8 @@ Depending on the current situation, the installed version may change.
   sudo rm -f /lib/modules/$(uname -r)/kernel/drivers/pci/bmsophon.ko
 
 
-**If the Debian/Ubuntu system is used:**
+Debian/Ubuntu system
+~~~~~~~~~~~~~~~~~~~~~~
 
 the installation package consists of three files:
 
@@ -78,7 +79,7 @@ You need to manually execute the following command to install the driver in the 
   sudo modprobe bmsophon
 
 
-Uninstallation method:
+**Uninstallation method:**
 
 .. code-block:: shell
   
@@ -104,7 +105,8 @@ If there is any trouble in uninstallation, you can try the following operations:
   #Completely clear libsophon:
   sudo dpkg --purge sophon-libsophon
 
-**If another Linux system is used:**
+Another Linux system
+~~~~~~~~~~~~~~~~~~~~~~
 
 the installation package consist of one file:
 
@@ -156,7 +158,7 @@ Finally, some configuration work should be done:
   sudo mkdir -p /usr/lib/cmake/libsophon
   sudo cp /opt/sophon/libsophon-current/data/libsophon-config.cmake /usr/lib/cmake/libsophon/
 
-Uninstallation method:
+**Uninstallation method:**
   
 .. code-block:: shell
   

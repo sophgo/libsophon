@@ -17,11 +17,11 @@ Interpretation of terms
    * - BM1684X
      - The fourth-generation tensor processor launched by SOPHGO for the field of deep learning.
 
-   * - TPU
-     - On-chip neural network processing unit.
+   * - Tensor Computing Processor
+     - On-processor neural network processing unit.
 
    * - SOC mode
-     - A working mode, the SDK runs on A53 AARCH64 platform, and TPU is used as the platform bus device.
+     - A working mode, the SDK runs on A53 AARCH64 platform, and Tensor Computing Processor is used as the platform bus device.
 
    * - PCIe mode
      - A working mode, SDK runs on the X86 platform, BM1684 and BM1684X are at deep learning computing accelerator cards in PCIe interface.
@@ -30,7 +30,7 @@ Interpretation of terms
      - Drivers are the channels through which the API interface accesses the hardware.
 
    * - Gmem
-     - DDR memory on card for TPU acceleration.
+     - DDR memory on card for Tensor Computing Processor acceleration.
 
    * - F
      - FAULT, fault status.
@@ -53,7 +53,7 @@ Bm-smi functions mainly include:
 
    -  Viewing physical board ID.
 
-   -  Viewing the device chip ID, and the PCIe bus ID where it is located.
+   -  Viewing the device processor ID, and the PCIe bus ID where it is located.
 
    -  Viewing device temperature and power consumption.
 
@@ -61,7 +61,7 @@ Bm-smi functions mainly include:
 
    -  Viewing the total number and usage of gmem.
 
-   -  Viewing the usage of tpu.
+   -  Viewing the usage of Tensor Computing Processor.
 
    -  Viewing the work frequency information of the device.
 
@@ -104,7 +104,7 @@ Bm-smi functions mainly include:
      - Supported       
      - Supported
 
-   * - Tpu device number              
+   * - Tensor Computing Processor device number              
      - Supported
      - Supported
 
@@ -120,7 +120,7 @@ Bm-smi functions mainly include:
      - Supported
      - Not supported
 
-   * - Chip temperature
+   * - Processor temperature
      - Supported
      - Not supported
 
@@ -184,7 +184,7 @@ Bm-smi functions mainly include:
      - Supported
      - Supported
 
-   * - Instantaneous usage of tpu
+   * - Instantaneous usage of Tensor Computing Processor
      - Supported
      - Supported
 
@@ -209,7 +209,7 @@ Bm-smi functions mainly include:
    :width: 5.76806in
    :height: 6.22083in
 
-Figure 1 shows the display status of SC5+ (three-core)/SC5H/SC5P (eight-core), each card is separated by =======, the board attributes are displayed on the left, and the state of a single chip is displayed on the right and middle.
+Figure 1 shows the display status of SC5+ (three-core)/SC5H/SC5P (eight-core), each card is separated by =======, the board attributes are displayed on the left, and the state of a single processor is displayed on the right and middle.
 
 bm-smi is an executable file that does not depend on other dynamic libraries, and it is located under /opt/sophon/libsophon-current/bin directory. The above figure is a schematic diagram about the execution of bm-smi.
 
@@ -232,21 +232,21 @@ The meaning of each part is introduced one by one below:
 
 -  SN: board serial number (total of 17 bits).
 
--  TPU: device number of tpu.
+-  TPU: device number of Tensor Computing Processor.
 
 -  BoardT: board temperature.
 
--  chipT: chip temperature.
+-  chipT: processor temperature.
 
--  TPU_P: power consumption of TPU module.
+-  TPU_P: power consumption of Tensor Computing Processor module.
 
--  TPU_V: voltage of TPU module.
+-  TPU_V: voltage of Tensor Computing Processor module.
 
 -  ECC: whether DDR ECC is enabled.
 
 -  CorrectNum: the number of correction times if DDR is enabled.
 
--  Tpu-Util: instantaneous usage of tpu.
+-  Tpu-Util: instantaneous usage of Tensor Computing Processor.
 
 -  12V_ATX: 12V board supply current.
 
@@ -254,9 +254,9 @@ The meaning of each part is introduced one by one below:
 
 -  boardP: board power consumption.
 
--  Minclk: minimum work frequency of tpu.
+-  Minclk: minimum work frequency of Tensor Computing Processor.
 
--  Maxclk: maximum work frequency of tpu.
+-  Maxclk: maximum work frequency of Tensor Computing Processor.
 
 -  Fan: fan speed, N/A means the card has no fan, and F means  there is a failure in the fan.
 
@@ -264,9 +264,9 @@ The meaning of each part is introduced one by one below:
 
 -  Status: board status. Active means active status; and Fault means fault status.
 
--  Curclk: current work frequency of tpu. The color of the displayed value varies according to the current work frequency. 550M (bm1684) or 1000M (bm1684x) is displayed in white, 75M in red, and other frequencies in yellow; red and yellow are used to indicate to the user that the current work  frequency is not the maximum work frequency. Displaying different colors are only available in version 2.1.0 and above.
+-  Curclk: current work frequency of Tensor Computing Processor. The color of the displayed value varies according to the current work frequency. 550M (bm1684) or 1000M (bm1684x) is displayed in white, 75M in red, and other frequencies in yellow; red and yellow are used to indicate to the user that the current work  frequency is not the maximum work frequency. Displaying different colors are only available in version 2.1.0 and above.
 
--  TPU_C: work current of tpu module.
+-  TPU_C: work current of Tensor Computing Processor module.
 
 -  Memory-Usage: byte numbers of gmem totals and used. The 106M indicates the memory size of the VPU firmware by default. The memory on the board may be distributed in different address spaces. All the memory we allocate is continuous address, and because of the different size of each allocation, it will lead to fragmentation of the memory, so the usage may not reach 100%.
 
@@ -348,7 +348,7 @@ The parameters supported by bm-smi include:
 
    bm-smi --dev=0x0 --led=off
 
-  Note: This function support on/off/blink on SC5+ and SC5P, on/off on SC5H, does not support other board types. For the SC5+ board, only the first chip can control the status of LED. SC5P has 8 LEDs, each device corresponds to one LED, and each LED supports setting status separately.
+  Note: This function support on/off/blink on SC5+ and SC5P, on/off on SC5H, does not support other board types. For the SC5+ board, only the first processor can control the status of LED. SC5P has 8 LEDs, each device corresponds to one LED, and each LED supports setting status separately.
 
   This function is not supported in SOC mode.
 
@@ -435,7 +435,7 @@ First area:
 
    1684-SC5+ PCIE chip0: 0 000:01:00.0 Active 56C 55C 2W 615mV OFF N/A 0% 75M 550M 550M 3.3A 0MB 7086MB
 
-Status of the 0th chip on the three-core card, 1684-SC5+ PCIE chip0:
+Status of the 0th processor on the three-core card, 1684-SC5+ PCIE chip0:
 
 ::
   
@@ -447,7 +447,7 @@ Second area:
 
    1684-SC5+ PCIE chip1: 1 000:01:00.1 Active 56C 55C 2W 613mV OFF N/A 0% 75M 550M 550M 4.2A 0MB 7086MB
 
-Status of the 1st chip on the three-chip card, 1684-SC5+ PCIE chip1: 
+Status of the 1st processor on the three-processor card, 1684-SC5+ PCIE chip1: 
 
 The following information corresponds in sequence to parameters in bm-smi: 
 
@@ -461,7 +461,7 @@ Third area:
 
    1684-SC5+ PCIE chip2: 2 000:01:00.2 Active 54C 53C 1W 615mV OFF N/A 0% 75M 550M 550M 2.6A 0MB 7086MB
 
-Status of the 2nd chip on the three-chip card, 1684-SC5+ PCIE chip2: 
+Status of the 2nd processor on the three-processor card, 1684-SC5+ PCIE chip2: 
 
 The following information corresponds in sequence to parameters in bm-smi:
 
@@ -473,7 +473,7 @@ The following information corresponds in sequence to parameters in bm-smi:
 
   Notes:
 
-  1. --start_dev=0 --last_dev=2 indicates the device numbers corresponding to the 0th chip and the last chip of a certain card displayed in bm-smi;
+  1. --start_dev=0 --last_dev=2 indicates the device numbers corresponding to the 0th processor and the last processor of a certain card displayed in bm-smi;
 
   2. --start_dev --last_dev --text_format should be used together.
 

@@ -1,7 +1,7 @@
 Basic Concepts and Functions of Bmlib
 =====================
 
-The simple functional diagram of SDK based on SOPHGO neural network accelerator chip is as follows:
+The simple functional diagram of SDK based on SOPHGO neural network accelerator processor is as follows:
 
 .. image:: ./images/image1.png
    :align: center
@@ -34,7 +34,7 @@ Concept of Handle
 ------------
 
 Our neural network acceleration device, whether in PCIe mode or SOC mode, 
-will become a standard character device after the installation of the TPU driver. 
+will become a standard character device after the installation of the Tensor Computing Processor driver. 
 A handle needs to be created when the upper user process try to run on this device.
 
 Handle is used in managing api, applying for memory and releasing memory. 
@@ -87,7 +87,7 @@ The above figure introduces the types of memory in PCIe mode,
 in which host can be PC/server, and PCIe board is SC5 series board. 
 The memory on the host side is called system memory, 
 and the memory on the PCIe board is called global memory or device memory. 
-There is a DMA hardware in BM1684 chip special for carrying data between system memory and global memory.
+There is a DMA hardware in BM1684 processor special for carrying data between system memory and global memory.
 
 Concept and Synchronization of Api
 ---------------
@@ -95,8 +95,8 @@ Concept and Synchronization of Api
 .. image:: ./images/image7.png
    :align: center
 
-If the software on the host side wants the TPU to complete a task, 
-it needs to send an “API” to the TPU, which is like a command. 
+If the software on the host side wants the Tensor Computing Processor to complete a task, 
+it needs to send an “API” to the Tensor Computing Processor, which is like a command. 
 Please note that the sending API function and the execution completion of the API are asynchronous, 
 so the software on the host side needs to call a sync function class until the API is really completed.
 
@@ -111,9 +111,9 @@ In this way, the API has been completed when the interface function of bmcv / bm
 Interface of Profile
 -----------
 
-Profile interface is used to obtain the time spent by the TPU processing API, 
-which has been accumulated since TPU began to work (if there are continuous APIs to be processed). 
-If only one process in the system uses TPU device, we can calculate the processing time of the API by calculating the difference between the profile data before and after calling the API.
+Profile interface is used to obtain the time spent by the Tensor Computing Processor processing API, 
+which has been accumulated since Tensor Computing Processor began to work (if there are continuous APIs to be processed). 
+If only one process in the system uses Tensor Computing Processor device, we can calculate the processing time of the API by calculating the difference between the profile data before and after calling the API.
 
 Enable of A53
 ---------
@@ -124,11 +124,11 @@ and let them complete some acceleration tasks.
 Power Control
 ---------
 
-We provide interfaces to obtain and set the working frequency of TPU. 
+We provide interfaces to obtain and set the working frequency of Tensor Computing Processor. 
 Users can define their own power consumption control strategies.
 
 Interface of Miscellaneous Information
 ------------
 
 It is used to obtain the information of the board and the statistical information during operation. 
-At present, it includes the total amount and usage of memory and the utilization rate of TPU
+At present, it includes the total amount and usage of memory and the utilization rate of Tensor Computing Processor

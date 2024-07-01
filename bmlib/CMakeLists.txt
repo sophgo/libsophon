@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.6)
 cmake_policy(SET CMP0046 NEW)
 cmake_policy(SET CMP0048 NEW)
 set(CMAKE_PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
@@ -29,6 +29,14 @@ set(SRCS
   src/bmlib_profile.cpp
   src/linux/bmlib_ioctl.cpp
   src/bmlib_md5.cpp
+  src/rbtree.c
+)
+
+execute_process(
+    COMMAND bash -c "find \"$(git rev-parse --show-toplevel)\" -type f -name \"update_bmlib_version.sh\" -exec bash {} \\;"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE error_output
 )
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/debian-lib")
@@ -66,6 +74,10 @@ if("${PLATFORM}" STREQUAL "cmodel")
     message(STATUS "USING_CMODEL")
     target_compile_definitions(${TARGET_NAME} PUBLIC -DUSING_CMODEL=1)
     target_link_libraries(${TARGET_NAME} dl pthread)
+endif()
+
+if("${PLATFORM}" STREQUAL "pcie_riscv64")
+    add_definitions(-DSMMU_MODE=1)
 endif()
 
 install(TARGETS ${TARGET_NAME}

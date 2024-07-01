@@ -14,7 +14,7 @@ Example description:
 * Create bm_handle and a runtime instance.
 * Load bmodel, which has one testnet network, two inputs and two outputs.
 * Prepare input tensors, including the shape and data of each input.
-* Start inference. 
+* Start inference.
 * Upon the ending of inference, copy the result data in  output_tensor to the system memory.
 * Before exiting from the program, release device mem, runtime instances and bm_handle.
 

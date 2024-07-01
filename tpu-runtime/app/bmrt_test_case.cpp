@@ -260,13 +260,20 @@ static void thread_entry_bmrt_launch(int thread_id, launch_unit_t *launch_unit)
       for (int i = 0; i < input_num; i++) {
         input_datas[i] = launch_unit->ref_input_v[i];
       }
-      bool ret = bmrt_launch_data(g_bmrt, net_name, input_datas, launch_unit->input_shape_v.data(),
-                                  input_num, output_datas, output_shapes, output_num, false);
+
+      auto& core_list = core_lists[thread_id%core_lists.size()];
+      bool ret = bmrt_launch_data_multi_cores(g_bmrt, net_name, input_datas, launch_unit->input_shape_v.data(),
+                                  input_num, output_datas, output_shapes, output_num, false, core_list.data(), core_list.size());
       if (!ret) {
         BMRT_LOG(FATAL, "launch net[%s] stage[%d] failed", net_name, launch_unit->stage_idx);
       }
       // sync, wait for finishing inference
-      bm_thread_sync(g_bm_handle);
+      for(size_t core_idx=0; core_idx < core_list.size(); core_idx++) {
+        bm_status_t core_status = bm_thread_sync_from_core(g_bm_handle, core_list[core_idx]);
+        if (core_status != BM_SUCCESS) {
+          BMRT_LOG(FATAL, "bm_thread_sync_from_core failed, core_id:%d, status:%d", core_list[core_idx], core_status);
+        }
+      }
       for (int i = 0; i < output_num; i++) {
         count_v.push_back(bmrt_shape_count(&output_shapes[i]));
       }
@@ -288,13 +295,50 @@ static void thread_entry_bmrt_launch(int thread_id, launch_unit_t *launch_unit)
       std::shared_ptr<bm_tensor_t> output_tensors_(new bm_tensor_t[output_num], std::default_delete<bm_tensor_t[]>());
       bm_tensor_t* output_tensors = output_tensors_.get();
       #endif
-      bool ret = bmrt_launch_tensor(g_bmrt, net_name, input_tensors, input_num, output_tensors,
-                                    output_num);
-      if (!ret) {
-        BMRT_LOG(FATAL, "launch net[%s] stage[%d] failed", net_name, launch_unit->stage_idx);
+      auto& core_list = core_lists[thread_id%core_lists.size()];
+      if (TEST_CASE == "bmrt_get_bmodel_api") {
+        auto api_info = bmruntime::get_bmodel_api_info(g_bmrt, net_name, input_tensors, input_num,
+                                                  output_tensors, output_num, false, false, (uint32_t*)core_list.data());
+        for(size_t core_idx=0; core_idx < core_list.size(); core_idx++){
+          auto api_id = api_info.api_id[core_idx];
+          bm_status_t core_status = tpu_kernel_launch_async_from_core(g_bm_handle, api_id,
+                                                                      api_info.api_data[core_idx].data(),
+                                                                      api_info.api_data[core_idx].size(),
+                                                                      core_list[core_idx]);
+          if (BM_SUCCESS != core_status) {
+            BMRT_LOG(FATAL, "tpu_kernel_launch_async_from_core failed, core_id:%d, api id:%d, status:%d",
+                      core_list[core_idx], api_id, core_status);
+          }
+        }
+      } else if (TEST_CASE == "bmrt_get_bmodel_api_c") {
+        auto api_info = get_bmodel_api_info_c(g_bmrt, net_name, input_tensors, input_num,
+                                              output_tensors, output_num, false, false, (uint32_t*)core_list.data());
+        for(size_t core_idx=0; core_idx < core_list.size(); core_idx++) {
+          auto api_id = api_info->api_id[core_idx];
+          bm_status_t core_status = tpu_kernel_launch_async_from_core(g_bm_handle, api_id,
+                                                                      api_info->api_data[core_idx],
+                                                                      api_info->api_data_subsize[core_idx],
+                                                                      core_list[core_idx]);
+          if (BM_SUCCESS != core_status) {
+            BMRT_LOG(FATAL, "tpu_kernel_launch_async_from_core failed, core_id:%d, api id:%d, status:%d",
+                      core_list[core_idx], api_id, core_status);
+          }
+        }
+        bmrt_free_api_info(api_info);
+      } else {
+        bool ret = bmrt_launch_tensor_multi_cores(g_bmrt, net_name, input_tensors, input_num, output_tensors,
+                                                  output_num, false, false, core_list.data(), core_list.size());
+        if (!ret) {
+          BMRT_LOG(FATAL, "launch net[%s] stage[%d] failed", net_name, launch_unit->stage_idx);
+        }
       }
       // sync, wait for finishing inference
-      bm_thread_sync(g_bm_handle);
+      for(size_t core_idx=0; core_idx < core_list.size(); core_idx++) {
+        bm_status_t core_status = bm_thread_sync_from_core(g_bm_handle, core_list[core_idx]);
+        if (core_status != BM_SUCCESS) {
+          BMRT_LOG(FATAL, "bm_thread_sync_from_core failed, core_id:%d, status:%d", core_list[core_idx], core_status);
+        }
+      }
       for (int i = 0; i < output_num; ++i) {
         auto &output_tensor = output_tensors[i];
         size_t size = bmrt_tensor_bytesize(&output_tensor);
@@ -923,6 +967,194 @@ static void bmtap2cpp_api_test_case()
   free_test_data();
 }
 
+static void thread_entry_bmrtmcore_launch(
+  const char *net_name,
+  const bm_tensor_t *input_tensors, int input_num,
+  bm_tensor_t *output_tensors, int output_num,
+  std::vector<int> core_list, int stage_idx) {
+  bool ret = bmrt_launch_tensor_multi_cores(g_bmrt, net_name, input_tensors, input_num,
+                                            output_tensors, output_num, true, false, core_list.data(), core_list.size());
+  if (ret == false) {
+    BMRT_LOG(FATAL, "The network '%s' stage '%d' launch failed", net_name, stage_idx);
+  }
+  for (int i = 0; i < core_list.size(); ++i) {
+    auto core_id = core_list[i];
+    bm_status_t core_status = bm_thread_sync_from_core(g_bm_handle, core_id);
+    if (core_status != BM_SUCCESS) {
+      BMRT_LOG(FATAL, "The network '%s' stage '%d' sync failed, core=%d", net_name, stage_idx, core_id);
+    }
+  }
+}
+
+static void test_bmrtmcore_launch_multi_mession()
+{
+  uint32_t launch_num = g_launch_unit_v.size();
+  uint32_t mession_num = core_lists.size();
+  if (launch_num < mession_num) {
+    BMRT_LOG(FATAL, "model number must equel or bigger than core mession number");
+  }
+  bool use_multi_thread = true;
+#ifdef USING_CMODEL
+  use_multi_thread = false;
+#endif
+  for (uint32_t launch_i = 0; launch_i < launch_num; launch_i += mession_num)
+  {
+    std::vector<uint32_t> input_nums, output_nums, stage_idxs;
+    std::vector<const char*> net_names;
+    uint32_t mession_num_ext = (std::min)(mession_num, launch_num - launch_i);
+    for (uint32_t m_i = 0; m_i < mession_num_ext; ++m_i)
+    {
+      uint32_t model_idx = launch_i + m_i;
+      input_nums.emplace_back(g_launch_unit_v[model_idx].ref_input_v.size());
+      output_nums.emplace_back(g_launch_unit_v[model_idx].ref_output_v.size());
+      net_names.emplace_back(g_launch_unit_v[model_idx].net_name.c_str());
+      stage_idxs.emplace_back(g_launch_unit_v[model_idx].stage_idx);
+    }
+#ifdef __linux__
+    std::vector<std::vector<bm_tensor_t>> all_input_tensors, all_output_tensors;
+    std::vector<std::vector<void *>> all_output_datas;
+    for (auto &input_num : input_nums)
+    {
+      std::vector<bm_tensor_t> input_tensors(input_num);
+      all_input_tensors.emplace_back(input_tensors);
+    }
+    for (auto &output_num : output_nums)
+    {
+      std::vector<bm_tensor_t> output_tensors(output_num);
+      all_output_tensors.emplace_back(output_tensors);
+      std::vector<void *> output_datas(output_num);
+      all_output_datas.emplace_back(output_datas);
+    }
+#else
+    std::vector<bm_tensor_t *> all_input_tensors, all_output_tensors;
+    std::vector<void **> all_output_datas;
+    for (auto &input_num : input_nums)
+    {
+      std::shared_ptr<bm_tensor_t> input_tensors_(new bm_tensor_t[input_num], std::default_delete<bm_tensor_t[]>());
+      bm_tensor_t *input_tensors = input_tensors_.get();
+      all_input_tensors.emplace_back(input_tensors);
+    }
+    for (auto &output_num : output_nums)
+    {
+      std::shared_ptr<bm_tensor_t> output_tensors_(new bm_tensor_t[output_num], std::default_delete<bm_tensor_t[]>());
+      bm_tensor_t *output_tensors = output_tensors_.get();
+      all_output_tensors.emplace_back(output_tensors);
+      std::shared_ptr<void *> output_datas_(new void *[output_num], std::default_delete<void *[]>());
+      void **output_datas = output_datas_.get();
+      all_output_datas.emplace_back(output_datas);
+    }
+#endif
+
+    for (uint32_t m_i = 0; m_i < mession_num_ext; ++m_i)
+    {
+      auto input_num = input_nums[m_i];
+      for (int i = 0; i < input_num; ++i)
+      {
+        uint32_t model_idx = launch_i + m_i;
+        bmrt_tensor(&all_input_tensors[m_i][i], g_bmrt, g_launch_unit_v[model_idx].input_type_v[i],
+                    g_launch_unit_v[model_idx].input_shape_v[i]);
+        bm_memcpy_s2d(g_bm_handle, all_input_tensors[m_i][i].device_mem, g_launch_unit_v[model_idx].ref_input_v[i]);
+      }
+      auto output_num = output_nums[m_i];
+      for (int i = 0; i < output_num; ++i)
+      {
+        uint32_t model_idx = launch_i + m_i;
+        bmrt_tensor(&all_output_tensors[m_i][i], g_bmrt, g_launch_unit_v[model_idx].output_type_v[i],
+                    g_launch_unit_v[model_idx].output_shape_v[i]);
+      }
+    }
+    for (uint32_t loop_i = 0; loop_i < LOOP_NUM; loop_i++)
+    {
+#ifdef __linux__
+      std::thread thread_v[mession_num_ext];
+#else
+      std::shared_ptr<thread> thread_v_(new thread[mession_num_ext], std::default_delete<thread[]>());
+      thread *thread_v = thread_v_.get();
+#endif
+      for (uint32_t mession_i = 0; mession_i < mession_num_ext; ++mession_i)
+      {
+        auto core_list = core_lists[mession_i];
+#ifdef __linux__
+        bm_tensor_t *input_tensors = all_input_tensors[mession_i].data();
+        bm_tensor_t *output_tensors = all_output_tensors[mession_i].data();
+#else
+        bm_tensor_t *input_tensors = all_input_tensors[mession_i];
+        bm_tensor_t *output_tensors = all_output_tensors[mession_i];
+#endif
+        if (use_multi_thread)
+        {
+          thread_v[mession_i] = std::thread(thread_entry_bmrtmcore_launch, net_names[mession_i], input_tensors, input_nums[mession_i],
+                                            output_tensors, output_nums[mession_i], core_list, stage_idxs[mession_i]);
+        } else {
+          thread_entry_bmrtmcore_launch(net_names[mession_i], input_tensors, input_nums[mession_i],
+                                        output_tensors, output_nums[mession_i], core_list, stage_idxs[mession_i]);
+        }
+      }
+      if (use_multi_thread) {
+        for (uint32_t m_i = 0; m_i < mession_num_ext; ++m_i)
+        {
+          thread_v[m_i].join();
+        }
+      }
+    }
+
+    for (uint32_t m_i = 0; m_i < mession_num_ext; ++m_i)
+    {
+      std::vector<int32_t> cmp_element_v;
+      auto output_num = output_nums[m_i];
+      for (int i = 0; i < output_num; ++i)
+      {
+        auto &output_tensor = all_output_tensors[m_i][i];
+        size_t size = bmrt_tensor_bytesize(&output_tensor);
+        cmp_element_v.push_back(bmrt_shape_count(&all_output_tensors[m_i][i].shape));
+        all_output_datas[m_i][i] = malloc(size);
+        bm_memcpy_d2s_partial(g_bm_handle, all_output_datas[m_i][i], output_tensor.device_mem, size);
+        bm_free_device(g_bm_handle, output_tensor.device_mem);
+      }
+
+      auto input_num = input_nums[m_i];
+      for (int i = 0; i < input_num; ++i)
+      {
+        bm_free_device(g_bm_handle, all_input_tensors[m_i][i].device_mem);
+      }
+
+      uint32_t model_idx = launch_i + m_i;
+#ifdef __linux__
+      int8_t** output_datas_p = (int8_t**)all_output_datas[m_i].data();
+#else
+      int8_t** output_datas_p = (int8_t**)all_output_datas[m_i];
+#endif
+      result_cmp(output_datas_p, g_launch_unit_v[model_idx], cmp_element_v);
+
+      for (int i = 0; i < output_num; ++i)
+      {
+        free(all_output_datas[m_i][i]);
+      }
+    }
+  }
+}
+
+static void bmmc_multi_mession_test_case() {
+  prepare_test_data();
+
+  bm_status_t ret = bm_dev_request(&g_bm_handle, DEV_ID);
+  if (ret != BM_SUCCESS) {
+    BMRT_LOG(FATAL, "bm_dev_request failed, ret:[%d]", ret);
+  }
+  g_bmrt = bmrt_create(g_bm_handle);
+  if (g_bmrt == NULL) {
+    BMRT_LOG(FATAL, "create runtime failed");
+  }
+
+  test_bmrt_load_bmodel();
+  test_bmrtmcore_launch_multi_mession();
+
+  bmrt_destroy(g_bmrt);
+  bm_dev_free(g_bm_handle);
+
+  free_test_data();
+}
+
 /* --------------------------------------------------------------------------*/
 /* main test case process */
 typedef void TestPtr();
@@ -934,7 +1166,8 @@ typedef struct {
 test_pair_t test_pair[] = {{"bmrt", bmrt_api_test_case},
                            {"bmcpp", bmcpp_api_test_case},
                            {"bmtap2", bmtap2_api_test_case},
-                           {"bmtap2cpp", bmtap2cpp_api_test_case}};
+                           {"bmtap2cpp", bmtap2cpp_api_test_case},
+                           {"bmmc", bmmc_multi_mession_test_case}};
 
 void bmrt_test_case()
 {

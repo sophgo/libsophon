@@ -345,12 +345,26 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
 				bmdi->boot_info.fan_exist != 0 ||
 				bmdi->boot_info.max_board_power != 300 ||
-				bmdi->boot_info.tpu_max_clk != 1000 ||
+				bmdi->boot_info.tpu_max_clk != 875 ||
 				bmdi->boot_info.tpu_min_clk != 25) {
 				bmdi->boot_info.board_power_sensor_exist = 1;
 				bmdi->boot_info.max_board_power = 300;
 				bmdi->boot_info.tpu_min_clk = 25;
-				bmdi->boot_info.tpu_max_clk = 1000;
+				bmdi->boot_info.tpu_max_clk = 875;
+				bmdi->boot_info.fan_exist = 0;
+				need_update = 1;
+			}
+			break;
+		case BOARD_TYPE_SC7_FP150:
+			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
+				bmdi->boot_info.fan_exist != 0 ||
+				bmdi->boot_info.max_board_power != 150 ||
+				bmdi->boot_info.tpu_max_clk != 800 ||
+				bmdi->boot_info.tpu_min_clk != 25) {
+				bmdi->boot_info.board_power_sensor_exist = 1;
+				bmdi->boot_info.max_board_power = 150;
+				bmdi->boot_info.tpu_min_clk = 25;
+				bmdi->boot_info.tpu_max_clk = 800;
 				bmdi->boot_info.fan_exist = 0;
 				need_update = 1;
 			}
@@ -365,6 +379,35 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 				bmdi->boot_info.max_board_power = 75;
 				bmdi->boot_info.tpu_min_clk = 25;
 				bmdi->boot_info.tpu_max_clk = 750;
+				bmdi->boot_info.fan_exist = 0;
+				need_update = 1;
+			}
+			break;
+		case BOARD_TYPE_AIV03X:
+			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
+				bmdi->boot_info.fan_exist != 0 ||
+				bmdi->boot_info.max_board_power != 75 ||
+				bmdi->boot_info.tpu_min_clk != 25 ||
+				bmdi->boot_info.tpu_max_clk != 750) {
+				bmdi->boot_info.board_power_sensor_exist = 1;
+				bmdi->boot_info.max_board_power = 75;
+				bmdi->boot_info.tpu_min_clk = 25;
+				bmdi->boot_info.tpu_max_clk = 750;
+				bmdi->boot_info.fan_exist = 0;
+				need_update = 1;
+			}
+			break;
+		case BOARD_TYPE_AIV01X:
+		case BOARD_TYPE_AIV02X:
+			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
+				bmdi->boot_info.fan_exist != 0 ||
+				bmdi->boot_info.max_board_power != 75 ||
+				bmdi->boot_info.tpu_min_clk != 25 ||
+				bmdi->boot_info.tpu_max_clk != 950) {
+				bmdi->boot_info.board_power_sensor_exist = 1;
+				bmdi->boot_info.max_board_power = 75;
+				bmdi->boot_info.tpu_min_clk = 25;
+				bmdi->boot_info.tpu_max_clk = 950;
 				bmdi->boot_info.fan_exist = 0;
 				need_update = 1;
 			}
@@ -459,7 +502,12 @@ static int bmdrv_set_1684x_default_boot_info(struct bm_device_info *bmdi)
 	bmdi->boot_info.append.append_v1.heap2_size = 0x40000000;
 	if (board_type == BOARD_TYPE_SC7_PRO){
 		bmdi->boot_info.max_board_power = 300;
-	} else if (board_type == BOARD_TYPE_SC7_PLUS) {
+	}else if(board_type == BOARD_TYPE_SC7_FP150){
+		bmdi->boot_info.max_board_power = 150;
+	} else if ((board_type == BOARD_TYPE_SC7_PLUS) ||
+		  (board_type == BOARD_TYPE_AIV01X) ||
+		  (board_type == BOARD_TYPE_AIV02X) ||
+		  (board_type == BOARD_TYPE_AIV03X)){
 		bmdi->boot_info.max_board_power = 75;
 	} else if (board_type == BOARD_TYPE_CP24) {
 		bmdi->boot_info.max_board_power = 150;

@@ -427,6 +427,9 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 			pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
 			return -1;
 		}
+#ifndef FW_SIMPLE
+		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
+#endif
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
 			bm_vpu_init(bmdi);
@@ -489,8 +492,12 @@ retry1:
 		}
 		bmdrv_power_and_temp_i2c_init(bmdi);
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
-			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
 			bmdrv_uart_init(bmdi, uart_index, baudrate);
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_early_init \n", bmdi->dev_index);
@@ -774,6 +781,28 @@ int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
 	return ret;
 }
 
+void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
+{
+	// u32 ctrl_word;
+	int value = 0x0;
+
+	/*send  fiq 6 to arm9, let it get ready to die*/
+	top_reg_write(bmdi, TOP_GP_REG_ARM9_IRQ_SET_OFFSET, 0x1 << 3);
+
+	udelay(50);
+
+	/*stop smbus*/
+
+	value = intc_reg_read(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_L_OFFSET);
+	value = value | (0x1 << 27);
+	intc_reg_write(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_L_OFFSET, value);
+
+	/* reset arm9 */
+	// ctrl_word = top_reg_read(bmdi, TOP_SW_RESET0);
+	// ctrl_word &= ~(1 << 1);
+	// top_reg_write(bmdi, TOP_SW_RESET0, ctrl_word);
+}
+
 int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 {
 	int ret = 0;
@@ -809,7 +838,7 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 
 	if (mode == FW_MIX_MODE && bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
 		pr_info("bmsophon%d mix mode force reset bmcpu!\n", bmdi->dev_index);
-		bmdrv_fw_unload(bmdi);
+		bmdrv_fw_unload_mix(bmdi);
 		return bmdrv_force_reset_bmcpu(bmdi);
 	}
 
@@ -876,7 +905,7 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 
 	board_version = bmdi->cinfo.board_version;
 	board_type = (u8)((board_version >> 8) & 0xff);
-	if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID || board_type == BOARD_TYPE_SC5_H) {
+	if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
 		pr_info("force reset bmcpu!\n");
 		ret = bmdrv_force_reset_bmcpu_pcie(bmdi);
 	}

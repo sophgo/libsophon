@@ -104,7 +104,7 @@ bool BMProfileDevice::init()
 bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 {
     bm_status_t ret = BM_SUCCESS;
-    auto handle = profile->handle;
+    auto handle = profile->get_handle();
     if(enable_bdc){
         memset(tpu_buffer.ptr, -1, tpu_buffer.size);
         ret = bm_memcpy_s2d(handle, tpu_buffer.mem, tpu_buffer.ptr);
@@ -132,7 +132,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 
 bool BMProfileDevice::end(net_ctx_t* net_ctx)
 {
-    auto handle = profile->handle;
+    auto handle = profile->get_handle();
     int ret = BM_SUCCESS;
     if (enable_bdc){
         bm_disable_perf_monitor(handle, &tpu_perf_monitor);

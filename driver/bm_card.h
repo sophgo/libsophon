@@ -9,6 +9,10 @@
 #define BM_MAX_CHIP_NUM_PER_CARD	1
 #define BM_MAX_CHIP_NUM                 1
 #endif
+struct rdrop_info {
+	int tpu_rdrop;
+	int vddc_rdrop;
+};
 
 struct bm_card {
 	int card_index;
@@ -22,6 +26,7 @@ struct bm_card {
 	int cdma_max_payload;
 	char sn[18];
 	void *vfs_db;
+	struct rdrop_info rdrop;
 	struct bm_device_info *sc5p_mcu_bmdi;
 	struct bm_device_info *card_bmdi[BM_MAX_CHIP_NUM_PER_CARD];
 	struct bm_device_info *first_probe_bmdi;

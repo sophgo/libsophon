@@ -20,6 +20,16 @@
 struct bm_ctrl_info *bmci;
 int dev_count;
 
+#ifdef SOC_MODE
+typedef struct {
+	struct  list_head list;
+	pid_t   vpu_pid;
+	int64_t vpu_gmem_used;
+} bm_smi_vpu_proc_gmem;
+
+static struct list_head vpu_gmem_info = LIST_HEAD_INIT(vpu_gmem_info);
+#endif
+
 int bmdrv_init_bmci(struct chip_info *cinfo)
 {
 	int rc;
@@ -409,6 +419,9 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 	struct bm_device_info *bmdi;
 	struct bm_handle_info *h_info;
 	int proc_cnt = 0;
+#ifdef SOC_MODE
+	bm_smi_vpu_proc_gmem *vpu_mem_info, *tmp;
+#endif
 
 	bmdi = bmctl_get_bmdi(bmci, smi_proc_gmem->dev_id);
 	if (!bmdi)
@@ -422,6 +435,20 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 		if (proc_cnt == 128)
 			break;
 	}
+
+#ifdef SOC_MODE
+	if (proc_cnt < 128) {
+		list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
+			if (vpu_mem_info->vpu_gmem_used > 0) {
+				smi_proc_gmem->pid[proc_cnt] = vpu_mem_info->vpu_pid;
+				smi_proc_gmem->gmem_used[proc_cnt] = vpu_mem_info->vpu_gmem_used / 1024 / 1024;
+				proc_cnt++;
+				if (proc_cnt == 128)
+					break;
+			}
+		}
+	}
+#endif
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	smi_proc_gmem->proc_cnt = proc_cnt;
 	return 0;
@@ -510,6 +537,44 @@ int bmctl_ioctl_set_ecc(struct bm_ctrl_info *bmci, unsigned long arg)
 
 	return 0;
 }
+
+#ifdef SOC_MODE
+int bmctl_update_vpu_gmem(int pid, int mem_used, int is_free, int is_del)
+{
+	int proc_cnt = 0;
+	int update_success = 0;
+	bm_smi_vpu_proc_gmem *vpu_mem_info, *tmp;
+	if (is_del == 0) {
+		list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
+			if (vpu_mem_info->vpu_pid == pid) {
+				if (is_free)
+					vpu_mem_info->vpu_gmem_used -= BGM_4K_ALIGN(mem_used);
+				else
+					vpu_mem_info->vpu_gmem_used += BGM_4K_ALIGN(mem_used);
+				update_success = 1;
+				proc_cnt++;
+				if (proc_cnt == 128)
+					break;
+			}
+		}
+		if (update_success == 0 && is_free == 0 && proc_cnt < 128) {
+			vpu_mem_info = kzalloc(sizeof(*vpu_mem_info), GFP_KERNEL);
+			vpu_mem_info->vpu_pid  = pid;
+    	    vpu_mem_info->vpu_gmem_used = BGM_4K_ALIGN(mem_used);
+    	    list_add(&vpu_mem_info->list, &vpu_gmem_info);
+		}
+	} else {
+    	list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
+        	if (pid == vpu_mem_info->vpu_pid) {
+            	list_del(&vpu_mem_info->list);
+            	kfree(vpu_mem_info);
+        	}
+    	}
+	}
+	return 0;
+}
+EXPORT_SYMBOL_GPL(bmctl_update_vpu_gmem);
+#endif
 
 #ifndef SOC_MODE
 int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
@@ -601,7 +666,8 @@ int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
 		}
 
 		if (bmdi->misc_info.chipid == 0x1684 || bmdi->misc_info.chipid == 0x1686) {
-			if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO) {
+			if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO ||
+				BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150) {
 				pr_info("to reboot chip, devid is %d\n", dev_id);
 				bmdrv_wdt_start(bmdi);
 			}

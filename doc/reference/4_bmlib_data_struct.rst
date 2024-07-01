@@ -135,6 +135,8 @@ unsigned long cdma_out_counter;
 
 unsigned long tpu_process_time;
 
+unsigned long tpu1_process_time;
+
 unsigned long sent_api_counter;
 
 unsigned long completed_api_counter;

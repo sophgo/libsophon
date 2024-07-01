@@ -88,6 +88,10 @@ int bmdrv_gmem_ioctl_alloc_mem(struct bm_device_info *bmdi, struct file *file,
 		unsigned long arg);
 int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *file,
 		unsigned long arg);
+int bmdrv_gmem_ioctl_alloc_mem_ion_u64(struct bm_device_info *bmdi, struct file *file,
+		unsigned long arg);
 int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
+		unsigned long arg);
+int bmdrv_gmem_ioctl_free_mem_u64(struct bm_device_info *bmdi, struct file *file,
 		unsigned long arg);
 #endif

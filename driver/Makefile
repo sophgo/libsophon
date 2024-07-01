@@ -130,6 +130,13 @@ else
       CENTOS_RELEASE_FIX = $(shell echo $(CENTOS_RELEASE)|cut -d . -f1)
       cflags-y += -DCENTOS_KERNEL_FIX=$(CENTOS_RELEASE_FIX)
       ccflags-y += -DCENTOS_KERNEL_FIX=$(CENTOS_RELEASE_FIX)
+    else ifeq ($(findstring BigCloud,$(shell cat /etc/redhat-release)),BigCloud)
+      LINUX_SRC = /lib/modules/$(shell uname -r)/build
+      CENTOS_KERNEL = $(shell uname -r |cut -d - -f1)
+      CENTOS_RELEASE =  $(shell uname -r |cut -d - -f 2 |cut -d . -f 1-3)
+      CENTOS_RELEASE_FIX = $(shell echo $(CENTOS_RELEASE)|cut -d . -f1)
+      cflags-y += -DCENTOS_KERNEL_FIX=$(CENTOS_RELEASE_FIX)
+      ccflags-y += -DCENTOS_KERNEL_FIX=$(CENTOS_RELEASE_FIX)
     else
       LINUX_SRC = /lib/modules/$(shell uname -r)/build
     endif

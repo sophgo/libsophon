@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.6)
 cmake_policy(SET CMP0046 NEW)
 cmake_policy(SET CMP0048 NEW)
 
@@ -35,7 +35,7 @@ else()
     foreach(src ${TOOLS_SRC_PATH})
         get_filename_component(target ${src} NAME_WE)
         add_executable(${target} ${src})
-        target_link_libraries(${target} gflags_nothreads.a pthread dl bmlib)
+        target_link_libraries(${target} gflags_nothreads.a bmlib pthread dl)
         install(TARGETS ${target}
             RUNTIME DESTINATION bin
             COMPONENT libsophon)

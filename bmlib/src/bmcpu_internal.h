@@ -17,6 +17,7 @@ extern "C" {
 
 #define LOGLIB_ITEM_MAX_SIZE 128
 #define LOGLIB_ITEM_MAX_SIZE_SHIFT 7 /* (2 << 7) = 128 */
+#define UTC_8 28800
 
 typedef enum arm9_fw_mode {
     FW_PCIE_MODE,
@@ -137,6 +138,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
                             char *      boot_file,
                             char *      core_file);
 bm_status_t bm_setup_veth(bm_handle_t handle);
+bm_status_t bmcpu_sync_time_mix(bm_handle_t handle);
 bm_status_t bm_remove_veth(bm_handle_t handle);
 bm_status_t bm_force_reset_bmcpu(bm_handle_t handle);
 bm_status_t bm_set_ip(bm_handle_t handle, struct bm_veth_ip ip_mask);

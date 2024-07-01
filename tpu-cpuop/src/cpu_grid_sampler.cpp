@@ -70,10 +70,7 @@ int cpu_grid_samplerlayer::process(void *param, int psize) {
     BMCPU_DECLARE_AND_UNPACK_PARAM(cpu_grid_sampler_param_t, rip, param, psize);
     const int N = input_shapes_[0][0];
     const int C = input_shapes_[0][1];
-    const int IH = input_shapes_[0][2];
-    const int IW = input_shapes_[0][3];
-    const int OH = input_shapes_[1][1];
-    const int OW = input_shapes_[1][2];
+    const int dims = input_shapes_[1].size();
     int num_thread = 1;
     char *nt = getenv("BM_CPU_LAYER_NUM_THREAD");
     if (nt != nullptr)
@@ -82,90 +79,213 @@ int cpu_grid_samplerlayer::process(void *param, int psize) {
         int start;
         int end;
     } ThreadParam_t;
-    int opt = OH / num_thread;
-    int start = 0;
     std::vector<ThreadParam_t> ps(num_thread);
-    for (int i = 0; i < num_thread; ++i) {
-        ps[i].start = start;
-        int len = opt + (i < OH - opt * num_thread ? 1 : 0);
-        ps[i].end = start + len;
-        start = ps[i].end;
-    }
-    auto func = [&](const ThreadParam_t *tp) {
-        for (int n = 0; n < N; ++n) {
-            const float *input = FLOAT_PTR(input_tensors_[0]) + n * C * IH * IW;
-            const float *grid = FLOAT_PTR(input_tensors_[1]) + n * OH * OW * 2 + tp->start * OW * 2;
-            float *output = FLOAT_PTR(output_tensors_[0]) + n * C * OH * OW + tp->start * OW;
-            for (int h = tp->start; h < tp->end; ++h) {
-                for (int w = 0; w < OW; ++w) {
-                    auto fx = computeIndex(*grid, IW, rip->padding_mode, rip->align_corners);
-                    ++grid;
-                    auto fy = computeIndex(*grid, IH, rip->padding_mode, rip->align_corners);
-                    ++grid;
-                    switch (rip->mode) {
-                    case GridSamplerBilinear: {
-                        int x = INT(std::floor(fx));
-                        int y = INT(std::floor(fy));
-                        float dx = fx - x;
-                        float dy = fy - y;
-                        float tx = 1.f - dx;
-                        float ty = 1.f - dy;
-                        float txty = tx * ty, dxty = dx * ty, txdy = tx * dy, dxdy = dx * dy;
-                        bool yBound_0 = y >= 0 && y < IH;
-                        bool yBound_1 = y + 1 >= 0 && y + 1 < IH;
-                        bool xBound_0 = x >= 0 && x < IW;
-                        bool xBound_1 = x + 1 >= 0 && x + 1 < IW;
-                        const float *iiter = input + y * IW + x;
-                        float *oiter = output;
-                        for (int c = 0; c < C; ++c) {
-                            *oiter = 0.f;
-                            if (yBound_0) {
-                                if (xBound_0)
-                                    *oiter += iiter[0] * txty;
-                                if (xBound_1)
-                                    *oiter += iiter[1] * dxty;
+    if (dims == 4) {
+        const int IH = input_shapes_[0][2];
+        const int IW = input_shapes_[0][3];
+        const int OH = input_shapes_[1][1];
+        const int OW = input_shapes_[1][2];
+        int opt = OH / num_thread;
+        int start = 0;
+        for (int i = 0; i < num_thread; ++i) {
+            ps[i].start = start;
+            int len = opt + (i < OH - opt * num_thread ? 1 : 0);
+            ps[i].end = start + len;
+            start = ps[i].end;
+        }
+        auto func = [&](const ThreadParam_t *tp) {
+            for (int n = 0; n < N; ++n) {
+                const float *input = FLOAT_PTR(input_tensors_[0]) + n * C * IH * IW;
+                const float *grid = FLOAT_PTR(input_tensors_[1]) + n * OH * OW * 2 + tp->start * OW * 2;
+                float *output = FLOAT_PTR(output_tensors_[0]) + n * C * OH * OW + tp->start * OW;
+                for (int h = tp->start; h < tp->end; ++h) {
+                    for (int w = 0; w < OW; ++w) {
+                        auto fx = computeIndex(*grid, IW, rip->padding_mode, rip->align_corners);
+                        ++grid;
+                        auto fy = computeIndex(*grid, IH, rip->padding_mode, rip->align_corners);
+                        ++grid;
+                        switch (rip->mode) {
+                        case GridSamplerBilinear: {
+                            int x = INT(std::floor(fx));
+                            int y = INT(std::floor(fy));
+                            float dx = fx - x;
+                            float dy = fy - y;
+                            float tx = 1.f - dx;
+                            float ty = 1.f - dy;
+                            float txty = tx * ty, dxty = dx * ty, txdy = tx * dy, dxdy = dx * dy;
+                            bool yBound_0 = y >= 0 && y < IH;
+                            bool yBound_1 = y + 1 >= 0 && y + 1 < IH;
+                            bool xBound_0 = x >= 0 && x < IW;
+                            bool xBound_1 = x + 1 >= 0 && x + 1 < IW;
+                            const float *iiter = input + y * IW + x;
+                            float *oiter = output;
+                            for (int c = 0; c < C; ++c) {
+                                *oiter = 0.f;
+                                if (yBound_0) {
+                                    if (xBound_0)
+                                        *oiter += iiter[0] * txty;
+                                    if (xBound_1)
+                                        *oiter += iiter[1] * dxty;
+                                }
+                                if (yBound_1) {
+                                    if (xBound_0)
+                                        *oiter += iiter[IW] * txdy;
+                                    if (xBound_1)
+                                        *oiter += iiter[IW + 1] * dxdy;
+                                }
+                                iiter += IH * IW;
+                                oiter += OH * OW;
                             }
-                            if (yBound_1) {
-                                if (xBound_0)
-                                    *oiter += iiter[IW] * txdy;
-                                if (xBound_1)
-                                    *oiter += iiter[IW + 1] * dxdy;
+                        }
+                        break;
+                        case GridSamplerNearest: {
+                            int x = INT(std::round(fx));
+                            int y = INT(std::round(fy));
+                            const float *iiter = input + y * IW + x;
+                            float *oiter = output;
+                            for (int c = 0; c < C; ++c) {
+                                *oiter = y >= 0 && y < IH && x >= 0 && x < IW ? *iiter : 0.f;
+                                iiter += IH * IW;
+                                oiter += OH * OW;
                             }
-                            iiter += IH * IW;
-                            oiter += OH * OW;
                         }
-                    }
-                    break;
-                    case GridSamplerNearest: {
-                        int x = INT(std::round(fx));
-                        int y = INT(std::round(fy));
-                        const float *iiter = input + y * IW + x;
-                        float *oiter = output;
-                        for (int c = 0; c < C; ++c) {
-                            *oiter = y >= 0 && y < IH && x >= 0 && x < IW ? *iiter : 0.f;
-                            iiter += IH * IW;
-                            oiter += OH * OW;
+                        break;
+                        default:
+                            CPU_ASSERT(0);
                         }
+                        ++output;
                     }
-                    break;
-                    default:
-                        CPU_ASSERT(0);
-                    }
-                    ++output;
                 }
             }
+        };
+        if (num_thread == 1)
+            func(ps.data());
+        else {
+            std::vector<std::thread> threads;
+            for (auto &it : ps)
+                threads.push_back(std::thread(func, &it));
+            for (auto &it : threads)
+                it.join();
         }
-    };
-    if (num_thread == 1)
-        func(ps.data());
-    else {
-        std::vector<std::thread> threads;
-        for (auto &it : ps)
-            threads.push_back(std::thread(func, &it));
-        for (auto &it : threads)
-            it.join();
+        *output_shapes_ = {{N, C, OH, OW}};
+    } else {
+        const int ID = input_shapes_[0][2];
+        const int IH = input_shapes_[0][3];
+        const int IW = input_shapes_[0][4];
+        const int OD = input_shapes_[1][1];
+        const int OH = input_shapes_[1][2];
+        const int OW = input_shapes_[1][3];
+        int opt = OH / num_thread;
+        int start = 0;
+        for (int i = 0; i < num_thread; ++i) {
+            ps[i].start = start;
+            int len = opt + (i < OH - opt * num_thread ? 1 : 0);
+            ps[i].end = start + len;
+            start = ps[i].end;
+        }
+        auto func = [&](const ThreadParam_t *tp) {
+            for (int n = 0; n < N; ++n) {
+                const float *input = FLOAT_PTR(input_tensors_[0]) + n * C * ID * IH * IW;
+                const float *grid = FLOAT_PTR(input_tensors_[1]) + n * OD * OH * OW * 3 + OD * tp->start * OW * 3;
+                float *output = FLOAT_PTR(output_tensors_[0]) + n * C * OD * OH * OW + OD * tp->start * OW;
+                for (int d = 0; d < OD; ++d) {
+                    for (int h = tp->start; h < tp->end; ++h) {
+                        for (int w = 0; w < OW; ++w) {
+                            auto fx = computeIndex(*grid, IW, rip->padding_mode, rip->align_corners);
+                            ++grid;
+                            auto fy = computeIndex(*grid, IH, rip->padding_mode, rip->align_corners);
+                            ++grid;
+                            auto fz = computeIndex(*grid, ID, rip->padding_mode, rip->align_corners);
+                            ++grid;
+                            switch (rip->mode) {
+                            case GridSamplerBilinear: {
+                                int x = INT(std::floor(fx));
+                                int y = INT(std::floor(fy));
+                                int z = INT(std::floor(fz));
+                                float dx = fx - x;
+                                float dy = fy - y;
+                                float dz = fz - z;
+                                float tx = 1.f - dx;
+                                float ty = 1.f - dy;
+                                float tz = 1.f - dz;
+                                float txtytz = tx * ty * tz, txtydz = tx * ty * dz, dxtytz = dx * ty * tz, dxtydz = dx * ty * dz;
+                                float txdytz = tx * dy * tz, txdydz = tx * dy * dz, dxdytz = dx * dy * tz, dxdydz = dx * dy * dz;
+                                bool zBound_0 = z >= 0 && z < ID;
+                                bool zBound_1 = z + 1 >= 0 && z + 1 < ID;
+                                bool yBound_0 = y >= 0 && y < IH;
+                                bool yBound_1 = y + 1 >= 0 && y + 1 < IH;
+                                bool xBound_0 = x >= 0 && x < IW;
+                                bool xBound_1 = x + 1 >= 0 && x + 1 < IW;
+                                const float *iiter = input + z * IH * IW + y * IW + x;
+                                float *oiter = output;
+                                for (int c = 0; c < C; ++c) {
+                                    *oiter = 0.f;
+                                    if (zBound_0) {
+                                        if (yBound_0) {
+                                            if (xBound_0)
+                                                *oiter += iiter[0] * txtytz;
+                                            if (xBound_1)
+                                                *oiter += iiter[1] * dxtytz;
+                                        }
+                                        if (yBound_1) {
+                                            if (xBound_0)
+                                                *oiter += iiter[IW] * txdytz;
+                                            if (xBound_1)
+                                                *oiter += iiter[IW + 1] * dxdytz;
+                                        }
+                                    }
+                                    if (zBound_1) {
+                                        if (yBound_0) {
+                                            if (xBound_0)
+                                                *oiter += iiter[IH * IW + 0] * txtydz;
+                                            if (xBound_1)
+                                                *oiter += iiter[IH * IW + 1] * dxtydz;
+                                        }
+                                        if (yBound_1) {
+                                            if (xBound_0)
+                                                *oiter += iiter[IH * IW + IW] * txdydz;
+                                            if (xBound_1)
+                                                *oiter += iiter[IH * IW + IW + 1] * dxdydz;
+                                        }
+                                    }
+                                    iiter += ID * IH * IW;
+                                    oiter += OD * OH * OW;
+                                }
+                            }
+                            break;
+                            case GridSamplerNearest: {
+                                int x = INT(std::round(fx));
+                                int y = INT(std::round(fy));
+                                int z = INT(std::round(fz));
+                                const float *iiter = input + z * IH * IW + y * IW + x;
+                                float *oiter = output;
+                                for (int c = 0; c < C; ++c) {
+                                    *oiter = z >= 0 && z < ID && y >= 0 && y < IH && x >= 0 && x < IW ? *iiter : 0.f;
+                                    iiter += ID * IH * IW;
+                                    oiter += OD * OH * OW;
+                                }
+                            }
+                            break;
+                            default:
+                                CPU_ASSERT(0);
+                            }
+                            ++output;
+                        }
+                    }
+                }
+            }
+        };
+        if (num_thread == 1)
+            func(ps.data());
+        else {
+            std::vector<std::thread> threads;
+            for (auto &it : ps)
+                threads.push_back(std::thread(func, &it));
+            for (auto &it : threads)
+                it.join();
+        }
+        *output_shapes_ = {{N, C, OD, OH, OW}};
     }
-    *output_shapes_ = {{N, C, OH, OW}};
     return 0;
 }
 int cpu_grid_samplerlayer::reshape(void *param, int psize,

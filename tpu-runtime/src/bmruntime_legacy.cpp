@@ -3,10 +3,12 @@
 #include "bmruntime.h"
 #include "bmruntime_common.h"
 #include "bmruntime_interface.h"
+#include "bmruntime_cpp.h"
 #include "string.h"
 
 using bmruntime::bmfunc;
 using bmruntime::Bmruntime;
+using bmruntime::api_info_t;
 
 // Make sure net_idx is greater than or equal to zero
 #define CHECK_net_idx(net_idx)                                                    \
@@ -689,4 +691,76 @@ int bmrt_thread_sync(void* p_bmrt)
 {
   bm_handle_t bm_handle = ((Bmruntime*)p_bmrt)->get_bm_handle();
   return bm_thread_sync(bm_handle);
+}
+
+api_info_c *get_bmodel_api_info_c(void *p_bmrt, const char *net_name,
+                                  const bm_tensor_t *input_tensors,
+                                  int input_num, bm_tensor_t *output_tensors,
+                                  int output_num, bool user_mem,
+                                  bool user_stmode, uint32_t *core_ids) {
+  api_info_c *api_info = new api_info_c;
+  memset(api_info, 0x0, sizeof(api_info_c));
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return api_info;
+  }
+  int net_idx = ((Bmruntime *)p_bmrt)->get_net_idx(net_name);
+  if (net_idx < 0) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return api_info;
+  }
+  const api_info_t &pinfo =
+      ((Bmruntime *)p_bmrt)
+          ->get_api_info(net_idx, input_tensors, input_num, output_tensors,
+                         output_num, user_mem, user_stmode, core_ids);
+
+  api_info->api_id_size = pinfo.api_id.size();
+  api_info->api_data_size = pinfo.api_data.size();
+  api_info->output_addr_offset_number = pinfo.output_addr_offset.size();
+  api_info->input_addr_offset_number = pinfo.input_addr_offset.size();
+  api_info->api_data_subsize = new size_t[api_info->api_data_size];
+  for (size_t i = 0; i < api_info->api_data_size; i++) {
+    api_info->api_data_subsize[i] = pinfo.api_data[i].size();
+  }
+
+  api_info->api_id = new uint32_t[api_info->api_id_size];
+  api_info->api_data = new uint8_t *[api_info->api_data_size];
+  for (size_t i = 0; i < api_info->api_data_size; i++) {
+    api_info->api_data[i] = new uint8_t[api_info->api_data_subsize[i]];
+  }
+  api_info->input_addr_offset =
+      new uint32_t[api_info->input_addr_offset_number];
+  api_info->output_addr_offset =
+      new uint32_t[api_info->output_addr_offset_number];
+  for (size_t i = 0; i < api_info->api_data_size; i++) {
+    memcpy(api_info->api_data[i], pinfo.api_data[i].data(),
+           pinfo.api_data[i].size() * sizeof(uint8_t));
+  }
+  memcpy(api_info->api_id, pinfo.api_id.data(),
+         api_info->api_id_size * sizeof(uint32_t));
+  memcpy(api_info->input_addr_offset, pinfo.input_addr_offset.data(),
+         api_info->input_addr_offset_number * sizeof(uint32_t));
+  memcpy(api_info->output_addr_offset, pinfo.output_addr_offset.data(),
+         api_info->output_addr_offset_number * sizeof(uint32_t));
+
+  return api_info;
+}
+
+void bmrt_free_api_info(api_info_c *api_info) {
+  for (size_t i = 0; i < api_info->api_data_size; i++) {
+    delete[] api_info->api_data[i];
+  }
+  delete[] api_info->api_id;
+  delete[] api_info->api_data;
+  delete[] api_info->input_addr_offset;
+  delete[] api_info->output_addr_offset;
+  delete[] api_info->api_data_subsize;
+
+  api_info->api_id = nullptr;
+  api_info->api_data = nullptr;
+  api_info->input_addr_offset = nullptr;
+  api_info->output_addr_offset = nullptr;
+  api_info->api_data_subsize = nullptr;
+  delete api_info;
+
 }

@@ -188,27 +188,15 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                          "----------------------------------------------+\n");
                 break;
             case 2:
-                if ((g_driver_version >> 24) == 0x6) {
-                    snprintf(
-                        line_str,
-                        BUFFER_LEN,
-                        "| SDK Version:%9s LTS         Driver Version:  "
-                        "%1d.%1d.%1d LTS                                     |\n",
-                        bm_smi_version,
-                        (g_driver_version >> 16) & 0xff,
-                        (g_driver_version >> 8) & 0xff,
-                        g_driver_version & 0xff);
-                } else {
-                    snprintf(
-                        line_str,
-                        BUFFER_LEN,
-                        "| SDK Version:%9s LTS         Driver Version:  "
-                        "%1d.%1d.%1d                                         |\n",
-                        bm_smi_version,
-                        (g_driver_version >> 16) & 0xff,
-                        (g_driver_version >> 8) & 0xff,
-                        g_driver_version & 0xff);
-                }
+                snprintf(
+                    line_str,
+                    BUFFER_LEN,
+                    "| Lib Version:%9s             Driver Version:  "
+                    "%1d.%1d.%1d                                         |\n",
+                    bm_smi_version,
+                    g_driver_version >> 16,
+                    (g_driver_version >> 8) & 0xff,
+                    g_driver_version & 0xff);
                 break;
             case 3:
                 snprintf(line_str,
@@ -329,7 +317,7 @@ static void bm_smi_tpuv_to_str(int dev_id, char *s) {
     } else if (g_attr[dev_id].vdd_tpu_volt < 0) {
         snprintf(s, 5, "%s", " F ");
     } else {
-        snprintf(s, 7, "%dmV", g_attr[dev_id].vdd_tpu_volt);
+        snprintf(s, 13, "%dmV", g_attr[dev_id].vdd_tpu_volt);
     }
 }
 
@@ -379,7 +367,12 @@ static void bm_smi_sn_to_str(int dev_id, char *s) {
 
 /* convert board type to string*/
 static void bm_smi_board_type_to_str(int dev_id, char *s) {
-    snprintf(s, 6, "%s", g_attr[dev_id].board_type);
+    int length = strlen(g_attr[dev_id].board_type);
+    if (g_attr[dev_id].chip_mode == 0 && length < 5){
+        snprintf(s, 10, "%s%s", "  ",g_attr[dev_id].board_type);
+    } else {
+	snprintf(s, 10, "%s", g_attr[dev_id].board_type);
+    }
 }
 
 /*
@@ -538,7 +531,7 @@ static void bm_smi_display_attr(int            dev_id,
     char chipt_s[5];
     char boardp_s[5];
     char tpup_s[6];
-    char tpuv_s[7];
+    char tpuv_s[13];
     char c12v_s[7];
     char ecc_s[4];
     char cnum_s[5];
@@ -552,7 +545,7 @@ static void bm_smi_display_attr(int            dev_id,
     char tpuc_s[6];
     char fan_s[4];
     char tpu_util_s[6];
-    char board_type_s[7];
+    char board_type_s[10];
 
     bm_smi_chipid_to_str(dev_id, chip_id_s);
     bm_smi_card_index_to_str(dev_id, card_index_s);
@@ -585,17 +578,30 @@ static void bm_smi_display_attr(int            dev_id,
         switch (i) {
             case 0: {
                 if (g_attr[dev_id].board_attr) {
-                    snprintf(line_str,
-                             BUFFER_LEN,
-                             "|%2s %5s-%-5s %5s %17s |%2d   %4s    %4s",
-                             card_index_s,
-                             chip_id_s,
-                             board_type_s,
-                             mode_s,
-                             sn_s,
-                             dev_id,
-                             boardt_s,
-                             chipt_s);
+		    if (g_attr[dev_id].chip_mode == 0){
+                        snprintf(line_str,
+                                 BUFFER_LEN,
+                                 "|%2s  %-10s %5s %17s |%2d   %4s    %4s",
+                                 card_index_s,
+                                 board_type_s,
+                                 mode_s,
+                                 sn_s,
+                                 dev_id,
+                                 boardt_s,
+                                 chipt_s);
+		    } else {
+                        snprintf(line_str,
+                                 BUFFER_LEN,
+                                 "|%2s %5s-%-5s %5s %17s |%2d   %4s    %4s",
+                                 card_index_s,
+				 chip_id_s,
+                                 board_type_s,
+                                 mode_s,
+                                 sn_s,
+                                 dev_id,
+                                 boardt_s,
+                                 chipt_s);
+		    }
                     str_length = snprintf(color_str, BUFFER_LEN, " ");
                     snprintf(after_color_str,
                              BUFFER_LEN,
@@ -607,10 +613,9 @@ static void bm_smi_display_attr(int            dev_id,
                              tpu_util_s);
                     snprintf(whole_str,
                              BUFFER_LEN,
-                             "|%2s %5s-%-5s %5s %17s |%2d   %4s    %4s   %5s  "
+                             "|%2s  %-10s %5s %17s |%2d   %4s    %4s   %5s  "
                              " %5s  %3s    %3s       %5s |\n",
                              card_index_s,
-                             chip_id_s,
                              board_type_s,
                              mode_s,
                              sn_s,
@@ -1008,6 +1013,19 @@ static void bm_smi_fetch_all(bm_handle_t handle,
         bm_smi_get_attr(bmctl_device, i);
         bm_smi_get_proc_gmem(bmctl_device, i);
 #endif
+
+        char *sg_env;
+
+        sg_env = getenv("SOPHONVM");
+        if (sg_env != NULL && (*sg_env) == 'y') {
+            g_attr[i].card_index = i/3;
+            g_attr[i].board_power = (g_attr[i].board_power)/2;
+            g_attr[i].atx12v_curr = (g_attr[i].atx12v_curr)/2;
+        } else if (sg_env != NULL && !strncmp(sg_env, "SOPHONVM", 8)) {
+            g_attr[i].board_power = (g_attr[i].board_power)/2;
+            g_attr[i].atx12v_curr = (g_attr[i].atx12v_curr)/2;
+        }
+
         if (dev_cnt == 1) {
             g_attr[i].board_endline = 1;
             g_attr[i].board_attr    = 1;
@@ -1074,7 +1092,7 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
     char boardt_s[5];
     char chipt_s[5];
     char tpup_s[6];
-    char tpuv_s[7];
+    char tpuv_s[13];
     char ecc_s[4];
     char cnum_s[5];
     char busid_s[12];
@@ -1084,7 +1102,7 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
     char currclk_s[6];
     char tpuc_s[6];
     char tpu_util_s[6];
-    char board_type_s[7];
+    char board_type_s[10];
 
 #ifdef __linux__
     bm_smi_fetch_all(fd, last_dev - start_dev + 1, start_dev);
@@ -1116,7 +1134,7 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
         bm_smi_tpu_util_to_str(i, tpu_util_s);
         bm_smi_board_type_to_str(i, board_type_s);
 
-        printf("%s-%s ", chip_id_s, board_type_s);
+        printf("%s ", board_type_s);
         printf("%s ", mode_s);
         printf("chip%d: %d ", i - start_dev, g_attr[i].dev_id);
         printf("%s ", busid_s);
@@ -1210,6 +1228,13 @@ int bm_smi_display::validate_input_para() {
         dev_cnt   = g_cmdline.m_last_dev - g_cmdline.m_start_dev + 1;
     }
 #endif
+        char *sg_env;
+
+        sg_env = getenv("SOPHONVM");
+        if (sg_env != NULL && strlen(sg_env) != 8 && !strncmp(sg_env, "SOPHONVM", 8)) {
+            start_dev = atoi(sg_env + 8) * 3;
+            dev_cnt = 3;
+        }
 
     /* check lms value */
     if (g_cmdline.m_lms < 300) {

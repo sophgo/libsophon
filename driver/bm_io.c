@@ -512,10 +512,10 @@ void io_init(struct bm_device_info *bmdi)
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->wdt_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.wdt_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->tpu_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->gdma_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->spacc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.spacc_bar_vaddr);
-	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pka_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pka_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->efuse_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr);
 #ifndef SOC_MODE
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->spacc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.spacc_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pka_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pka_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->dev_info_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.dev_info_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->i2c_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.i2c_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->ddr_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.ddr_bar_vaddr);

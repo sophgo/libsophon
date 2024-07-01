@@ -22,10 +22,10 @@ DECLARE_bool(helpshort);
 bm_smi_cmdline::bm_smi_cmdline(int argc, char *argv[]) {
 #ifndef SOC_MODE
   /* get and validate flags*/
-  gflags::SetUsageMessage("command line brew\n"
+  gflags::SetUsageMessage("command line prompt\n"
       "usage: bm-smi [--ecc=on/off] [--file=/xx/yy.txt] [--dev=0/1...]"
       "[--start_dev=x] [--last_dev=y] [--text_format]"
-      " [--lms=500] [--recovery] [-loop] [--led=on/off/blink]\n"
+      " [--lms=500] [--recovery] [--loop] [--led=on/off/blink]\n"
       "ecc:\n"
       "  set ecc status, default is off\n"
       "file:\n"
@@ -39,19 +39,19 @@ bm_smi_cmdline::bm_smi_cmdline(int argc, char *argv[]) {
       "lms:\n"
       "  how many ms of the sample interval, default is 500.\n"
       "loop:\n"
-      "  if -loop (default): smi sample device every lms ms.\n"
-      "  if -noloop: smi sample device only once.\n"
+      "  if --loop (default): smi sample device every lms ms.\n"
+      "  if --noloop: smi sample device only once.\n"
       "recovery:\n"
       "  recovery dev from fault to active status.\n"
       "text_format:\n"
       "  if true only display attr value from start_dev to last_dev.\n"
       "led:\n"
-      "  pcie card LED status: on/off/blink.\n"
+      "  PCIE card LED status: on/off/blink.\n"
       "\n"
       "New usage: bm-smi [--opmode=display/ecc/led/recovery...]"
       "[--opval=on/off/...] [--file=/xx/yy.txt]"
       "[--dev=0/1...] [--start_dev=x] [--last_dev=y] [--text_format]"
-      "[--lms=500] [-loop]\n"
+      "[--lms=500] [--loop]\n"
       "opmode(default null):\n"
       "  choose different mode,example:display, ecc, led, recovery\n"
       "    display:                 means open bm-smi window and check info, use like ./bm-smi\n"
@@ -69,9 +69,9 @@ bm_smi_cmdline::bm_smi_cmdline(int argc, char *argv[]) {
       "other flags have same usage, Both usage can be used!\n");
 
 #else
-  gflags::SetUsageMessage("command line brew\n"
+  gflags::SetUsageMessage("command line prompt\n"
       "usage: bm-smi [--opmode=display] [--file=/xx/yy.txt]"
-      " [--lms=500] [-loop]\n"
+      " [--lms=500] [--loop]\n"
       "opmode:\n"
       "  SOC mode just only use display.\n"
       "file:\n"
@@ -79,8 +79,8 @@ bm_smi_cmdline::bm_smi_cmdline(int argc, char *argv[]) {
       "lms:\n"
       "  how many ms of the sample interval, default is 500.\n"
       "loop:\n"
-      "  if -loop (default): smi sample device every lms ms.\n"
-      "  if -noloop: smi sample device only once.\n");
+      "  if --loop (default): smi sample device every lms ms.\n"
+      "  if --noloop: smi sample device only once.\n");
 #endif
 
 

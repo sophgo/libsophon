@@ -19,7 +19,10 @@ typedef enum bmtpu_arch {
   BM1684,
   BM1880,
   BM1684X,
-  BM1686,
+  BM1688,
+  BM1690,
+  MARS3,
+  SG2380,
   UNKOWN_ARCH
 } bmtpu_arch_t;
 
@@ -32,6 +35,7 @@ class bmrt_arch_info {
     static const string& get_bmtpu_name() { return sta_bmtpu_ptr->m_arch_name; }
     static bool is_soc_mode() { return sta_bmtpu_ptr->m_soc_mode; }
     static void set_current_arch_info(bmrt_arch_info *arch_ptr) { if(arch_ptr) sta_bmtpu_ptr = arch_ptr; }
+
 
     static int get_npu_num();
     static int get_eu_num(bm_data_type_t dtype);
@@ -49,6 +53,8 @@ class bmrt_arch_info {
     static u32 get_bdc_cmd_num();
     static u32 get_gdma_cmd_num();
     static u64 get_soc_base_distance();
+
+    static u64 addr_mask();
 
   private:
     static bmrt_arch_info* sta_bmtpu_ptr;

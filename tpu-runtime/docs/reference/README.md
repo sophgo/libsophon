@@ -1,4 +1,4 @@
-This is the document repo of NNToolChain, which is used for deploying models on Sophon TPU (https://sophon.ai).
+This is the document repo of NNToolChain, which is used for deploying models on SOPHON deep-learning processors (https://sophon.ai).
 
 * Frontend parsers for Caffe/TensorFlow/MXNet/PyTorch
 * Graph optimization compiler and runtime
@@ -30,8 +30,8 @@ If fandol exists in /usr/share/fonts, we can ignore this step.
 make html # build document to static html files
 python3 -m http.server --directory build/html
 # open http://localhost:8000 in browser
- 
-## make  pdf 
+
+## make  pdf
 
 ```
 
@@ -45,8 +45,8 @@ TODO
 
 ## Built With
 
-* [Sphinx](http://www.sphinx-doc.org) - Document auto generate tool  
-* [Latex](https://www.latex-project.org/) - High-quality typesetting system 
+* [Sphinx](http://www.sphinx-doc.org) - Document auto generate tool
+* [Latex](https://www.latex-project.org/) - High-quality typesetting system
 
 ## License
 

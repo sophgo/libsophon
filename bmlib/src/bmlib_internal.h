@@ -15,6 +15,8 @@
 //#include "..\..\common\bm1684\include_win\common_win.h"
 #else
 #include "linux/bmlib_ioctl.h"
+#include <pthread.h>
+#include "rbtree.h"
 #endif
 #ifdef USING_CMODEL
 #include "bmlib_device.h"
@@ -122,6 +124,8 @@ typedef struct bm_context {
     bm_cdma_iommu_mode               cdma_iommu_mode;
 #endif
     bmlib_profile_t *profile;
+    struct rb_root root;
+    pthread_mutex_t mem_mutex;
 } bm_context_t, *bm_handle_t;
 
 DECL_EXPORT bm_status_t bm_send_api(
@@ -129,6 +133,13 @@ DECL_EXPORT bm_status_t bm_send_api(
   int api_id,
   const u8     *api,
   u32          size);
+
+DECL_EXPORT bm_status_t bm_send_api_to_core(
+  bm_handle_t  handle,
+  int api_id,
+  const u8     *api,
+  u32          size,
+  int          core_id);
 
 DECL_EXPORT bm_status_t bm_send_api_ext(
   bm_handle_t  handle,
@@ -248,6 +259,20 @@ bm_status_t bm_get_device_time_us(bm_handle_t handle,
 void bm_enable_iommu(bm_handle_t handle);
 void bm_disable_iommu(bm_handle_t handle);
 
+enum bm_rw_op {
+  BM_READ = 0,
+  BM_WRITE = 1,
+  BM_MALLOC = 2,
+  BM_FREE = 3,
+};
+
+struct bm_rw {
+  enum bm_rw_op op;
+  u64 paddr;
+  u32 value;
+  void *vaddr;
+};
+
 struct bm_reg {
   int reg_addr;
   int reg_value;
@@ -270,6 +295,8 @@ struct bm_card {
 
 bm_status_t bm_get_reg(bm_handle_t handle, struct bm_reg *p_reg);
 bm_status_t bm_set_reg(bm_handle_t handle, struct bm_reg *p_reg);
+bm_status_t bm_rw_mix(bm_handle_t handle, struct bm_rw *reg);
+bm_status_t bm_rw_host(bm_handle_t handle, struct bm_rw *reg);
 
 typedef struct bm_fw_desc {
   unsigned int *itcm_fw;

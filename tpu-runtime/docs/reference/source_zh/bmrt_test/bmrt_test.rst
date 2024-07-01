@@ -17,7 +17,7 @@ _____________________________________________
 
    .. table:: bmrt_test主要参数说明
       :widths: 15 10 50
- 
+
       +---------------+------------+-----------------------------------------------------------------+
       |    args       |    type    |                   Description                                   |
       +===============+============+=================================================================+
@@ -53,6 +53,8 @@ _____________________________________________
       +---------------+------------+-----------------------------------------------------------------+
       |  subnet_time  |   bool     |  可选, 是否显示bmodel的subnet时间                               |
       +---------------+------------+-----------------------------------------------------------------+
+      |  core_list    |   string   |  可选, 指定深度学习处理器core参数列表(仅对支持多核的硬件架构有效)         +
+      +---------------+------------+-----------------------------------------------------------------+
 
 bmrt_test输出
 ____________________________________________
@@ -84,7 +86,7 @@ ____________________________________________
       bmrt_test --context_dir bmodel_dir  --compare=0 # 运行bmodel，bmodel_dir中要包含compilation.bmodel
       bmrt_test --bmodel xxx.bmodel # 直接运行bmodel，不比对数据
       bmrt_test --bmodel xxx.bmodel --stage_idx 0  --shapes "[1,3,224,224]" # 运行多stage的bmodel模型，指定运行stage0的bmodel
-
+      bmrt_test --bmodel xxx.bmodel --core_list 0,1 # 在深度学习处理器core0和core1上同时运行该bmodel，注意该bmodel为多核编译且能够架构支持多核运行，core_list中的值至少为0且不能大于深度学习处理器core数量-1
       # 以下命令是通过环境变量使用bmruntime提供的功能，其他应用程序也可以使用
       BMRUNTIME_ENABLE_PROFILE=1 bmrt_test --bmodel xxx.bmodel # 生成profile数据：bmprofile_data-x
       BMRT_SAVE_IO_TENSORS=1 bmrt_test --bmodel xxx.bmodel  # 将模型推理的数据保存成input_ref_data.dat.bmrt和output_ref_data.dat.bmrt

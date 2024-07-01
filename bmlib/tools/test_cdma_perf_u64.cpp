@@ -33,7 +33,7 @@ int array_cmp_int(
   return 0;
 }
 
-int sg_array_cmp_int(
+int bm_array_cmp_int_u64(
     unsigned char *p_exp,
     unsigned char *p_got,
     u64 len,
@@ -42,7 +42,7 @@ int sg_array_cmp_int(
   u64 idx;
   for (idx = 0; idx < len; idx++) {
     if (p_exp[idx] != p_got[idx]) {
-      printf("%s error at index %d exp %x got %x\n",
+      printf("%s error at index %llu exp %x got %x\n",
              info_label, idx, p_exp[idx], p_got[idx]);
       return -1;
     }
@@ -172,7 +172,7 @@ int test_cdma_stod_transfer(int chip_num, u64 transfer_size, unsigned long long 
   unsigned long consume_real = 0;
   unsigned long consume = 0;
   struct timespec tp;
-  sg_device_mem_t dev_buffer;
+  bm_device_mem_u64_t dev_buffer;
   bm_profile_t profile_start, profile_end;
   struct timeval tv_start;
   struct timeval tv_end;
@@ -208,24 +208,24 @@ int test_cdma_stod_transfer(int chip_num, u64 transfer_size, unsigned long long 
     return -1;
   }
   if (dst_addr == 0x0) {
-    ret = sg_malloc_device_dword(handle, &dev_buffer, transfer_size/4);
-    // ret = sg_malloc_device_byte(handle, &dev_buffer, transfer_size);
-    // ret = sg_malloc_device_byte_heap(handle, &dev_buffer, 0, transfer_size);
-    // ret = sg_malloc_device_byte_heap_mask(handle, &dev_buffer, 0x1, transfer_size);
+    ret = bm_malloc_device_dword_u64(handle, &dev_buffer, transfer_size/4);
+    // ret = bm_malloc_device_byte_u64(handle, &dev_buffer, transfer_size);
+    // ret = bm_malloc_device_byte_heap_u64(handle, &dev_buffer, 0, transfer_size);
+    // ret = bm_malloc_device_byte_heap_mask_u64(handle, &dev_buffer, 0x1, transfer_size);
     if (ret != BM_SUCCESS) {
-      printf("malloc device memory size = %d failed, ret = %d\n", transfer_size, ret);
+      printf("malloc device memory size = %llu failed, ret = %d\n", transfer_size, ret);
       return -1;
     }
   } else {
-      dev_buffer = sg_mem_from_device(dst_addr, transfer_size);
+      dev_buffer = bm_mem_from_device_u64(dst_addr, transfer_size);
   }
 
   for (int i = 0; i < 10; i++) {
     bm_trace_enable(handle);
     gettimeofday(&tv_start, NULL);
     bm_get_profile(handle, &profile_start);
-    ret = sg_memcpy_s2d(handle, dev_buffer, sys_send_buffer);
-    // ret = sg_memcpy_s2d_poll(handle, dev_buffer, sys_send_buffer);
+    ret = bm_memcpy_s2d_u64(handle, dev_buffer, sys_send_buffer);
+    // ret = bm_memcpy_s2d_poll_u64(handle, dev_buffer, sys_send_buffer);
     if (ret != BM_SUCCESS) {
       printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       return -1;
@@ -266,8 +266,8 @@ int test_cdma_stod_transfer(int chip_num, u64 transfer_size, unsigned long long 
     bm_trace_enable(handle);
     gettimeofday(&tv_start, NULL);
     bm_get_profile(handle, &profile_start);
-    ret = sg_memcpy_d2s(handle, sys_recieve_buffer, dev_buffer);
-    // ret = sg_memcpy_d2s_poll(handle, sys_recieve_buffer, dev_buffer, transfer_size);
+    ret = bm_memcpy_d2s_u64(handle, sys_recieve_buffer, dev_buffer);
+    // ret = bm_memcpy_d2s_poll_u64(handle, sys_recieve_buffer, dev_buffer, transfer_size);
     if (ret != BM_SUCCESS) {
       printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       return -1;
@@ -298,13 +298,13 @@ int test_cdma_stod_transfer(int chip_num, u64 transfer_size, unsigned long long 
             consume,
             bandwidth);
   }
-  cmp_ret = sg_array_cmp_int(sys_send_buffer, sys_recieve_buffer, transfer_size, "cdma test");
+  cmp_ret = bm_array_cmp_int_u64(sys_send_buffer, sys_recieve_buffer, transfer_size, "cdma test");
   printf("dev = %d, cdma transfer test %s.\n", chip_num, cmp_ret ? "Failed" : "Success");
 
   if (sys_send_buffer) free(sys_send_buffer);
   if (sys_recieve_buffer) free(sys_recieve_buffer);
   if (dst_addr == 0x0) {
-    sg_free_device(handle, dev_buffer);
+    bm_free_device_u64(handle, dev_buffer);
   }
   bm_dev_free(handle);
   return cmp_ret;
@@ -327,7 +327,7 @@ DWORD WINAPI test_cdma_thread(LPVOID arg) {
   bm_status_t ret = BM_SUCCESS;
   struct cdma_process_para *ppara = (struct cdma_process_para *)arg;
   unsigned char * sys_buffer;
-  sg_device_mem_t dev_buffer;
+  bm_device_mem_u64_t dev_buffer;
   int i = 0x0;
 
   sys_buffer = (unsigned char*)malloc(ppara->size);
@@ -338,21 +338,21 @@ DWORD WINAPI test_cdma_thread(LPVOID arg) {
     return NULL;
   }
 
-  ret = sg_malloc_device_byte(handle, &dev_buffer, ppara->size);
+  ret = bm_malloc_device_byte_u64(handle, &dev_buffer, ppara->size);
   if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %d failed, ret = %d\n", ppara->size, ret);
+    printf("malloc device memory size = %llu failed, ret = %d\n", ppara->size, ret);
     free(sys_buffer);
     return NULL;
   }
 
   for (i = 0; i < ppara->launch_num; i++) {
     if (ppara->dir == 0x0) {
-      ret = sg_memcpy_s2d(handle, dev_buffer, sys_buffer);
+      ret = bm_memcpy_s2d_u64(handle, dev_buffer, sys_buffer);
       if (ret != BM_SUCCESS) {
         printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       }
     } else {
-      ret = sg_memcpy_d2s(handle, sys_buffer, dev_buffer);
+      ret = bm_memcpy_d2s_u64(handle, sys_buffer, dev_buffer);
       if (ret != BM_SUCCESS) {
         printf("CDMA transfer from device to sys failed, ret = %d\n", ret);
       }

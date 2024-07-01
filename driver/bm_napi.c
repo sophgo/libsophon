@@ -166,11 +166,19 @@ static netdev_tx_t eth_ndo_start_xmit(struct sk_buff *   skb,
 
     return NETDEV_TX_OK;
 }
-#if  (LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0) || (LINUX_VERSION_CODE == KERNEL_VERSION(4,18,0) \
-      && CENTOS_KERNEL_FIX >= 240))
+
+#ifndef CENTOS_KERNEL_FIX
+	#if  LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
-#else
+	#else
 static void eth_ndo_tx_timeout(struct net_device *ndev)
+	#endif
+#else
+	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0) && CENTOS_KERNEL_FIX >= 240)
+void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
+	#else
+static void eth_ndo_tx_timeout(struct net_device *ndev)
+	#endif
 #endif
 {
     struct eth_dev_info *info = *((struct eth_dev_info **)netdev_priv(ndev));
@@ -253,10 +261,11 @@ static void eth_set_a53ipaddress(struct eth_dev_info *info) {
     if (bmdi->cinfo.chip_id == 0x1684)
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_IPADDRESS_REG, bmdi->dev_index);
     else if (bmdi->cinfo.chip_id == 0x1686) {
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, 0xc0c00002);
+        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, 0xc0c00002 + (bmdi->dev_index << 8));
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, 0xffffff00);
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, 0);
         bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
+        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + CHANGE_VETH_TIME, 0);
     }
 }
 

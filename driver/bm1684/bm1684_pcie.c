@@ -28,7 +28,7 @@ int bm1684_get_pcie_func_index(struct bm_device_info *bmdi)
 	} else
 		index = -1;
 
-	//index = PCI_FUNC(bmdi->cinfo.pcidev->devfn);
+	index = PCI_FUNC(bmdi->cinfo.pcidev->devfn);
 	if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686)) {
 		bmdi->cinfo.pcie_func_index = index;
 		pr_info("bm-sophon%d, pcie_func_index = %d\n", bmdi->dev_index, index);

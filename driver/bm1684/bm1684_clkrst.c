@@ -115,8 +115,7 @@ int bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target)
 	int val = 0;
 
 	if (bmdi->misc_info.pcie_soc_mode == 0) {
-		if(target<bmdi->boot_info.tpu_min_clk ||
-			target>bmdi->boot_info.tpu_max_clk) {
+		if (target < TPU_MIN_CLK || target > TPU_MAX_CLK) {
 			pr_err("%s: freq %d is too small or large\n", __func__, target);
 			return -1;
 		}

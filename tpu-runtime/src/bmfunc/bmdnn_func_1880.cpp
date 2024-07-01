@@ -1,108 +1,115 @@
 #include "bmfunc/bmfunc.h"
 #include <iostream>
+#include <memory>
 
 namespace bmruntime {
+void bmdnn_func_1880::fill_api_info(const tpu_net_info_t &net_info,
+                                    api_info_t &api_info) {
+  const std::vector<tpu_tensor_info_t> &input_info = net_info.input_info;
+  const std::vector<tpu_tensor_info_t> &output_info = net_info.output_info;
+  const std::vector<tpu_cmd_info_t> &cmd_info = net_info.core_commands[0].cmd_info;
+  u32 api_buffer_size =
+      sizeof(int) +
+      (input_info.size() *
+       (sizeof(u64) * 2 + sizeof(int) * 2 + sizeof(unsigned short) +
+        sizeof(unsigned char) * 2)) + // api buffer size for input
+      sizeof(int) +
+      (output_info.size() *
+       (sizeof(u64) * 2 + sizeof(int) * 2 + sizeof(unsigned short) +
+        sizeof(unsigned char) * 2)) + // api buffer size for output
+      sizeof(u64) * 2 +
+      sizeof(int) * 2 * cmd_info.size() + sizeof(int);
 
-bm_status_t bmdnn_func_1880::_bmdnn_multi_fullnet_(
-        bm_handle_t handle,
-        int input_num,
-        u64* user_input_global_offset,
-        u64* cmd_input_global_offset,
-        int* input_n,
-        int* input_length,
-        unsigned short* input_data_type, //0: FP32, 1: FP16, 2: INT8, 3: UINT8, 4: INT16, 5: UINT16
-        unsigned char* input_st_mode,    //0: 1N, 1: 2N, 2: 4N
-        unsigned char* real_in_stmode,   //0: 1N, 1: 2N, 2: 4N
-        int output_num,
-        u64* user_output_global_offset,
-        u64* cmd_output_global_offset,
-        int* output_n,
-        int* output_length,
-        unsigned short* output_data_type, //0: FP32, 1: FP16, 2: INT8, 3: UINT8, 4: INT16, 5: UINT16
-        unsigned char* output_st_mode,    //0: 1N, 1: 2N, 2: 4N
-        unsigned char* force_out_stmode,   //0: 1N, 1: 2N, 2: 4N
-        u64 bdc_cmd_offset,
-        u64 gdma_cmd_offset,
-        int* bdc_cmd_num,
-        int* gdma_cmd_num,
-        int cmdgroup_num
-        )
-{
-    BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
-    u32 api_buffer_size = sizeof(int) + (input_num * (sizeof(u64) * 2 + sizeof(int) * 2 + sizeof(unsigned short) + sizeof(unsigned char) * 2)) + //api buffer size for input
-                          sizeof(int) + (output_num * (sizeof(u64) * 2 + sizeof(int) * 2 + sizeof(unsigned short) + sizeof(unsigned char) * 2)) + //api buffer size for output
-                          sizeof(u64) * 2 + sizeof(int) * 2 * cmdgroup_num + sizeof(int);
+  api_info.api_id.push_back(0xfff);
+  api_info.api_data.resize(1);
+  api_info.api_data[0].assign(api_buffer_size, 0);
+  api_info.input_addr_offset.assign(input_info.size(), 0);
+  api_info.output_addr_offset.assign(output_info.size(), 0);
 
-    u8* api_buffer = new u8 [api_buffer_size];
+  void *p_api = api_info.api_data[0].data();
+  // input global offset process
+  *(int *)p_api = input_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < input_info.size(); ++i) {
+    const auto &info = input_info.at(i);
+    api_info.input_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = info.user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = info.compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(int *)p_api = info.n;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = info.c * info.h * info.w;
+    p_api = (int *)p_api + 1;
+    *(unsigned short *)p_api = info.dtype;
+    p_api = (unsigned short *)p_api + 1;
+    *(unsigned char *)p_api = info.compiled_stmode;
+    p_api = (unsigned char *)p_api + 1;
+    BMRT_ASSERT_INFO(info.compiled_stmode != 1,
+                     "input_st_mode[%d] shouldn't be 2N\n", i);
+    *(unsigned char *)p_api = info.user_stmode;
+    p_api = (unsigned char *)p_api + 1;
+    BMRT_ASSERT_INFO(info.user_stmode != 1,
+                     "real_in_stmode[%d] shouldn't be 2N\n", i);
+  }
 
-    void* p_api = api_buffer;
-    //input global offset process
-    *(int*)p_api = input_num;
-    p_api = (int*)p_api + 1;
-    for (int i = 0; i < input_num; ++i) {
-        *(u64*)p_api = user_input_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(u64*)p_api = cmd_input_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(int*)p_api = input_n[i];
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = input_length[i];
-        p_api = (int*)p_api + 1;
-        *(unsigned short*)p_api = input_data_type[i];
-        p_api = (unsigned short*)p_api + 1;
-        *(unsigned char*)p_api = input_st_mode[i];
-        p_api = (unsigned char*)p_api + 1;
-        BMRT_ASSERT_INFO(input_st_mode[i] != 1,"input_st_mode[%d] shouldn't be 2N\n",i);
-        *(unsigned char*)p_api = real_in_stmode[i];
-        p_api = (unsigned char*)p_api + 1;
-        BMRT_ASSERT_INFO(real_in_stmode[i] != 1,"real_in_stmode[%d] shouldn't be 2N\n",i);
-    }
+  // output global offset process
+  *(int *)p_api = output_info.size();
+  p_api = (int *)p_api + 1;
+  for (size_t i = 0; i < output_info.size(); ++i) {
+    const tpu_tensor_info_t &info = output_info.at(i);
+    api_info.output_addr_offset.at(i) =
+        (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
+    *(u64 *)p_api = info.user_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = info.compiled_global_addr;
+    p_api = (u64 *)p_api + 1;
+    *(int *)p_api = info.n;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = info.c * info.h * info.w;
+    p_api = (int *)p_api + 1;
+    *(unsigned short *)p_api = info.dtype;
+    p_api = (unsigned short *)p_api + 1;
+    *(unsigned char *)p_api = info.compiled_stmode;
+    p_api = (unsigned char *)p_api + 1;
+    BMRT_ASSERT_INFO(info.compiled_stmode != 1,
+                     "output_st_mode[%d] shouldn't be 2N\n", i);
+    *(unsigned char *)p_api = info.user_stmode;
+    p_api = (unsigned char *)p_api + 1;
+    BMRT_ASSERT_INFO(info.user_stmode != 1,
+                     "force_out_stmode[%d] shouldn't be 2N\n", i);
+  }
 
-    //output global offset process
-    *(int*)p_api = output_num;
-    p_api = (int*)p_api + 1;
-    for (int i = 0; i < output_num; ++i) {
-        *(u64*)p_api = user_output_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(u64*)p_api = cmd_output_global_offset[i];
-        p_api = (u64*)p_api + 1;
-        *(int*)p_api = output_n[i];
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = output_length[i];
-        p_api = (int*)p_api + 1;
-        *(unsigned short*)p_api = output_data_type[i];
-        p_api = (unsigned short*)p_api + 1;
-        *(unsigned char*)p_api = output_st_mode[i];
-        p_api = (unsigned char*)p_api + 1;
-        BMRT_ASSERT_INFO(output_st_mode[i] != 1,"output_st_mode[%d] shouldn't be 2N\n",i);
-        *(unsigned char*)p_api = force_out_stmode[i];
-        p_api = (unsigned char*)p_api + 1;
-        BMRT_ASSERT_INFO(force_out_stmode[i] != 1,"force_out_stmode[%d] shouldn't be 2N\n",i);
-        
-    }
+  // memcpy cmd offset and num
+  *(u64 *)p_api = net_info.core_commands[0].bdc_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(u64 *)p_api = net_info.core_commands[0].gdma_cmd_addr;
+  p_api = (u64 *)p_api + 1;
+  *(int *)p_api = cmd_info.size();
+  for (size_t i = 0; i < cmd_info.size(); i++) {
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).bdc_cmd_num;
+    p_api = (int *)p_api + 1;
+    *(int *)p_api = cmd_info.at(i).gdma_cmd_num;
+  }
+}
+bm_status_t
+bmdnn_func_1880::_bmdnn_multi_fullnet_(bm_handle_t handle,
+                                       const tpu_net_info_t &net_info) {
+  BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
-    //memcpy cmd offset and num
-    *(u64*)p_api = bdc_cmd_offset;
-    p_api = (u64*)p_api + 1;
-    *(u64*)p_api = gdma_cmd_offset;
-    p_api = (u64*)p_api + 1;
-    *(int*)p_api = cmdgroup_num;
-    for (int i = 0; i < cmdgroup_num; i++) {
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = bdc_cmd_num[i];
-        p_api = (int*)p_api + 1;
-        *(int*)p_api = gdma_cmd_num[i];
-    }
+  api_info_t api_info;
+  fill_api_info(net_info, api_info);
+  bm_status_t status = BM_SUCCESS;
+  status = (bm_status_t)bm_send_api(handle, (bm_api_id_t)api_info.api_id[0],
+                                    api_info.api_data[0].data(),
+                                    api_info.api_data[0].size());
+  if (BM_SUCCESS != status) {
+    BMRT_LOG(WRONG, "bm_multi_fullnet run failed, status:%d", status);
+  }
 
-    bm_status_t status = BM_SUCCESS;
-    //status = (bm_status_t)bm_multi_fullnet(handle, api_buffer, api_buffer_size);
-    status = (bm_status_t)bm_send_api(handle, (bm_api_id_t)0xfff, api_buffer, api_buffer_size);
-    if (BM_SUCCESS != status) {
-      BMRT_LOG(WRONG, "bm_multi_fullnet run failed, status:%d", status);
-    }
-
-    delete [] api_buffer;
-    return status;
+  return status;
 }
 
 /*
