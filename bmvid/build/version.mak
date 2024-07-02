@@ -1,0 +1,2 @@
+SO_VERSION=".0.10.0"
+SO_NAME=".0"

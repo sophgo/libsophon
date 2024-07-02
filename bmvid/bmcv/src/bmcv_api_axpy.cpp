@@ -132,7 +132,7 @@ bm_status_t  bmcv_image_axpy(
             break;
 
         default:
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_NOFEATURE;
             break;
     }
 

@@ -806,12 +806,12 @@ RetCode ProductVpuAllocateFramebuffer(
     CodecInst* inst, FrameBuffer* fbArr, TiledMapType mapType, Int32 num,
     Int32 stride, Int32 height, FrameBufferFormat format,
     BOOL cbcrInterleave, BOOL nv21, Int32 endian,
-    bm_device_mem_t* vb, Int32 gdiIndex,
+    vpu_buffer_t* vb, Int32 gdiIndex,
     FramebufferAllocType fbType)
 {
     Int32           i;
     Uint32          coreIdx;
-    bm_device_mem_t vbFrame;
+    vpu_buffer_t vbFrame;
     FrameBufInfo    fbInfo;
     DecInfo*        pDecInfo = &inst->CodecInfo->decInfo;
     EncInfo*        pEncInfo = &inst->CodecInfo->encInfo;
@@ -821,7 +821,7 @@ RetCode ProductVpuAllocateFramebuffer(
     ProductId       productId     = (ProductId)inst->productId;
     RetCode         ret           = RETCODE_SUCCESS;
 
-    osal_memset((void*)&vbFrame, 0x00, sizeof(bm_device_mem_t));
+    osal_memset((void*)&vbFrame, 0x00, sizeof(vpu_buffer_t));
     osal_memset((void*)&fbInfo,  0x00, sizeof(FrameBufInfo));
 
     coreIdx = inst->coreIdx;
@@ -954,13 +954,13 @@ RetCode ProductVpuAllocateFramebuffer(
 
             pDramCfg = (inst->isDecoder == TRUE) ? &pDecInfo->dramCfg : &pEncInfo->dramCfg;
             pMapCfg  = (inst->isDecoder == TRUE) ? &pDecInfo->mapCfg  : &pEncInfo->mapCfg;
-            vbFrame.u.device.device_addr = GetTiledFrameBase(coreIdx, fbArr, num);
+            vbFrame.phys_addr = GetTiledFrameBase(coreIdx, fbArr, num);
             if (fbType == FB_TYPE_PPU) {
                 tiledBaseAddr = pMapCfg->tiledBaseAddr;
             }
             else {
-                pMapCfg->tiledBaseAddr = vbFrame.u.device.device_addr;
-                tiledBaseAddr = vbFrame.u.device.device_addr;
+                pMapCfg->tiledBaseAddr = vbFrame.phys_addr;
+                tiledBaseAddr = vbFrame.phys_addr;
             }
             *vb = vbFrame;
             ret = AllocateTiledFrameBufferGdiV1(mapType, tiledBaseAddr, fbArr, num, sizeLuma, sizeChroma, pDramCfg);

@@ -3,11 +3,10 @@
 # Project: C&M Video encoder sample
 #
 # ----------------------------------------------------------------------
-.PHONY: CREATE_DIR clean all
+.PHONY: CREATE_DIR COPY_HEADERS clean all
 
 PRODUCT := WAVE521C
 BUILD_CONFIGURATION = EmbeddedLinux
-$(shell cp sample_v2/component_list_encoder.h sample_v2/component/component_list.h)
 
 USE_FFMPEG  = no
 USE_PTHREAD = yes
@@ -169,9 +168,9 @@ LINT_SRC_INCLUDES = -I./sample_v2 -I./sample_v2/component -I./sample_v2/componen
 LINT_SRC_INCLUDES += -I./sample_v2/helper -I./sample_v2/helper/bitstream -I./sample_v2/helper/comparator -I./sample_v2/helper/misc -I./sample_v2/helper/yuv
 
 ifeq ($(USE_RTL_SIM), yes)
-all: CREATE_DIR $(OBJECTPATHS) 
+all: CREATE_DIR COPY_HEADERS $(OBJECTPATHS) 
 else
-all: CREATE_DIR $(OBJECTPATHS)
+all: CREATE_DIR COPY_HEADERS $(OBJECTPATHS)
 	$(LINKER) -o $(TARGET) $(LDFLAGS) -Wl,-gc-section -Wl,--start-group $(OBJECTPATHS) $(LDLIBS) -Wl,--end-group
 endif
 
@@ -184,6 +183,9 @@ clean:
 
 CREATE_DIR:
 	-mkdir -p $(OBJDIR)
+
+COPY_HEADERS:
+	cp sample_v2/component_list_encoder.h sample_v2/component/component_list.h
 
 obj/%.o: %.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -Wall -Werror -c $< -o $@ -MD -MF $(@:.o=.dep)

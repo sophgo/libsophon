@@ -10,6 +10,11 @@ bmcv_image_convert_to
     y=kx+b
     \end{array}
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式:**
 
     .. code-block:: c

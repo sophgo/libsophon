@@ -15,6 +15,11 @@ The API converts the input image format into the output image format, and suppor
         );
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Description of incoming parameters:**
 
 * bm_handle_t handle

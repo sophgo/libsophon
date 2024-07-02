@@ -15,7 +15,7 @@ bm_status_t bmcv_as_strided(
     bm_status_t ret = BM_SUCCESS;
     if (handle == NULL){
         bmlib_log("AS_STRIDED", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
 
     bm_api_cv_as_strided_t api;
@@ -37,7 +37,7 @@ bm_status_t bmcv_as_strided(
     {
         case 0x1684:
             bmlib_log("AS_STRIDED", BMLIB_LOG_ERROR, "1684 not support!\r\n");
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_NOFEATURE;
 
         case BM1684X:
             ret = bm_tpu_kernel_launch(handle, "cv_as_strided", (u8 *)&api, sizeof(api));
@@ -47,7 +47,7 @@ bm_status_t bmcv_as_strided(
             break;
 
         default:
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_NOFEATURE;
             break;
     }
 

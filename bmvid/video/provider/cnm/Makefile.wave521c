@@ -15,7 +15,7 @@
 #   make -f Makefile.wave521c PRODUCTFORM=pcie
 #
 
-.PHONY: CREATE_DIR clean all
+.PHONY: CREATE_DIR COPY_HEADERS clean all
 
 PRODUCT := WAVE521
 PRODUCTFORM ?= soc
@@ -25,8 +25,6 @@ ION ?= 0
 ION_DIR ?= ./release
 INSTALL_DIR ?= ./release
 BMVID_TOP_DIR ?= ../../../
-
-$(shell cp $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_list_encoder.h $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component/component_list.h)
 
 USE_PTHREAD = yes
 LINT_HOME   = etc/lint
@@ -169,7 +167,7 @@ OBJECTPATHS=$(addprefix $(OBJDIR)/,$(notdir $(OBJECTNAMES)))
 LINT_SRC_INCLUDES = -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2 -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_decoder -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_encoder
 LINT_SRC_INCLUDES += -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper -I$(BMVID_TOP_DIR)/video/driver
 
-all: CREATE_DIR $(OBJECTPATHS)
+all: CREATE_DIR COPY_HEADERS $(OBJECTPATHS)
 	$(LINKER) -o $(TARGET) $(LDFLAGS) -Wl,-gc-section -Wl,--start-group $(OBJECTPATHS) $(LDLIBS) -Wl,--end-group
 
 -include $(OBJECTPATHS:.o=.dep)
@@ -188,6 +186,9 @@ uninstall:
 
 CREATE_DIR:
 	-mkdir -p $(OBJDIR)
+
+COPY_HEADERS:
+	cp $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_list_encoder.h $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component/component_list.h
 
 obj/%.o: %.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -Wall -Werror -c $< -o $@ -MD -MF $(@:.o=.dep)

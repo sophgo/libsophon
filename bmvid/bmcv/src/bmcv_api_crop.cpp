@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include "bmcv_api.h"
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
@@ -35,7 +36,7 @@ INLINE static bm_image_format_ext bmcv_get_image_format_from_sc3(bm_image_format
     case RGB:
         return FORMAT_RGB_PLANAR;
     break;
-    case BGR: 
+    case BGR:
         return FORMAT_BGR_PLANAR;
     break;
     case RGB_PACKED:
@@ -60,23 +61,23 @@ bm_status_t bmcv_crop_check(int          crop_num,
             BMCV_ERR_LOG(
                 "[Crop] input data_type and image_format must be same to "
                 "output!\r\n");
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         if (rects[i].start_x < 0 || rects[i].start_x > input.width ||
             rects[i].start_y < 0 || rects[i].start_y > input.height) {
             BMCV_ERR_LOG("[Crop] %dth rect coordinate is illegal\r\n", i);
-            return BM_ERR_FAILURE;
+            return BM_ERR_PARAM;
         }
         if (rects[i].start_x + rects[i].crop_w > input.width ||
             rects[i].start_y + rects[i].crop_h > input.height) {
             BMCV_ERR_LOG("[Crop] %dth crop box is out of input range\r\n", i);
-            return BM_ERR_FAILURE;
+            return BM_ERR_PARAM;
         }
         if (rects[i].crop_w != output[i].width ||
             rects[i].crop_h != output[i].height) {
             BMCV_ERR_LOG(
                 "[Crop] %dth output size should equal to crop size\r\n", i);
-            return BM_ERR_FAILURE;
+            return BM_ERR_PARAM;
         }
     }
     // image format check
@@ -86,14 +87,14 @@ bm_status_t bmcv_crop_check(int          crop_num,
         (input.image_format != FORMAT_BGR_PACKED) &&
         (input.image_format != FORMAT_GRAY)) {
         BMCV_ERR_LOG("[Crop] image format only support RGB/BGR/GRAY\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((input.data_type != DATA_TYPE_EXT_1N_BYTE_SIGNED) &&
         (input.data_type != DATA_TYPE_EXT_1N_BYTE) &&
         (input.data_type != DATA_TYPE_EXT_FLOAT32)) {
         BMCV_ERR_LOG(
             "[Crop] image data type only support 1N int8 and float32\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -122,7 +123,7 @@ static bm_status_t bmcv_image_crop(bm_handle_t handle,
             break;
         default:
             BMCV_ERR_LOG("[Crop] not support this format!\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
     }
     switch (input.image_format) {
         case FORMAT_BGR_PLANAR:
@@ -175,13 +176,13 @@ static bm_status_t bmcv_image_crop(bm_handle_t handle,
         }
         default:
             BMCV_ERR_LOG("[Crop] not support this format!\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
     }
 
     if (!bm_image_is_attached(output)) {
         if (BM_SUCCESS != bm_image_alloc_dev_mem(output, BMCV_HEAP_ANY)) {
             BMCV_ERR_LOG("[Crop] bm_image_alloc_dev_mem error!\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_device_mem_t in_dev_mem, out_dev_mem;
@@ -212,11 +213,11 @@ static bm_status_t bmcv_image_crop(bm_handle_t handle,
         bm_send_api(
             handle,  BM_API_ID_MEMCPY_TENSOR, (uint8_t*)&arg, sizeof(arg))) {
         BMCV_ERR_LOG("crop send api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("crop sync api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
 
     return BM_SUCCESS;
@@ -229,7 +230,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
                             bm_image*    output) {
     if (handle == NULL) {
         BMCV_ERR_LOG("[Crop] Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     bm_status_t ret = BM_SUCCESS;
     ret             = bmcv_crop_check(crop_num, rects, input, output);
@@ -265,7 +266,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
                 }
                 delete[] output_alloc_flag;
                 delete[] copy_info;
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             output_alloc_flag[i] = true;
         }
@@ -292,7 +293,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
                 break;
             default:
                 BMCV_ERR_LOG("[Crop] not support this format!\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
         }
         switch (input.image_format) {
             case FORMAT_BGR_PLANAR:
@@ -353,7 +354,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
             }
             default:
                 BMCV_ERR_LOG("[Crop] not support this format!\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
         }
         bm_device_mem_t dev_mem;
         bm_image_get_device_mem(output[i], &dev_mem);
@@ -377,7 +378,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
         }
         delete[] output_alloc_flag;
         delete[] copy_info;
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     if (BM_SUCCESS != bm_memcpy_s2d(handle, info_mem, copy_info)) {
         BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
@@ -391,7 +392,7 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
         bm_free_device(handle, info_mem);
         delete[] output_alloc_flag;
         delete[] copy_info;
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
 
     bm_api_memcpy_tensors_t arg;
@@ -404,14 +405,14 @@ bm_status_t bm1684_bmcv_image_crop(bm_handle_t  handle,
         delete[] output_alloc_flag;
         delete[] copy_info;
         bm_free_device(handle, info_mem);
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("crop sync api error\r\n");
         delete[] output_alloc_flag;
         delete[] copy_info;
         bm_free_device(handle, info_mem);
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     delete[] output_alloc_flag;
     delete[] copy_info;
@@ -429,7 +430,7 @@ bm_status_t bmcv_image_crop(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, output[0]);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -447,7 +448,7 @@ bm_status_t bmcv_image_crop(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -471,24 +472,24 @@ bm_status_t bmcv_img_crop(bm_handle_t handle,
 
     if (handle == NULL) {
         bmlib_log("CROP", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     if (channels != 1 && channels != 3) {
         bmlib_log("CROP", BMLIB_LOG_ERROR, "channels should be 1 or 3!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (input.color_space != COLOR_RGB || output.color_space != COLOR_RGB) {
         bmlib_log("CROP",
                   BMLIB_LOG_ERROR,
                   "color_space of input and output bmcv_image should be "
                   "COLOR_RGB!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.image_format != BGR && input.image_format != RGB) {
         bmlib_log("CROP",
                   BMLIB_LOG_ERROR,
                   "image_format of input bmcv_image should be RGB or BGR!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.data_format != DATA_TYPE_FLOAT &&
         input.data_format != DATA_TYPE_BYTE) {
@@ -496,7 +497,7 @@ bm_status_t bmcv_img_crop(bm_handle_t handle,
                   BMLIB_LOG_ERROR,
                   "data_format of input bmcv_image should be DATA_TYPE_FLOAT "
                   "or DATA_TYPE_BYTE!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (output.data_format != DATA_TYPE_FLOAT &&
         output.data_format != DATA_TYPE_BYTE) {
@@ -504,13 +505,13 @@ bm_status_t bmcv_img_crop(bm_handle_t handle,
                   BMLIB_LOG_ERROR,
                   "data_format of output bmcv_image should be DATA_TYPE_FLOAT "
                   "or DATA_TYPE_BYTE!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (output.stride[0] < output.image_width) {
         bmlib_log("CROP",
                   BMLIB_LOG_ERROR,
                   "stride of output should be greater than width!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     int   input_n = 1;

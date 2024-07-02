@@ -16,6 +16,11 @@ bmcv_image_vpp_convert
         );
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **传入参数说明:**
 
 * bm_handle_t handle
@@ -92,7 +97,7 @@ bmcv_image_vpp_convert
 
 
 
-**代码示例：** 
+**代码示例：**
 
     .. code-block:: c
 
@@ -106,14 +111,14 @@ bmcv_image_vpp_convert
         #include "stdlib.h"
         #include <stdio.h>
         #include <stdlib.h>
-        
+
         int main(int argc, char *argv[]) {
             bm_handle_t handle;
             int            image_h     = 1080;
             int            image_w     = 1920;
             bm_image       src, dst[4];
             bm_dev_request(&handle, 0);
-            bm_image_create(handle, image_h, image_w, FORMAT_NV12, 
+            bm_image_create(handle, image_h, image_w, FORMAT_NV12,
                     DATA_TYPE_EXT_1N_BYTE, &src);
             bm_image_alloc_dev_mem(src, 1);
             for (int i = 0; i < 4; i++) {
@@ -131,21 +136,21 @@ bmcv_image_vpp_convert
             memset((void *)(uv_ptr.get()), 158, image_h * image_w / 2);
             u8 *host_ptr[] = {y_ptr.get(), uv_ptr.get()};
             bm_image_copy_host_to_device(src, (void **)host_ptr);
-        
+
             bmcv_rect_t rect[] = {{0, 0, image_w / 2, image_h / 2},
                     {0, image_h / 2, image_w / 2, image_h / 2},
                     {image_w / 2, 0, image_w / 2, image_h / 2},
                     {image_w / 2, image_h / 2, image_w / 2, image_h / 2}};
-        
+
             bmcv_image_vpp_convert(handle, 4, src, dst, rect);
-        
+
             for (int i = 0; i < 4; i++) {
                 bm_image_destroy(dst[i]);
             }
-        
+
             bm_image_destroy(src);
             bm_dev_free(handle);
             return 0;
         }
 
-   
+

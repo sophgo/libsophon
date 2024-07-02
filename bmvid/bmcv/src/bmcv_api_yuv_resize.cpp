@@ -341,7 +341,7 @@ bm_status_t bmcv_image_yuv_resize(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input[0], output[0]);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;

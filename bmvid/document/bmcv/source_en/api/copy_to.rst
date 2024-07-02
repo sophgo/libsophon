@@ -5,6 +5,11 @@ bmcv_image_copy_to
 The interface copies an image to the corresponding memory area of the target image.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

@@ -26,9 +26,7 @@
 
 #include "bmvpuenc.h"
 #include "bmqueue.h"
-
-#include "bmlib_runtime.h"
-
+#define INTERVAL 1
 #define handle_error(msg) \
         do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
@@ -48,6 +46,7 @@ typedef struct {
     int aligned_height;
 
     int bit_rate; /* kbps */
+    int fps;  /*default is 30*/
     int cqp;
 
     int gop_preset;
@@ -56,44 +55,37 @@ typedef struct {
 
 typedef struct {
     char *input_filename;
+    FILE *fin;
     char *output_filename;
 
     int   log_level;
-
-    int   thread_number; /* at most 2 threads for now */
+    int   thread_number; /* at most 24 threads for now */
     int   thread_id;
 
     int   loop;
     int   frame_number;
-
     EncParameter enc;
 
     int   result;
+
+    int   run_times;
 } InputParameter;
 
 typedef struct {
     BmVpuEncOpenParams open_params;
-    bm_handle_t bm_handle;
     BmVpuEncoder* video_encoder;
 
     BmVpuEncInitialInfo initial_info;
 
-    BmVpuFramebuffer* rec_fb_list;
-    bm_device_mem_t* rec_fb_dmabuffers;
-    int num_rec_fb;
-
     BmVpuFramebuffer* src_fb_list;
-    bm_device_mem_t* src_fb_dmabuffers;
+    BmVpuEncDMABuffer* src_fb_dmabuffers;
     void*             frame_unused_queue;
     int num_src_fb;
     BmVpuFramebuffer* src_fb;
 
-    bm_device_mem_t bs_dma_buffer;
+    BmVpuEncDMABuffer bs_dma_buffer;
     size_t bs_buffer_size;
     uint32_t bs_buffer_alignment;
-
-    size_t work_buffer_size;
-    uint32_t work_buffer_alignment;
 
     BmVpuEncParams enc_params;
     BmVpuRawFrame input_frame;
@@ -106,11 +98,10 @@ typedef struct {
 
     int    preset;   /* 0, 1, 2 */
 
-    int    perf;
     struct timeval ps;
     struct timeval pe;
     double total_time;
-    long   total_frame;
+    long long   total_frame;
 } VpuEncContext;
 
 typedef struct {
@@ -124,12 +115,25 @@ typedef struct {
 #ifdef __linux__
 static sigset_t waitsigset = {0};
 #endif
+#ifdef BM_PCIE_MODE
+#define MAX_THREAD 24
+#else
+#define MAX_THREAD 18
+#endif
+long long count_enc[MAX_THREAD];
+double sta_time[MAX_THREAD];
+int g_exit_flag = 0;
+#ifdef __linux__
+    pthread_t thread_stat;
+#elif _WIN32
+    HANDLE thread_stat;
+#endif
 
 static void usage(char *progname);
 static int parse_args(int argc, char **argv, InputParameter* par);
 static int read_yuv_source(uint8_t* dst_pa, int dst_stride_y, int dst_stride_c, int dst_height,
                            FILE**  src_file, int src_stride_y, int src_stride_c, int src_height,
-                           int chroma_interleave,
+                           int pix_format,
                            int width, int height);
 
 static BmVpuFramebuffer* get_src_framebuffer(VpuEncContext *ctx);
@@ -166,6 +170,60 @@ static BOOL CtrlHandler(DWORD fdwCtrlType)
     }
 }
 #endif
+#if _WIN32
+DWORD statPthread(void *arg)
+{
+#else
+void *stat_pthread(void *arg)
+{
+#endif
+    InputParameter* ctx = (InputParameter*)arg;
+    int thread_num = ctx->thread_number;
+    int i = 0;
+    long long   last_count_enc[MAX_THREAD]      = {0};
+    double      last_time[MAX_THREAD]           = {0.0};
+    double      cur_fps[MAX_THREAD]             = {0.0};
+    double      total_fps                       = 0.0;
+    long long   count_sum                       = 0;
+    int         dis_mode = 0;
+    char        *display = getenv("BMVPUENC_DISPLAY_FRAMERATE");
+    if (display) dis_mode = atoi(display);
+    printf("BMVPUENC_DISPLAY_FRAMERATE=%d  thread_num=%d g_exit_flag=%d \n", dis_mode, thread_num, g_exit_flag);
+    while(!g_exit_flag) {
+#ifdef __linux__
+        sleep(INTERVAL);
+#elif _WIN32
+        Sleep(INTERVAL*1000);
+#endif
+        total_fps = 0.0;
+        for (i = 0; i < thread_num; i++){
+            count_sum += count_enc[i] - last_count_enc[i];
+            if ((count_enc[i] > last_count_enc[i]) && (sta_time[i] > last_time[i])) {
+                cur_fps[i] = (double)((count_enc[i]-last_count_enc[i]) * 1000)/(sta_time[i]-last_time[i]);
+            } else {
+                cur_fps[i] = 0;
+            }
+
+            total_fps += cur_fps[i];
+            last_count_enc[i] = count_enc[i];
+            last_time[i] = sta_time[i];
+        }
+        if (dis_mode == 1) {
+            for (i = 0; i < thread_num; i++)
+                printf("ID[%d],   FRM[%10lld], Cost Time[%2.2f] FPS[%2.2f]  \n", i, (long long)count_enc[i], sta_time[i], cur_fps[i]);
+        }else
+            printf("thread_count %d, total_frame %lld, total_enc_fps %2.2f\n", thread_num, count_sum, total_fps);
+        printf("\r");
+        fflush(stdout);
+    }
+    fflush(stdout);
+
+    for (i = 0; i < thread_num; i++)
+        printf("%3dth thread Encode %lld frame in total, avg: %5.4f, time: %5.4fms!\n", i, count_enc[i], (double)count_enc[i] * 1000 / sta_time[i], sta_time[i]);
+    printf("stat_pthread over.\n");
+    return NULL;
+}
+
 static void* acquire_output_buffer(void *context, size_t size, void **acquired_handle)
 {
     ((void)(context));
@@ -205,34 +263,22 @@ static void cleanup_task(void* arg)
     }
 
     /* Free all allocated memory (both regular and DMA memory) */
-    if (ctx->rec_fb_list)
-        free(ctx->rec_fb_list);
-    if (ctx->rec_fb_dmabuffers)
-    {
-        for (i = 0; i < ctx->num_rec_fb; ++i)
-            bm_free_device(ctx->bm_handle, ctx->rec_fb_dmabuffers[i]);
-
-        free(ctx->rec_fb_dmabuffers);
-    }
-
     if (ctx->src_fb_list)
         free(ctx->src_fb_list);
     if (ctx->src_fb_dmabuffers)
     {
         for (i = 0; i < ctx->num_src_fb; ++i)
-            bm_free_device(ctx->bm_handle, ctx->src_fb_dmabuffers[i]);
+            bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->src_fb_dmabuffers[i]));
 
         free(ctx->src_fb_dmabuffers);
     }
 
     if (&(ctx->bs_dma_buffer))
-        bm_free_device(ctx->bm_handle, ctx->bs_dma_buffer);
+        bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->bs_dma_buffer));
 
     /* Unload the VPU firmware */
     bmvpu_enc_unload(ctx->soc_idx);
 
-    if (ctx->fin != NULL)
-        fclose(ctx->fin);
     if (ctx->fout != NULL)
         fclose(ctx->fout);
 
@@ -249,26 +295,18 @@ static int run_once(InputParameter* par)
     EncParameter* enc_par = &(par->enc);
     char output_filename[256] = {0};
     FILE *fin, *fout;
-    char* perf_s = NULL;
-    int frm_cnt = 0;
     int l, i, ret = 0;
+    int tid = par->thread_id;
 
-    fin = fopen(par->input_filename, "rb");
-    if (fin == NULL)
-    {
-        fprintf(stderr, "Failed to open %s for reading: %s\n",
-                par->input_filename, strerror(errno));
-        par->result = -1;
-        return -1;
-    }
+    fin = par->fin;
 
     ret = strncmp(par->output_filename, "/dev/null", 9);
     if (ret != 0)
     {
         if (enc_par->enc_fmt == 0)
-            sprintf(output_filename, "%s-%d.264", par->output_filename, par->thread_id);
+            sprintf(output_filename, "%s-%d.264", par->output_filename, tid);
         else
-            sprintf(output_filename, "%s-%d.265", par->output_filename, par->thread_id);
+            sprintf(output_filename, "%s-%d.265", par->output_filename, tid);
         fout = fopen(output_filename, "wb");
     }
     else
@@ -285,8 +323,8 @@ static int run_once(InputParameter* par)
         return -1;
     }
 
-    bmvpu_set_logging_threshold(par->log_level);
-    bmvpu_set_logging_function(logging_fn);
+    bmvpu_enc_set_logging_threshold(par->log_level);
+    bmvpu_enc_set_logging_function(logging_fn);
 
     ctx = calloc(1, sizeof(VpuEncContext));
     if (ctx == NULL)
@@ -303,23 +341,6 @@ static int run_once(InputParameter* par)
     ctx->fin  = fin;
     ctx->fout = fout;
 
-    perf_s = getenv("BMVE_PERF");
-    if (perf_s)
-    {
-        printf("BMVE_PERF=%s\n", perf_s);
-        ctx->perf = atoi(perf_s);
-    }
-    else
-    {
-        ctx->perf = 0;
-    }
-
-    if (ctx->perf)
-    {
-        ctx->total_time = 0.0;
-        ctx->total_frame = 0;
-    }
-
     ctx->soc_idx = enc_par->soc_idx;
     ctx->core_idx = bmvpu_enc_get_core_idx(enc_par->soc_idx);
 
@@ -334,20 +355,19 @@ static int run_once(InputParameter* par)
 
     eop->soc_idx = ctx->soc_idx;
 
-    eop->color_format = BM_VPU_COLOR_FORMAT_YUV420;
     /* If this is 1, then Cb and Cr are interleaved in one shared chroma
      * plane, otherwise they are separated in their own planes.
-     * See the BmVpuColorFormat documentation for the consequences of this. */
+     * See the BmVpuEncPixFormat documentation for the consequences of this. */
     if (enc_par->pix_fmt == 0)
-        eop->chroma_interleave = 0;
+        eop->pix_format = BM_VPU_ENC_PIX_FORMAT_YUV420P;
     else
-        eop->chroma_interleave = 1;
+        eop->pix_format = BM_VPU_ENC_PIX_FORMAT_NV12;
 
     eop->frame_width  = enc_par->crop_w;
     eop->frame_height = enc_par->crop_h;
     eop->timebase_num = 1;
     eop->timebase_den = 1;
-    eop->fps_num = 30;
+    eop->fps_num = par->enc.fps;
     eop->fps_den = 1;
 
     /* Set a bitrate of 0 bps, which tells the VPU to use constant quality mode. */
@@ -357,6 +377,10 @@ static int run_once(InputParameter* par)
 
     eop->intra_period = enc_par->intra_period;
     eop->gop_preset = enc_par->gop_preset;
+
+    eop->buffer_alloc_func = NULL;
+    eop->buffer_free_func = NULL;
+    eop->buffer_context = NULL;
 
     /* Load the VPU firmware */
     ret = bmvpu_enc_load(ctx->soc_idx);
@@ -373,16 +397,8 @@ static int run_once(InputParameter* par)
     /* in unit of 4k bytes */
     ctx->bs_buffer_size = (ctx->bs_buffer_size +(4*1024-1)) & (~(4*1024-1));
 
-    ctx->bm_handle = bmvpu_enc_get_bmlib_handle(ctx->soc_idx);
-    if (!ctx->bm_handle)
-    {
-        fprintf(stderr, "bm_dev handle request failed! \n");
-        ret = -1;
-        goto cleanup;
-    }
-
     /* Create bs buffer */
-    ret = bmvpu_malloc_device_byte_heap(ctx->bm_handle, &(ctx->bs_dma_buffer), ctx->bs_buffer_size, 0x06, 1);
+    ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->bs_dma_buffer), ctx->bs_buffer_size);
     if (ret != 0)
     {
         fprintf(stderr, "bm_malloc_device_byte for bs_dmabuffer failed!\n");
@@ -391,7 +407,7 @@ static int run_once(InputParameter* par)
     }
 
     /* Open an encoder instance, using the previously allocated bitstream buffer */
-    ret = bmvpu_enc_open(&(ctx->video_encoder), eop, &(ctx->bs_dma_buffer));
+    ret = bmvpu_enc_open(&(ctx->video_encoder), eop, &(ctx->bs_dma_buffer), &(ctx->initial_info));
     if (ret != BM_VPU_ENC_RETURN_CODE_OK)
     {
         fprintf(stderr, "bmvpu_enc_open failed\n");
@@ -401,71 +417,6 @@ static int run_once(InputParameter* par)
     if (!ctx->video_encoder)
     {
         fprintf(stderr, "ctx->video_encoder is NULL!\n");
-        ret = -1;
-        goto cleanup;
-    }
-
-    /* Retrieve the initial information to allocate source and reconstruction
-     * framebuffers for the encoding process. */
-    ret = bmvpu_enc_get_initial_info(ctx->video_encoder, &(ctx->initial_info));
-    if (ret != 0)
-    {
-        fprintf(stderr, "bmvpu_enc_get_initial_info failed\n");
-        ret = -1;
-        goto cleanup;
-    }
-
-    ctx->num_rec_fb = ctx->initial_info.min_num_rec_fb;
-#ifdef __linux__
-    printf("[%zx] num framebuffers for recon: %u\n", pthread_self(), ctx->num_rec_fb);
-#endif
-#ifdef _WIN32
-    printf("[%zx] num framebuffers for recon: %u\n", GetCurrentThreadId(), ctx->num_rec_fb);
-#endif
-
-    /* Allocate memory blocks for the framebuffer and DMA buffer structures,
-     * and allocate the DMA buffers themselves */
-    ctx->rec_fb_list = malloc(sizeof(BmVpuFramebuffer) * ctx->num_rec_fb);     //malloc(sizeof(VpuFrameBuffer) * num_framebuffers);
-    if (ctx->rec_fb_list == NULL)
-    {
-        fprintf(stderr, "malloc failed\n");
-        ret = -1;
-        goto cleanup;
-    }
-
-    ctx->rec_fb_dmabuffers = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t) * ctx->num_rec_fb);
-    for (i = 0; i < ctx->num_rec_fb; i++)
-    {
-        int rec_id = 0x200 + (par->thread_id<<5) + i;
-
-        /* Allocate a DMA buffer for each framebuffer.
-         * It is possible to specify alternate allocators;
-         * all that is required is that the allocator provides physically contiguous memory
-         * (necessary for DMA transfers) and repects the alignment value. */
-        ret = bmvpu_malloc_device_byte_heap(ctx->bm_handle, &ctx->rec_fb_dmabuffers[i], ctx->initial_info.rec_fb.size, 0x06, 1);
-        if(ret != 0){
-            fprintf(stderr, "bmvpu_malloc_device_byte_heap for rec_buffer failed\n");
-            ret = -1;
-            goto cleanup;
-        }
-
-        ret = bmvpu_fill_framebuffer_params(&(ctx->rec_fb_list[i]),
-                                      &(ctx->initial_info.rec_fb),
-                                      &(ctx->rec_fb_dmabuffers[i]),
-                                      rec_id, NULL);
-        if(ret != 0){
-            fprintf(stderr, "bmvpu_fill_framebuffer_params failed\n");
-            ret = -1;
-            goto cleanup;
-        }
-    }
-
-    /* Buffer registration help the VPU knows which buffers to use for
-     * storing temporary frames into. */
-    ret = bmvpu_enc_register_framebuffers(ctx->video_encoder, ctx->rec_fb_list, ctx->num_rec_fb);
-    if (ret != 0)
-    {
-        fprintf(stderr, "bmvpu_enc_register_framebuffers failed\n");
         ret = -1;
         goto cleanup;
     }
@@ -480,7 +431,7 @@ static int run_once(InputParameter* par)
         ret = -1;
         goto cleanup;
     }
-    ctx->src_fb_dmabuffers = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t) * ctx->num_src_fb);
+    ctx->src_fb_dmabuffers = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer) * ctx->num_src_fb);
     if (ctx->src_fb_dmabuffers == NULL)
     {
         fprintf(stderr, "malloc failed\n");
@@ -489,10 +440,10 @@ static int run_once(InputParameter* par)
     }
     for (i = 0; i < ctx->num_src_fb; ++i)
     {
-        int src_id = 0x100 + (par->thread_id<<5) + i;
+        int src_id = 0x100 + (tid<<5) + i;
 
         /* Allocate DMA buffers for the raw input frames. */
-        ret = bmvpu_malloc_device_byte_heap(ctx->bm_handle, &ctx->src_fb_dmabuffers[i], ctx->initial_info.src_fb.size, 0x06, 1);
+        ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &ctx->src_fb_dmabuffers[i], ctx->initial_info.src_fb.size);
         if(ret != 0){
             fprintf(stderr, "bmvpu_malloc_device_byte_heap for src_buffer failed\n");
             ret = -1;
@@ -522,7 +473,7 @@ static int run_once(InputParameter* par)
     {
         BmVpuFramebuffer *fb = &(ctx->src_fb_list[i]);
         bm_queue_push(ctx->frame_unused_queue, (void*)(&fb));
-        if (par->log_level > BM_VPU_LOG_LEVEL_INFO)
+        if (par->log_level > BMVPU_ENC_LOG_LEVEL_INFO)
 #ifdef __linux__
             printf("[%zx] myIndex = 0x%x, %p, push\n", pthread_self(), fb->myIndex, fb);
 #endif
@@ -568,7 +519,8 @@ static int run_once(InputParameter* par)
 #ifdef _WIN32
     SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 #endif
-    for (l=0; l<par->loop; l++)
+    l = 0;
+    while (1)
     {
         fseek(fin, 0, SEEK_SET);
         /* Read input I420/NV12 frames and encode them until the end of the input file is reached */
@@ -593,57 +545,52 @@ static int run_once(InputParameter* par)
             }
 
             /* Read uncompressed pixels into the input DMA buffer */
-#ifdef BM_PCIE_MODE
             ret = read_yuv_source(host_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
                                 &fin, enc_par->y_stride, enc_par->c_stride, enc_par->aligned_height,
-                                eop->chroma_interleave,
+                                eop->pix_format,
                                 enc_par->crop_w, enc_par->crop_h);
             if (ret < 0)
+            {
+                int j;
+                for (j=0; j<ctx->num_src_fb; j++)
+                {
+                    BmVpuFramebuffer* fb = &(ctx->src_fb_list[j]);
+                    if (fb->myIndex == ctx->src_fb->myIndex)
+                    {
+                        bm_queue_push(ctx->frame_unused_queue, &fb);
+                        if (par->log_level > BMVPU_ENC_LOG_LEVEL_INFO)
+#ifdef __linux__
+                        printf("[%zx] myIndex = 0x%x, push\n", pthread_self(), fb->myIndex);
+#endif
+#ifdef _WIN32
+                        printf("[%zx] myIndex = 0x%x, push\n", GetCurrentThreadId(), fb->myIndex);
+#endif
+                        break;
+                    }
+                }
                 break;
+            }
 
             // TODO
-            // u64 vpu_pa = bm_mem_get_device_addr(*(ctx->src_fb->dma_buffer));
-            // ret = bmvpu_upload_data(ctx->soc_idx, host_va, frame_size,
-            //                         vpu_pa, frame_size, frame_size, 1);
-
-            ret = bm_memcpy_s2d_partial(ctx->bm_handle, *(ctx->src_fb->dma_buffer), host_va, frame_size);
+            u64 vpu_pa = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer);
+            ret = bmvpu_enc_upload_data(ctx->core_idx, host_va, frame_size,
+                                    vpu_pa, frame_size, frame_size, 1);
             if (ret != 0)
             {
-                fprintf(stderr, "%s:%d(%s) bmvpu_upload_data failed\n", __FILE__, __LINE__, __func__);
+                fprintf(stderr, "%s:%d(%s) bmvpu_enc_upload_data failed\n", __FILE__, __LINE__, __func__);
                 ret = -1;
                 goto cleanup;
             }
-#else
-            unsigned long long tmp_va;
-            bm_mem_mmap_device_mem_no_cache(ctx->bm_handle, ctx->src_fb->dma_buffer, &tmp_va);
-
-            ret = read_yuv_source((uint8_t*)tmp_va, ctx->initial_info.src_fb.y_stride, ctx->initial_info.src_fb.c_stride, ctx->initial_info.src_fb.height,
-                            &fin, enc_par->y_stride, enc_par->c_stride, enc_par->aligned_height,
-                            eop->chroma_interleave,
-                            enc_par->crop_w, enc_par->crop_h);
-
-            bm_mem_unmap_device_mem(ctx->bm_handle, (void*)tmp_va, frame_size);
-            if (ret < 0)
-                break;
-
-#endif
 
             ctx->input_frame.framebuffer = ctx->src_fb;
 
-            if (par->log_level > BM_VPU_LOG_LEVEL_ERROR)
+            if (par->log_level > BMVPU_ENC_LOG_LEVEL_ERROR)
                 printf("\n\n");
 
 #ifdef __linux__
-            printf("[%zx] Encoding frame #%d\n", pthread_self(), frm_cnt++);
-#endif
-#ifdef _WIN32
-            printf("[%zx] Encoding frame #%d\n", GetCurrentThreadId(), frm_cnt++);
-#endif
-            if (ctx->perf)
-#ifdef __linux__
-                gettimeofday(&(ctx->ps), NULL);
+            gettimeofday(&(ctx->ps), NULL);
 #elif _WIN32
-                s_gettimeofday(&(ctx->ps), NULL);
+            s_gettimeofday(&(ctx->ps), NULL);
 #endif
             /* The actual encoding */
             ret = bmvpu_enc_encode(ctx->video_encoder, &(ctx->input_frame), &(ctx->output_frame), &(ctx->enc_params), &output_code);
@@ -664,7 +611,7 @@ static int run_once(InputParameter* par)
                     if (fb->myIndex == ctx->output_frame.src_idx)
                     {
                         bm_queue_push(ctx->frame_unused_queue, &fb);
-                        if (par->log_level > BM_VPU_LOG_LEVEL_INFO)
+                        if (par->log_level > BMVPU_ENC_LOG_LEVEL_INFO)
 #ifdef __linux__
                         printf("[%zx] myIndex = 0x%x, push\n", pthread_self(), fb->myIndex);
 #endif
@@ -678,17 +625,15 @@ static int run_once(InputParameter* par)
                 {
                     fprintf(stderr, "unknown encSrcIdx %d\n", ctx->output_frame.src_idx);
                 }
-                if (ctx->perf)
-                {
+
 #ifdef __linux__
-                    gettimeofday(&(ctx->pe), NULL);
+                gettimeofday(&(ctx->pe), NULL);
 #elif _WIN32
-                    s_gettimeofday(&(ctx->pe), NULL);
+                s_gettimeofday(&(ctx->pe), NULL);
 #endif
-                    ctx->total_time += ((ctx->pe.tv_sec*1000.0 + ctx->pe.tv_usec/1000.0) -
-                                        (ctx->ps.tv_sec*1000.0 + ctx->ps.tv_usec/1000.0));
-                    ctx->total_frame++;
-                }
+                sta_time[tid] += ((ctx->pe.tv_sec*1000.0 + ctx->pe.tv_usec/1000.0) -
+                                    (ctx->ps.tv_sec*1000.0 + ctx->ps.tv_usec/1000.0));
+                count_enc[tid]++;
 
                 /* Write out the encoded frame to the output file. */
                 output_block = ctx->output_frame.acquired_handle;
@@ -705,6 +650,8 @@ static int run_once(InputParameter* par)
         if (win_exit_flag)
             break;
 #endif
+        if (par->loop > 0 && ++l >= par->loop)
+            break;
     }
 
     free(host_va);
@@ -719,18 +666,14 @@ static int run_once(InputParameter* par)
         ctx->input_frame.pts = 0L;
         ctx->input_frame.dts = 0L;
 
-        if (par->log_level > BM_VPU_LOG_LEVEL_ERROR)
+        if (par->log_level > BMVPU_ENC_LOG_LEVEL_ERROR)
             printf("\n\n");
 
 #ifdef __linux__
-        printf("[%zx] Flushing frame #%d\n", pthread_self(), frm_cnt++);
-        if (ctx->perf)
-            gettimeofday(&(ctx->ps), NULL);
+        gettimeofday(&(ctx->ps), NULL);
 #endif
 #ifdef _WIN32
-        printf("[%zx] Flushing frame #%d\n", GetCurrentThreadId(), frm_cnt++);
-        if (ctx->perf)
-            s_gettimeofday(&(ctx->ps), NULL);
+        s_gettimeofday(&(ctx->ps), NULL);
 #endif
 
 
@@ -759,41 +702,49 @@ static int run_once(InputParameter* par)
             break;
         }
 
-        if (ctx->perf)
-        {
 #ifdef __linux__
-            gettimeofday(&(ctx->pe), NULL);
+        gettimeofday(&(ctx->pe), NULL);
 #elif _WIN32
-            s_gettimeofday(&(ctx->pe), NULL);
+        s_gettimeofday(&(ctx->pe), NULL);
 #endif
-            ctx->total_time += ((ctx->pe.tv_sec*1000.0 + ctx->pe.tv_usec/1000.0) -
-                                (ctx->ps.tv_sec*1000.0 + ctx->ps.tv_usec/1000.0));
-            ctx->total_frame++;
-        }
-
+        sta_time[tid] += ((ctx->pe.tv_sec*1000.0 + ctx->pe.tv_usec/1000.0) -
+                            (ctx->ps.tv_sec*1000.0 + ctx->ps.tv_usec/1000.0));
+        count_enc[tid]++;
         /* Write out the encoded frame to the output file. */
         output_block = ctx->output_frame.acquired_handle;
         fwrite(output_block, 1, ctx->output_frame.data_size, fout);
         free(output_block);
     }
 
-    if (ctx->perf)
-    {
-        if (ctx->total_time > 0.0f)
-        {
-            printf("Frames encoded: %ld. Encoding speed: %.0ffps\n",
-                   ctx->total_frame, ctx->total_frame*1000/ctx->total_time);
-        }
-    }
-
 cleanup:
-
     cleanup_task((void*)ctx);
-
     par->result = ret;
 #ifdef __linux__
     pthread_cleanup_pop(0);
 #endif
+    return ret;
+}
+
+static int run(InputParameter* par)
+{
+    int ret = 0;
+    int i;
+    par->fin = fopen(par->input_filename, "rb");
+    if (par->fin == NULL)
+    {
+        fprintf(stderr, "Failed to open %s for reading: %s\n",
+                par->input_filename, strerror(errno));
+        par->result = -1;
+        return -1;
+    }
+    for(i=0; i<par->run_times; i++)
+    {
+        fseek(par->fin, 0, SEEK_SET);
+        ret = run_once(par);
+        if(ret < 0)
+            break;
+    }
+    fclose(par->fin);
     return ret;
 }
 
@@ -806,7 +757,7 @@ static void usage(char *progname)
     "\t--soc Sophon device index. (only for PCIE mode)\n"
     "\t\tFor example, if /dev/bm-sophon1 will be used, please set -s 1\n"
     "\t\tor set --soc 1\n"
-    "\t-m thread number: 1(default), 2\n"
+    "\t-m thread number: 1(default), pcie max 24, soc max 18\n"
     "\t-f         pixel format. 0: YUV420(default); 1: NV12\n"
     "\t--pix_fmt  pixel format. 0: YUV420(default); 1: NV12\n"
     "\t-c         video encoder. 0: H.264; 1: H.265(default)\n"
@@ -833,13 +784,19 @@ static void usage(char *progname)
     "\t-t aligned height (optional)\n"
     "\t-r bit rate (kbps). 0 means to use constant quality mode (0 at default)\n"
     "\t-q quantization parameter for constant quality mode. [0, 51] (32 at default)\n"
-    "\t-l      loop number(optional). (1 at default)\n"
-    "\t--loop  loop number(optional). (1 at default)\n"
+    "\t--run_times  open and close codec count. (1 at default)\n"
+    "\t-l      loop number(optional). (1 at default, 0 is press test)\n"
+    "\t--loop  loop number(optional). (1 at default, 0 is press test)\n"
     "\t-n output frame number(optional). -1,0: unlimited encoding\n"
+    "\t-a       framerate,default 30 \n"
+    "\t--fps    framerate,default 30 \n"
     "\t-i input file\n"
     "\t-o output file\n"
     "\t-?\n"
     "\t--help\n"
+    "\tSet BMVPUENC_DISPLAY_FRAMERATE to view the details of fps:\n"
+    "\texport BMVPUENC_DISPLAY_FRAMERATE = 0(default) shows the total fps info of all threads;\n"
+    "\texport BMVPUENC_DISPLAY_FRAMERATE = 1 shows fps of every single thread;"
     "For example,\n"
     "\tbmvpuenc -w 426 -h 240 -i 240p.yuv -o 240p.265\n"
     "\tbmvpuenc -c 0 -w 426 -h 240 -i 240p.yuv -o 240p.264\n"
@@ -863,23 +820,26 @@ static int parse_args(int argc, char **argv, InputParameter* par)
         { "width",   required_argument, NULL, 'w' },
         { "height",  required_argument, NULL, 'h' }, // TODO
         { "loop",  required_argument, NULL, 'l' },
+        { "run_times",  required_argument, NULL, 0 },
+        { "fps",  required_argument, NULL, 'a' },
         { "help",    no_argument, NULL, 0 },
         { NULL,      no_argument, NULL, 0 }
     };
-    int opt;
+    int opt , ret;
     int longIndex = 0;
-    int ret;
 
     memset(par, 0, sizeof(InputParameter));
 
+    par->run_times = 1;
     par->thread_number = 1;
     par->enc.soc_idx = 0;
     par->enc.enc_fmt = 1;
-    par->enc.gop_preset   = 5;
+    par->enc.gop_preset   = BM_VPU_ENC_GOP_PRESET_IBBBP;
     par->enc.intra_period = 28;
     par->enc.bit_rate = 0;
     par->enc.cqp = 32;
-
+    par->enc.fps = 30;
+    par->loop = 1;
     if (argc == 1) {
         /* No input argument */
         usage(argv[0]);
@@ -888,10 +848,9 @@ static int parse_args(int argc, char **argv, InputParameter* par)
 
     while (1)
     {
-        opt = getopt_long(argc, argv, "s:f:i:o:w:h:y:c:t:v:l:n:p:g:m:r:q:?", longOpts, &longIndex);
+        opt = getopt_long(argc, argv, "s:f:i:o:w:h:y:c:t:v:l:n:p:g:m:r:q:a:?", longOpts, &longIndex);
         if (opt == -1)
             break;
-
         switch (opt)
         {
         case 'v':
@@ -944,6 +903,9 @@ static int parse_args(int argc, char **argv, InputParameter* par)
             break;
         case 'o':
             par->output_filename = optarg;
+            break;
+        case 'a':
+            par->enc.fps = atoi(optarg);
             break;
         case '?':
             usage(argv[0]);
@@ -1001,6 +963,17 @@ static int parse_args(int argc, char **argv, InputParameter* par)
             if (ret == 0)
             {
                 par->loop = atoi(optarg);
+                break;
+            }
+            ret = strcmp("run_times", longOpts[longIndex].name);
+            if (ret == 0)
+            {
+                par->run_times = atoi(optarg);
+                break;
+            }
+            ret = strcmp("fps", longOpts[longIndex].name);
+            if(ret == 0 ){
+                par->enc.fps = atoi(optarg);
                 break;
             }
             break;
@@ -1100,6 +1073,9 @@ static int parse_args(int argc, char **argv, InputParameter* par)
     if (par->enc.bit_rate < 0)
         par->enc.bit_rate = 0;
 
+    if (par->enc.fps <= 0 )
+        par->enc.fps = 30;
+
     if (par->enc.cqp < 0 || par->enc.cqp > 51)
     {
         fprintf(stderr, "Invalid quantization parameter %d\n", par->enc.cqp);
@@ -1107,8 +1083,8 @@ static int parse_args(int argc, char **argv, InputParameter* par)
         return RETVAL_ERROR;
     }
 
-    if (par->log_level < BM_VPU_LOG_LEVEL_ERROR ||
-        par->log_level > BM_VPU_LOG_LEVEL_TRACE)
+    if (par->log_level < BMVPU_ENC_LOG_LEVEL_ERROR ||
+        par->log_level > BMVPU_ENC_LOG_LEVEL_TRACE)
     {
         fprintf(stderr, "Wrong log level: %d\n", par->log_level);
         usage(argv[0]);
@@ -1116,15 +1092,18 @@ static int parse_args(int argc, char **argv, InputParameter* par)
     }
 
     if (par->thread_number < 1 ||
-        par->thread_number > 4)
+        par->thread_number > MAX_THREAD )
     {
         fprintf(stderr, "Wrong thread number: %d\n", par->thread_number);
         usage(argv[0]);
         return RETVAL_ERROR;
     }
 
-    if (par->loop <= 0)
+    if (par->loop < 0)
         par->loop = 1;
+
+    if (par->run_times <= 0)
+        par->run_times = 1;
 
     if (par->frame_number <= 0)
         par->frame_number = 0x7fffffff;
@@ -1134,7 +1113,7 @@ static int parse_args(int argc, char **argv, InputParameter* par)
 
 static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, int dst_height,
                            FILE**  src_file, int src_stride_y, int src_stride_c, int src_height,
-                           int chroma_interleave,
+                           int pix_format,
                            int width, int height)
 {
     int dst_size_y = dst_stride_y * dst_height;
@@ -1146,8 +1125,8 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
     int log_level;
     int i;
 
-    log_level = bmvpu_get_logging_threshold();
-    if (log_level > BM_VPU_LOG_LEVEL_INFO)
+    log_level = bmvpu_enc_get_logging_threshold();
+    if (log_level > BMVPU_ENC_LOG_LEVEL_INFO)
     {
         printf("dst_stride_y=%d, dst_stride_c=%d, dst_height=%d\n", dst_stride_y, dst_stride_c, dst_height);
         printf("src_stride_y=%d, src_stride_c=%d, src_height=%d\n", src_stride_y, src_stride_c, src_height);
@@ -1167,14 +1146,14 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
     }
 
     int dst_frame_size = dst_size_y + dst_size_c*2;
-    if (chroma_interleave)
+    if (pix_format == BM_VPU_ENC_PIX_FORMAT_NV12)
         dst_frame_size = dst_size_y + dst_size_c;
 
     if (dst_stride_y == src_stride_y &&
         dst_stride_c == src_stride_c &&
         dst_height   == src_height)
     {
-        if ( dst_frame_size >  fread(dst_va, sizeof(uint8_t), dst_frame_size, *src_file)){
+        if ( dst_frame_size > fread(dst_va, sizeof(uint8_t), dst_frame_size, *src_file)){
             printf("eof when read in dst frame...\n");
             return -1;
         }
@@ -1183,7 +1162,7 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
     }
 
     int src_frame_size = src_size_y + src_size_c*2;
-    if (chroma_interleave)
+    if (pix_format == BM_VPU_ENC_PIX_FORMAT_NV12)
         src_frame_size = src_size_y + src_size_c;
     uint8_t* tmp_buffer = malloc(sizeof(uint8_t)*src_frame_size);
     if (tmp_buffer==NULL)
@@ -1208,7 +1187,7 @@ static int read_yuv_source(uint8_t* dst_va, int dst_stride_y, int dst_stride_c, 
         dy += dst_stride_y;
     }
 
-    if (chroma_interleave==0)
+    if (pix_format == BM_VPU_ENC_PIX_FORMAT_YUV420P)
     {
         int w_c = (width +1)/2;
         int h_c = (height+1)/2;
@@ -1272,8 +1251,8 @@ static BmVpuFramebuffer* get_src_framebuffer(VpuEncContext *ctx)
         return NULL;
     }
 
-    log_level = bmvpu_get_logging_threshold();
-    if (log_level > BM_VPU_LOG_LEVEL_INFO)
+    log_level = bmvpu_enc_get_logging_threshold();
+    if (log_level > BMVPU_ENC_LOG_LEVEL_INFO)
     {
 #ifdef __linux__
         printf("[%zx] myIndex = 0x%x, %p, pop\n", pthread_self(), fb->myIndex, fb);
@@ -1296,10 +1275,7 @@ static void* sigmgr_thread(void* argument)
     threads_t* threads = (threads_t*)argument;
 #ifdef __linux__
     siginfo_t  info;
-
-
     int        i, ret;
-
     while (1)  {
         ret = sigwaitinfo(&waitsigset, &info);
         if (ret != -1) {
@@ -1307,8 +1283,12 @@ static void* sigmgr_thread(void* argument)
             if (info.si_signo == SIGINT || info.si_signo == SIGTERM) {
                 for (i=0; i<threads->number; i++) {
                     pthread_t ptid = threads->handles[i];
-                    printf("Thread 0x%lx is canceling...\n", ptid);
-                    pthread_cancel(ptid);
+                    if (ptid != NULL)
+                    {
+                        printf("Thread 0x%lx is canceling...\n", ptid);
+                        pthread_cancel(ptid);
+                        threads->handles[i] = NULL;
+                    }
                 }
             }
         } else {
@@ -1322,7 +1302,6 @@ static void* sigmgr_thread(void* argument)
 
 int main(int argc, char *argv[])
 {
-
     InputParameter par = {0};
 #ifdef __linux__
     sigset_t oldset;
@@ -1334,11 +1313,13 @@ int main(int argc, char *argv[])
 
     ret = parse_args(argc, argv, &par);
     if (ret != RETVAL_OK)
+    {
         return -1;
+    }
 
-    bmvpu_set_logging_threshold(par.log_level);
+    bmvpu_enc_set_logging_threshold(par.log_level);
 
-    bmvpu_set_logging_function(logging_fn);
+    bmvpu_enc_set_logging_function(logging_fn);
 
 
 #ifdef __linux__
@@ -1367,7 +1348,7 @@ int main(int argc, char *argv[])
         memcpy(&(mt_par[i]), &par, sizeof(InputParameter));
         mt_par[i].thread_id = i;
 #ifdef __linux__
-        ret = pthread_create(&(thread_handle[i]), NULL, (void*)run_once, (void*)(&(mt_par[i])));
+        ret = pthread_create(&(thread_handle[i]), NULL, (void*)run, (void*)(&(mt_par[i])));
         if (ret < 0)
         {
             snprintf(tmp, 256, "Failed to create pthread #%d\n", i);
@@ -1375,12 +1356,25 @@ int main(int argc, char *argv[])
         }
 #endif
 #ifdef _WIN32
-        if ((thread_handle[i] = CreateThread(NULL, 0, (void*)run_once, (void*)(&(mt_par[i])), 0, NULL)) == NULL ) {
+        if ((thread_handle[i] = CreateThread(NULL, 0, (void*)run, (void*)(&(mt_par[i])), 0, NULL)) == NULL ) {
             printf("create thread error\n");
         }
 #endif
         printf("Thread %d: %zx\n", i, thread_handle[i]);
     }
+
+#ifdef WIN32
+    thread_stat = CreateThread(NULL, 0, statPthread, (void*)(&(par)), 0, NULL);
+    if (thread_stat == NULL) {
+        printf("stat pthread create failed \n");
+    }
+#else
+    ret = pthread_create(&(thread_stat), NULL, stat_pthread, (void*)(&(par)));
+    if (ret != 0) {
+        printf("stat pthread create failed \n");
+    }
+#endif
+
 #ifdef __linux__
     pthread_t sigmgr_thread_id;
 #endif
@@ -1406,13 +1400,20 @@ int main(int argc, char *argv[])
             snprintf(tmp, 256, "Failed to join pthread #%d\n", i);
             handle_error(tmp);
         }
-#endif
-#ifdef _WIN32
+#elif _WIN32
         if (WaitForSingleObject(thread_handle[i], INFINITE) != WAIT_OBJECT_0) {
 			printf("release thread error\n");
         }
 #endif
     }
+    printf("All threads have done, set g_exit_flag = 1 \n");
+    g_exit_flag = 1;
+
+#ifdef WIN32
+        WaitForSingleObject(thread_stat, INFINITE);
+#else
+        pthread_join(thread_stat, NULL);
+#endif
 
     for (i=0; i<par.thread_number; i++)
     {

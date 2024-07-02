@@ -98,7 +98,8 @@ typedef struct vpu_buffer_t {
     u64 base;
     u64 virt_addr;
 
-    unsigned int  reserve[2];
+    unsigned int core_idx;
+    int          enable_cache;
 } vpu_buffer_t;
 
 #ifndef ENDIANMODE
@@ -226,5 +227,18 @@ int bm_vdi_get_firmware_status(uint32_t core_idx);
 int bm_vdi_resume_kernel_reset(uint32_t core_idx);
 int bm_vdi_disable_kernel_reset(uint32_t core_idx);
 int bm_vdi_get_kernel_reset(uint32_t core_idx);
+
+int bm_vdi_write_memory(uint32_t core_idx, uint64_t dst_addr, uint8_t *src_data, int len);
+int bm_vdi_read_memory(uint32_t core_idx, uint64_t src_addr, uint8_t *dst_data, int len);
+
+int bm_vdi_allocate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_free_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_mmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb, int enable_read, int enable_write);
+int bm_vdi_unmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_attach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_deattach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_flush_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+int bm_vdi_invalidate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb);
+
 #endif //#ifndef _VDI_H_
 

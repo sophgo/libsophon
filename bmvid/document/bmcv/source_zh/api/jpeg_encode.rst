@@ -10,11 +10,15 @@ bmcv_image_jpeg_enc
         bm_status_t bmcv_image_jpeg_enc(
                 bm_handle_t handle,
                 int         image_num,
-                bm_image *  src,      
+                bm_image *  src,
                 void *      p_jpeg_data[],
                 size_t *    out_size,
                 int         quality_factor = 85
         );
+
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
 
 
 **输入参数说明：**
@@ -79,20 +83,20 @@ bmcv_image_jpeg_enc
         int size        = image_h * image_w;
         int format      = FORMAT_YUV420P;
         bm_image src;
-        bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format, 
+        bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format,
                 DATA_TYPE_EXT_1N_BYTE, &src);
         std::unique_ptr<unsigned char[]> buf1(new unsigned char[size]);
         memset(buf1.get(), 0x11, size);
-      
+
         std::unique_ptr<unsigned char[]> buf2(new unsigned char[size / 4]);
         memset(buf2.get(), 0x22, size / 4);
-      
+
         std::unique_ptr<unsigned char[]> buf3(new unsigned char[size / 4]);
         memset(buf3.get(), 0x33, size / 4);
-      
+
         unsigned char *buf[] = {buf1.get(), buf2.get(), buf3.get()};
         bm_image_copy_host_to_device(src, (void **)buf);
-      
+
         void* jpeg_data = NULL;
         size_t out_size = 0;
         int ret = bmcv_image_jpeg_enc(handle, 1, &src, &jpeg_data, &out_size);

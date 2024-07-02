@@ -3,6 +3,7 @@
 #include "bmcv_common_bm1684.h"
 #include "bmcv_internal.h"
 #include "bm1684x/bmcv_1684x_vpp_ext.h"
+#include <stdio.h>
 
 #ifndef USING_CMODEL
 #include "vpplib.h"
@@ -21,20 +22,20 @@ static bm_status_t bmcv_yuv2bgr_check(int                   input_n,
     if (input_n < 1 || input_h < 1 || input_w < 1) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "illegal image_num, image size %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (input_w % 2 != 0 || input_h % 2 != 0)
     {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "input width and height should 2 aligned %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (src_data_format != DATA_TYPE_EXT_1N_BYTE)
     {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "input  data size should be DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
 
@@ -44,7 +45,7 @@ static bm_status_t bmcv_yuv2bgr_check(int                   input_n,
     {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "not supported output data type %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if ((dst_data_format == DATA_TYPE_EXT_FP16) ||
@@ -53,7 +54,7 @@ static bm_status_t bmcv_yuv2bgr_check(int                   input_n,
         (dst_data_format == DATA_TYPE_EXT_BF16)){
         BMCV_ERR_LOG("data type not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (!(src_image_format == FORMAT_NV12 || src_image_format == FORMAT_NV21 ||
@@ -62,13 +63,13 @@ static bm_status_t bmcv_yuv2bgr_check(int                   input_n,
     {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "not supported input image format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (!(dst_image_format == FORMAT_RGB_PLANAR || dst_image_format == FORMAT_BGR_PLANAR))
     {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "not supported output image format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -79,7 +80,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
                                     bm_image *   output) {
     if (handle == NULL) {
         bmlib_log("YUV2BGR", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     int                   width            = input[0].width;
     int                   height           = input[0].height;
@@ -94,39 +95,39 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
 
     if (!bm_image_is_attached(input[0])) {
         bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "input not attached data!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     for (int i = 1; i < image_num; i++) {
         if (width != input[i].width || height != input[i].height) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "inputs shape not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (src_data_format != input[i].data_type) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "inputs data type not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (src_image_format != input[i].image_format) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "inputs format not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (!bm_image_is_attached(input[i])) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "input %d not attached data!\r\n", i);
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
     }
 
     for (int i = 0; i < output_image_num; i++) {
         if (width != output[i].width || height != output[i].height) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "outputs shape not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (dst_data_format != output[i].data_type) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "outputs data type not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
         if (dst_image_format != output[i].image_format) {
             bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "outputs format not same!\r\n");
-            return BM_ERR_PARAM;
+            return BM_ERR_DATA;
         }
     }
 
@@ -137,7 +138,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
                                             src_data_format,
                                             dst_image_format,
                                             dst_data_format);
-    if (result == BM_NOT_SUPPORTED) {
+    if (result != BM_SUCCESS) {
         return result;
     }
 
@@ -151,7 +152,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
         {
             if (src_stride[k] != stride[k]) {
                 bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "src stride not same!\r\n");
-                return BM_ERR_PARAM;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -166,7 +167,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
         {
             if (dst_stride[k] != stride[k]) {
                 bmlib_log("YUV2RGB", BMLIB_LOG_ERROR, "dst stride not same!\r\n");
-                return BM_ERR_PARAM;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -192,7 +193,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
                         bm_free_device(handle, dmem);
                     }
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             output_alloc_flag[i] = true;
         }
@@ -258,7 +259,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
     u64             output_dev_addr[4][1]      = {0};
     for (int i = 0; i < image_num; i++) {
         if(BM_SUCCESS !=bm_image_get_device_mem(input[i], tensor_input[i])) {
-            BMCV_ERR_LOG("bm_image_alloc_dev_mem error\r\n");
+            BMCV_ERR_LOG("bm_image_get_device_mem error\r\n");
             for (int free_idx = 0; free_idx < output_image_num; free_idx ++) {
                 if (output_alloc_flag[free_idx]) {
                        bm_device_mem_t dmem;
@@ -267,7 +268,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
                    }
             }
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         for (int channel_idx = 0;
              channel_idx < bm_image_get_plane_num(input[i]);
@@ -279,7 +280,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
 
     for (int i = 0; i < output_image_num; i++) {
         if(BM_SUCCESS !=bm_image_get_device_mem(output[i], tensor_output[i])) {
-            BMCV_ERR_LOG("bm_image_alloc_dev_mem error\r\n");
+            BMCV_ERR_LOG("bm_image_get_device_mem error\r\n");
             for (int free_idx = 0; free_idx < output_image_num; free_idx ++) {
                 if (output_alloc_flag[free_idx]) {
                        bm_device_mem_t dmem;
@@ -288,7 +289,7 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
                    }
             }
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         output_dev_addr[i][0] = bm_mem_get_device_addr(tensor_output[i][0]);
     }
@@ -322,11 +323,11 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
 
     if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_CV_YUV2RGB, (uint8_t *)&api, sizeof(api))) {
         BMCV_ERR_LOG("yuv2rgb send api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("yuv2rgb sync api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
 
     return BM_SUCCESS;
@@ -355,7 +356,7 @@ bm_status_t bmcv_image_yuv2bgr_ext(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input[0], output[0]);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -373,7 +374,7 @@ bm_status_t bmcv_image_yuv2bgr_ext(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

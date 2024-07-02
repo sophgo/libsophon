@@ -2,6 +2,7 @@
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 #include <memory>
+#include <stdio.h>
 #include <vector>
 #include <cstring>
 
@@ -218,7 +219,7 @@ bm_status_t  bmcv_image_laplacian(
 
     unsigned int chipid = 0x1686;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;

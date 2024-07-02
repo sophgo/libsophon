@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <stdio.h>
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
 #include "bmcv_api.h"
@@ -181,6 +182,12 @@ static bm_status_t fill_image_private(bm_image *res, int *stride) {
             break;
         }
         case FORMAT_BAYER: {
+            image_private->plane_num = 1;
+            image_private->memory_layout[0] =
+                layout::plane_layout(1, 1, H, W, data_size);
+            break;
+        }
+        case FORMAT_BAYER_RG8: {
             image_private->plane_num = 1;
             image_private->memory_layout[0] =
                 layout::plane_layout(1, 1, H, W, data_size);
@@ -444,7 +451,7 @@ bm_status_t bm_image_format_check(int                      img_h,
                   __FILE__,
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (image_format <= FORMAT_NV24 &&
         (data_type == DATA_TYPE_EXT_4N_BYTE ||
@@ -455,7 +462,7 @@ bm_status_t bm_image_format_check(int                      img_h,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
 
     if (FORMAT_COMPRESSED == image_format) {
@@ -467,7 +474,7 @@ bm_status_t bm_image_format_check(int                      img_h,
                       filename(__FILE__),
                       __func__,
                       __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_PARAM;
         }
     }
     return BM_SUCCESS;
@@ -492,7 +499,7 @@ bm_status_t bm_image_create(bm_handle_t              handle,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     memset(res->image_private->data,
            0,
@@ -507,7 +514,7 @@ bm_status_t bm_image_create(bm_handle_t              handle,
                   __LINE__);
         delete res->image_private;
         res->image_private = nullptr;
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     if (fill_image_private(res, stride) != BM_SUCCESS) {
         bmlib_log("BMCV",
@@ -518,7 +525,7 @@ bm_status_t bm_image_create(bm_handle_t              handle,
                   __LINE__);
         delete res->image_private;
         res->image_private = nullptr;
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     res->image_private->handle = handle;
     return BM_SUCCESS;
@@ -540,7 +547,7 @@ bm_status_t bm_image_tensor_create(bm_handle_t              handle,
     res->image_c             = img_c;
     res->image.image_private = new bm_image_private;
     if (!res->image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
 
     fill_image_private_tensor(*res);
     res->image.image_private->handle = handle;
@@ -557,7 +564,7 @@ bm_status_t bm_image_destroy(bm_image image) {
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
 #ifndef USING_CMODEL
     if (image.image_private->decoder != NULL) {
@@ -594,13 +601,13 @@ bm_status_t bm_image_tensor_destroy(bm_image_tensor image_tensor) {
 
 bm_status_t bm_image_copy_host_to_device(bm_image image, void *buffers[]) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_format == FORMAT_COMPRESSED) {
         bmlib_log(BMCV_LOG_TAG,
                   BMLIB_LOG_ERROR,
                   "compressed format only support attached device memory, not "
                   "host pointer\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     // The image didn't attached to a buffer, malloc and own it.
     if (!image.image_private->attached) {
@@ -611,7 +618,7 @@ bm_status_t bm_image_copy_host_to_device(bm_image image, void *buffers[]) {
                       filename(__FILE__),
                       __func__,
                       __LINE__);
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
 
@@ -623,7 +630,7 @@ bm_status_t bm_image_copy_host_to_device(bm_image image, void *buffers[]) {
             BMCV_ERR_LOG("bm_memcpy_s2d error, src addr %p, dst addr 0x%llx\n",
               host[i], bm_mem_get_device_addr(image.image_private->data[i]));
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         // host = host + image.image_private->plane_byte_size[i];
     }
@@ -637,9 +644,9 @@ bm_status_t bm_image_tensor_copy_to_device(bm_image_tensor image_tensor,
 
 bm_status_t bm_image_copy_device_to_host(bm_image image, void *buffers[]) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (!image.image_private->attached) {
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     unsigned char **host = (unsigned char **)buffers;
     for (int i = 0; i < image.image_private->plane_num; i++) {
@@ -649,7 +656,7 @@ bm_status_t bm_image_copy_device_to_host(bm_image image, void *buffers[]) {
             BMCV_ERR_LOG("bm_memcpy_d2s error, src addr 0x%llx, dst addr %p\n",
               bm_mem_get_device_addr(image.image_private->data[i]), host[i]);
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         // host = host + image.image_private->plane_byte_size[i];
     }
@@ -668,7 +675,7 @@ bm_status_t bm_image_tensor_attach(bm_image_tensor  image_tensor,
 
 bm_status_t bm_image_attach(bm_image image, bm_device_mem_t *device_memory) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_private->data_owned) {
         std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
         int                         total_size = 0;
@@ -703,7 +710,7 @@ bm_status_t bm_image_tensor_detach(bm_image image_tensor) {
 
 bm_status_t bm_image_detach(bm_image image) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_private->data_owned == true) {
         std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
         int                         total_size = 0;
@@ -729,7 +736,7 @@ bm_status_t bm_image_detach(bm_image image) {
 
 bm_status_t bm_image_get_byte_size(bm_image image, int *size) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_format == FORMAT_COMPRESSED &&
         !image.image_private->attached) {
         bmlib_log("BMCV",
@@ -739,7 +746,7 @@ bm_status_t bm_image_get_byte_size(bm_image image, int *size) {
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
     for (int i = 0; i < image.image_private->plane_num; i++) {
@@ -750,7 +757,7 @@ bm_status_t bm_image_get_byte_size(bm_image image, int *size) {
 
 bm_status_t bm_image_alloc_dev_mem_heap_mask(bm_image image, int heap_mask) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_format == FORMAT_COMPRESSED) {
         bmlib_log("BMCV",
                   BMLIB_LOG_ERROR,
@@ -759,7 +766,7 @@ bm_status_t bm_image_alloc_dev_mem_heap_mask(bm_image image, int heap_mask) {
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (image.image_private->data_owned == true) {
         return BM_SUCCESS;
@@ -777,7 +784,7 @@ bm_status_t bm_image_alloc_dev_mem_heap_mask(bm_image image, int heap_mask) {
             image.image_private->handle, &dmem, heap_mask, total_size)) {
         BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
 
     #ifdef __linux__
@@ -806,7 +813,7 @@ bm_status_t bm_image_alloc_dev_mem_heap_mask(bm_image image, int heap_mask) {
 
 bm_status_t bm_image_alloc_dev_mem(bm_image image, int heap_id) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.image_format == FORMAT_COMPRESSED) {
         bmlib_log("BMCV",
                   BMLIB_LOG_ERROR,
@@ -815,7 +822,7 @@ bm_status_t bm_image_alloc_dev_mem(bm_image image, int heap_id) {
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (image.image_private->data_owned == true) {
         return BM_SUCCESS;
@@ -834,14 +841,14 @@ bm_status_t bm_image_alloc_dev_mem(bm_image image, int heap_id) {
                 image.image_private->handle, &dmem, heap_id, total_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     } else {
         if (BM_SUCCESS != bm_malloc_device_byte(
                               image.image_private->handle, &dmem, total_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
 
@@ -892,7 +899,7 @@ bool bm_image_tensor_is_attached(bm_image_tensor image_tensor) {
 
 bm_status_t bm_image_get_device_mem(bm_image image, bm_device_mem_t *mem) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     for (int i = 0; i < image.image_private->plane_num; i++) {
         mem[i] = image.image_private->data[i];
     }
@@ -914,7 +921,7 @@ bm_status_t bm_image_get_format_info(bm_image *              src,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if (src->image_format == FORMAT_COMPRESSED &&
         !src->image_private->attached) {
@@ -925,7 +932,7 @@ bm_status_t bm_image_get_format_info(bm_image *              src,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     info->plane_nb = src->image_private->plane_num;
     for (int i = 0; i < info->plane_nb; ++i) {
@@ -947,13 +954,13 @@ bm_status_t bm_image_tensor_get_device_mem(bm_image_tensor  image_tensor,
 
 int bm_image_get_plane_num(bm_image image) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     return image.image_private->plane_num;
 }
 
 bm_status_t bm_image_get_stride(bm_image image, int *stride) {
     if (!image.image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
 
     for (int i = 0; i < image.image_private->plane_num; i++) {
         stride[i] = image.image_private->memory_layout[i].pitch_stride;
@@ -963,7 +970,7 @@ bm_status_t bm_image_get_stride(bm_image image, int *stride) {
 
 bm_status_t bm_image_write_to_bmp(bm_image image, const char *filename) {
     if (!image.image_private || !image.image_private->attached)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (image.data_type == DATA_TYPE_EXT_4N_BYTE ||
         image.data_type == DATA_TYPE_EXT_4N_BYTE_SIGNED) {
         bmlib_log(BMCV_LOG_TAG,
@@ -972,7 +979,7 @@ bm_status_t bm_image_write_to_bmp(bm_image image, const char *filename) {
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     int need_format_transform = (image.image_format != FORMAT_RGB_PACKED &&
                                  image.image_format != FORMAT_GRAY) ||
@@ -1001,8 +1008,21 @@ bm_status_t bm_image_write_to_bmp(bm_image image, const char *filename) {
         }
     }
     int component = image.image_format == FORMAT_GRAY ? 1 : 3;
+    int stride[4] = {0};
+    bm_image_get_stride(image, stride);
+    void *      buf_tmp = malloc(stride[0] * image_temp.height);
     void *      buf = malloc(image_temp.width * image_temp.height * component);
-    bm_status_t ret = bm_image_copy_device_to_host(image_temp, &buf);
+    bm_status_t ret = bm_image_copy_device_to_host(image_temp, &buf_tmp);
+
+    if (stride[0] > image_temp.width * component) {
+        for (int i = 0; i < image_temp.height; i++) {
+            memcpy((unsigned char *)buf + i * image_temp.width * component, (unsigned char *)buf_tmp + i * stride[0], image_temp.width * component);
+        }
+    } else {
+        memcpy((unsigned char *)buf, (unsigned char *)buf_tmp, stride[0] * image_temp.height);
+    }
+    free(buf_tmp);
+
     if (ret != BM_SUCCESS) {
         free(buf);
         if (need_format_transform) {
@@ -1045,6 +1065,7 @@ bm_status_t bm_image_tensor_init(bm_image_tensor *image_tensor) {
 bm_status_t bmcv_width_align(bm_handle_t handle,
                              bm_image    input,
                              bm_image    output) {
+    bm_handle_check_2(handle, input, output);
     if (input.image_format == FORMAT_COMPRESSED) {
         bmlib_log(BMCV_LOG_TAG,
                   BMLIB_LOG_INFO,
@@ -1062,7 +1083,7 @@ bm_status_t bmcv_width_align(bm_handle_t handle,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (!bm_image_is_attached(input)) {
@@ -1072,13 +1093,13 @@ bm_status_t bmcv_width_align(bm_handle_t handle,
                   filename(__FILE__),
                   __func__,
                   __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (!bm_image_is_attached(output)) {
         if (BM_SUCCESS != bm_image_alloc_dev_mem(output, BMCV_HEAP_ANY)) {
             BMCV_ERR_LOG("bm_image_alloc_dev_mem error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
 
@@ -1103,19 +1124,19 @@ bm_status_t bm_image_alloc_contiguous_mem(int       image_num,
                                           int       heap_id) {
     if (0 == image_num) {
         BMCV_ERR_LOG("image_num can not be set as 0\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num - 1; i++) {
         for (int idx = 0; idx < images[i].image_private->plane_num; idx++) {
             if (images[i].image_private->memory_layout[idx].size !=
                 images[i + 1].image_private->memory_layout[idx].size) {
                 BMCV_ERR_LOG("all image must have same size\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
         if (images[i].image_private->attached) {
             BMCV_ERR_LOG("image has been attached memory\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     int single_image_sz = 0;
@@ -1132,7 +1153,7 @@ bm_status_t bm_image_alloc_contiguous_mem(int       image_num,
                                        total_image_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     } else {
         if (BM_SUCCESS != bm_malloc_device_byte(images[0].image_private->handle,
@@ -1140,7 +1161,7 @@ bm_status_t bm_image_alloc_contiguous_mem(int       image_num,
                                                 total_image_size)) {
             BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     int           dmabuf_fd = dmem.u.device.dmabuf_fd;
@@ -1171,19 +1192,19 @@ bm_status_t bm_image_alloc_contiguous_mem_heap_mask(int       image_num,
                                                     int       heap_mask) {
     if (0 == image_num) {
         BMCV_ERR_LOG("image_num can not be set as 0\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num - 1; i++) {
         for (int idx = 0; idx < images[i].image_private->plane_num; idx++) {
             if (images[i].image_private->memory_layout[idx].size !=
                 images[i + 1].image_private->memory_layout[idx].size) {
                 BMCV_ERR_LOG("all image must have same size\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
         if (images[i].image_private->attached) {
             BMCV_ERR_LOG("image has been attached memory\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     int single_image_sz = 0;
@@ -1199,7 +1220,7 @@ bm_status_t bm_image_alloc_contiguous_mem_heap_mask(int       image_num,
                                    total_image_size)) {
         BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     int           dmabuf_fd = dmem.u.device.dmabuf_fd;
     #ifdef __linux__
@@ -1227,11 +1248,11 @@ bm_status_t bm_image_alloc_contiguous_mem_heap_mask(int       image_num,
 bm_status_t bm_image_free_contiguous_mem(int image_num, bm_image *images) {
     if (0 == image_num) {
         BMCV_ERR_LOG("[FREE]image_num can not be set as 0\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num; i++) {
         if (images[i].image_private->data_owned) {
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         bm_image_detach(images[i]);
     }
@@ -1258,14 +1279,14 @@ bm_status_t bm_image_attach_contiguous_mem(int             image_num,
                                            bm_device_mem_t dmem) {
     if (0 == image_num) {
         BMCV_ERR_LOG("[ALLOC]image_num can not be set as 0\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num - 1; i++) {
         for (int idx = 0; idx < images[i].image_private->plane_num; idx++) {
             if (images[i].image_private->memory_layout[idx].size !=
                 images[i + 1].image_private->memory_layout[idx].size) {
                 BMCV_ERR_LOG("all image must have same size\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -1298,7 +1319,7 @@ bm_status_t bm_image_dettach_contiguous_mem(int image_num, bm_image *images) {
     for (int i = 0; i < image_num; i++) {
         if (images[i].image_private->data_owned) {
             BMCV_ERR_LOG("image mem can not be free\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         bm_image_detach(images[i]);
     }
@@ -1311,19 +1332,19 @@ bm_status_t bm_image_get_contiguous_device_mem(int              image_num,
                                                bm_device_mem_t *mem) {
     if (0 == image_num) {
         BMCV_ERR_LOG("image_num can not be set as 0\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num - 1; i++) {
         for (int idx = 0; idx < images[i].image_private->plane_num; idx++) {
             if (images[i].image_private->memory_layout[idx].size !=
                 images[i + 1].image_private->memory_layout[idx].size) {
                 BMCV_ERR_LOG("all image must have same size\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
         if (!(images[i].image_private->attached)) {
             BMCV_ERR_LOG("image has not been attached memory\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     bm_device_mem_t dmem;
@@ -1342,7 +1363,7 @@ bm_status_t bm_image_get_contiguous_device_mem(int              image_num,
         if ((base_addr + i * single_image_sz) != tmp_addr) {
             BMCV_ERR_LOG("images should have continuous mem\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
     bm_device_mem_t out_dmem;
@@ -1356,10 +1377,10 @@ bm_status_t bm_image_get_contiguous_device_mem(int              image_num,
 bm_status_t bm_image_to_bmcv_image(bm_image *src, bmcv_image *dst)
 {
     if (!src->image_private)
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     if (src->image_private->attached == false) {
         printf("please attach device memory first!\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
 
     dst->color_space = color_space_convert(src->image_format);
@@ -1439,14 +1460,14 @@ static bm_status_t map_addr(bm_handle_t handle, int process_id) {
     unsigned int heap_num;
     if (BM_SUCCESS != bm_get_gmem_total_heap_num(handle, &heap_num)) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "get_heap num failed!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     set_map_heap_size(dev_id, heap_num);
     for (unsigned int i = 0; i < heap_num; i++) {
         bm_heap_stat_byte_t heap_info;
         if (BM_SUCCESS != bm_get_gmem_heap_stat_byte_by_id(handle, &heap_info, i)) {
             bmlib_log("BMCV", BMLIB_LOG_ERROR, "get_heap info failed!\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DEVNOTREADY;
         }
         u64 vaddr = (u64)bmcpu_map_phys_addr(
                 handle,
@@ -1478,6 +1499,7 @@ u64 get_mapped_addr(bm_handle_t handle, bm_device_mem_t* mem) {
 
 bm_status_t bmcv_open_cpu_process(bm_handle_t handle) {
 #if !defined(USING_CMODEL) && !defined(SOC_MODE)
+    bm_status_t ret = BM_SUCCESS;
     int dev_id = bm_get_devid(handle);
     if (get_cpu_process_id(handle) != -1) return BM_SUCCESS;
     int timeout = -1;
@@ -1485,11 +1507,11 @@ bm_status_t bmcv_open_cpu_process(bm_handle_t handle) {
     char* kernel_path = getenv("BMCV_CPU_KERNEL_PATH");
     if (lib_path == NULL) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Please set environment variable: BMCV_CPU_LIB_PATH!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     if (kernel_path == NULL) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Please set environment variable: BMCV_CPU_KERNEL_PATH!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     if (BM_SUCCESS != bmcpu_start_cpu(
                 handle,
@@ -1517,9 +1539,10 @@ bm_status_t bmcv_open_cpu_process(bm_handle_t handle) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "load library failed!\r\n");
         return BM_ERR_FAILURE;
     }
-    if (BM_SUCCESS != map_addr(handle, cpu_id)) {
+    ret = map_addr(handle, cpu_id);
+    if (BM_SUCCESS != ret) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "map addr failed!\r\n");
-        return BM_ERR_FAILURE;
+        return ret;
     }
     increase_ref_cnt(dev_id);
 #else
@@ -1547,13 +1570,13 @@ bm_status_t bmcv_close_cpu_process(bm_handle_t handle) {
                                     timeout);
         if (BM_SUCCESS != ret) {
             bmlib_log("BMCV", BMLIB_LOG_ERROR, "unmap cpu failed!\r\n");
-            return BM_ERR_FAILURE;
+            return ret;
         }
     }
     ret = bmcpu_close_process(handle, cpu_id, timeout);
     if (BM_SUCCESS != ret) {
         bmlib_log("BMCV", BMLIB_LOG_WARNING, "close process failed!\r\n");
-        return BM_ERR_FAILURE;
+        return ret;
     }
     set_cpu_process_id(dev_id, -1);
 #else

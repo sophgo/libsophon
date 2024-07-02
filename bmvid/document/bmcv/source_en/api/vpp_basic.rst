@@ -1,7 +1,7 @@
 bmcv_image_vpp_basic
 =========================
 
-  There is a special video post-processing module VPP on BM1684 and BM1684X. Under certain conditions, it can do the functions of clip, color-space-convert, resize and padding at one time, faster than TPU.
+  There is a special video post-processing module VPP on BM1684 and BM1684X. Under certain conditions, it can do the functions of clip, color-space-convert, resize and padding at one time, faster than Tensor Computing Processor.
   The API can combine  crop, color-space-convert, resize, padding and any number of functions for multiple images.
 
     .. code-block:: c
@@ -17,6 +17,11 @@ bmcv_image_vpp_basic
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
             csc_type_t            csc_type = CSC_MAX_ENUM,
             csc_matrix_t*         matrix = NULL);
+
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
 
 
 **Description of incoming parameters:**

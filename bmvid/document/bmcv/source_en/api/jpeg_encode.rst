@@ -3,6 +3,12 @@ bmcv_image_jpeg_enc
 
 This API can be used for JPEG encoding of multiple bm_image.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

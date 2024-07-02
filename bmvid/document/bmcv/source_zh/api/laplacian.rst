@@ -3,11 +3,15 @@ bmcv_image_laplacian
 
 梯度计算laplacian算子。
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
 
 **接口形式：**
 
     .. code-block:: c
-    
+
         bm_status_t  bmcv_image_laplacian(
             bm_handle_t handle,
             bm_image input,
@@ -93,11 +97,11 @@ bmcv_image_laplacian
         ret = bm_dev_request(&handle, 0);
         if (ret != BM_SUCCESS)
             throw("bm_dev_request failed");
-    
+
         bm_image_data_format_ext data_type = DATA_TYPE_EXT_1N_BYTE;
         bm_image input;
         bm_image output;
-   
+
         bm_image_create(handle, ih, iw, fmt, data_type, &input);
         bm_image_alloc_dev_mem(input);
 
@@ -107,7 +111,7 @@ bmcv_image_laplacian
         std::shared_ptr<unsigned char*> ch0_ptr = std::make_shared<unsigned char*>(new unsigned char[ih * iw]);
         std::shared_ptr<unsigned char*> tpu_res_ptr = std::make_shared<unsigned char *>(new unsigned char[ih * iw]);
         std::shared_ptr<unsigned char*> cpu_res_ptr = std::make_shared<unsigned char *>(new unsigned char[ih*iw]);
-    
+
         for (int i = 0; i < loop; i++) {
             for (int j = 0; j < ih * iw; j++) {
                 (*ch0_ptr.get())[j] = j % 256;

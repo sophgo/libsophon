@@ -3,6 +3,12 @@ bmcv_faiss_indexflatL2
 
 This interface is used to calculate squared L2 distance between query vectors and database vectors, output the top K (sort_cnt) L2sqr-values and the corresponding indices, return BM_SUCCESS if succeed.
 
+
+**Processor model support**
+
+This interface only supports BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c++
@@ -101,13 +107,13 @@ This interface is used to calculate squared L2 distance between query vectors an
 
 2. The data type of the output sorted similarity result is float, and that of the corresponding indices is int.
 
-3. The assumption is that the norm_L2sqr values of the input data and the database data have been computed ahead of time and stored on the chip.
+3. The assumption is that the norm_L2sqr values of the input data and the database data have been computed ahead of time and stored on the processor.
 
 4. Usually, the data in the database is arranged in the memory as database_vecs_num * vec_dims. Therefore, the is_transpose needs to be set to 1.
 
 5. The smaller the squared L2 values of the query vector and the database vector, the higher the similarity of the two vectors. Therefore, the squared L2 values are sorted in ascending order in the process of TopK.
 
-6. The interface is used for Faiss::IndexFlatL2.search() and implemented on BM1684X. According to the continuous memory of TPU on BM1684X, we can query about 512 inputs of 256 dimensions at a time on a single chip if the database is about 100W.
+6. The interface is used for Faiss::IndexFlatL2.search() and implemented on BM1684X. According to the continuous memory of Tensor Computing Processor on BM1684X, we can query about 512 inputs of 256 dimensions at a time on a single processor if the database is about 100W.
 
 7. the value of database_vecs_num and sort_cnt needs to meet the condition: database_vecs_num > sort_cnt.
 

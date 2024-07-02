@@ -49,6 +49,10 @@ The format of the interface is as follows:
                                  float            beta = 0);
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **输入参数说明：**
 

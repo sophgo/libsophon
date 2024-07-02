@@ -3,6 +3,12 @@ bmcv_image_fill_rectangle
 
 This interface is used to fill one or more rectangles on the image.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
     .. code-block:: c
 

@@ -3,6 +3,7 @@
 #include "bmcv_common_bm1684.h"
 #include <memory>
 #include <vector>
+#include <stdio.h>
 
 static bm_status_t bmcv_add_weighted_check(
         bm_handle_t handle,
@@ -11,7 +12,7 @@ static bm_status_t bmcv_add_weighted_check(
         bm_image output) {
     if (handle == NULL) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     bm_image_format_ext src1_format = input1.image_format;
     bm_image_data_format_ext src1_type = input1.data_type;
@@ -28,7 +29,7 @@ static bm_status_t bmcv_add_weighted_check(
     if (src1_format != src2_format &&
         src1_format != dst_format) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "input and output image format is NOT same");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if (src1_format != FORMAT_YUV420P &&
         src1_format != FORMAT_YUV422P &&
@@ -46,18 +47,18 @@ static bm_status_t bmcv_add_weighted_check(
         src1_format != FORMAT_RGBP_SEPARATE &&
         src1_format != FORMAT_BGRP_SEPARATE) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "Not supported image format");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src1_type != DATA_TYPE_EXT_1N_BYTE ||
         src2_type != DATA_TYPE_EXT_1N_BYTE ||
         dst_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "Not supported image data type");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src1_h != src2_h || src1_w != src2_w ||
         src1_h != dst_h || src1_w != dst_w) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "inputs and output image size should be same");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -71,6 +72,7 @@ bm_status_t bmcv_image_add_weighted(
         float gamma,
         bm_image output) {
     bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_3(handle, input1, input2, output);
     ret = bmcv_add_weighted_check(handle, input1, input2, output);
     if (BM_SUCCESS != ret) {
         return ret;
@@ -158,8 +160,9 @@ bm_status_t bmcv_image_add_weighted(
 
         default:
             printf("BM_NOT_SUPPORTED!\n");
+            ret = BM_ERR_NOFEATURE;
             break;
     }
-    return BM_SUCCESS;
+    return ret;
 }
 

@@ -4,6 +4,11 @@ bmcv_image_absdiff
   Subtract the pixel values of two images with the same size and take the absolute value.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

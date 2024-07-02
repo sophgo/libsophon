@@ -3,6 +3,12 @@ bmcv_faiss_indexflatIP
 
 计算查询向量与数据库向量的内积距离, 输出前 K （sort_cnt） 个最匹配的内积距离值及其对应的索引。
 
+
+**处理器型号支持：**
+
+该接口仅支持BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c++
@@ -95,7 +101,7 @@ bmcv_faiss_indexflatIP
 
 4、查询向量和数据库向量内积距离值越大, 表示两者的相似度越高。因此, 在 TopK 过程中对内积距离值按降序排序。
 
-5、该接口用于 Faiss::IndexFlatIP.search(), 在 BM1684X 上实现。考虑 BM1684X 上 TPU 的连续内存, 针对 100W 底库, 可以在单芯片上一次查询最多约 512 个 256 维的输入。
+5、该接口用于 Faiss::IndexFlatIP.search(), 在 BM1684X 上实现。考虑 BM1684X 上 Tensor Computing Processor 的连续内存, 针对 100W 底库, 可以在单处理器上一次查询最多约 512 个 256 维的输入。
 
 
 **示例代码**

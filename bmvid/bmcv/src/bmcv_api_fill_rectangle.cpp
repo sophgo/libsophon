@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdio.h>
 #include "bmcv_api.h"
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
@@ -17,11 +18,11 @@ static bm_status_t bmcv_draw_solid_rectangle(bm_handle_t handle,
 
     if (BM_SUCCESS != bm_send_api(handle,  BM_API_ID_MEMSET_BYTE, (uint8_t *)&api, sizeof(api))) {
         BMCV_ERR_LOG("fill rectangle send api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("fill rectangle sync api error\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     return BM_SUCCESS;
 }
@@ -155,7 +156,7 @@ bm_status_t bmcv_image_fill_rectangle(bm_handle_t handle,
     }
     else {
         BMCV_ERR_LOG("error currently not support this format to fill rectangle\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -226,20 +227,21 @@ bm_status_t bmcv_image_fill_rectangle(bm_handle_t   handle,
     }
     if(!image.image_private) {
         BMCV_ERR_LOG("invalidate image, not created\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(image.data_type != DATA_TYPE_EXT_1N_BYTE) {
         BMCV_ERR_LOG("invalidate image, data type should be DATA_TYPE_EXT_1N_BYTE\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(!bm_image_is_attached(image)) {
         BMCV_ERR_LOG("invalidate image, please attach device memory\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(image.height >= (1 << 16) || image.width >= (1 << 16)) {
         BMCV_ERR_LOG("Not support such big size image\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
+    bm_handle_check_1(handle, image);
 
     bm_status_t ret = BM_SUCCESS;
     unsigned int chipid = BM1684X;
@@ -255,9 +257,10 @@ bm_status_t bmcv_image_fill_rectangle(bm_handle_t   handle,
       {
         for (int i = 0; i < rect_num; i++) {
             bmcv_rect_t rect = refine_rect(rects[i], image.height, image.width);
-            if (bmcv_image_fill_rectangle(handle, image, rect, r, g, b) != BM_SUCCESS) {
+            ret = bmcv_image_fill_rectangle(handle, image, rect, r, g, b);
+            if (ret != BM_SUCCESS) {
                 BMCV_ERR_LOG("error call fill rectangle\n");
-                return BM_ERR_FAILURE;
+                return ret;
             }
         }
         break;
@@ -268,13 +271,13 @@ bm_status_t bmcv_image_fill_rectangle(bm_handle_t   handle,
             calculate_yuv(r, g, b, fill_val, fill_val + 1, fill_val + 2);
         ret = bm1684x_fill_vpp_rectangle(handle, image, rect_num, rects, fill_val[0], fill_val[1], fill_val[2]);
         if(ret!=BM_SUCCESS){
-            BMCV_ERR_LOG("error 1684x fill rectangle\n");
+            BMCV_ERR_LOG("error call fill rectangle\n");
         }
         break;
       }
       default:
       {
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_NOFEATURE;
       }
     }
     return ret;

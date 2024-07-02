@@ -8,6 +8,11 @@ The interface is used to do the linear change of image pixels. The specific data
     y=kx+b
     \end{array}
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

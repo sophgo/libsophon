@@ -41,48 +41,6 @@ static int s_bitCodeSize[MAX_NUM_VPU_CORE] = {0,};
 
 Uint32 __VPU_BUSY_TIMEOUT = VPU_BUSY_CHECK_TIMEOUT;
 
-typedef struct _G_bm_handle{
-    bm_handle_t bm_handle;
-    unsigned int count;
-} G_bm_handle;
-static G_bm_handle g_bm_handle[MAX_NUM_VPU_CORE] = { {0, 0} };
-
-
-#ifdef __linux__
-static int bmhandle_atomic_lock = 0; /* atomic lock for bmlib_handle */
-#elif _WIN32
-static  volatile long bmhandle_atomic_lock = 0;
-#endif
-
-/* atomic lock for bmlib_handle operations*/
-static void bm_handle_lock()
-{
-#ifdef __linux__
-    while (__atomic_test_and_set(&bmhandle_atomic_lock, __ATOMIC_SEQ_CST))
-    {
-        usleep(100);
-    }
-#endif
-#ifdef _WIN32
-    while (InterlockedCompareExchange(&bmhandle_atomic_lock, 1, 0)) {
-        Sleep(1);
-    }
-#endif
-}
-
-static void bm_handle_unlock()
-{
-#ifdef __linux__
-    __atomic_clear(&bmhandle_atomic_lock, __ATOMIC_SEQ_CST);
-#endif
-#ifdef _WIN32
-    InterlockedExchange(&bmhandle_atomic_lock, 0);
-#endif
-}
-
-
-
-
 static RetCode CheckDecInstanceValidity(CodecInst* pCodecInst)
 {
     RetCode ret;
@@ -239,6 +197,7 @@ int VPU_GetOpenInstanceNum(Uint32 coreIdx)
 static RetCode InitializeVPU(Uint32 coreIdx, const Uint16* code, Uint32 size)
 {
     RetCode     ret;
+    int init_status;
 
     if (vdi_init(coreIdx) < 0)
         return RETCODE_FAILURE;
@@ -256,7 +215,8 @@ static RetCode InitializeVPU(Uint32 coreIdx, const Uint16* code, Uint32 size)
     create_sw_uart_thread(coreIdx);
     vdi_delay_ms(500);
 #endif
-    if (VPU_IsInit(coreIdx) != 0 && ((vdi_get_instance_num(coreIdx) > 0) || ProductVpuGetId(coreIdx)==PRODUCT_ID_960)) {
+    init_status = vdi_get_init_status(coreIdx);
+    if (VPU_IsInit(coreIdx) != 0 && ((init_status == 1) || ProductVpuGetId(coreIdx)==PRODUCT_ID_960)) {
         if(ProductVpuGetId(coreIdx)==PRODUCT_ID_960 && VPU_GetFirmwareStatus(coreIdx) == 0) {
             ret = ProductVpuReset(coreIdx, 0, SW_RESET_ON_BOOT);
             if (ret != RETCODE_SUCCESS) {
@@ -534,6 +494,7 @@ RetCode VPU_DecOpen(DecHandle* pHandle, DecOpenParam* pop)
     pDecInfo->reorderEnable      = VPU_REORDER_ENABLE;
     pDecInfo->mirrorDirection    = MIRDIR_NONE;
     pDecInfo->prevFrameEndPos    = pop->bitstreamBuffer;
+    pDecInfo->enableDecodeOrder  = pop->decodeOrder;
 
     if ((ret=ProductVpuDecBuildUpOpenParam(pCodecInst, pop)) != RETCODE_SUCCESS) {
         *pHandle = 0;
@@ -551,7 +512,6 @@ RetCode VPU_DecOpen(DecHandle* pHandle, DecOpenParam* pop)
 
     osal_memset((void*)&pDecInfo->cacheConfig, 0x00, sizeof(MaverickCacheConfig));
 
-    vdi_resume_kernel_reset(pCodecInst->coreIdx);
     LeaveLock(pCodecInst->coreIdx);
 
     return RETCODE_SUCCESS;
@@ -586,8 +546,6 @@ RetCode VPU_DecClose(DecHandle handle)
     DecInfo * pDecInfo;
     RetCode ret;
     int i;
-    bm_handle_t bm_handle;
-    bm_handle =bmvpu_dec_get_bmlib_handle(handle->coreIdx);
     ret = CheckDecInstanceValidity(handle);
     if (ret != RETCODE_SUCCESS) {
         return ret;
@@ -613,87 +571,91 @@ RetCode VPU_DecClose(DecHandle handle)
     if (pCodecInst->loggingEnable)
         vdi_log(pCodecInst->coreIdx, DEC_SEQ_END, 0);
 
-    if (pDecInfo->vbDevSlice.size)
+    if (pDecInfo->vbSlice.size)
     {
-        bm_free_mem(bm_handle,pDecInfo->vbDevSlice,pDecInfo->vbSliceVddr);
-        pDecInfo->vbDevSlice.size=0;
+        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbSlice);
+        pDecInfo->vbSlice.size=0;
     }
 
-    if (pDecInfo->vbDevWork.size) {
+    if (pDecInfo->vbWork.size) {
         if (pDecInfo->workBufferAllocExt == 0) {
-#ifndef BM_PCIE_MODE
-        bm_mem_unmap_device_mem(bm_handle,(void *)pDecInfo->vbWorkVaddr,pDecInfo->vbDevWork.size);
-#endif
-        bm_free_device(bm_handle,pDecInfo->vbDevWork);
-        pDecInfo->vbDevWork.size=0;
+            vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbWork);
+            pDecInfo->vbWork.size=0;
         }
         else {
-#ifndef BM_PCIE_MODE
-             bm_mem_unmap_device_mem(bm_handle,(void *)pDecInfo->vbWorkVaddr,pDecInfo->vbDevWork.size);
-#endif
+            vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbWork);
         }
     }
 
-    if (pDecInfo->vbDevFrame.size) {
+    if (pDecInfo->vbFrame.size) {
         if (pDecInfo->frameAllocExt == 0) {
-            bm_free_mem(bm_handle,pDecInfo->vbDevFrame,pDecInfo->vbFrameVaddr);
-            pDecInfo->vbDevFrame.size=0;
+            vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFrame);
+            pDecInfo->vbFrame.size=0;
         }
     }
     for ( i=0 ; i<MAX_REG_FRAME; i++) {
-        if (pDecInfo->vbDevMV[i].size)
+        if (pDecInfo->vbMV[i].size)
         {
-            bm_free_mem(bm_handle,pDecInfo->vbDevMV[i],pDecInfo->vbMVVaddr[i]);
-            pDecInfo->vbDevMV[i].size=0;
+            vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbMV[i]);
+            pDecInfo->vbMV[i].size=0;
         }
 
-        if (pDecInfo->vbDevFbcYTbl[i].size)
+        if (pDecInfo->vbFbcYTbl[i].size)
         {
-
-            bm_free_mem(bm_handle,pDecInfo->vbDevFbcYTbl[i],pDecInfo->vbFbcYTblVaddr[i]);
-            pDecInfo->vbDevFbcYTbl[i].size=0;
-        }
-
-        if (pDecInfo->vbDevFbcCTbl[i].size)
-        {
-            bm_free_mem(bm_handle,pDecInfo->vbDevFbcCTbl[i],pDecInfo->vbFbcCTblVaddr[i]);
-            pDecInfo->vbDevFbcCTbl[i].size=0;
-        }
-#ifndef BM_PCIE_MODE
-        if(pDecInfo->vpu_frame_buffer_vaddr[i]!=0x00)
+            if(pDecInfo->framebuf_from_user != 1)
             {
-                bm_mem_unmap_device_mem(bm_handle,(void *)pDecInfo->vpu_frame_buffer_vaddr[i],pDecInfo->vpu_frame_buffer_vaddr_size[i]);
+                vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                pDecInfo->vbFbcYTbl[i].size=0;
             }
-#endif
+            else
+            {
+                vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+            }
+        }
+
+        if (pDecInfo->vbFbcCTbl[i].size)
+        {
+            if(pDecInfo->framebuf_from_user != 1)
+            {
+                vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                pDecInfo->vbFbcCTbl[i].size=0;
+            }
+            else
+            {
+                vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+            }
+        }
     }
 
-    if (pDecInfo->vbDevTemp.size)
+    if (pDecInfo->vbTemp.size)
     {
         vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbTemp);
     }
 
-    if (pDecInfo->vbDevPPU.size) {
+    if (pDecInfo->vbPPU.size) {
         if (pDecInfo->ppuAllocExt == 0)
         {
-            bm_free_mem(bm_handle,pDecInfo->vbDevPPU,0x00);
-            pDecInfo->vbDevPPU.size=0;
+            vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbPPU);
+            pDecInfo->vbPPU.size=0;
         }
     }
 
-    if (pDecInfo->vbDevWTL.size)
+    if (pDecInfo->vbWTL.size)
     {
-          bm_free_mem(bm_handle,pDecInfo->vbDevWTL,0x00);
-          pDecInfo->vbDevWTL.size=0;
+          vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbWTL);
+          pDecInfo->vbWTL.size=0;
     }
-    // if (pDecInfo->vbUserData.size)
-    // {
-    //     vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbUserData);
-    // }
-
-    if (pDecInfo->vbDevReport.size)
+    if (pDecInfo->vbUserData.size)
     {
-        bm_free_mem(bm_handle,pDecInfo->vbDevReport,pDecInfo->vbReportVddr);
-        pDecInfo->vbDevReport.size=0;
+        vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbUserData);
+    }
+
+    if (pDecInfo->vbReport.size)
+    {
+        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbReport);
+        pDecInfo->vbReport.size=0;
     }
     if (GetPendingInst(pCodecInst->coreIdx) == pCodecInst)
         ClearPendingInst(pCodecInst->coreIdx);
@@ -924,7 +886,7 @@ static RetCode DecRegisterFrameBuffer(DecHandle handle, FrameBuffer *bufArray, i
     Int32           i;
     RetCode         ret;
     FrameBuffer*    fb, nullFb;
-    bm_device_mem_t    *vb;
+    vpu_buffer_t    *vb;
     FrameBufferFormat format = FORMAT_420;
     Int32          totalNumOfFbs;
 
@@ -992,7 +954,7 @@ static RetCode DecRegisterFrameBuffer(DecHandle handle, FrameBuffer *bufArray, i
             pDecInfo->frameBufPool[i] = bufArray[i];
     }
     else {
-        vb = &pDecInfo->vbDevFrame;
+        vb = &pDecInfo->vbFrame;
         fb = &pDecInfo->frameBufPool[0];
         ret = ProductVpuAllocateFramebuffer(
             (CodecInst*)handle, fb, (TiledMapType)mapType, numFbsForDecoding, stride, height, format,
@@ -1014,7 +976,7 @@ static RetCode DecRegisterFrameBuffer(DecHandle handle, FrameBuffer *bufArray, i
         if (!bufArray) {
             TiledMapType map;
             map = pDecInfo->wtlMode==FF_FRAME ? LINEAR_FRAME_MAP : LINEAR_FIELD_MAP;
-            vb = &pDecInfo->vbDevWTL;
+            vb = &pDecInfo->vbWTL;
             fb = &pDecInfo->frameBufPool[numFbsForDecoding];
 
             ret = ProductVpuAllocateFramebuffer(
@@ -1645,14 +1607,14 @@ RetCode VPU_DecGetOutputInfo(DecHandle handle, DecOutputInfo* info)
             info->dispPicHeight = pDecInfo->decOutInfo[displayIndex].decPicHeight;
         }
 
-        if (pDecInfo->scalerEnable == TRUE) { 
+        if (pDecInfo->scalerEnable == TRUE) {
             if ((pDecInfo->scaleWidth != 0) && (pDecInfo->scaleHeight != 0)) {
                 info->dispPicWidth     = pDecInfo->scaleWidth;
                 info->dispPicHeight    = pDecInfo->scaleHeight;
                 info->rcDisplay.right  = pDecInfo->scaleWidth;
                 info->rcDisplay.bottom = pDecInfo->scaleHeight;
             }
-        } 
+        }
     }
     else
     {
@@ -1708,8 +1670,14 @@ RetCode VPU_DecGetOutputInfo(DecHandle handle, DecOutputInfo* info)
 
         maxDecIndex = (pDecInfo->numFbsForDecoding > pDecInfo->numFbsForWTL) ? (SvacSvcFlag ? pDecInfo->numFbsForDecoding*2 : pDecInfo->numFbsForDecoding) : pDecInfo->numFbsForWTL;
 
-        if (0 <= info->indexFrameDisplay && info->indexFrameDisplay < (int)maxDecIndex)
+        if (pDecInfo->enableDecodeOrder && (0 <= info->indexFrameDecoded && info->indexFrameDecoded < (int)maxDecIndex))
+        {
+            info->dispFrame = pDecInfo->frameBufPool[val+info->indexFrameDecoded];
+        }
+        else if (0 <= info->indexFrameDisplay && info->indexFrameDisplay < (int)maxDecIndex)
+        {
             info->dispFrame = pDecInfo->frameBufPool[val+info->indexFrameDisplay];
+        }
     }
     info->rdPtr            = streamRdPtr;
     info->wrPtr            = pDecInfo->streamWrPtr;
@@ -1851,7 +1819,7 @@ RetCode VPU_DecFrameBufferFlush(DecHandle handle, DecOutputInfo* pRemainings, Ui
                     pOut->dispPicWidth   = pDecInfo->scaleWidth;
                     pOut->dispPicHeight  = pDecInfo->scaleHeight;
                 }
-            } 
+            }
             else {
                 pOut->dispPicWidth  = pOut->decPicWidth;
                 pOut->dispPicHeight = pOut->decPicHeight;
@@ -2026,8 +1994,7 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
     CodecInst*          pCodecInst;
     DecInfo*            pDecInfo;
     RetCode             ret;
-    bm_handle_t         bm_handle;
-    bm_handle=bmvpu_dec_get_bmlib_handle(handle->coreIdx);
+
     ret = CheckDecInstanceValidity(handle);
     if (ret != RETCODE_SUCCESS)
         return ret;
@@ -2390,50 +2357,66 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
     case DEC_FREE_FRAME_BUFFER:
         {
             int i;
-            if (pDecInfo->vbDevSlice.size)
+            if (pDecInfo->vbSlice.size)
                 {
-                    bm_free_mem(bm_handle,pDecInfo->vbDevSlice,pDecInfo->vbSliceVddr);
-                    pDecInfo->vbDevSlice.size=0;
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbSlice);
+                    pDecInfo->vbSlice.size = 0;
                 }
 
-            if (pDecInfo->vbDevFrame.size){
-            if (pDecInfo->frameAllocExt == 0) {
-                bm_free_mem(bm_handle,pDecInfo->vbDevFrame,pDecInfo->vbFrameVaddr);
-                pDecInfo->vbDevFrame.size=0;
+            if (pDecInfo->vbFrame.size){
+                if (pDecInfo->frameAllocExt == 0) {
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFrame);
+                    pDecInfo->vbFrame.size=0;
                 }
             }
             for (i=0  ; i<MAX_REG_FRAME; i++) {
-                if (pDecInfo->vbDevFbcYTbl[i].size)
-                    {
-                        bm_free_mem(bm_handle,pDecInfo->vbDevFbcYTbl[i],pDecInfo->vbFbcYTblVaddr[i]);
-                        pDecInfo->vbFbcYTblVaddr[i]=0x00;
-                    }
-                if (pDecInfo->vbDevFbcCTbl[i].size)
+                if (pDecInfo->vbFbcYTbl[i].size)
                 {
-                    bm_free_mem(bm_handle,pDecInfo->vbDevFbcCTbl[i],pDecInfo->vbFbcCTblVaddr[i]);
-                    pDecInfo->vbFbcCTblVaddr[i]=0x00;
+                    if(pDecInfo->framebuf_from_user != 1)
+                    {
+                        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                        pDecInfo->vbFbcYTbl[i].size = 0;
+                    }
+                    else
+                    {
+                        vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                        vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                    }
+                }
+                if (pDecInfo->vbFbcCTbl[i].size)
+                {
+                    if(pDecInfo->framebuf_from_user != 1)
+                    {
+                        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                        pDecInfo->vbFbcCTbl[i].size = 0;
+                    }
+                    else
+                    {
+                        vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                        vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                    }
                 }
 
-                if (pDecInfo->vbDevMV[i].size)
+                if (pDecInfo->vbMV[i].size)
                 {
-                    bm_free_mem(bm_handle,pDecInfo->vbDevMV[i],pDecInfo->vbMVVaddr[i]);
-                    pDecInfo->vbMVVaddr[i]=0x00;
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbMV[i]);
+                    pDecInfo->vbMV[i].size = 0;
                 }
             }
 
-            if (pDecInfo->vbDevPPU.size) {
+            if (pDecInfo->vbPPU.size) {
                 if (pDecInfo->ppuAllocExt == 0)
                 {
-                 bm_free_mem(bm_handle,pDecInfo->vbDevPPU,0x00);
-                pDecInfo->vbDevPPU.size=0;
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbPPU);
+                    pDecInfo->vbPPU.size=0;
                 }
             }
 
             if (pDecInfo->wtlEnable) {
-                if (pDecInfo->vbDevWTL.size)
+                if (pDecInfo->vbWTL.size)
                 {
-                    bm_free_mem(bm_handle,pDecInfo->vbDevWTL,0x00);
-                    pDecInfo->vbDevWTL.size=0;
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbWTL);
+                    pDecInfo->vbWTL.size=0;
                 }
             }
             break;
@@ -2442,13 +2425,13 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
         {
             DecGetFramebufInfo* fbInfo = (DecGetFramebufInfo*)param;
             Uint32 i;
-            fbInfo->devMemFrame   = pDecInfo->vbDevFrame;
-            fbInfo->devMemWTL     = pDecInfo->vbDevWTL;
+            fbInfo->vbFrame   = pDecInfo->vbFrame;
+            fbInfo->vbWTL     = pDecInfo->vbWTL;
             for (i=0  ; i<MAX_REG_FRAME; i++)
             {
-                fbInfo->devMemInfoVbFbcYTbl[i] = pDecInfo->vbDevFbcYTbl[i];
-                fbInfo->devMemInfoVbFbcCTbl[i] = pDecInfo->vbDevFbcCTbl[i];
-                fbInfo->devMemInfoVbMv[i]   = pDecInfo->vbDevMV[i];
+                fbInfo->vbFbcYTbl[i] = pDecInfo->vbFbcYTbl[i];
+                fbInfo->vbFbcCTbl[i] = pDecInfo->vbFbcCTbl[i];
+                fbInfo->vbMvCol[i]   = pDecInfo->vbMV[i];
             }
 
             for (i=0; i<MAX_GDI_IDX*2; i++) {
@@ -2460,23 +2443,28 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
         {
             int i;
 
-            pDecInfo->vbDevFrame.u.device.device_addr     = 0;
-            pDecInfo->vbFrameVaddr                        = 0;
-            pDecInfo->vbDevFrame.size                     = 0;
-            //pDecInfo->vbWTLVaddr                          = 0;
-            pDecInfo->vbDevWTL.u.device.device_addr       = 0;
-            pDecInfo->vbDevWTL.size            = 0;
+            pDecInfo->vbFrame.base          = 0;
+            pDecInfo->vbFrame.phys_addr     = 0;
+            pDecInfo->vbFrame.virt_addr     = 0;
+            pDecInfo->vbFrame.size          = 0;
+            pDecInfo->vbWTL.base            = 0;
+            pDecInfo->vbWTL.phys_addr       = 0;
+            pDecInfo->vbWTL.virt_addr       = 0;
+            pDecInfo->vbWTL.size            = 0;
             for (i=0  ; i<MAX_REG_FRAME; i++)
             {
-                pDecInfo->vbDevFbcYTbl[i].u.device.device_addr   = 0;
-                pDecInfo->vbFbcCTblVaddr[i]                      = 0;
-                pDecInfo->vbDevFbcYTbl[i].size                   = 0;
-                pDecInfo->vbDevFbcCTbl[i].u.device.device_addr   = 0;
-                pDecInfo->vbFbcCTblVaddr[i]                      = 0;
-                pDecInfo->vbDevFbcCTbl[i].size                  = 0;
-                pDecInfo->vbDevMV[i].u.device.device_addr       = 0;
-                pDecInfo->vbMVVaddr[i]                          = 0;
-                pDecInfo->vbDevMV[i].size                       = 0;
+                pDecInfo->vbFbcYTbl[i].base        = 0;
+                pDecInfo->vbFbcYTbl[i].phys_addr   = 0;
+                pDecInfo->vbFbcYTbl[i].virt_addr   = 0;
+                pDecInfo->vbFbcYTbl[i].size        = 0;
+                pDecInfo->vbFbcCTbl[i].base        = 0;
+                pDecInfo->vbFbcCTbl[i].phys_addr   = 0;
+                pDecInfo->vbFbcCTbl[i].virt_addr   = 0;
+                pDecInfo->vbFbcCTbl[i].size        = 0;
+                pDecInfo->vbMV[i].base             = 0;
+                pDecInfo->vbMV[i].phys_addr        = 0;
+                pDecInfo->vbMV[i].virt_addr        = 0;
+                pDecInfo->vbMV[i].size             = 0;
             }
 
             pDecInfo->frameDisplayFlag      = 0;
@@ -2706,22 +2694,38 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
     case DEC_FREE_FBC_TABLE_BUFFER:
         {
             Uint32 fbcCurFrameIdx = *(Uint32*)param;
-            if(pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx].size > 0) {
-                bm_free_mem(bm_handle,pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx],pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]);
-                pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx].size = 0;
+            if(pDecInfo->vbFbcYTbl[fbcCurFrameIdx].size > 0) {
+                if(pDecInfo->framebuf_from_user != 1)
+                {
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[fbcCurFrameIdx]);
+                    pDecInfo->vbFbcYTbl[fbcCurFrameIdx].size = 0;
+                }
+                else
+                {
+                    vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[fbcCurFrameIdx]);
+                    vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[fbcCurFrameIdx]);
+                }
             }
-            if(pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx].size > 0) {
-                bm_free_mem(bm_handle,pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx],pDecInfo->vbFbcCTblVaddr[fbcCurFrameIdx]);
-                pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx].size = 0;
+            if(pDecInfo->vbFbcCTbl[fbcCurFrameIdx].size > 0) {
+                if(pDecInfo->framebuf_from_user != 1)
+                {
+                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[fbcCurFrameIdx]);
+                    pDecInfo->vbFbcCTbl[fbcCurFrameIdx].size = 0;
+                }
+                else
+                {
+                    vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[fbcCurFrameIdx]);
+                    vdi_unmap_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[fbcCurFrameIdx]);
+                }
             }
         }
         break;
     case DEC_FREE_MV_BUFFER:
         {
             Uint32 fbcCurFrameIdx = *(Uint32*)param;
-            if(pDecInfo->vbDevMV[fbcCurFrameIdx].size > 0) {
-                bm_free_mem(bm_handle,pDecInfo->vbDevMV[fbcCurFrameIdx],pDecInfo->vbMVVaddr[fbcCurFrameIdx]);
-                pDecInfo->vbDevMV[fbcCurFrameIdx].size = 0;
+            if(pDecInfo->vbMV[fbcCurFrameIdx].size > 0) {
+                vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbMV[fbcCurFrameIdx]);
+                pDecInfo->vbMV[fbcCurFrameIdx].size = 0;
             }
         }
         break;
@@ -2730,17 +2734,10 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
             Uint32 fbcCurFrameIdx = *(Uint32*)param;
             Uint32 size;
             size          = WAVE5_DEC_VP9_MVCOL_BUF_SIZE(pDecInfo->initialInfo.picWidth, pDecInfo->initialInfo.picHeight);
-            pDecInfo->vbDevMV[fbcCurFrameIdx].u.device.device_addr = 0;
-            pDecInfo->vbDevMV[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;   /* 4096 is a margin */
-            bm_free_mem(bm_handle,  pDecInfo->vbDevMV[fbcCurFrameIdx],pDecInfo->vbMVVaddr[fbcCurFrameIdx]);
-            if(bmvpu_malloc_device_byte_heap(bm_handle,&pDecInfo->vbDevMV[fbcCurFrameIdx],pDecInfo->vbDevMV[fbcCurFrameIdx].size,HEAP_MASK,1)!=BM_SUCCESS)
+            pDecInfo->vbMV[fbcCurFrameIdx].phys_addr = 0;
+            pDecInfo->vbMV[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;   /* 4096 is a margin */
+            if(vdi_allocate_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbMV[fbcCurFrameIdx]) < 0)
                 return RETCODE_INSUFFICIENT_RESOURCE;
-// #ifndef BM_PCIE_MODE
-//             bm_mem_mmap_device_mem_no_cache(bm_handle,&pDecInfo->vbDevMV[fbcCurFrameIdx],&pDecInfo->vbMVVaddr[fbcCurFrameIdx]);
-// #else
-//             pDecInfo->vbMVVaddr[fbcCurFrameIdx]=0xDEADBEEFl;
-// #endif
-            bm_vdi_mmap(bm_handle,&pDecInfo->vbDevMV[fbcCurFrameIdx],&pDecInfo->vbMVVaddr[fbcCurFrameIdx]);
         }
         break;
     case DEC_ALLOC_FBC_Y_TABLE_BUFFER:
@@ -2749,17 +2746,10 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
             Uint32 size;
             size        = WAVE5_FBC_LUMA_TABLE_SIZE(VPU_ALIGN64(pDecInfo->initialInfo.picWidth), VPU_ALIGN64(pDecInfo->initialInfo.picHeight));
             size        = VPU_ALIGN16(size);
-            pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx].u.device.device_addr = 0;
-            pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;
-            bm_free_mem(bm_handle,  pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx],pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]);
-            if(bmvpu_malloc_device_byte_heap(bm_handle,&pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx],pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx].size,HEAP_MASK,1)!=BM_SUCCESS)
+            pDecInfo->vbFbcYTbl[fbcCurFrameIdx].phys_addr = 0;
+            pDecInfo->vbFbcYTbl[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;
+            if(vdi_allocate_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[fbcCurFrameIdx]) < 0)
                 return RETCODE_INSUFFICIENT_RESOURCE;
-// #ifndef BM_PCIE_MODE
-//             bm_mem_mmap_device_mem_no_cache(bm_handle,&pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx],&pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]);
-// #else
-//             pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]=0xDEADBEEFl;
-// #endif
-            bm_vdi_mmap(bm_handle,&pDecInfo->vbDevFbcYTbl[fbcCurFrameIdx],&pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]);
         }
         break;
     case DEC_ALLOC_FBC_C_TABLE_BUFFER:
@@ -2768,17 +2758,10 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
             Uint32 size;
             size        = WAVE5_FBC_CHROMA_TABLE_SIZE(VPU_ALIGN64(pDecInfo->initialInfo.picWidth), VPU_ALIGN64(pDecInfo->initialInfo.picHeight));
             size        = VPU_ALIGN16(size);
-            pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx].u.device.device_addr = 0;
-            pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;
-            bm_free_mem(bm_handle,  pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx],pDecInfo->vbFbcCTblVaddr[fbcCurFrameIdx]);
-            if(bmvpu_malloc_device_byte_heap(bm_handle,&pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx],pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx].size,HEAP_MASK,1)!=BM_SUCCESS)
+            pDecInfo->vbFbcCTbl[fbcCurFrameIdx].phys_addr = 0;
+            pDecInfo->vbFbcCTbl[fbcCurFrameIdx].size      = ((size+4095)&~4095)+4096;
+            if(vdi_allocate_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[fbcCurFrameIdx]) < 0)
                 return RETCODE_INSUFFICIENT_RESOURCE;
-// #ifndef BM_PCIE_MODE
-//             bm_mem_mmap_device_mem_no_cache(bm_handle,&pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx],&pDecInfo->vbFbcCTblVaddr[fbcCurFrameIdx]);
-// #else
-//             pDecInfo->vbFbcYTblVaddr[fbcCurFrameIdx]=0xDEADBEEFl;
-// #endif
-            bm_vdi_mmap(bm_handle,&pDecInfo->vbDevFbcCTbl[fbcCurFrameIdx],&pDecInfo->vbFbcCTblVaddr[fbcCurFrameIdx]);
         }
         break;
     case GET_BANDWIDTH_REPORT:
@@ -2815,7 +2798,6 @@ RetCode  VPU_DecAllocateFrameBuffer(DecHandle handle, FrameBufferAllocInfo info,
     if (!frameBuffer) {
         return RETCODE_INVALID_PARAM;
     }
-    //bm_handle= bmvpu_dec_get_bmlib_handle(handle->coreIdx);
     if (info.type == FB_TYPE_PPU) {
         if (pDecInfo->numFrameBuffers == 0)
             return RETCODE_WRONG_CALL_SEQUENCE;
@@ -2826,7 +2808,7 @@ RetCode  VPU_DecAllocateFrameBuffer(DecHandle handle, FrameBufferAllocInfo info,
         gdiIndex = pDecInfo->numFbsForDecoding;
         ret = ProductVpuAllocateFramebuffer(
             pCodecInst,  frameBuffer, (TiledMapType)info.mapType, (Int32)info.num,
-            info.stride, info.height, info.format, info.cbcrInterleave, info.nv21, info.endian, &pDecInfo->vbDevPPU, gdiIndex, FB_TYPE_PPU);
+            info.stride, info.height, info.format, info.cbcrInterleave, info.nv21, info.endian, &pDecInfo->vbPPU, gdiIndex, FB_TYPE_PPU);
     }
     else if (info.type == FB_TYPE_CODEC) {
         gdiIndex = 0;
@@ -2835,8 +2817,9 @@ RetCode  VPU_DecAllocateFrameBuffer(DecHandle handle, FrameBufferAllocInfo info,
         }
         ret = ProductVpuAllocateFramebuffer(
             pCodecInst, frameBuffer, (TiledMapType)info.mapType, (Int32)info.num,
-            info.stride, info.height, info.format, info.cbcrInterleave, info.nv21, info.endian, &pDecInfo->vbDevFrame, gdiIndex, (FramebufferAllocType)info.type);
-        pDecInfo->mapCfg.tiledBaseAddr = pDecInfo->vbDevFrame.u.device.device_addr ;
+            info.stride, info.height, info.format, info.cbcrInterleave, info.nv21, info.endian, &pDecInfo->vbFrame, gdiIndex, (FramebufferAllocType)info.type);
+
+        pDecInfo->mapCfg.tiledBaseAddr = pDecInfo->vbFrame.phys_addr;
     }
 
     return ret;
@@ -3035,16 +3018,16 @@ RetCode VPU_EncRegisterFrameBuffer(EncHandle handle, FrameBuffer* bufArray, int 
     pEncInfo = &pCodecInst->CodecInfo->encInfo;
     openParam = &pEncInfo->openParam;
 
-    if (pEncInfo->stride) 
+    if (pEncInfo->stride)
         return RETCODE_CALLED_BEFORE;
 
-    if (!pEncInfo->initialInfoObtained) 
+    if (!pEncInfo->initialInfoObtained)
         return RETCODE_WRONG_CALL_SEQUENCE;
 
-    if (num < pEncInfo->initialInfo.minFrameBufferCount) 
+    if (num < pEncInfo->initialInfo.minFrameBufferCount)
         return RETCODE_INSUFFICIENT_FRAME_BUFFERS;
 
-    if (stride == 0 || (stride % 8 != 0) || stride < 0) 
+    if (stride == 0 || (stride % 8 != 0) || stride < 0)
         return RETCODE_INVALID_STRIDE;
 
     if (height == 0 || height < 0)
@@ -3097,7 +3080,7 @@ RetCode VPU_EncRegisterFrameBuffer(EncHandle handle, FrameBuffer* bufArray, int 
         }
         ret = ProductVpuAllocateFramebuffer(
             pCodecInst, fb, (TiledMapType)mapType, num, stride, height, (FrameBufferFormat)openParam->srcFormat,
-            openParam->cbcrInterleave, FALSE, openParam->frameEndian, (bm_device_mem_t*)&pEncInfo->vbFrame, 0, FB_TYPE_CODEC);
+            openParam->cbcrInterleave, FALSE, openParam->frameEndian, &pEncInfo->vbFrame, 0, FB_TYPE_CODEC);
         if (ret != RETCODE_SUCCESS) {
             SetPendingInst(pCodecInst->coreIdx, 0);
             LeaveLock(pCodecInst->coreIdx);
@@ -3247,7 +3230,7 @@ RetCode VPU_EncUpdateBitstreamBuffer(
 
 RetCode VPU_EncStartOneFrame(
     EncHandle handle,
-    EncParam * param 
+    EncParam * param
     )
 {
     CodecInst*          pCodecInst;
@@ -3367,13 +3350,13 @@ RetCode VPU_EncGiveCommand(
 
     pCodecInst = handle;
     pEncInfo = &pCodecInst->CodecInfo->encInfo;
-    switch (cmd) 
+    switch (cmd)
     {
     case ENABLE_ROTATION :
         {
-            pEncInfo->rotationEnable = 1;            
+            pEncInfo->rotationEnable = 1;
         }
-        break;        
+        break;
     case DISABLE_ROTATION :
         {
             pEncInfo->rotationEnable = 0;
@@ -3386,11 +3369,11 @@ RetCode VPU_EncGiveCommand(
         break;
     case DISABLE_MIRRORING :
         {
-            pEncInfo->mirrorEnable = 0;            
+            pEncInfo->mirrorEnable = 0;
         }
         break;
     case SET_MIRROR_DIRECTION :
-        {    
+        {
             MirrorDirection mirDir;
 
             if (param == 0) {
@@ -3402,7 +3385,7 @@ RetCode VPU_EncGiveCommand(
             }
             pEncInfo->mirrorDirection = mirDir;
         }
-        break;        
+        break;
     case SET_ROTATION_ANGLE :
         {
             int angle;
@@ -3418,7 +3401,7 @@ RetCode VPU_EncGiveCommand(
             if (pEncInfo->initialInfoObtained && (angle == 90 || angle ==270)) {
                 return RETCODE_INVALID_PARAM;
             }
-            pEncInfo->rotationAngle = angle;            
+            pEncInfo->rotationAngle = angle;
         }
         break;
     case SET_CACHE_CONFIG:
@@ -3437,13 +3420,13 @@ RetCode VPU_EncGiveCommand(
 
             if (param == 0) {
                 return RETCODE_INVALID_PARAM;
-            }                
+            }
             encHeaderParam = (EncHeaderParam *)param;
             if (pCodecInst->codecMode == MP4_ENC ) {
                 if (!( VOL_HEADER<=encHeaderParam->headerType && encHeaderParam->headerType <= VIS_HEADER)) {
                     return RETCODE_INVALID_PARAM;
                 }
-            } 
+            }
             else if  (pCodecInst->codecMode == AVC_ENC) {
                 if (!( SPS_RBSP<=encHeaderParam->headerType && encHeaderParam->headerType <= PPS_RBSP_MVC)) {
                     return RETCODE_INVALID_PARAM;
@@ -3454,7 +3437,7 @@ RetCode VPU_EncGiveCommand(
                     return RETCODE_INVALID_PARAM;
                 }
                 if (pEncInfo->ringBufferEnable == 0 ) {
-                    if (encHeaderParam->buf % 16 || encHeaderParam->size == 0) 
+                    if (encHeaderParam->buf % 16 || encHeaderParam->size == 0)
                         return RETCODE_INVALID_PARAM;
                 }
                 if (encHeaderParam->headerType & CODEOPT_ENC_VCL)   // ENC_PUT_VIDEO_HEADER encode only non-vcl header.
@@ -3478,21 +3461,21 @@ RetCode VPU_EncGiveCommand(
             else {
                 return GetEncHeader(handle, encHeaderParam);
             }
-        }        
+        }
     case ENC_SET_PARAM:
         {
             if (param == 0) {
                 return RETCODE_INVALID_PARAM;
             }
             pEncInfo->openParam = *(EncOpenParam *)param;
- 
+
             if (pCodecInst->codecMode != AVC_ENC)
                 return RETCODE_INVALID_COMMAND;
- 
+
             ret = EncParaSet(handle, SPS_RBSP);
             if (ret != RETCODE_SUCCESS)
                 return ret;
- 
+
             ret = EncParaSet(handle, PPS_RBSP);
 			if (ret != RETCODE_SUCCESS)
                 return ret;
@@ -3507,7 +3490,7 @@ RetCode VPU_EncGiveCommand(
             if (*pGopNumber < 0)
                 return RETCODE_INVALID_PARAM;
             pEncInfo->openParam.gopSize = *pGopNumber;
-            SetGopNumber(handle, (Uint32 *)pGopNumber);        
+            SetGopNumber(handle, (Uint32 *)pGopNumber);
         }
         break;
     case ENC_SET_INTRA_QP:
@@ -3517,16 +3500,16 @@ RetCode VPU_EncGiveCommand(
                 return RETCODE_INVALID_COMMAND;
             }
             if (pCodecInst->codecMode == MP4_ENC)
-            {    
+            {
                 if(*pIntraQp<1 || *pIntraQp>31)
                     return RETCODE_INVALID_PARAM;
             }
             if (pCodecInst->codecMode == AVC_ENC)
-            {    
+            {
                 if(*pIntraQp<0 || *pIntraQp>51)
                     return RETCODE_INVALID_PARAM;
             }
-            SetIntraQp(handle, (Uint32 *)pIntraQp);        
+            SetIntraQp(handle, (Uint32 *)pIntraQp);
         }
         break;
     case ENC_SET_BITRATE:
@@ -3540,7 +3523,7 @@ RetCode VPU_EncGiveCommand(
                     return RETCODE_INVALID_PARAM;
                 }
             }
-            SetBitrate(handle, (Uint32 *)pBitrate);        
+            SetBitrate(handle, (Uint32 *)pBitrate);
         }
         break;
     case ENC_SET_FRAME_RATE:
@@ -3553,13 +3536,13 @@ RetCode VPU_EncGiveCommand(
             if (*pFramerate <= 0) {
                 return RETCODE_INVALID_PARAM;
             }
-            SetFramerate(handle, (Uint32 *)pFramerate);        
+            SetFramerate(handle, (Uint32 *)pFramerate);
         }
         break;
     case ENC_SET_INTRA_MB_REFRESH_NUMBER:
         {
             int *pIntraRefreshNum =(int *)param;
-            SetIntraRefreshNum(handle, (Uint32 *)pIntraRefreshNum); 
+            SetIntraRefreshNum(handle, (Uint32 *)pIntraRefreshNum);
         }
         break;
 
@@ -3606,16 +3589,16 @@ RetCode VPU_EncGiveCommand(
                 pEncInfo->secAxiInfo.u.wave.useEncRdoEnable = secAxiUse.u.wave.useEncRdoEnable;
                 pEncInfo->secAxiInfo.u.wave.useEncLfEnable  = secAxiUse.u.wave.useEncLfEnable;
             }
-            else { // coda9 or coda7q or ... 
+            else { // coda9 or coda7q or ...
                 pEncInfo->secAxiInfo.u.coda9.useBitEnable  = secAxiUse.u.coda9.useBitEnable;
                 pEncInfo->secAxiInfo.u.coda9.useIpEnable   = secAxiUse.u.coda9.useIpEnable;
                 pEncInfo->secAxiInfo.u.coda9.useDbkYEnable = secAxiUse.u.coda9.useDbkYEnable;
                 pEncInfo->secAxiInfo.u.coda9.useDbkCEnable = secAxiUse.u.coda9.useDbkCEnable;
                 pEncInfo->secAxiInfo.u.coda9.useOvlEnable  = secAxiUse.u.coda9.useOvlEnable;
-                pEncInfo->secAxiInfo.u.coda9.useBtpEnable  = secAxiUse.u.coda9.useBtpEnable;            
-            }        
+                pEncInfo->secAxiInfo.u.coda9.useBtpEnable  = secAxiUse.u.coda9.useBtpEnable;
+            }
         }
-        break;        
+        break;
     case ENC_CONFIG_SUB_FRAME_SYNC: // for CODA9
         {
             EncSubFrameSyncConfig *subFrameSyncConfig;
@@ -3670,7 +3653,7 @@ RetCode VPU_EncGiveCommand(
         }
     case ENABLE_LOGGING:
         {
-            pCodecInst->loggingEnable = 1;            
+            pCodecInst->loggingEnable = 1;
         }
         break;
     case DISABLE_LOGGING:
@@ -3746,14 +3729,14 @@ RetCode VPU_EncAllocateFrameBuffer(EncHandle handle, FrameBufferAllocInfo info, 
         gdiIndex = pEncInfo->numFrameBuffers;
         ret = ProductVpuAllocateFramebuffer(pCodecInst, frameBuffer, (TiledMapType)info.mapType, (Int32)info.num,
                                             info.stride, info.height, info.format, info.cbcrInterleave, info.nv21,
-                                            info.endian, (bm_device_mem_t*)&pEncInfo->vbPPU, gdiIndex, (FramebufferAllocType)info.type);
+                                            info.endian, &pEncInfo->vbPPU, gdiIndex, (FramebufferAllocType)info.type);
     }//this is for compile,can not guaranteed the operation
     else if (info.type == FB_TYPE_CODEC) {
         gdiIndex = 0;
         pEncInfo->frameAllocExt = frameBuffer[0].updateFbInfo;
         ret = ProductVpuAllocateFramebuffer(
             pCodecInst, frameBuffer, (TiledMapType)info.mapType, (Int32)info.num,
-            info.stride, info.height, info.format, info.cbcrInterleave, FALSE, info.endian, (bm_device_mem_t*)&pEncInfo->vbFrame, gdiIndex, (FramebufferAllocType)info.type);
+            info.stride, info.height, info.format, info.cbcrInterleave, FALSE, info.endian, &pEncInfo->vbFrame, gdiIndex, (FramebufferAllocType)info.type);
             //this is for compile,can not guaranteed the operation
     }
     else {
@@ -3824,7 +3807,7 @@ RetCode VPU_EncCompleteSeqInit(EncHandle handle, EncInitialInfo * info)
     else {
         if (pCodecInst != GetPendingInst(pCodecInst->coreIdx)) {
             SetPendingInst(pCodecInst->coreIdx, 0);
-            LeaveLock(pCodecInst->coreIdx);    
+            LeaveLock(pCodecInst->coreIdx);
             return RETCODE_WRONG_CALL_SEQUENCE;
         }
     }
@@ -4035,154 +4018,5 @@ void VPU_PrintW5AllReg(int coreIdx)
     printf("===========================\n");
 
     return;
-}
-
-
-
- void bmvpu_dec_load_bmlib_handle(int coreIdx){
-    if (coreIdx > MAX_NUM_VPU_CORE)
-    {
-         VLOG(INFO,"soc_idx excess MAX_SOC_NUM!\n");
-        exit(0);
-    }
-    int soc_idx= coreIdx/MAX_NUM_VPU_CORE_CHIP;
-    bm_handle_lock();
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        g_bm_handle[soc_idx].count += 1;
-        bm_handle_unlock();
-        return ;
-    }
-
-    bm_handle_t handle;
-    bm_status_t ret = bm_dev_request(&handle, soc_idx);
-    if (ret != BM_SUCCESS) {
-      VLOG(INFO,"Create Bm Handle Failed\n");
-        bm_handle_unlock();
-      exit(0);
-    }
-    g_bm_handle[soc_idx].count = 1;
-    g_bm_handle[soc_idx].bm_handle = handle;
-    bm_handle_unlock();
-    return ;
-}
-
-/*
- * If a bm_handle_t on this soc already exists, then the bm_handle_t's reference count -1.
- * After that, if bm_handle_t's reference count is 0, free it(bm_dev_free),
- * otherwise do nothing.
- * This function is only be called by bmvpu_enc_unload().
- */
-void bmvpu_dec_unload_bmlib_handle(int coreIdx){
-    if (coreIdx > MAX_NUM_VPU_CORE)
-    {
-      VLOG(ERR,"soc_idx excess MAX_SOC_NUM!\n");
-      exit(0);
-    }
-    int soc_idx= coreIdx/MAX_NUM_VPU_CORE_CHIP;
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        bm_handle_lock();
-        if (g_bm_handle[soc_idx].count <= 1)
-        {
-            bm_dev_free(g_bm_handle[soc_idx].bm_handle);
-            g_bm_handle[soc_idx].count = 0;
-            g_bm_handle[soc_idx].bm_handle = 0;
-            VLOG(INFO,"Free bm_handle for decode on soc %d \n", soc_idx);
-        }
-        else
-        {
-            g_bm_handle[soc_idx].count -= 1;
-            VLOG(INFO,"The bm_handle for decode on soc is used by %d users \n", g_bm_handle[soc_idx].count);
-        }
-        bm_handle_unlock();
-    }
-    else
-        VLOG(ERR,"Bm_handle for encode on soc %d not exist \n", soc_idx);
-}
-
-
-
-bm_handle_t bmvpu_dec_get_bmlib_handle(int coreIdx)
-{
-    bm_handle_t handle = 0;
-    int soc_idx= coreIdx/MAX_NUM_VPU_CORE_CHIP;
-    if (coreIdx > MAX_NUM_VPU_CORE)
-    {
-       VLOG(ERR,"soc_idx excess MAX_SOC_NUM!\n");
-        exit(0);
-    }
-    bm_handle_lock();
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        handle = g_bm_handle[soc_idx].bm_handle;
-        bm_handle_unlock();
-        //VLOG(ERR,"core_idx=%d,bm_handle[soc_idx].bm_handle=%p\n",pcie_id,handle);
-        return handle;
-    }
-    else
-    {
-        bm_handle_unlock();
-        VLOG(ERR,"There is not bmlib_handle on soc %d, This function should be called after bmvpu_dec_load()! \n",soc_idx);
-        return handle;
-    }
-}
-
-
-
-int bmvpu_malloc_device_byte_heap(bm_handle_t bm_handle, bm_device_mem_t *pmem, unsigned int size, int heap_id_mask, int high_bit_first)
-{
-    int ret = 0;
-    int i = 0;
-    unsigned int heap_num = 0;
-    ret = bm_get_gmem_total_heap_num(bm_handle, &heap_num);
-    if (ret != 0)
-    {
-        VLOG(ERR,"bmvpu_malloc_device_byte_heap failed!\n");
-        return -1;
-    }
-
-    int available_heap_mask = 0;
-    for (i=0; i<heap_num; i++){
-        available_heap_mask = available_heap_mask | (0x1 << i);
-    }
-
-    int enable_heap_mask = available_heap_mask & heap_id_mask;
-    if (enable_heap_mask == 0x0)
-    {
-        VLOG(ERR,"bmvpu_malloc_device_byte_heap failed!\n");
-        return -1;
-    }
-    if (high_bit_first)
-    {
-        for (i=(heap_num-1); i>=0; i--)
-        {
-            if ((enable_heap_mask & (0x1<<i)))
-            {
-                ret = bm_malloc_device_byte_heap(bm_handle, pmem, i, size);
-                if (ret != 0)
-                {
-                    VLOG(ERR,"bmvpu_malloc_device_byte_heap failed!\n");
-                }
-                return ret;
-            }
-        }
-    }
-    else
-    {
-        for (i=0; i<heap_num; i++)
-        {
-            if ((enable_heap_mask & (0x1<<i)))
-            {
-                ret = bm_malloc_device_byte_heap(bm_handle, pmem, i, size);
-                if (ret != 0)
-                {
-                    VLOG(ERR,"bmvpu_malloc_device_byte_heap failed!\n");
-                }
-                return ret;
-            }
-        }
-    }
-    return ret;
 }
 

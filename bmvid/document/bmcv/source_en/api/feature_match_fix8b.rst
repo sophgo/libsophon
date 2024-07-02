@@ -3,6 +3,12 @@ bmcv_feature_match
 
 The interface is used to compare the feature points obtained from the network (int8 format) with the feature points in the database (int8 format),and output the best matching top-k.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

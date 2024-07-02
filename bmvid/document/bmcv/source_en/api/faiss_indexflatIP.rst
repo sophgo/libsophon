@@ -3,6 +3,12 @@ bmcv_faiss_indexflatIP
 
 This interface is used to calculate inner product distance between query vectors and database vectors, output the top K (sort_cnt)  IP-values and the corresponding indices, return BM_SUCCESS if succeed.
 
+
+**Processor model support**
+
+This interface only supports BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c++
@@ -95,7 +101,7 @@ This interface is used to calculate inner product distance between query vectors
 
 4. The larger the inner product values of the query vector and the database vector, the higher the similarity of the two vectors. Therefore, the inner product values are sorted in descending order in the process of TopK.
 
-5. The interface is used for Faiss::IndexFlatIP.search() and implemented on BM1684X. According to the continuous memory of TPU on BM1684X, we can query about 512 inputs of 256 dimensions at a time on a single chip if the database is about 100W.
+5. The interface is used for Faiss::IndexFlatIP.search() and implemented on BM1684X. According to the continuous memory of Tensor Computing Processor on BM1684X, we can query about 512 inputs of 256 dimensions at a time on a single processor if the database is about 100W.
 
 
 **Sample code**

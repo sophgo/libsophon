@@ -32,9 +32,11 @@
 #define WAVE5_SYSERR_ACCESS_VIOLATION_HW                                0x00000040
 #define WAVE5_RESULT_NOT_READY                                          0x00000800
 #define WAVE5_VPU_STILL_RUNNING                                         0x00001000
+#define WAVE5_VPU_UNKNOWN_CMD                                           0x00002000
 #define WAVE5_INSTANCE_DESTROYED                                        0x00004000
 #define WAVE5_SYSERR_DEC_VLC_BUF_FULL                                   0x00010000
 #define WAVE5_SYSERR_WATCHDOG_TIMEOUT                                   0x00020000
+#define WAVE5_INVALID_TASK_BUF                                          0x00040000
 #define WAVE5_ERROR_FW_FATAL                                            0x00200000
 
 

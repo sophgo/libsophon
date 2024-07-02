@@ -151,7 +151,7 @@ Int32 LoadFirmware(
                 char *ptr = strrchr(map->l_name, '/');
                 if(ptr) {
                     int name_len = ptr - map->l_name + 1;
-                    printf("libbmvideo.so addr : %s, name_len: %d\n", map->l_name, name_len);
+                    printf("so addr : %s, name_len: %d\n", map->l_name, name_len);
 
                     if(name_len > 0) {
                         memset(addr, 0, 255);
@@ -163,13 +163,13 @@ Int32 LoadFirmware(
                     }
                 }
                 else {
-                    VLOG(ERR, "can't get the absolute pathname of libbmvideo.so\n");
+                    VLOG(ERR, "can't get the absolute pathname of so\n");
                     dlclose(handle);
                     return -1;
                 }
             }
             else {
-                printf("can't get addr of libbmvideo.so file.\n");
+                printf("can't get addr of fw file.\n");
                 dlclose(handle);
                 return -1;
             }
@@ -202,13 +202,13 @@ Int32 LoadFirmware(
 
 	        if (!ptr)
 	        {
-	            printf("can't get vpu_firmware path by libbmvideo.dll\n");
+	            printf("can't get vpu_firmware path\n");
 	        }
 
 	        dirname_len = strlen(strDLLPath1) - strlen(ptr) + 1;
 	        if (dirname_len <= 0)
 	        {
-	            printf("can't get vpu_firmware path by libbmvideo.dll\n");
+	            printf("can't get vpu_firmware path\n");
 	        }
 	        memset(fw_path, 0, 512);
 	        strncpy(fw_path, strDLLPath1, dirname_len);
@@ -980,9 +980,8 @@ void ChangePathStyle(
 }
 
 void ReleaseVideoMemory(
-    bm_handle_t     handle,
     Uint32          coreIndex,
-    bm_device_mem_t*memoryArr,
+    vpu_buffer_t*   memoryArr,
     Uint32          count
     )
 {
@@ -992,19 +991,20 @@ void ReleaseVideoMemory(
     for (idx=0; idx<count; idx++) {
         if (memoryArr[idx].size)
         {
-            bm_free_device(handle,memoryArr[idx]);
+            vdi_free_dma_memory(coreIndex, &memoryArr[idx]);
         }
     }
     vdi_unlock(coreIndex);
 }
 
+#define FRAME_BUFFER_FROM_USER  1
 BOOL AllocateDecFrameBuffer(
     DecHandle       decHandle,
     TestDecConfig*  config,
     Uint32          tiledFbCount,
     Uint32          linearFbCount,
     FrameBuffer*    retFbArray,
-    bm_device_mem_t*retFbAddrs,
+    vpu_buffer_t*   retFbAddrs,
     Uint32*         retStride,
     int             enable_cache
     )
@@ -1017,19 +1017,16 @@ BOOL AllocateDecFrameBuffer(
     DecInitialInfo          seqInfo;
     FrameBufferAllocInfo    fbAllocInfo;
     RetCode                 ret;
-    bm_device_mem_t*        pvb;
-    unsigned long long      pvbVaddr;
+    vpu_buffer_t*           pvb;
     size_t                  framebufStride;
     size_t                  framebufHeight;
     Uint32                  productId;
     DRAMConfig*             pDramCfg        = NULL;
     DRAMConfig              dramCfg         = {0};
-    bm_handle_t             bm_handle;
 
     coreIndex = VPU_HANDLE_CORE_INDEX(decHandle);
     productId = VPU_HANDLE_PRODUCT_ID(decHandle);
     VPU_DecGiveCommand(decHandle, DEC_GET_SEQ_INFO, (void*)&seqInfo);
-    bm_handle= bmvpu_dec_get_bmlib_handle(coreIndex);
     if (productId == PRODUCT_ID_960) {
         pDramCfg = &dramCfg;
         ret = VPU_DecGiveCommand(decHandle, GET_DRAM_CONFIG, pDramCfg);
@@ -1076,28 +1073,27 @@ BOOL AllocateDecFrameBuffer(
     fbAllocInfo.num             = tiledFbCount;
     fbAllocInfo.endian          = VDI_128BIT_LITTLE_ENDIAN;    // FBC endian is fixed.
     fbAllocInfo.type            = FB_TYPE_CODEC;
-    osal_memset((void*)retFbAddrs, 0x00, sizeof(bm_device_mem_t)*totalFbCount);
+
+    if(config->framebuf_from_user != FRAME_BUFFER_FROM_USER)
+        osal_memset((void*)retFbAddrs, 0x00, sizeof(vpu_buffer_t)*totalFbCount);
     APIDPRINT("ALLOC MEM - FBC data\n");
     vdi_lock(coreIndex);
     for (idx=0; idx<tiledFbCount; idx++) {
         pvb = &retFbAddrs[idx];
-        pvb->size = framebufSize;
-        if(bmvpu_malloc_device_byte_heap(bm_handle,pvb,framebufSize,HEAP_MASK,1)!=BM_SUCCESS)
+        if(config->framebuf_from_user != FRAME_BUFFER_FROM_USER)
         {
-            vdi_unlock(coreIndex);
-            VLOG(ERR, "coreIdx:%d,%s:%d fail to allocate frame buffer\n",coreIndex, __FUNCTION__, __LINE__);
-            ReleaseVideoMemory(bm_handle,coreIndex, retFbAddrs, totalFbCount);
+            pvb->size = framebufSize;
+            if (vdi_allocate_dma_memory(coreIndex, pvb) < 0)
+            {
+                vdi_unlock(coreIndex);
+                VLOG(ERR, "coreIdx:%d,%s:%d fail to allocate frame buffer\n",coreIndex, __FUNCTION__, __LINE__);
+                ReleaseVideoMemory(coreIndex, retFbAddrs, totalFbCount);
 
-            return FALSE;
+                return FALSE;
+            }
         }
-        bm_vdi_mmap(bm_handle,pvb,(unsigned long long *)&pvbVaddr);
-#ifndef BM_PCIE_MODE
-        retFbArray[idx].bufYVaddr=(Uint64)pvbVaddr;
-#endif
-        decHandle->CodecInfo->decInfo.vpu_frame_buffer_vaddr[idx]=pvbVaddr;
-        decHandle->CodecInfo->decInfo.vpu_frame_buffer_vaddr_size[idx]=framebufSize;
 
-        retFbArray[idx].bufY  = pvb->u.device.device_addr;
+        retFbArray[idx].bufY  = pvb->phys_addr;
         retFbArray[idx].bufCb = (PhysicalAddress)-1;
         retFbArray[idx].bufCr = (PhysicalAddress)-1;
         retFbArray[idx].updateFbInfo = TRUE;
@@ -1110,7 +1106,7 @@ BOOL AllocateDecFrameBuffer(
         if ((ret=VPU_DecAllocateFrameBuffer(decHandle, fbAllocInfo, retFbArray)) != RETCODE_SUCCESS) {
             VLOG(ERR, "%s:%d failed to VPU_DecAllocateFrameBuffer(), ret(%d)\n",
                 __FUNCTION__, __LINE__, ret);
-            ReleaseVideoMemory(bm_handle,coreIndex,retFbAddrs,totalFbCount);
+            ReleaseVideoMemory(coreIndex,retFbAddrs,totalFbCount);
             return FALSE;
         }
     }
@@ -1161,22 +1157,20 @@ BOOL AllocateDecFrameBuffer(
         vdi_lock(coreIndex);
         for (idx=linearFbStartIdx; idx<totalFbCount; idx++) {
             pvb = &retFbAddrs[idx];
-            pvb->size = framebufSize;
-            if(bmvpu_malloc_device_byte_heap(bm_handle,pvb,pvb->size,HEAP_MASK,1)!=BM_SUCCESS)
+            pvb->enable_cache = 1;
+            if(config->framebuf_from_user != FRAME_BUFFER_FROM_USER)
             {
-                vdi_unlock(coreIndex);
-                VLOG(ERR, "%s:%d fail to allocate frame buffer\n", __FUNCTION__, __LINE__);
-                ReleaseVideoMemory(bm_handle,coreIndex,retFbAddrs, totalFbCount-idx);
-                return FALSE;
+                pvb->size = framebufSize;
+                if (vdi_allocate_dma_memory(coreIndex, pvb) < 0)
+                {
+                    vdi_unlock(coreIndex);
+                    VLOG(ERR, "%s:%d fail to allocate frame buffer\n", __FUNCTION__, __LINE__);
+                    ReleaseVideoMemory(coreIndex,retFbAddrs, totalFbCount);
+                    return FALSE;
+                }
             }
-            bm_vdi_mmap(bm_handle,pvb,(unsigned long long *)&pvbVaddr);
-#ifndef BM_PCIE_MODE
-            retFbArray[idx].bufYVaddr=(Uint64)pvbVaddr;
-#endif
-            decHandle->CodecInfo->decInfo.vpu_frame_buffer_vaddr[idx]=pvbVaddr;
-            decHandle->CodecInfo->decInfo.vpu_frame_buffer_vaddr_size[idx]=framebufSize;
 
-            retFbArray[idx].bufY  = pvb->u.device.device_addr;
+            retFbArray[idx].bufY  = pvb->phys_addr;
             retFbArray[idx].bufCb = (PhysicalAddress)-1;
             retFbArray[idx].bufCr = (PhysicalAddress)-1;
             retFbArray[idx].updateFbInfo = TRUE;
@@ -1195,7 +1189,7 @@ BOOL AllocateDecFrameBuffer(
         if (ret != RETCODE_SUCCESS) {
             VLOG(ERR, "%s:%d failed to VPU_DecAllocateFrameBuffer() ret:%d\n",
                 __FUNCTION__, __LINE__, ret);
-            ReleaseVideoMemory(bm_handle,coreIndex, retFbAddrs, totalFbCount);
+            ReleaseVideoMemory(coreIndex, retFbAddrs, totalFbCount);
             return FALSE;
         }
     }

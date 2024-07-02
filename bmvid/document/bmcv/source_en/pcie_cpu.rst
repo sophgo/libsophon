@@ -1,11 +1,11 @@
 PCIe CPU
 ==========
 
-For operations that are inconvenient to use TPU acceleration, the cooperation of CPU is required.
+For operations that are inconvenient to use Tensor Computing Processor acceleration, the cooperation of Processor is required.
 
-If it is SoC mode, the host side is the on-chip ARM A53 processor, which completes the CPU operation.
+If it is SoC mode, the host side is the on-chip ARM A53 processor, which completes the Processor operation.
 
-In case of PCIe mode, the host side is the user’s host, and the CPU operation can be completed at the host side or by using the on-chip ARM A53 processor. The two implementation methods have their own advantages and disadvantages: the former needs to carry input and output data between device and host, but the operation performance may be better than ARM, so users can choose the better method according to their own host processor performance, load and other actual conditions. It is the former by default. If you need to use an on-chip processor, you can turn it on in the following way.
+In case of PCIe mode, the host side is the user’s host, and the Processor operation can be completed at the host side or by using the on-chip ARM A53 processor. The two implementation methods have their own advantages and disadvantages: the former needs to carry input and output data between device and host, but the operation performance may be better than ARM, so users can choose the better method according to their own host processor performance, load and other actual conditions. It is the former by default. If you need to use an on-chip processor, you can turn it on in the following way.
 
 
 Preparatory Work
@@ -21,11 +21,11 @@ You need to set the path where these two files are located to the environment va
 
 $ export BMCV_CPU_KERNEL_PATH=/path/to/kernel_fils/
 
-All implementations of BMCV that require CPU operations are in the library libbmcv_cpu_func.so, you need to add the path of the file to the environment variable BMCV_CPU_KERNEL_PATH where the program runs, as follows:
+All implementations of BMCV that require Processor operations are in the library libbmcv_cpu_func.so, you need to add the path of the file to the environment variable BMCV_CPU_KERNEL_PATH where the program runs, as follows:
 
 $ export BMCV_CPU_LIB_PATH=/path/to/lib/
 
-At present, the APIs that require CPU participation are as follows. If the following APIs are not used, this function can be ignored.
+At present, the APIs that require Processor participation are as follows. If the following APIs are not used, this function can be ignored.
 
 +-----+-----------------------------------+
 | num |       API                         |

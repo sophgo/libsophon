@@ -1,6 +1,7 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_common_bm1684.h"
-
+#include "bmcv_bm1684x.h"
+#include "bmcv_internal.h"
 #include <cmath>
 #include <vector>
 #include <thread>
@@ -316,6 +317,40 @@ static bm_status_t bmcv_fft_1d_execute_bm1684(bm_handle_t handle,
     return ret;
 }
 
+static bm_status_t bmcv_fft_1d_execute_bm1684X(bm_handle_t handle,
+                                       bm_device_mem_t inputReal,
+                                       bm_device_mem_t inputImag,
+                                       bm_device_mem_t outputReal,
+                                       bm_device_mem_t outputImag,
+                                       const void *plan,
+                                       bool realInput,
+                                       int trans) {
+    bm_status_t ret = BM_SUCCESS;
+    sg_api_cv_fft_t api;
+    auto P = reinterpret_cast<const FFT1DPlan *>(plan);
+    api.XR = bm_mem_get_device_addr(inputReal);
+    api.XI = realInput ? 0 : bm_mem_get_device_addr(inputImag);
+    api.YR = bm_mem_get_device_addr(outputReal);
+    api.YI = bm_mem_get_device_addr(outputImag);
+    api.ER = bm_mem_get_device_addr(P->ER);
+    api.EI = bm_mem_get_device_addr(P->EI);
+    api.batch = P->batch;
+    api.len = P->L;
+    api.forward = P->forward ? 1 : 0;
+    api.realInput = realInput ? 1 : 0;
+    api.trans = trans;
+    for (size_t i = 0; i < P->factors.size(); ++i)
+        api.factors[i] = P->factors[i];
+    api.factorSize = static_cast<int>(P->factors.size());
+
+    ret = bm_tpu_kernel_launch(handle, "cv_fft", &api, sizeof(api));
+    if (BM_SUCCESS != ret) {
+        bmlib_log("FFT", BMLIB_LOG_ERROR, "fft sync api error\n");
+        return BM_ERR_FAILURE;
+    }
+    return ret;
+}
+
 static bm_status_t bmcv_fft_1d_execute(bm_handle_t handle,
                                        bm_device_mem_t inputReal,
                                        bm_device_mem_t inputImag,
@@ -324,13 +359,11 @@ static bm_status_t bmcv_fft_1d_execute(bm_handle_t handle,
                                        const void *plan,
                                        bool realInput,
                                        int trans) {
-   unsigned int chipid = 0x1686;
+    unsigned int chipid = 0x1686;
     bm_status_t ret = BM_SUCCESS;
-
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
-
     switch(chipid)
     {
 
@@ -345,9 +378,15 @@ static bm_status_t bmcv_fft_1d_execute(bm_handle_t handle,
                                         trans);
         break;
 
-      case 0x1686:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+    case 0x1686:
+        ret = bmcv_fft_1d_execute_bm1684X(handle, inputReal,
+                                        inputImag,
+                                        outputReal,
+                                        outputImag,
+                                        plan,
+
+                                        realInput,
+                                        trans);
         break;
 
       default:

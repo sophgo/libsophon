@@ -20,25 +20,25 @@ static bm_status_t bm1684_image_csc_convert_to_check(
     if (handle == NULL)
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     if (input == NULL || output == NULL)
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input or output is nullptr");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DATA;
     }
     for(int i = 0; i < img_num; i++){
         if(input[i].data_type != DATA_TYPE_EXT_1N_BYTE)
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         if(input[i].image_format != input[0].image_format)
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "input image list format must be the same %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
     }
     for(int i = 0; i < crop_num; i++){
@@ -46,30 +46,30 @@ static bm_status_t bm1684_image_csc_convert_to_check(
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         if(output[i].image_format < FORMAT_RGB_PLANAR || output[i].image_format > FORMAT_BGR_PLANAR)
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "output image format not supposted %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         if(output[i].image_format != output[0].image_format)
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "output image list format must be the same %s: %s: %d\n",
                     filename(__FILE__), __func__, __LINE__);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
     }
     if (padding_attr == NULL){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
             "padding_attr should not be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     if (convert_to_attr == NULL){
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
             "convert_to_attr should not be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     return ret;
 }
@@ -91,6 +91,7 @@ static bm_status_t bm1684_image_csc_convert_to(
     bm_status_t ret = BM_SUCCESS;
     int* crop_num_vec = NULL;
     bmcv_rect_t *crop_rect = NULL;
+    bmcv_copy_to_atrr_t copy_to_attr;
     if(crop_rect_ == NULL && crop_num_vec_ == NULL){
         crop_num = img_num;
     } else if (crop_rect_ != NULL && crop_num_vec_ != NULL){
@@ -102,7 +103,7 @@ static bm_status_t bm1684_image_csc_convert_to(
     } else {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
             "crop_num_vec or crop_rect should not be NULL err %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
 
     ret = bm1684_image_csc_convert_to_check(handle, img_num, crop_num, input, output, padding_attr, convert_to_attr);
@@ -138,13 +139,17 @@ static bm_status_t bm1684_image_csc_convert_to(
         }
     }
 
-    csc_matrix_t black_matrix;
-    bmcv_copy_to_atrr_t copy_to_attr;
-    memset(&black_matrix, 0, sizeof(csc_matrix_t));
-    ret = bm1684_vpp_csc_matrix_convert(handle, crop_num, input[0], output, CSC_USER_DEFINED_MATRIX, &black_matrix);
-    if(ret != BM_SUCCESS){
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "get black background failed %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-        goto fail1;
+    if(padding_attr[0].if_memset == 1){
+        csc_matrix_t black_matrix;
+        memset(&black_matrix, 0, sizeof(csc_matrix_t));
+        black_matrix.csc_add0 = ((int)padding_attr[0].padding_r) << 10;
+        black_matrix.csc_add1 = ((int)padding_attr[0].padding_g) << 10;
+        black_matrix.csc_add2 = ((int)padding_attr[0].padding_b) << 10;
+        ret = bm1684_vpp_csc_matrix_convert(handle, crop_num, input[0], output, CSC_USER_DEFINED_MATRIX, &black_matrix);
+        if(ret != BM_SUCCESS){
+            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_WARNING, "get black background failed %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+            goto fail1;
+        }
     }
     crop_idx = 0;
     for(int i = 0; i < img_num; i++){
@@ -200,6 +205,7 @@ bm_status_t bmcv_image_vpp_basic_v2(
 {
     bm_status_t ret = BM_SUCCESS;
     unsigned int chipid = BM1684X;
+    bm_handle_check_2(handle, *input, *output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
         return ret;
@@ -211,7 +217,7 @@ bm_status_t bmcv_image_vpp_basic_v2(
             break;
 
         default:
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_NOFEATURE;
             break;
     }
     return ret;
@@ -232,7 +238,7 @@ bm_status_t bmcv_image_csc_convert_to(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, *input, *output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
         return ret;
@@ -252,7 +258,7 @@ bm_status_t bmcv_image_csc_convert_to(
             break;
 
         default:
-            ret = BM_NOT_SUPPORTED;
+            ret = BM_ERR_NOFEATURE;
             break;
     }
 

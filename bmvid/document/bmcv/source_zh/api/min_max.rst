@@ -14,6 +14,10 @@ bmcv_min_max
                                  float *maxVal,
                                  int len);
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
 
 **输入参数说明：**
 

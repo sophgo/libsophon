@@ -4,6 +4,11 @@ bmcv_axpy
 This interface implements F = A * X + Y, where A is a constant of size n * c , and F , X , Y are all matrices of size n * c * h * w.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

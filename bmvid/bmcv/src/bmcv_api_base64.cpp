@@ -83,14 +83,14 @@ bm_status_t bmcv_base64_dec(bm_handle_t handle, bm_device_mem_t src,
 
     if (bm_mem_get_type(src) == BM_MEM_TYPE_DEVICE) {
         src_device = src;
-        src_device.u.device.device_addr 
+        src_device.u.device.device_addr
             = src.u.device.device_addr + len[0] - 2;
         src_device.size = 2;
         if (BM_SUCCESS !=bm_memcpy_d2s(handle,
             (void *)check_buf,
             src_device)) {
             BMCV_ERR_LOG("bm_memcpy_d2s when check len error\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         for (i = 0; i < 2; i++) {
             if(check_buf[i] == '=')
@@ -105,7 +105,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
 
     if (handle == NULL) {
         bmlib_log("BASE64", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     struct ce_base base;
     int fd;
@@ -130,12 +130,12 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
     ret = 0;
     if (fd < 0) {
         perror("open");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
 
     if (len > MAX_LEN) {
         printf("base64 lenth should be less than 128M!\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
 
     if (bm_mem_get_type(src) == BM_MEM_TYPE_SYSTEM)
@@ -145,9 +145,9 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
     if ((bm_mem_get_type(src) == BM_MEM_TYPE_DEVICE) &&
         len > MAX_LOOP_LEN) {
         printf("len of device_mem should be less than 3M!\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
-   
+
     while (len > 0) {
         if (len > MAX_LOOP_LEN) {
             loop_len = MAX_LOOP_LEN;
@@ -163,7 +163,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
                                       loop_len)) {
                 BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             if(BM_SUCCESS !=
                 bm_memcpy_s2d(handle,
@@ -173,7 +173,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
 
                 if(bm_mem_get_type(src) == BM_MEM_TYPE_SYSTEM){
                      bm_free_device(handle, src_buf_device);
-                     return BM_ERR_FAILURE;
+                     return BM_ERR_NOMEM;
                 }
 
             }
@@ -188,7 +188,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
                 if(bm_mem_get_type(src) == BM_MEM_TYPE_SYSTEM){
                      bm_free_device(handle, src_buf_device);
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
 
             }
         /* system to device for destination device ? */
@@ -207,7 +207,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
             }*/
         } else {
             dst_buf_device = dst;
-        }  
+        }
 
 #ifndef SOC_MODE
         base.src = (unsigned long long)bm_mem_get_device_addr(src_buf_device);
@@ -232,7 +232,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
 #endif
         if (ret < 0) {
             printf("ioctl failed!\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DEVNOTREADY;
         }
 
         if (bm_mem_get_type(dst) == BM_MEM_TYPE_SYSTEM) {
@@ -247,7 +247,7 @@ bm_status_t bmcv_base64_codec(bm_handle_t handle, bm_device_mem_t src,
                 if (bm_mem_get_type(dst) == BM_MEM_TYPE_SYSTEM) {
                     bm_free_device(handle, dst_buf_device);
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             bm_free_device(handle, dst_buf_device);
         }

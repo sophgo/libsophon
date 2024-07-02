@@ -13,6 +13,9 @@ bmcv_image_dct
                 bm_image output,
                 bool is_inversed);
 
+**处理器型号支持：**
+
+该接口仅支持BM1684。
 
 
 **输入参数说明：**

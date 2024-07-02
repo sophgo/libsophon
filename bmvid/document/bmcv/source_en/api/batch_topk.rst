@@ -3,6 +3,11 @@ bmcv_batch_topk
 Compute the largest or smallest k number in each db, and return the index.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

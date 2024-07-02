@@ -1,7 +1,9 @@
 #include <memory>
 #include <vector>
 #include <numeric>
+#include <stdio.h>
 #include "bmcv_api_ext.h"
+#include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 #include "device_mem_allocator.h"
 
@@ -9,17 +11,17 @@
 static bm_status_t check_image(bm_image input) {
     if (input.image_format != FORMAT_GRAY) {
         bmlib_log("DCT", BMLIB_LOG_ERROR, "input format only support gray!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.data_type != DATA_TYPE_EXT_FLOAT32) {
         bmlib_log("DCT", BMLIB_LOG_ERROR, "input data type only support float32!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     int stride[3];
     bm_image_get_stride(input, stride);
     if ((u32)stride[0] != input.width * sizeof(float)) {
         bmlib_log("DCT", BMLIB_LOG_ERROR, "stride[0] should equal to input.width*sizeof(float)!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -78,12 +80,12 @@ bm_status_t bmcv_dct_coeff(
         break;
 
       case 0x1686:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -190,12 +192,12 @@ static bm_status_t __bmcv_dct_inner(
         break;
 
       case 0x1686:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -209,6 +211,7 @@ bm_status_t bmcv_image_dct_with_coeff(
         bm_device_mem_t wcoeff,
         bm_image output
         ){
+    bm_handle_check_2(handle, input, output);
     return __bmcv_dct_inner(handle, input, 0, 1, hcoeff, wcoeff, output);
 }
 
@@ -219,5 +222,6 @@ bm_status_t bmcv_image_dct(
         bool is_inversed
         ){
     bm_device_mem_t dummy_mem;
+    bm_handle_check_2(handle, input, output);
     return __bmcv_dct_inner(handle, input, is_inversed, 0, dummy_mem, dummy_mem, output);
 }

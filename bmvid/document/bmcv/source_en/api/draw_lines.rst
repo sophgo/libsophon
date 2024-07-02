@@ -4,6 +4,11 @@ bmcv_image_draw_lines
 The function of drawing polygons can be implemented by drawing one or more lines on an image, it also can specify the color and width of lines.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

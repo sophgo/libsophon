@@ -77,7 +77,6 @@ set(SRCS
     ${PROJECT_ROOT}/video/encoder/bm_enc_api/src/encoder.c
     ${PROJECT_ROOT}/video/encoder/bm_enc_api/src/log.c
     ${PROJECT_ROOT}/video/encoder/bm_enc_api/src/misc.c
-    ${PROJECT_ROOT}/video/encoder/bm_enc_api/src/queue.c
 )
 
 add_library(libbmvpuapi SHARED ${SRCS})
@@ -90,6 +89,7 @@ target_link_libraries(libbmvpuapi-static PUBLIC ${SETUPAPILIB_LIBRARY} libbmvpul
 
 set(SRCSEXEC
     ${PROJECT_ROOT}/example/bmvpuenc.c
+    ${PROJECT_ROOT}/example/queue.c
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/windows/libusb-1.0.18/examples/getopt/getopt1.c
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/windows/libusb-1.0.18/examples/getopt/getopt.c
 )
@@ -102,7 +102,7 @@ install(TARGETS libbmvpuapi libbmvpuapi-static DESTINATION lib)
 
 if(WIN32)
 file(
-    COPY ./inc/bmqueue.h ./inc/bmvpuapi.h ./inc/bmvpuapi_common.h ./inc/bmvpuapi_enc.h
+    COPY ./inc/bm_vpuenc_interface.h
     DESTINATION ${CMAKE_INSTALL_PREFIX}/include
 )
 endif()

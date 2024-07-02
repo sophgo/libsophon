@@ -15,6 +15,8 @@
 #endif
 using namespace std;
 
+#define MAX_INPUT 4088
+
 struct thread_arg{
     int test_loop_times;
     int devid;
@@ -81,8 +83,8 @@ static int test_vpp_random(
 
   srand(seed);
 
-  src_w = rand() % 8185 + 8;
-  src_h = rand() % 8185 + 8;
+  src_w = rand() % MAX_INPUT + 8;
+  src_h = rand() % MAX_INPUT + 8;
   src_fmt = src_format[rand() % (sizeof(src_format)/sizeof(bm_image_format_ext))];
   dst_fmt = dst_format[rand() % (sizeof(dst_format)/sizeof(bm_image_format_ext))];
 

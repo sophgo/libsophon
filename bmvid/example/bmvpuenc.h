@@ -25,7 +25,7 @@
 #include <windows.h>
 #endif
 
-#include "bmvpuapi.h"
+#include "bm_vpuenc_interface.h"
 
 enum
 {
@@ -34,7 +34,7 @@ enum
     RETVAL_EOS = 2
 };
 
-static void logging_fn(BmVpuLogLevel level,
+static void logging_fn(BmVpuEncLogLevel level,
                        char const *file,
                        int const line,
                        char const *fn,
@@ -45,12 +45,12 @@ static void logging_fn(BmVpuLogLevel level,
     char const *lvlstr = "";
     switch (level)
     {
-    case BM_VPU_LOG_LEVEL_ERROR:   lvlstr = "ERROR";   break;
-    case BM_VPU_LOG_LEVEL_WARNING: lvlstr = "WARNING"; break;
-    case BM_VPU_LOG_LEVEL_INFO:    lvlstr = "INFO";    break;
-    case BM_VPU_LOG_LEVEL_DEBUG:   lvlstr = "DEBUG";   break;
-    case BM_VPU_LOG_LEVEL_TRACE:   lvlstr = "TRACE";   break;
-    case BM_VPU_LOG_LEVEL_LOG:     lvlstr = "LOG";     break;
+    case BMVPU_ENC_LOG_LEVEL_ERROR:   lvlstr = "ERROR";   break;
+    case BMVPU_ENC_LOG_LEVEL_WARNING: lvlstr = "WARNING"; break;
+    case BMVPU_ENC_LOG_LEVEL_INFO:    lvlstr = "INFO";    break;
+    case BMVPU_ENC_LOG_LEVEL_DEBUG:   lvlstr = "DEBUG";   break;
+    case BMVPU_ENC_LOG_LEVEL_TRACE:   lvlstr = "TRACE";   break;
+    case BMVPU_ENC_LOG_LEVEL_LOG:     lvlstr = "LOG";     break;
     default: break;
     }
 #ifdef __linux__

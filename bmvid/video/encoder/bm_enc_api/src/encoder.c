@@ -22,6 +22,8 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/file.h>
 #elif _WIN32
 #include <windows.h>
 #include  < MMSystem.h >
@@ -31,15 +33,9 @@
 #include <signal.h>     /* SIG_SETMASK */
 #include "bmvpu.h"
 
-#include "bmvpuapi.h"
-#include "bmvpuapi_internal.h"
+#include "bm_vpuenc_interface.h"
+#include "bm_vpuenc_internal.h"
 #define MAX_SOC_NUM 64
-typedef struct _G_bm_handle{
-    bm_handle_t bm_handle;
-    unsigned int count;
-} G_bm_handle;
-static G_bm_handle g_bm_handle[MAX_SOC_NUM] = { {0, 0} };
-#define HEAP_MASK 0x06
 
 #define VPU_ENC_BITSTREAM_BUFFER_SIZE (1024*1024*1)
 
@@ -56,7 +52,8 @@ typedef struct _BmVpuEncWriteContext {
     bmvpu_enc_handle_error_full(__FILE__, __LINE__, __func__, (MSG_START), (RET_CODE))
 
 #define BM_VPU_ENC_GET_BS_VA(BMVPUENC, BITSTREAM_PHYS_ADDR) \
-    (((BMVPUENC)->bs_virt_addr) + ((bm_pa_t)(BITSTREAM_PHYS_ADDR) - (bm_pa_t)((BMVPUENC)->bs_phys_addr)))
+    (((BMVPUENC)->bs_virt_addr) + ((bmvpu_phys_addr_t)(BITSTREAM_PHYS_ADDR) - (bmvpu_phys_addr_t)((BMVPUENC)->bs_phys_addr)))
+
 
 /* For BM1684 */
 #define MAX_NUM_VPU_CORE_CHIP     5
@@ -70,14 +67,11 @@ enum {
 };
 #define VID_OPEN_ENC_FLOCK_NAME "/tmp/vid_open_enc_global_flock"
 #ifdef __linux__
-
-static int bmhandle_atomic_lock = 0; /* atomic lock for bmlib_handle */
-static int bmve_atomic_lock = 0;
+// static int bmve_atomic_lock = 0;
 static __thread int s_vid_enc_open_flock_fd[MAX_SOC_NUM] = {[0 ... (MAX_SOC_NUM-1)] = -1};
 #elif _WIN32
 static  __declspec(thread) HANDLE s_vid_enc_open_flock_fd[MAX_SOC_NUM] = {  NULL };
 static  volatile long bmve_atomic_lock = 0;
-static  volatile long bmhandle_atomic_lock = 0;
 #endif
 
 #ifdef __linux__
@@ -86,6 +80,7 @@ static __thread sigset_t newmask[128];
 #endif
 
 #define TRY_OPEN_SEM_TIMEOUT 20
+
 void get_lock_timeout(int sec,int soc_idx)
 {
     char flock_name[255];
@@ -135,36 +130,6 @@ void unlock_flock(int soc_idx)
      }
 }
 
-
-
-static void bm_handle_lock()
-{
-#ifdef __linux__
-    // while (atomic_flag_test_and_set(&bmhandle_atomic_lock))
-    while (__atomic_test_and_set(&bmhandle_atomic_lock, __ATOMIC_SEQ_CST))
-    {
-        usleep(100);
-    }
-#endif
-#ifdef _WIN32
-    while (InterlockedCompareExchange(&bmhandle_atomic_lock, 1, 0)) {
-        Sleep(1);
-    }
-#endif
-}
-
-
-static void bm_handle_unlock()
-{
-#ifdef __linux__
-    // atomic_flag_clear(&bmhandle_atomic_lock);
-    __atomic_clear(&bmhandle_atomic_lock, __ATOMIC_SEQ_CST);
-#endif
-#ifdef _WIN32
-    InterlockedExchange(&bmhandle_atomic_lock, 0);
-#endif
-}
-
 static void bmvpu_enc_lock(int soc_idx)
 {
 #if __linux__
@@ -186,23 +151,7 @@ static void bmvpu_enc_unlock(int soc_idx)
 
 static int bmvpu_enc_handle_error_full(char const *fn, int linenr, char const *funcn,
                                        char const *msg_start, int ret_code);
-static BmVpuFrameType convert_frame_type(int vpu_pic_type);
-
-/*
- * If a bm_handle_t on this soc already exists, return it directly,
- * otherwise return after creat one (using bm_dev_request).
- * This function is only be called by bmvpu_enc_load(), the bm_handle_t's reference count +1
- * if this function is called.
- */
-static void bmvpu_enc_load_bmlib_handle(int soc_idx);
-
-/*
- * If a bm_handle_t on this soc already exists, then the bm_handle_t's reference count -1.
- * After that, if bm_handle_t's reference count is 0, free it(bm_dev_free),
- * otherwise do nothing.
- * This function is only be called by bmvpu_enc_unload().
- */
-static void bmvpu_enc_unload_bmlib_handle(int soc_idx);
+static BmVpuEncFrameType convert_frame_type(int vpu_pic_type);
 
 int bmvpu_enc_get_core_idx(int soc_idx)
 {
@@ -213,17 +162,45 @@ static int bmvpu_enc_bs_download(BmVpuEncoder* bve, uint8_t* host_va,
                                   uint64_t vpu_pa, int size)
 {
 #ifdef BM_PCIE_MODE
-    bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
-    int ret = bm_memcpy_d2s_partial(bve->bm_handle, (void*)host_va, vpu_mem, size);
-    return ret;
+    return bmvpu_enc_download_data(bve->core_idx, host_va, size,
+                               vpu_pa, size, size, 1);
 #else
-    uint8_t* va = BM_VPU_ENC_GET_BS_VA(bve, vpu_pa);
-
-    bm_device_mem_t vpu_mem = bm_mem_from_device(vpu_pa, size);
+    uint8_t* va = (uint8_t*)BM_VPU_ENC_GET_BS_VA(bve, vpu_pa);
     memcpy(host_va, va, size);
-
     return 0;
 #endif
+}
+
+static int bmvpu_enc_alloc_proc(void *enc_ctx,
+                                int vpu_core_idx, BmVpuEncDMABuffer *buf, unsigned int size)
+{
+    BmVpuEncoderCtx *video_enc_ctx = enc_ctx;
+    int ret = 0;
+
+    if (video_enc_ctx->buffer_alloc_func) {
+        ret = video_enc_ctx->buffer_alloc_func(video_enc_ctx->buffer_context
+                                            , vpu_core_idx, buf, size);
+    } else {
+        ret = bmvpu_enc_dma_buffer_allocate(vpu_core_idx, buf, size);
+    }
+
+    return ret;
+}
+
+static int bmvpu_enc_free_proc(void *enc_ctx,
+                                int vpu_core_idx, BmVpuEncDMABuffer *buf)
+{
+    BmVpuEncoderCtx *video_enc_ctx = enc_ctx;
+    int ret = 0;
+
+    if (video_enc_ctx->buffer_free_func) {
+        ret = video_enc_ctx->buffer_free_func(video_enc_ctx->buffer_context
+                                            , vpu_core_idx, buf);
+    } else {
+        ret = bmvpu_enc_dma_buffer_deallocate(vpu_core_idx, buf);
+    }
+
+    return ret;
 }
 
 static int
@@ -324,7 +301,7 @@ int bmvpu_enc_load(int soc_idx)
    get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
 
 
-    BM_VPU_LOG("VPU at Sophon device [%d] init", soc_idx);
+    BM_VPU_LOG("VPU at device [%d] init", soc_idx);
 
     BM_VPU_INFO("libbmvpuapi version %s", BMVPUAPI_VERSION);
 
@@ -336,8 +313,6 @@ int bmvpu_enc_load(int soc_idx)
         unlock_flock(soc_idx);
         goto cleanup;
     }
-
-    bmvpu_enc_load_bmlib_handle(soc_idx);
 
 #ifdef _WIN32
     timeBeginPeriod(1);
@@ -358,15 +333,10 @@ int bmvpu_enc_unload(int soc_idx)
 
     get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
 
-
-
-    BM_VPU_LOG("VPU at Sophon device [%d] deinit", soc_idx);
+    BM_VPU_LOG("VPU at device [%d] deinit", soc_idx);
 
     vpu_EncUnInit(soc_idx);
     BM_VPU_DEBUG("unloaded VPU");
-
-    /* free bm_handle_t */
-    bmvpu_enc_unload_bmlib_handle(soc_idx);
 
     /* Leave critical region */
 //    atomic_flag_clear(&bmve_atomic_lock);
@@ -399,7 +369,7 @@ void bmvpu_enc_set_default_open_params(BmVpuEncOpenParams *open_params,
     memset(open_params, 0, sizeof(BmVpuEncOpenParams));
 
     open_params->codec_format = codec_format;
-    open_params->color_format = BM_VPU_COLOR_FORMAT_YUV420;
+    open_params->pix_format = BM_VPU_ENC_PIX_FORMAT_YUV420P;
     open_params->frame_width = 0;
     open_params->frame_height = 0;
     open_params->fps_num = 1;
@@ -417,14 +387,12 @@ void bmvpu_enc_set_default_open_params(BmVpuEncOpenParams *open_params,
     open_params->min_qp          = 8;
     open_params->max_qp          = 51;
 
-    open_params->chroma_interleave = 0;
-
     open_params->soc_idx = 0;
 
-    open_params->gop_preset = 5;
+    open_params->gop_preset = BM_VPU_ENC_GOP_PRESET_IBBBP;
     open_params->intra_period = 60;
 
-    open_params->enc_mode = 1;
+    open_params->enc_mode = BM_VPU_ENC_RECOMMENDED_MODE;
 
     open_params->roi_enable = 0;
 
@@ -523,7 +491,7 @@ static int bmvpu_enc_check_open_params(BmVpuEncOpenParams *opt)
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
     }
 
-    if (opt->gop_preset < 1 || opt->gop_preset > 8)
+    if (opt->gop_preset < BM_VPU_ENC_GOP_PRESET_ALL_I || opt->gop_preset > BM_VPU_ENC_GOP_PRESET_RA_IB)
     {
         BM_VPU_ERROR("GOP preset IDX is only one of 1,2,...,8");
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
@@ -536,9 +504,11 @@ static int bmvpu_enc_check_open_params(BmVpuEncOpenParams *opt)
     }
 
     low_delay = false;
-    if (opt->gop_preset == 1 ||
-        opt->gop_preset == 2 || opt->gop_preset == 3 ||
-        opt->gop_preset == 6 || opt->gop_preset == 7)
+    if (opt->gop_preset == BM_VPU_ENC_GOP_PRESET_ALL_I ||
+        opt->gop_preset == BM_VPU_ENC_GOP_PRESET_IPP   ||
+        opt->gop_preset == BM_VPU_ENC_GOP_PRESET_IBBB  ||
+        opt->gop_preset == BM_VPU_ENC_GOP_PRESET_IPPPP ||
+        opt->gop_preset == BM_VPU_ENC_GOP_PRESET_IBBBB)
         low_delay = true;
 
     if (low_delay)
@@ -574,11 +544,11 @@ static int bmvpu_enc_check_open_params(BmVpuEncOpenParams *opt)
     return BM_VPU_ENC_RETURN_CODE_OK;
 }
 
-static int bmvpu_enc_clear_work_buffer(bm_handle_t bm_handle, bm_device_mem_t *work_dmabuffer)
+static int bmvpu_enc_clear_work_buffer(int core_idx, BmVpuDMABuffer *work_dmabuffer)
 {
     int size = (*work_dmabuffer).size;
 
-#ifdef BM_PCIE_MODE
+    bmvpu_phys_addr_t work_buf_addr = work_dmabuffer->phys_addr;
     uint8_t* tmp_va = calloc(size, 1);
     if (tmp_va == NULL)
     {
@@ -586,7 +556,7 @@ static int bmvpu_enc_clear_work_buffer(bm_handle_t bm_handle, bm_device_mem_t *w
         return -1;
     }
 
-    int ret = bm_memcpy_s2d_partial(bm_handle, *work_dmabuffer, tmp_va, size);
+    int ret = bmvpu_enc_upload_data(core_idx, tmp_va, size, work_buf_addr, size, size, 1);
     if (ret != 0)
     {
         BM_VPU_ERROR("PCIE mode vpu upload data failed");
@@ -595,25 +565,13 @@ static int bmvpu_enc_clear_work_buffer(bm_handle_t bm_handle, bm_device_mem_t *w
     }
 
     free(tmp_va);
-#else
-    unsigned long long tmp_va;
-    int ret = bm_mem_mmap_device_mem_no_cache(bm_handle, work_dmabuffer, &tmp_va);
-    if (ret != 0)
-    {
-        BM_VPU_ERROR("SoC mode vpu upload data failed");
-        return -1;
-    }
-    memset(tmp_va, 0, size);
-    bm_mem_unmap_device_mem(bm_handle, tmp_va, size);
-
-#endif
 
     return 0;
 }
 
-int bmvpu_enc_open(BmVpuEncoder **encoder,
+int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
                    BmVpuEncOpenParams *open_params,
-                   bm_device_mem_t *bs_dmabuffer)
+                   BmVpuEncDMABuffer *bs_dmabuffer)
 {
     VpuEncOpenParam eop;
     size_t work_buffer_size;
@@ -621,9 +579,18 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     int soc_idx = open_params->soc_idx;
     BmVpuEncReturnCodes ret;
     int enc_ret;
+    BmVpuEncoderCtx *video_enc_ctx = NULL;
 
     if((encoder == NULL) || (open_params == NULL) || (bs_dmabuffer == NULL)){
         BM_VPU_ERROR("bmvpu_enc_open params err: encoder(0X%x), open_params(0X%x), bs_dmabuffer(0X%x)", encoder, open_params, bs_dmabuffer);
+        unlock_flock(soc_idx);
+        return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
+    }
+
+    if ((open_params->buffer_alloc_func && !open_params->buffer_free_func)
+        || (!open_params->buffer_alloc_func && open_params->buffer_free_func)) {
+        BM_VPU_ERROR("bmvpu_enc_open params err: alloc_func(0X%x), free_func(0X%x)"
+                    , open_params->buffer_alloc_func, open_params->buffer_free_func);
         unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
     }
@@ -666,29 +633,27 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
 
     /* Map the bitstream buffer. This mapping will persist until the encoder is closed. */
 #ifndef BM_PCIE_MODE
-    bm_mem_mmap_device_mem_no_cache(bmvpu_enc_get_bmlib_handle(soc_idx), bs_dmabuffer, &((*encoder)->bs_virt_addr));
+    ret = bmvpu_dma_buffer_map(bmvpu_enc_get_core_idx(soc_idx), bs_dmabuffer, BM_VPU_MAPPING_FLAG_READ|BM_VPU_MAPPING_FLAG_WRITE);
+    if (ret < 0) {
+        BM_VPU_ERROR("mmap failed for bitstream buffer");
+        if (*encoder)
+            free(*encoder);
+        return BM_VPU_ENC_RETURN_CODE_ERROR;
+    }
 #endif
-    (*encoder)->bs_phys_addr = bm_mem_get_device_addr(*bs_dmabuffer);
+    (*encoder)->bs_virt_addr = bs_dmabuffer->virt_addr;
+    (*encoder)->bs_phys_addr = bmvpu_enc_dma_buffer_get_physical_address(bs_dmabuffer);
     (*encoder)->bs_dmabuffer = bs_dmabuffer;
-
-    (*encoder)->cbcr_interleave = open_params->chroma_interleave;
-
 
 #ifdef BM_PCIE_MODE
     (*encoder)->soc_idx = open_params->soc_idx;
-    (*encoder)->bm_handle = bmvpu_enc_get_bmlib_handle(open_params->soc_idx);
 #else
     (*encoder)->soc_idx = 0;
-    (*encoder)->bm_handle = bmvpu_enc_get_bmlib_handle(0);
 #endif
 
     (*encoder)->core_idx = bmvpu_enc_get_core_idx((*encoder)->soc_idx);
 
     memset(&eop, 0, sizeof(VpuEncOpenParam));
-
-    vpu_SetEncOpenParam(&eop, open_params->frame_width, open_params->frame_height,
-                        open_params->fps_num, open_params->fps_den,
-                        open_params->bitrate, open_params->cqp);
 
     eop.socIdx  = (*encoder)->soc_idx;
     eop.coreIdx = (*encoder)->core_idx;
@@ -698,9 +663,13 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     else /* if (open_params->codec_format == BM_VPU_CODEC_FORMAT_H265) */
         eop.bitstreamFormat = VPU_CODEC_HEVC;
 
+    vpu_SetEncOpenParam(&eop, open_params->frame_width, open_params->frame_height,
+                        open_params->fps_num, open_params->fps_den,
+                        open_params->bitrate, open_params->cqp);
+
     /* Fill in the bitstream buffer address and size. */
-    eop.bitstreamBuffer     = bm_mem_get_device_addr(*bs_dmabuffer);
-    eop.bitstreamBufferSize = bm_mem_get_device_size(*bs_dmabuffer);
+    eop.bitstreamBuffer     = bmvpu_enc_dma_buffer_get_physical_address(bs_dmabuffer);
+    eop.bitstreamBufferSize = bmvpu_enc_dma_buffer_get_size(bs_dmabuffer);
 
     /* Miscellaneous codec format independent values */
     BM_VPU_TRACE("input bit rate: %d", open_params->bitrate);
@@ -735,7 +704,14 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     eop.waveParam.maxQpP     =
     eop.waveParam.maxQpB     = open_params->max_qp;
 
-    eop.cbcrInterleave = open_params->chroma_interleave;
+    if ((open_params->pix_format == BM_VPU_ENC_PIX_FORMAT_NV12) ||
+        (open_params->pix_format == BM_VPU_ENC_PIX_FORMAT_NV16) ||
+        (open_params->pix_format == BM_VPU_ENC_PIX_FORMAT_NV24)) {
+        eop.cbcrInterleave = BM_VPU_ENC_CHROMA_INTERLEAVE_CBCR;
+    } else {
+        eop.cbcrInterleave = BM_VPU_ENC_CHROMA_NO_INTERLEAVE;
+    }
+
     eop.cbcrOrder = 0;
     eop.nv21 = 0;
 
@@ -800,9 +776,21 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     /* in unit of 4k bytes */
     work_buffer_size = (work_buffer_size +(4*1024-1)) & (~(4*1024-1));
 
+    video_enc_ctx = (BmVpuEncoderCtx *)calloc(1, sizeof(BmVpuEncoderCtx));
+    if (video_enc_ctx == NULL) {
+        BM_VPU_ERROR("malloc video_enc_ctx failed\n");
+        goto cleanup;
+    }
+    (*encoder)->video_enc_ctx = video_enc_ctx;
+
+    video_enc_ctx->buffer_alloc_func = open_params->buffer_alloc_func;;
+    video_enc_ctx->buffer_free_func = open_params->buffer_free_func;
+    video_enc_ctx->buffer_context = open_params->buffer_context;
+
     /* Create work buffer */
-    (*encoder)->work_dmabuffer = (bm_device_mem_t *)malloc(sizeof(bm_device_mem_t));
-    ret = bmvpu_malloc_device_byte_heap(bmvpu_enc_get_bmlib_handle((*encoder)->soc_idx), (*encoder)->work_dmabuffer, work_buffer_size, HEAP_MASK, 1);  
+    (*encoder)->work_dmabuffer = (BmVpuEncDMABuffer *)malloc(sizeof(BmVpuEncDMABuffer));
+
+    ret = bmvpu_enc_dma_buffer_allocate((*encoder)->core_idx, (*encoder)->work_dmabuffer, work_buffer_size);
     if (ret != 0)
     {
         BM_VPU_ERROR("bm_malloc_device_byte for work_dmabuffer failed!\n");
@@ -811,11 +799,11 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     }
 
     // BM_VPU_LOG("work buffer: pa = 0x%lx, size = %zd",
-    //            bmvpu_dma_buffer_get_physical_address(work_dmabuffer),
+    //            bmvpu_enc_dma_buffer_get_physical_address(work_dmabuffer),
     //            work_buffer_size);
 
     /* Clear the working buffer */
-    ret = bmvpu_enc_clear_work_buffer(bmvpu_enc_get_bmlib_handle((*encoder)->soc_idx), (*encoder)->work_dmabuffer);
+    ret = bmvpu_enc_clear_work_buffer((*encoder)->core_idx, (BmVpuDMABuffer *)(*encoder)->work_dmabuffer);
     if (ret != 0)
     {
         BM_VPU_ERROR("bmvpu_enc_clear_work_buffer failed");
@@ -824,8 +812,8 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
     }
 
     /* Fill in the working buffer address and size. */
-    eop.workBuffer     = bm_mem_get_device_addr(*((*encoder)->work_dmabuffer));
-    eop.workBufferSize = bm_mem_get_device_size(*((*encoder)->work_dmabuffer));
+    eop.workBuffer     = bmvpu_enc_dma_buffer_get_physical_address((*encoder)->work_dmabuffer);
+    eop.workBufferSize = bmvpu_enc_dma_buffer_get_size((*encoder)->work_dmabuffer);
 
     /* Now actually open the encoder instance */
     BM_VPU_LOG("opening encoder, frame size: %u x %u pixel",
@@ -837,13 +825,23 @@ int bmvpu_enc_open(BmVpuEncoder **encoder,
         goto cleanup;
 
     (*encoder)->codec_format = open_params->codec_format;
-    (*encoder)->color_format = open_params->color_format;
+    (*encoder)->pix_format = open_params->pix_format;
     (*encoder)->frame_width  = open_params->frame_width;
     (*encoder)->frame_height = open_params->frame_height;
     (*encoder)->fps_n        = open_params->fps_num;
     (*encoder)->fps_d        = open_params->fps_den;
     (*encoder)->rc_enable    = (open_params->bitrate > 0);
     (*encoder)->cqp          = open_params->cqp;
+
+    if(open_params->timeout > 0)
+        (*encoder)->timeout = open_params->timeout;
+    else
+        (*encoder)->timeout = VPU_WAIT_TIMEOUT;
+
+    if(open_params->timeout_count > 0)
+        (*encoder)->timeout_count = open_params->timeout_count;
+    else
+        (*encoder)->timeout_count = VPU_MAX_TIMEOUT_COUNTS;
 
 finish:
     unlock_flock(soc_idx);
@@ -855,12 +853,17 @@ finish:
 cleanup:
     unlock_flock(soc_idx);
 #ifndef BM_PCIE_MODE
-    bm_mem_unmap_device_mem(bmvpu_enc_get_bmlib_handle((*encoder)->soc_idx), (void *)((*encoder)->bs_virt_addr), bm_mem_get_device_size(*bs_dmabuffer)); 
+    bmvpu_dma_buffer_unmap((*encoder)->core_idx, bs_dmabuffer);
 #endif
     if ((*encoder)->work_dmabuffer!=NULL)
     {
-        bm_free_device(bmvpu_enc_get_bmlib_handle((*encoder)->soc_idx), *((*encoder)->work_dmabuffer));
+        bmvpu_enc_free_proc(video_enc_ctx, (*encoder)->core_idx, (*encoder)->work_dmabuffer);
         free((*encoder)->work_dmabuffer);
+    }
+
+    if ((*encoder)->video_enc_ctx) {
+        free((*encoder)->video_enc_ctx);
+        (*encoder)->video_enc_ctx = NULL;
     }
 
     free(*encoder);
@@ -869,10 +872,115 @@ cleanup:
     goto finish;
 }
 
+int bmvpu_enc_open(BmVpuEncoder **encoder,
+                   BmVpuEncOpenParams *open_params,
+                   BmVpuEncDMABuffer *bs_dmabuffer,
+                   BmVpuEncInitialInfo *initial_info)
+{
+    BmVpuEncReturnCodes ret;
+    BmVpuEncoder *video_encoder = NULL;
+    BmVpuEncoderCtx *video_enc_ctx = NULL;
+    int i;
+
+    // step 1: Open an encoder instance
+    ret = bmvpu_enc_open_internal(encoder, open_params, bs_dmabuffer);
+    if (ret != BM_VPU_ENC_RETURN_CODE_OK) {
+        return ret;
+    }
+
+    // step 2: get initial information: min_num_rec_fb and min_num_src_fb
+    video_encoder = *encoder;
+    ret = bmvpu_enc_get_initial_info(video_encoder, initial_info);
+    if (ret != BM_VPU_ENC_RETURN_CODE_OK) {
+        return ret;
+    }
+
+    video_enc_ctx = video_encoder->video_enc_ctx;
+    do {
+        // step 3: alloc rec fb and register to vpu
+        video_enc_ctx->num_rec_fb = initial_info->min_num_rec_fb;
+
+        /* Allocate memory blocks for the framebuffer and DMA buffer structures,
+        * and allocate the DMA buffers themselves */
+        video_enc_ctx->rec_fb_list = calloc(video_enc_ctx->num_rec_fb, sizeof(BmVpuFramebuffer));
+        if (video_enc_ctx->rec_fb_list == NULL) {
+            BM_VPU_ERROR("malloc rec_fb_list failed\n");
+            ret = BM_VPU_ENC_RETURN_CODE_ERROR;
+            break;
+        }
+
+        video_enc_ctx->rec_fb_dmabuffers = calloc(video_enc_ctx->num_rec_fb, sizeof(BmVpuEncDMABuffer*));
+        if (video_enc_ctx->rec_fb_dmabuffers == NULL) {
+            BM_VPU_ERROR("malloc rec_fb_dmabuffers failed\n");
+            ret = BM_VPU_ENC_RETURN_CODE_ERROR;
+            break;;
+        }
+
+        for (i = 0; i < video_enc_ctx->num_rec_fb; i++) {
+            int rec_id = 0x200 + i; // TODO
+
+            /* Allocate a DMA buffer for each framebuffer.
+            * It is possible to specify alternate allocators;
+            * all that is required is that the allocator provides physically contiguous memory
+            * (necessary for DMA transfers) and repects the alignment value. */
+            video_enc_ctx->rec_fb_dmabuffers[i] = (BmVpuEncDMABuffer *)calloc(1, sizeof(BmVpuEncDMABuffer));
+            ret = bmvpu_enc_alloc_proc(video_enc_ctx, video_encoder->core_idx
+                                        , video_enc_ctx->rec_fb_dmabuffers[i]
+                                        , initial_info->rec_fb.size);
+            if (ret != 0) {
+                BM_VPU_ERROR("bmvpu_enc_dma_buffer_allocate failed! line=%d\n", __LINE__);
+                return BM_VPU_ENC_RETURN_CODE_ERROR;
+            }
+
+            bmvpu_fill_framebuffer_params(&(video_enc_ctx->rec_fb_list[i]),
+                                        &(initial_info->rec_fb),
+                                        video_enc_ctx->rec_fb_dmabuffers[i], rec_id, NULL);
+        }
+
+        /* Buffer registration help the VPU knows which buffers to use for
+        * storing temporary frames into. */
+        ret = bmvpu_enc_register_framebuffers(video_encoder, video_enc_ctx->rec_fb_list
+                                            , video_enc_ctx->num_rec_fb);
+        if (ret != 0) {
+            BM_VPU_ERROR("bmvpu_enc_register_framebuffers failed\n");
+            ret = BM_VPU_ENC_RETURN_CODE_ERROR;
+            break;
+        }
+    } while(0);
+
+    if (ret != BM_VPU_ENC_RETURN_CODE_OK && video_enc_ctx != NULL) {
+        if (video_enc_ctx->rec_fb_list) {
+            free(video_enc_ctx->rec_fb_list);
+            video_enc_ctx->rec_fb_list = NULL;
+        }
+
+        if (video_enc_ctx->rec_fb_dmabuffers) {
+            for (i = 0; i < video_enc_ctx->num_rec_fb; ++i) {
+                bmvpu_enc_free_proc(video_enc_ctx, video_encoder->core_idx
+                                            , video_enc_ctx->rec_fb_dmabuffers[i]);
+                free(video_enc_ctx->rec_fb_dmabuffers[i]);
+            }
+            free(video_enc_ctx->rec_fb_dmabuffers);
+            video_enc_ctx->rec_fb_dmabuffers = NULL;
+        }
+
+        if (video_enc_ctx) {
+            free(video_enc_ctx);
+        }
+
+        video_encoder->video_enc_ctx = NULL;
+        return ret;
+    }
+
+    return BM_VPU_ENC_RETURN_CODE_OK;
+}
+
 int bmvpu_enc_close(BmVpuEncoder *encoder)
 {
     BmVpuEncReturnCodes ret;
+    BmVpuEncoderCtx *pst_video_enc_ctx = NULL;
     int enc_ret;
+    int i = 0;
 
     if (encoder == NULL)
         return BM_VPU_ENC_RETURN_CODE_OK;
@@ -901,7 +1009,7 @@ int bmvpu_enc_close(BmVpuEncoder *encoder)
 
 #ifndef BM_PCIE_MODE
     if (encoder->bs_dmabuffer != NULL)
-        bm_mem_unmap_device_mem(encoder->bm_handle, (void *)(encoder->bs_virt_addr), bm_mem_get_device_size(*encoder->bs_dmabuffer));
+        bmvpu_dma_buffer_unmap(encoder->core_idx, encoder->bs_dmabuffer);
 #endif
 
     if (encoder->internal_framebuffers != NULL)
@@ -913,42 +1021,61 @@ int bmvpu_enc_close(BmVpuEncoder *encoder)
 
     if (encoder->buffer_mv)
     {
-        bm_free_device(encoder->bm_handle, *(encoder->buffer_mv));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_mv);
         free(encoder->buffer_mv);
         encoder->buffer_mv = NULL;
     }
     if (encoder->buffer_fbc_y_tbl)
     {
-        bm_free_device(encoder->bm_handle, *(encoder->buffer_fbc_y_tbl));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_fbc_y_tbl);
         free(encoder->buffer_fbc_y_tbl);
         encoder->buffer_fbc_y_tbl = NULL;
     }
 
     if (encoder->buffer_fbc_c_tbl)
     {
-        bm_free_device(encoder->bm_handle, *(encoder->buffer_fbc_c_tbl));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_fbc_c_tbl);
         free(encoder->buffer_fbc_c_tbl);
         encoder->buffer_fbc_c_tbl = NULL;
     }
 
     if (encoder->buffer_sub_sam)
     {
-        bm_free_device(encoder->bm_handle, *(encoder->buffer_sub_sam));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_sub_sam);
         free(encoder->buffer_sub_sam);
         encoder->buffer_sub_sam = NULL;
     }
 
     if (encoder->work_dmabuffer)
     {
-        bm_free_device(encoder->bm_handle, *(encoder->work_dmabuffer));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->work_dmabuffer);
         free(encoder->work_dmabuffer);
         encoder->work_dmabuffer = NULL;
     }
 
+    if (encoder->video_enc_ctx) {
+        pst_video_enc_ctx = (BmVpuEncoderCtx *)encoder->video_enc_ctx;
+        if (pst_video_enc_ctx->rec_fb_list) {
+            free(pst_video_enc_ctx->rec_fb_list);
+            pst_video_enc_ctx->rec_fb_list = NULL;
+        }
+
+        if (pst_video_enc_ctx->rec_fb_dmabuffers) {
+            for (i = 0; i < pst_video_enc_ctx->num_rec_fb; ++i) {
+                bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx
+                                            , pst_video_enc_ctx->rec_fb_dmabuffers[i]);
+                free(pst_video_enc_ctx->rec_fb_dmabuffers[i]);
+            }
+            free(pst_video_enc_ctx->rec_fb_dmabuffers);
+            pst_video_enc_ctx->rec_fb_dmabuffers = NULL;
+        }
+
+        free(encoder->video_enc_ctx);
+        encoder->video_enc_ctx = NULL;
+    }
+
     free(encoder);
     encoder = NULL;
-
-
 
     if (ret == BM_VPU_ENC_RETURN_CODE_OK)
         BM_VPU_DEBUG("successfully closed encoder");
@@ -962,12 +1089,12 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
                                     uint32_t num_framebuffers)
 {
     VpuEncoder* handle = encoder->handle;
-    bm_handle_t bm_handle = encoder->bm_handle;
+    BmVpuEncoderCtx *video_enc_ctx = encoder->video_enc_ctx;
 
-    bm_device_mem_t* dmabuffer_mv        = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
-    bm_device_mem_t* dmabuffer_fbc_y_tbl = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
-    bm_device_mem_t* dmabuffer_fbc_c_tbl = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
-    bm_device_mem_t* dmabuffer_sub_sam   = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t));
+    BmVpuEncDMABuffer* dmabuffer_mv        = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer));
+    BmVpuEncDMABuffer* dmabuffer_fbc_y_tbl = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer));
+    BmVpuEncDMABuffer* dmabuffer_fbc_c_tbl = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer));
+    BmVpuEncDMABuffer* dmabuffer_sub_sam   = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer));
 
     uint32_t i;
     BmVpuEncReturnCodes ret;
@@ -981,7 +1108,7 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     BM_VPU_DEBUG("attempting to register %u framebuffers", num_framebuffers);
 
     /* Allocate memory for framebuffer structures */
-    encoder->internal_framebuffers = (VpuFrameBuffer*)malloc(sizeof(VpuFrameBuffer) * num_framebuffers);
+    encoder->internal_framebuffers = (void*)malloc(sizeof(VpuFrameBuffer) * num_framebuffers);
     if (encoder->internal_framebuffers == NULL)
     {
         BM_VPU_ERROR("allocating memory for framebuffers failed");
@@ -991,15 +1118,16 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
 
     /* Copy the values from the framebuffers array to the internal_framebuffers
      * one, which in turn will be used by the VPU */
+    VpuFrameBuffer* _framebuffers = (VpuFrameBuffer*)encoder->internal_framebuffers;
     for (i = 0; i < num_framebuffers; ++i)
     {
         VpuFrameBuffer *internal_fb = NULL;
         BmVpuFramebuffer *fb = &framebuffers[i];
         bmvpu_phys_addr_t phys_addr = 0;
 
-        phys_addr = bm_mem_get_device_addr(*(fb->dma_buffer));
+        phys_addr = bmvpu_enc_dma_buffer_get_physical_address(fb->dma_buffer);
 
-        internal_fb = &(encoder->internal_framebuffers[i]);
+        internal_fb = &((_framebuffers[i]));
         internal_fb->myIndex = i;
         internal_fb->mapType = BM_COMPRESSED_FRAME_MAP;
         internal_fb->format = FB_FMT_420;
@@ -1012,9 +1140,9 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
         /* if mapType is BM_COMPRESSED_FRAME_MAP, set 128BIT_LITTLE_ENDIAN */
         internal_fb->endian = 16; /* 128BIT_LITTLE_ENDIAN */
 
-        internal_fb->bufY  = (bm_pa_t)(phys_addr + fb->y_offset);
-        internal_fb->bufCb = (bm_pa_t)(phys_addr + fb->cb_offset);
-        internal_fb->bufCr = (bm_pa_t)(phys_addr + fb->cr_offset);
+        internal_fb->bufY  = (bmvpu_phys_addr_t)(phys_addr + fb->y_offset);
+        internal_fb->bufCb = (bmvpu_phys_addr_t)(phys_addr + fb->cb_offset);
+        internal_fb->bufCr = (bmvpu_phys_addr_t)(phys_addr + fb->cr_offset);
     }
 
     ret = vpu_EncCalcCoreBufferSize(handle, num_framebuffers);
@@ -1031,7 +1159,7 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     int sub_sam_size   = handle->vbSubSamBuf.size;
 
     /* buffer_mv */
-    ret = bmvpu_malloc_device_byte_heap(bm_handle, dmabuffer_mv, mv_size, HEAP_MASK, 1);
+    ret = bmvpu_enc_alloc_proc(video_enc_ctx, encoder->core_idx, dmabuffer_mv, mv_size);
     if (ret != 0)
     {
         BM_VPU_ERROR("Get buffer_mv failed");
@@ -1040,7 +1168,7 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     }
 
     /* buffer_fbc_y_tbl */
-    ret = bmvpu_malloc_device_byte_heap(bm_handle, dmabuffer_fbc_y_tbl, fbc_y_tbl_size, HEAP_MASK, 1);
+    ret = bmvpu_enc_alloc_proc(video_enc_ctx, encoder->core_idx, dmabuffer_fbc_y_tbl, fbc_y_tbl_size);
     if (ret != 0)
     {
         BM_VPU_ERROR("Get buffer_fbc_y_tbl failed");
@@ -1049,7 +1177,7 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     }
 
     /* buffer_fbc_y_tbl */
-    ret = bmvpu_malloc_device_byte_heap(bm_handle, dmabuffer_fbc_c_tbl, fbc_c_tbl_size, HEAP_MASK, 1);
+    ret = bmvpu_enc_alloc_proc(video_enc_ctx, encoder->core_idx, dmabuffer_fbc_c_tbl, fbc_c_tbl_size);
     if (ret != 0)
     {
         BM_VPU_ERROR("Get buffer_fbc_c_tbl failed");
@@ -1058,7 +1186,7 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     }
 
     /* buffer_fbc_y_tbl */
-    ret = bmvpu_malloc_device_byte_heap(bm_handle, dmabuffer_sub_sam, sub_sam_size, HEAP_MASK, 1);
+    ret = bmvpu_enc_alloc_proc(video_enc_ctx, encoder->core_idx, dmabuffer_sub_sam, sub_sam_size);
     if (ret != 0)
     {
         BM_VPU_ERROR("Get buffer_sub_sam failed");
@@ -1067,30 +1195,30 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
     }
 
     BM_VPU_LOG("mv:        pa = 0x%lx, size = %d \n",
-               bm_mem_get_device_addr(*(encoder->buffer_mv)),
+               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_mv),
                mv_size);
     BM_VPU_LOG("fbc_y_tbl: pa = 0x%lx, size = %d",
-               bm_mem_get_device_addr(*(encoder->buffer_fbc_y_tbl)),
+               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_y_tbl),
                fbc_y_tbl_size);
     BM_VPU_LOG("fbc_c_tbl: pa = 0x%lx, size = %d",
-               bm_mem_get_device_addr(*(encoder->buffer_fbc_c_tbl)),
+               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_c_tbl),
                fbc_c_tbl_size);
     BM_VPU_LOG("sub_sam:   pa = 0x%lx, size = %d",
-               bm_mem_get_device_addr(*(encoder->buffer_sub_sam)),
+               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_sub_sam),
                sub_sam_size);
 
-    encoder->buffer_mv        = dmabuffer_mv;
-    encoder->buffer_fbc_y_tbl = dmabuffer_fbc_y_tbl;
-    encoder->buffer_fbc_c_tbl = dmabuffer_fbc_c_tbl;
-    encoder->buffer_sub_sam   = dmabuffer_sub_sam;
+    encoder->buffer_mv        = (BmVpuEncDMABuffer*)dmabuffer_mv;
+    encoder->buffer_fbc_y_tbl = (BmVpuEncDMABuffer*)dmabuffer_fbc_y_tbl;
+    encoder->buffer_fbc_c_tbl = (BmVpuEncDMABuffer*)dmabuffer_fbc_c_tbl;
+    encoder->buffer_sub_sam   = (BmVpuEncDMABuffer*)dmabuffer_sub_sam;
 
-    handle->vbMV.pa        = bm_mem_get_device_addr(*(encoder->buffer_mv));
-    handle->vbFbcYTbl.pa   = bm_mem_get_device_addr(*(encoder->buffer_fbc_y_tbl));
-    handle->vbFbcCTbl.pa   = bm_mem_get_device_addr(*(encoder->buffer_fbc_c_tbl));
-    handle->vbSubSamBuf.pa = bm_mem_get_device_addr(*(encoder->buffer_sub_sam));
+    handle->vbMV.pa        = bmvpu_enc_dma_buffer_get_physical_address((BmVpuEncDMABuffer*)encoder->buffer_mv);
+    handle->vbFbcYTbl.pa   = bmvpu_enc_dma_buffer_get_physical_address((BmVpuEncDMABuffer*)encoder->buffer_fbc_y_tbl);
+    handle->vbFbcCTbl.pa   = bmvpu_enc_dma_buffer_get_physical_address((BmVpuEncDMABuffer*)encoder->buffer_fbc_c_tbl);
+    handle->vbSubSamBuf.pa = bmvpu_enc_dma_buffer_get_physical_address((BmVpuEncDMABuffer*)encoder->buffer_sub_sam);
 
     enc_ret = vpu_EncRegisterFrameBuffer(encoder->handle,
-                                         encoder->internal_framebuffers,
+                                         (VpuFrameBuffer*)encoder->internal_framebuffers,
                                          num_framebuffers);
     ret = BM_VPU_ENC_HANDLE_ERROR("could not register framebuffers", enc_ret);
     if (ret != BM_VPU_ENC_RETURN_CODE_OK)
@@ -1122,32 +1250,32 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
 
 cleanup:
 
-    handle->vbMV.pa        = bm_mem_get_device_addr(*(encoder->buffer_mv));
-    handle->vbFbcYTbl.pa   = bm_mem_get_device_addr(*(encoder->buffer_fbc_y_tbl));
-    handle->vbFbcCTbl.pa   = bm_mem_get_device_addr(*(encoder->buffer_fbc_c_tbl));
-    handle->vbSubSamBuf.pa = bm_mem_get_device_addr(*(encoder->buffer_sub_sam));
+    handle->vbMV.pa        = bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_mv);
+    handle->vbFbcYTbl.pa   = bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_y_tbl);
+    handle->vbFbcCTbl.pa   = bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_c_tbl);
+    handle->vbSubSamBuf.pa = bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_sub_sam);
 
     if (encoder->buffer_mv != NULL)
     {
-        bm_free_device(bm_handle, *(encoder->buffer_mv));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_mv);
         free(encoder->buffer_mv);
     }
 
     if (encoder->buffer_fbc_y_tbl != NULL)
     {
-        bm_free_device(bm_handle, *(encoder->buffer_fbc_y_tbl));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_fbc_y_tbl);
         free(encoder->buffer_fbc_y_tbl);
     }
 
     if (encoder->buffer_fbc_c_tbl != NULL)
     {
-        bm_free_device(bm_handle, *(encoder->buffer_fbc_c_tbl));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_fbc_c_tbl);
         free(encoder->buffer_fbc_c_tbl);
     }
 
     if (encoder->buffer_sub_sam != NULL)
     {
-        bm_free_device(bm_handle, *(encoder->buffer_sub_sam));
+        bmvpu_enc_free_proc(encoder->video_enc_ctx, encoder->core_idx, encoder->buffer_sub_sam);
         free(encoder->buffer_sub_sam);
     }
 
@@ -1195,16 +1323,16 @@ int bmvpu_enc_get_initial_info(BmVpuEncoder *encoder, BmVpuEncInitialInfo *info)
 
     BM_VPU_DEBUG("min_num_rec_fb=%d", info->min_num_rec_fb);
 
-    enc_ret = bmvpu_calc_framebuffer_sizes(BM_LINEAR_FRAME_MAP, encoder->color_format,
+    enc_ret = bmvpu_calc_framebuffer_sizes(BM_LINEAR_FRAME_MAP, encoder->pix_format,
                                  encoder->frame_width, encoder->frame_height,
-                                 encoder->cbcr_interleave, &(info->src_fb));
+                                 &(info->src_fb));
     if (enc_ret != BM_VPU_ENC_RETURN_CODE_OK) {
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
 
-    enc_ret = bmvpu_calc_framebuffer_sizes(BM_COMPRESSED_FRAME_MAP, encoder->color_format,
+    enc_ret = bmvpu_calc_framebuffer_sizes(BM_COMPRESSED_FRAME_MAP, encoder->pix_format,
                                  encoder->frame_width, encoder->frame_height,
-                                 encoder->cbcr_interleave, &(info->rec_fb));
+                                 &(info->rec_fb));
     if (enc_ret != BM_VPU_ENC_RETURN_CODE_OK) {
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
@@ -1265,8 +1393,8 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
 
     enc_param.skipPicture = encoding_params->skip_frame;
 
-    enc_param.picStreamBufferAddr = bm_mem_get_device_addr(*(encoder->bs_dmabuffer));
-    enc_param.picStreamBufferSize = bm_mem_get_device_size(*(encoder->bs_dmabuffer));
+    enc_param.picStreamBufferAddr = bmvpu_enc_dma_buffer_get_physical_address(encoder->bs_dmabuffer);
+    enc_param.picStreamBufferSize = bmvpu_enc_dma_buffer_get_size(encoder->bs_dmabuffer);
 
     /* FW will encode header data implicitly when changing the header syntaxes
      * If this value is 1, encodeVPS, encodeSPS, and encodePPS are ignored. */
@@ -1284,13 +1412,13 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     enc_param.codeOption.encodeFiller = 0;     /* encode filler data nal unit explicitly */
 #endif
     if (encoding_params->customMapOpt != NULL) {
-        enc_param.customMapOpt.roiAvgQp              = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].roiAvgQp;
-        enc_param.customMapOpt.customRoiMapEnable    = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].customRoiMapEnable;
-        enc_param.customMapOpt.customLambdaMapEnable = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].customLambdaMapEnable;
-        enc_param.customMapOpt.customModeMapEnable   = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].customModeMapEnable;
-        enc_param.customMapOpt.customCoefDropEnable  = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].customCoefDropEnable;
-        enc_param.customMapOpt.customCoefDropEnable  = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].customCoefDropEnable;
-        enc_param.customMapOpt.addrCustomMap         = encoding_params->customMapOpt[encoding_params->customMapOptUsedIndex].addrCustomMap;
+        enc_param.customMapOpt.roiAvgQp              = encoding_params->customMapOpt->roiAvgQp;
+        enc_param.customMapOpt.customRoiMapEnable    = encoding_params->customMapOpt->customRoiMapEnable;
+        enc_param.customMapOpt.customLambdaMapEnable = encoding_params->customMapOpt->customLambdaMapEnable;
+        enc_param.customMapOpt.customModeMapEnable   = encoding_params->customMapOpt->customModeMapEnable;
+        enc_param.customMapOpt.customCoefDropEnable  = encoding_params->customMapOpt->customCoefDropEnable;
+        enc_param.customMapOpt.customCoefDropEnable  = encoding_params->customMapOpt->customCoefDropEnable;
+        enc_param.customMapOpt.addrCustomMap         = encoding_params->customMapOpt->addrCustomMap;
     }
 
     /* Copy over information from the raw_frame's framebuffer into the
@@ -1300,8 +1428,15 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     src_fb.mapType = BM_LINEAR_FRAME_MAP;
 
     src_fb.format = FB_FMT_420;
-    src_fb.cbcrInterleave = encoder->cbcr_interleave;
+    if ((encoder->pix_format == BM_VPU_ENC_PIX_FORMAT_NV12) ||
+        (encoder->pix_format == BM_VPU_ENC_PIX_FORMAT_NV16) ||
+        (encoder->pix_format == BM_VPU_ENC_PIX_FORMAT_NV24)) {
+        src_fb.cbcrInterleave = BM_VPU_ENC_CHROMA_INTERLEAVE_CBCR;
+    } else {
+        src_fb.cbcrInterleave = BM_VPU_ENC_CHROMA_NO_INTERLEAVE;
+    }
     src_fb.nv21 = 0;
+
 
     src_fb.lumaBitDepth   = 8;
     src_fb.chromaBitDepth = 8;
@@ -1314,7 +1449,7 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
 
         /* Get the physical address for the raw_frame that shall be encoded
          * and the virtual pointer to the output buffer */
-        pa = bm_mem_get_device_addr(*(framebuffer->dma_buffer));
+        pa = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer);
 
         BM_VPU_LOG("source framebuffer: myIndex: 0x%x, Y stride: %u,  CbCr stride: %u, pa: 0x%lx",
                    framebuffer->myIndex, framebuffer->y_stride, framebuffer->cbcr_stride, pa);
@@ -1324,11 +1459,11 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
         src_fb.width  = framebuffer->width;
         src_fb.height = framebuffer->height;
 
-        src_fb.bufY  = (bm_pa_t)(pa + framebuffer-> y_offset);
-        src_fb.bufCb = (bm_pa_t)(pa + framebuffer->cb_offset);
-        src_fb.bufCr = (bm_pa_t)(pa + framebuffer->cr_offset);
+        src_fb.bufY  = (bmvpu_phys_addr_t)(pa + framebuffer-> y_offset);
+        src_fb.bufCb = (bmvpu_phys_addr_t)(pa + framebuffer->cb_offset);
+        src_fb.bufCr = (bmvpu_phys_addr_t)(pa + framebuffer->cr_offset);
 
-        src_fb.size = bm_mem_get_device_size(*(framebuffer->dma_buffer));
+        src_fb.size = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer);
 
         enc_param.srcEndFlag = 0;
     }
@@ -1383,15 +1518,15 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
      * one vpu_EncWaitForInt() call to cover the encoding interval */
     timeout = TRUE;
     BM_VPU_LOG("waiting for encoding completion");
-    for (i = 0; i < VPU_MAX_TIMEOUT_COUNTS; i++)
+    for (i = 0; i <  encoder->timeout_count; i++)
     {
-        ret = vpu_EncWaitForInt(encoder->handle, VPU_WAIT_TIMEOUT);
+        ret = vpu_EncWaitForInt(encoder->handle,  encoder->timeout);
         if (ret == VPU_RET_SUCCESS)
         {
             timeout = FALSE;
             break;
         }
-        BM_VPU_WARNING("timeout after waiting %d ms for frame completion", VPU_WAIT_TIMEOUT);
+        BM_VPU_WARNING("timeout after waiting %d ms for frame completion",  encoder->timeout);
     }
 
     /* Retrieve information about the result of the encode process. Do so even if
@@ -1423,13 +1558,14 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
 
     encoded_frame->data_size = 0;
 
-    encoded_frame->frame_type = convert_frame_type(enc_output_info.picType);
+    encoded_frame->frame_type = convert_frame_type((int)enc_output_info.picType);
 
     encoded_frame->src_idx = enc_output_info.encSrcIdx;
     encoded_frame->context = enc_output_info.context;
     encoded_frame->pts     = enc_output_info.pts;
     encoded_frame->dts     = enc_output_info.dts;
     encoded_frame->avg_ctu_qp = enc_output_info.avgCtuQp;
+    encoded_frame->u64CustomMapPhyAddr = enc_output_info.addrCustomMap;
 
     BM_VPU_LOG("output info: picType %d (%s), skipEncoded %d, bitstream buffer %lx size %u",
                enc_output_info.picType, bmvpu_frame_type_string(encoded_frame->frame_type),
@@ -1454,8 +1590,8 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     encoded_data_size = enc_output_info.bitstreamSize;
 
     add_header = (encoder->first_frame ||
-                  (encoded_frame->frame_type == BM_VPU_FRAME_TYPE_IDR) ||
-                  (encoded_frame->frame_type == BM_VPU_FRAME_TYPE_I));
+                  (encoded_frame->frame_type == BM_VPU_ENC_FRAME_TYPE_IDR) ||
+                  (encoded_frame->frame_type == BM_VPU_ENC_FRAME_TYPE_I));
     if (add_header)
         encoded_data_size += encoder->headers_rbsp_size;
 
@@ -1663,111 +1799,18 @@ bmvpu_enc_handle_error_full(char const *fn, int linenr, char const *funcn, char 
 }
 
 
-static BmVpuFrameType convert_frame_type(int vpu_pic_type)
+static BmVpuEncFrameType convert_frame_type(int vpu_pic_type)
 {
-    BmVpuFrameType type = BM_VPU_FRAME_TYPE_UNKNOWN;
+    BmVpuEncFrameType type = BM_VPU_ENC_FRAME_TYPE_UNKNOWN;
 
     switch (vpu_pic_type)
     {
-    case 0: type = BM_VPU_FRAME_TYPE_I;   break;
-    case 1: type = BM_VPU_FRAME_TYPE_P;   break;
-    case 2: type = BM_VPU_FRAME_TYPE_B;   break;
-    case 5: type = BM_VPU_FRAME_TYPE_IDR; break;
+    case 0: type = BM_VPU_ENC_FRAME_TYPE_I;   break;
+    case 1: type = BM_VPU_ENC_FRAME_TYPE_P;   break;
+    case 2: type = BM_VPU_ENC_FRAME_TYPE_B;   break;
+    case 5: type = BM_VPU_ENC_FRAME_TYPE_IDR; break;
     default: break;
     }
 
     return type;
-}
-
-/*
- * If a bm_handle_t on this soc already exists, return it directly,
- * otherwise return after creat one (using bm_dev_request).
- * This function is only be called by bmvpu_enc_load(), the bm_handle_t's reference count +1
- * if this function is called.
- */
-static void bmvpu_enc_load_bmlib_handle(int soc_idx){
-    if (soc_idx > MAX_SOC_NUM)
-    {
-        BM_VPU_ERROR("soc_idx excess MAX_SOC_NUM!\n");
-        exit(0);
-    }
-
-    bm_handle_lock();
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        g_bm_handle[soc_idx].count += 1;
-        bm_handle_unlock();
-        return ;
-    }
-
-    bm_handle_t handle;
-    bm_status_t ret = bm_dev_request(&handle, soc_idx);
-    if (ret != BM_SUCCESS) {
-      BM_VPU_ERROR("Create Bm Handle Failed\n");
-      bm_handle_unlock();
-      exit(0);
-    }
-    g_bm_handle[soc_idx].count = 1;
-    g_bm_handle[soc_idx].bm_handle = handle;
-    bm_handle_unlock();
-    return ;
-}
-
-
-/*
- * If a bm_handle_t on this soc already exists, then the bm_handle_t's reference count -1.
- * After that, if bm_handle_t's reference count is 0, free it(bm_dev_free),
- * otherwise do nothing.
- * This function is only be called by bmvpu_enc_unload().
- */
-static void bmvpu_enc_unload_bmlib_handle(int soc_idx){
-    if (soc_idx > MAX_SOC_NUM)
-    {
-      BM_VPU_ERROR("soc_idx excess MAX_SOC_NUM!\n");
-      exit(0);
-    }
-
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        bm_handle_lock();
-        if (g_bm_handle[soc_idx].count <= 1)
-        {
-            bm_dev_free(g_bm_handle[soc_idx].bm_handle);
-            g_bm_handle[soc_idx].count = 0;
-            g_bm_handle[soc_idx].bm_handle = 0;
-            BM_VPU_DEBUG("Free bm_handle for encode on soc %d \n", soc_idx);
-        }
-        else
-        {
-            g_bm_handle[soc_idx].count -= 1;
-            BM_VPU_DEBUG("The bm_handle for encode on soc is used by %d users \n", g_bm_handle[soc_idx].count);
-        }
-        bm_handle_unlock();
-    }
-    else
-        BM_VPU_DEBUG("Bm_handle for encode on soc %d not exist \n", soc_idx);
-}
-
-bm_handle_t bmvpu_enc_get_bmlib_handle(int soc_idx)
-{
-    bm_handle_t handle = 0;
-    if (soc_idx > MAX_SOC_NUM)
-    {
-        BM_VPU_ERROR("soc_idx excess MAX_SOC_NUM!\n");
-        exit(0);
-    }
-
-    bm_handle_lock();
-    if (g_bm_handle[soc_idx].bm_handle)
-    {
-        handle = g_bm_handle[soc_idx].bm_handle;
-        bm_handle_unlock();
-        return handle;
-    }
-    else
-    {
-        bm_handle_unlock();
-        BM_VPU_ERROR("There is not bmlib_handle on soc %d, This function should be called after bmvpu_enc_load()! \n");
-        return handle;
-    }
 }

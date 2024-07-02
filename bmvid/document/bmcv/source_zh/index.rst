@@ -48,6 +48,8 @@ bm_image 介绍
    bm_image/bm_image_get_plane_num
    bm_image/bm_image_is_attached
    bm_image/bm_image_get_handle
+   bm_image/bm_image_write_to_bmp
+   bm_image/bmcv_calc_cbcr_addr
 
 
 bm_image device memory 管理
@@ -63,6 +65,7 @@ BMCV API
    :glob:
 
    api/api_introduct
+   api/bmcv_hist_balance
    api/yuv2bgr
    api/warp_affine
    api/warp_perspective
@@ -124,6 +127,7 @@ BMCV API
    api/pyramid
    api/bayer2rgb
    api/as_strided
+   api/quantify
 
 PCIe CPU
 --------

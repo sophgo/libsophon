@@ -3,6 +3,10 @@ bmcv_debug_savedata
 
 This interface is used to input bm_image object to the internally defined binary file for debugging. The binary file format and parsing method are given in the example code.
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form:**
 

@@ -51,7 +51,7 @@ CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
 
 CFLAGS += -fPIC -Wall -Wl,--fatal-warning
-CFLAGS += -I$(BMVID_TOP_DIR)/video/encoder/bm_enc_api/inc -I$(INSTALL_DIR)/include -I$(BMVID_TOP_DIR)/provider/cnm/encoder/inc -I$(BMVID_ROOT)/3rdparty/libbmcv/include
+CFLAGS += -I$(BMVID_TOP_DIR)/video/encoder/bm_enc_api/inc -I$(INSTALL_DIR)/include -I$(BMVID_TOP_DIR)/provider/cnm/encoder/inc -I$(BMVID_TOP_DIR)/provider/cnm/encoder/inc/ #-I$(BMVID_ROOT)/3rdparty/libbmcv/include
 CFLAGS += -D$(BM_CHIP_TYPE) -D$(BM_SUB_TYPE)
 ifneq ($(PRODUCTFORM), soc)
     CFLAGS += -DBM_PCIE_MODE
@@ -66,11 +66,11 @@ LDLIBS   = -lpthread -lm -lrt -ldl
 LDLIBS  += -lbmvpulite -lbmvpuapi
 LIBS0    = -lbmvpulite
 
-LDFLAGS += -L./$(PRODUCTFORM) -L$(INSTALL_DIR)/lib -L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)
+LDFLAGS += -L./$(PRODUCTFORM) -L$(INSTALL_DIR)/lib #-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)
 
-# for using bmlib to manage physical memory
-LIBS0  += -lbmlib
-LDLIBS += -lbmlib
+# # for using bmlib to manage physical memory
+# LIBS0  += -lbmlib
+# LDLIBS += -lbmlib
 
 ifeq ($(PRODUCTFORM),pcie_mips64)
     CFLAGS += -mips64r2 -mabi=64 -march=gs464e -D_GLIBCXX_USE_CXX11_ABI=0
@@ -108,13 +108,13 @@ MKDIR ?= mkdir -p
 
 LIB_SRC = src/encoder.c \
           src/log.c \
-          src/queue.c \
           src/misc.c
 
 LIB_OBJS=$(patsubst %.c,%.o,$(LIB_SRC))
 LIB_PATHS=$(addprefix $(OBJDIR)/,$(notdir $(LIB_OBJS)))
 
-ENC_SRC = $(BMVID_TOP_DIR)/example/bmvpuenc.c
+ENC_SRC = $(BMVID_TOP_DIR)/example/bmvpuenc.c \
+          $(BMVID_TOP_DIR)/example/queue.c
 
 ENC_OBJS=$(patsubst %.c,%.o,$(ENC_SRC))
 ENC_PATHS=$(addprefix $(OBJDIR)/,$(notdir $(ENC_OBJS)))
@@ -147,10 +147,7 @@ install: $(TARGET)
 	install -d $(INSTALL_DIR)/lib
 	install -d $(INSTALL_DIR)/include
 	install $(TESTENC) $(INSTALL_DIR)/bin
-	install -m 0644 inc/bmqueue.h $(INSTALL_DIR)/include
-	install -m 0644 inc/bmvpuapi.h $(INSTALL_DIR)/include
-	install -m 0644 inc/bmvpuapi_common.h $(INSTALL_DIR)/include
-	install -m 0644 inc/bmvpuapi_enc.h $(INSTALL_DIR)/include
+	install -m 0644 inc/bm_vpuenc_interface.h $(INSTALL_DIR)/include
 ifeq ($(TARGET_SOVERSION), )
 	install $(TARGET) $(INSTALL_DIR)/lib
 else
@@ -163,10 +160,7 @@ uninstall:
 	$(RM) $(INSTALL_DIR)/lib/$(TARGET_NAME)
 	$(RM) $(INSTALL_DIR)/lib/$(TARGET_NAME)$(SO_NAME)
 	$(RM) $(INSTALL_DIR)/lib/$(TARGET_NAME)$(SO_VERSION)
-	$(RM) $(INSTALL_DIR)/include/bmqueue.h
-	$(RM) $(INSTALL_DIR)/include/bmvpuapi.h
-	$(RM) $(INSTALL_DIR)/include/bmvpuapi_common.h
-	$(RM) $(INSTALL_DIR)/include/bmvpuapi_enc.h
+	$(RM) $(INSTALL_DIR)/include/bm_vpuenc_interface.h
 
 $(OBJDIR)/encoder.o : src/encoder.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
@@ -174,13 +168,13 @@ $(OBJDIR)/encoder.o : src/encoder.c $(MAKEFILE)
 $(OBJDIR)/log.o : src/log.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
 
-$(OBJDIR)/queue.o : src/queue.c $(MAKEFILE)
-	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
-
 $(OBJDIR)/misc.o : src/misc.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
 
 $(OBJDIR)/bmvpuenc.o : $(BMVID_TOP_DIR)/example/bmvpuenc.c $(MAKEFILE)
+	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
+
+$(OBJDIR)/queue.o : $(BMVID_TOP_DIR)/example/queue.c $(MAKEFILE)
 	$(CC) $(CFLAGS) -c $< -o $@ -MD -MF $(@:.o=.dep)
 
 $(OBJDIR):

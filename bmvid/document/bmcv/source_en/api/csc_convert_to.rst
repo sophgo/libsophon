@@ -18,6 +18,10 @@ bmcv_image_csc_convert_to
             csc_matrix_t*         matrix = NULL,
             bmcv_convert_to_attr* convert_to_attr);
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Description of incoming parameters:**
 

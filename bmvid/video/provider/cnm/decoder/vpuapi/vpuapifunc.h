@@ -18,6 +18,7 @@
 #define VPUAPI_UTIL_H_INCLUDED
 
 #include "vpuapi.h"
+#include "bmlib_runtime.h"
 
 // COD_STD
 enum {
@@ -302,7 +303,8 @@ typedef struct {
     Uint32          PrevDecodeEndTick;
     Uint32          cyclePerTick;
     Uint32          productCode;
-
+    Uint32          enableDecodeOrder;
+    int             framebuf_from_user;
 } DecInfo;
 typedef struct {
     EncOpenParam        openParam;
@@ -806,7 +808,7 @@ typedef struct
     Uint8 film_grain_model_id;
     Uint8 separate_colour_description_present_flag;
     Uint8 film_grain_bit_depth_luma_minus8;
-    
+
     Uint8 film_grain_bit_depth_chroma_minus8;
     Uint8 film_grain_full_range_flag;
     Uint8 film_grain_colour_primaries;

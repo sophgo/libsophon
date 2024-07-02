@@ -48,11 +48,18 @@ typedef int     BOOL;
 # define NULL    0
 #endif
 
+#ifndef u64
 #ifdef _WIN32
 typedef unsigned long long u64;
-typedef unsigned int u32;
 #elif __linux__
 typedef unsigned long u64;
+#endif
+#endif
+
+#ifndef u32
+#ifdef _WIN32
+typedef unsigned int u32;
+#endif
 #endif
 
 #ifndef UNREFERENCED_PARAMETER

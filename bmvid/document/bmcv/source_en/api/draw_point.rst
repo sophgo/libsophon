@@ -1,6 +1,13 @@
 bmcv_image_draw_point
 =========================
+
 This interface is used to fill one or more points on an image。
+
+
+**Processor model support**
+
+This interface only supports BM1684X.
+
 
 **接口形式：**
     .. code-block:: c
@@ -76,9 +83,7 @@ This interface is used to fill one or more points on an image。
 
 **注意事项:**
 
-1. this interface does not support bm1684.
-
-2. bm1684x supports the following formats of bm_image:
+1. bm1684x supports the following formats of bm_image:
 
 +-----+-------------------------------+
 | num | input image_format            |

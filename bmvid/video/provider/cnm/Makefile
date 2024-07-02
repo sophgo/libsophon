@@ -3,7 +3,7 @@
 # Project: C&M Video decoder sample
 #
 # ----------------------------------------------------------------------
-.PHONY: CREATE_DIR
+.PHONY: CREATE_DIR COPY_HEADERS
 
 # ----------------------------------------------------------------------
 #configurable parameter
@@ -57,7 +57,6 @@ sub_type := WAVE512_FPGA       # default asic subtype
 endif
 endif
 
-$(shell cp $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_list_all.h $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component/component_list.h)
 ifeq ($(OS),linux)
 ifeq ($(PRODUCTFORM),pcie)
 BUILD_CONFIGURATION = NativeLinux
@@ -312,28 +311,22 @@ SOURCES_COMMON =main_helper.c                   vpuhelper.c                 bits
                 $(VDI_C)                        $(VDI_OSAL_C)               $(MM_C)
 
 ifeq ("$(BUILD_CONFIGURATION)", "EmbeddedLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "NativeLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "MipsLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "LoongLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "SunwayLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "RiscvLinux")
-SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c \
-                  $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_syscxt.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 endif
 
 
@@ -365,9 +358,9 @@ ifneq ($(SO_NAME),)
     TARGET_SOVERSION=$(DECTEST)$(SO_VERSION)
 endif
 
-all: $(BUILDLIST)
+all: COPY_HEADERS $(BUILDLIST)
 
-test: CREATE_DIR $(TEST)
+test: CREATE_DIR COPY_HEADERS $(TEST)
 
 $(TEST): $(DECTEST) $(SOURCES_DECTEST)
 	$(CC) -o $@ $(LDFLAGS) -O2 $(SOURCES_DECTEST) $(LDLIBS) $(CFLAGS)
@@ -390,13 +383,13 @@ ifneq ($(TARGET_SOVERSION), )
 endif
 
 endif
-	@cp $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/inc/bm_video_interface.h $(INSTALL_DIR)/
+	@cp $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/inc/bm_vpudec_interface.h $(INSTALL_DIR)/
 
 install-lib:
 	install -d $(DESTDIR)/lib
 	install -d $(DESTDIR)/include
 	ln -sf "$(SLIBNAME)" "$(DESTDIR)/lib/libvideo_bm.so"
-	install -m 755 $(INSTALL_DIR)/bm_video_interface.h $(DESTDIR)/include
+	install -m 755 $(INSTALL_DIR)/bm_vpudec_interface.h $(DESTDIR)/include
 ifeq ($(TARGET_SOVERSION), )
 	install -m 755 $(DECTEST) "$(DESTDIR)/lib/$(SLIBNAME)"
 else
@@ -422,6 +415,9 @@ clean:
 CREATE_DIR:
 	-mkdir -p $(OBJDIR)
 	-mkdir -p $(INSTALL_DIR)
+
+COPY_HEADERS:
+	cp $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_list_all.h $(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component/component_list.h
 
 ${OBJDIR}/%.o: %.c
 	$(CC) $(LDFLAGS) $(CFLAGS)  $(LDLIBS) -c $< -o $@ -MD -MF $(@:.o=.dep)

@@ -14,7 +14,7 @@
 #include <signal.h>        /* SIGIO */
 #include <fcntl.h>        /* fcntl */
 #include <sys/types.h>
-#include <sys/stat.h> 
+#include <sys/stat.h>
 #include <msrdc.h>
 #include <winioctl.h>
 #include <setupapi.h>
@@ -101,7 +101,7 @@ typedef pthread_mutex_t    MUTEX_HANDLE;
 
 
 const GUID* g_guid_interface[] = { &GUID_DEVINTERFACE_bm_sophon0};
-								  
+
 typedef struct vpudrv_buffer_pool_t
 {
     vpudrv_buffer_t vdb;
@@ -192,9 +192,9 @@ static BOOL getDriverContext(vdi_info_t* vdi, uint32_t board_idx) {
         DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
     //  Initialize the SP_DEVICE_INTERFACE_DATA Structure.
     DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
-    
+
     if (INVALID_HANDLE_VALUE == vdi->hDevInfo) {
-        printf("No sophon devices interface class are in the system.\n");
+        printf("No devices interface class are in the system.\n");
         return FALSE;
     }
 
@@ -210,7 +210,7 @@ static BOOL getDriverContext(vdi_info_t* vdi, uint32_t board_idx) {
         (LPGUID)g_guid_interface[0],
         vdi->dev_id,
         &DeviceInterfaceData)) {
-        printf("No sophon devices SetupDiEnumDeviceInterfaces for dev%d.\n", vdi->dev_id);
+        printf("No devices SetupDiEnumDeviceInterfaces for dev%d.\n", vdi->dev_id);
         goto Error;
     }
 
@@ -416,10 +416,10 @@ int vdi_init(u64 core_idx)
 #else
 
     vdi->vdb_register.size = chip_core_idx;
- 
+
 #endif
 
-    if(winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_REGISTER_INFO, &vdi->vdb_register) == -1){ 
+    if(winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_REGISTER_INFO, &vdi->vdb_register) == -1){
         goto ERR_VDI_INIT;
     }
 
@@ -572,8 +572,8 @@ int vdi_release(u64 core_idx)
     {
         memset(&vdi->vpu_common_memory, 0x00, sizeof(vpu_buffer_t));//release by drive
     }
-   
-   
+
+
     if (vdi->vpu_inst_memory.virt_addr) {
         memset(&vdi->vpu_inst_memory, 0x00, sizeof(vpu_buffer_t)); //release by drive
     }
@@ -630,8 +630,27 @@ int vdi_release(u64 core_idx)
 
     memset(vdi, 0x00, sizeof(vdi_info_t));
 	vdi->hDevice = INVALID_HANDLE_VALUE;
-	
+
     return 0;
+}
+
+int vdi_get_init_status(u64 core_idx)
+{
+    int ret;
+    vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+    vdi = &s_vdi_info[core_idx];
+
+    if (ret = winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_FIRMWARE_STATUS, &core_idx) < 0) {
+            return NULL;
+        }
+
+    if(ret == 100) {
+        return 0;
+    }
+    return 1;
 }
 
 int vdi_get_common_memory(u64 core_idx, vpu_buffer_t *vb)
@@ -842,7 +861,7 @@ int vdi_get_instance_num(u64 core_idx)
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return inst_num;
-    vdi = &s_vdi_info[core_idx];     
+    vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->hDevice == INVALID_HANDLE_VALUE || !(vdi->hDevice)) {
 #ifndef BM_PCIE_MODE
@@ -855,7 +874,7 @@ int vdi_get_instance_num(u64 core_idx)
         VLOG(TRACE,"[VDI] Get instance num. board %d, core %d, fd %d\n",
              board_idx, chip_core_idx, vdi->hDevice);
 #endif
-  
+
         vpudrv_inst_info_t inst_info = {0};
 
 #if defined(BM_PCIE_MODE) && defined(CHIP_BM1684)
@@ -873,7 +892,7 @@ int vdi_get_instance_num(u64 core_idx)
 
     }
     else {
-        inst_num = vdi->pvip->vpu_instance_num;    
+        inst_num = vdi->pvip->vpu_instance_num;
     }
     return inst_num;
 }
@@ -904,8 +923,8 @@ int vdi_hw_reset(u64 core_idx) // DEVICE_ADDR_SW_RESET
         winDeviceIoControl(vdi->hDevice, VDI_IOCTL_RESET, &chip_core_idx);
 		closeDrive(vdi);
         return 0;
-    }else 
-    	return winDeviceIoControl(vdi->hDevice, VDI_IOCTL_RESET, &chip_core_idx);     
+    }else
+    	return winDeviceIoControl(vdi->hDevice, VDI_IOCTL_RESET, &chip_core_idx);
 }
 
 int vdi_crst_set_status(int core_idx, int status)
@@ -972,7 +991,7 @@ int vdi_crst_set_enable(int core_idx, int en)
 #endif
 
         winDeviceIoControl(vdi->hDevice, VDI_IOCTL_SYSCXT_SET_EN, &syscxt_info);
-        
+
 		closeDrive(vdi);
         return 0;
     }
@@ -1553,6 +1572,55 @@ int vdi_read_memory(u64 core_idx, u64 src_addr, unsigned char *dst_data, int len
     return len;
 }
 
+int vdi_mmap_memory(u64 core_idx, vpu_buffer_t *vb)
+{
+//     vdi_info_t *vdi;
+// #if defined(BM_PCIE_MODE)
+//     int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+// #endif
+//     if (core_idx >= MAX_NUM_VPU_CORE)
+//         return -1;
+
+//     vdi = &s_vdi_info[core_idx];
+//     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
+//         return -1;
+
+//     vb->virt_addr = (unsigned long)mmap(NULL, vb->size, PROT_READ | PROT_WRITE,
+//                                         MAP_SHARED, vdi->vpu_fd, vb->phys_addr);
+//     if ((void *)vb->virt_addr == MAP_FAILED)
+//     {
+//         vb->virt_addr = 0;
+//         return -1;
+//     }
+
+    return 0;
+}
+
+int vdi_unmap_memory(u64 core_idx, vpu_buffer_t *vb)
+{
+//     vdi_info_t *vdi;
+// #if defined(BM_PCIE_MODE)
+//     int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+// #endif
+//     if (core_idx >= MAX_NUM_VPU_CORE)
+//         return -1;
+
+//     vdi = &s_vdi_info[core_idx];
+//     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
+//         return -1;
+
+//     if(vb->virt_addr != 0 && vb->virt_addr != FAKE_PCIE_VIRT_ADDR)
+//     {
+//         if (munmap((void *)vb->virt_addr, vb->size) != 0)
+//         {
+//             VLOG(ERR, "[VDI] fail to vdi_free_dma_memory virtial address = 0x%lx\n", vb->virt_addr);
+//         }
+//         return -1;
+//     }
+
+    return 0;
+}
+
 int vdi_allocate_dma_memory(u64 core_idx, vpu_buffer_t *vb)
 {
     vdi_info_t *vdi;
@@ -1722,7 +1790,7 @@ u64 vdi_get_dma_memory_free_size(u64 coreIdx)
     else {
         if(winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_FREE_MEM_SIZE, &size) == -1){
             return 0;
-        }   
+        }
     }
 #endif
 
@@ -1891,8 +1959,8 @@ int vdi_set_clock_gate(u64 core_idx, int enable)
     }
 
     return 0;
-    
-    
+
+
 }
 
 int vdi_get_clock_gate(u64 core_idx)
@@ -1987,7 +2055,7 @@ int vdi_wait_vpu_busy(u64 core_idx, int timeout, unsigned int addr_bit_busy_flag
                 Uint32 idx;
                 for (idx=0; idx<50; idx++) {
                     VLOG(ERR, "[VDI] vdi_wait_vpu_busy timeout, PC=0x%x, LR=0x%x\n", vdi_read_register(core_idx, pc), vdi_read_register(core_idx, W5_VCPU_CUR_LR));
-                    VLOG(ERR, "[VDI] W5_VPU_BUSY_STATUS=0x%x, W5_VPU_HALT_STATUS=0x%x, W5_VPU_VCPU_STATUS=0x%x, W5_VPU_PRESCAN_STATUS=0x%x\n", vdi_read_register(core_idx, W5_VPU_BUSY_STATUS), 
+                    VLOG(ERR, "[VDI] W5_VPU_BUSY_STATUS=0x%x, W5_VPU_HALT_STATUS=0x%x, W5_VPU_VCPU_STATUS=0x%x, W5_VPU_PRESCAN_STATUS=0x%x\n", vdi_read_register(core_idx, W5_VPU_BUSY_STATUS),
                         vdi_read_register(core_idx, W5_VPU_HALT_STATUS), vdi_read_register(core_idx, W5_VPU_VCPU_STATUS), vdi_read_register(core_idx, W5_VPU_PRESCAN_STATUS));
                     {
                         Uint32 vcpu_reg[31]= {0,};
