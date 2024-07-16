@@ -31,62 +31,10 @@
 #include "bm_pt.h"
 #include "efuse.h"
 #endif
-#include "base_cb.h"
 
 extern dev_t bm_devno_base;
 extern dev_t bm_ctl_devno_base;
 extern int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
-
-int bmdev_do_teaisp_cb(void *p, enum ENUM_MODULES_ID caller, u32 cmd, void *arg)
-{
-	struct file *file = (struct file *)p;
-	struct bm_device_info *bmdi = (struct bm_device_info *)file->private_data;
-	int ret = 0;
-	unsigned long api_addr = (unsigned long)arg;
-
-	switch (cmd)
-	{
-	case BMDEV_SEND_API:
-		if (bmdi->status_sync_api == 0) {
-			ret = bmdrv_send_api(bmdi, file, api_addr, false, false);
-		} else {
-			pr_err("[send_api]bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
-			ret = -EBUSY;
-		}
-		break;
-	case BMDEV_THREAD_SYNC_API:
-		if (bmdi->status_sync_api == 0) {
-			int core_id;
-			ret = copy_from_user(&core_id, (void __user *)api_addr, sizeof(int));
-			if (ret != 0) {
-				pr_err("error copy_from_user, ret is %d\n", ret);
-				return -EFAULT;
-			}
-			ret = bmdrv_thread_sync_api(bmdi, file, core_id);
-			bmdi->status_sync_api = ret;
-		} else {
-			pr_err("[sync_api]bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
-			ret = -EBUSY;
-		}
-		break;
-	default:
-		dev_err(bmdi->dev, "*************Invalid ioctl parameter************\n");
-		return -EINVAL;
-	}
-
-	return ret;
-}
-
-static int bmdev_register_teaisp_cb(struct file *file)
-{
-	struct base_m_cb_info reg_cb;
-
-	reg_cb.module_id = E_MODULE_BMTPU;
-	reg_cb.dev = (void *)file;
-	reg_cb.cb  = bmdev_do_teaisp_cb;
-
-	return base_reg_module_cb(&reg_cb);
-}
 
 static int bmdev_open(struct inode *inode, struct file *file)
 {
@@ -95,7 +43,6 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	struct bm_handle_info *h_info;
 	struct bm_thread_info *thd_info = NULL;
 	int i;
-	unsigned long irq_flags;
 
 	PR_TRACE("bmdev_open\n");
 
@@ -111,16 +58,16 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	}
 #endif
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	bmdi->dev_refcount++;
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	open_pid = current->pid;
 
 	h_info = kmalloc(sizeof(struct bm_handle_info), GFP_KERNEL);
 	if (!h_info) {
-		spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+		mutex_lock(&bmdi->gmem_info.gmem_mutex);
 		bmdi->dev_refcount--;
-		spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 		return -ENOMEM;
 	}
 
@@ -135,22 +82,21 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	init_waitqueue_head(&h_info->h_msg_done);
 	mutex_init(&h_info->h_api_seq_mutex);
 
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	thd_info = bmdrv_create_thread_info(h_info, open_pid);
 	if (!thd_info) {
-		spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
-		bmdi->dev_refcount--;
-		spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 		kfree(h_info);
+		bmdi->dev_refcount--;
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 		return -ENOMEM;
 	}
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_add(&h_info->list, &bmdi->handle_list);
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	file->private_data = bmdi;
-
-	bmdev_register_teaisp_cb(file);
 
 #ifndef SOC_MODE
 	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
@@ -198,22 +144,21 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	struct bm_device_info *bmdi = file->private_data;
 	struct bm_handle_info *h_info, *h_node;
 	int handle_num = 0;
-	int core = 0;
-	int core_num = bmdi->cinfo.tpu_core_num;
-	unsigned long irq_flags;
+	//int core = 0;
+	//int core_num = bmdi->cinfo.tpu_core_num;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
 		return -EINVAL;
 	}
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_for_each_entry(h_node, &bmdi->handle_list, list) {
 		if (h_node->open_pid == h_info->open_pid) {
 			handle_num++;
 		}
 	}
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	if (handle_num == 1)
 		bmdrv_api_clear_lib(bmdi, file);
@@ -225,23 +170,24 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	}
 #endif
 	/* invalidate pending APIs in msgfifo */
-	for (core = 0; core < core_num; core++)
-		bmdev_invalidate_pending_apis(bmdi, h_info, core);
+	//for (core = 0; core < core_num; core++)
+	//	bmdev_invalidate_pending_apis(bmdi, h_info, core);
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	bmdrv_delete_thread_info(h_info);
 	list_del(&h_info->list);
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
 	kfree(h_info);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+
 	file->private_data = NULL;
 
 #ifdef USE_RUNTIME_PM
 	pm_runtime_put_sync(bmdi->cinfo.device);
 #endif
 	PR_TRACE("bmdev_close\n");
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	bmdi->dev_refcount--;
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	return 0;
 }
 
@@ -693,13 +639,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_THREAD_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
-			int core_id;
-			ret = copy_from_user(&core_id, (void __user *)arg, sizeof(int));
-			if (ret != 0) {
-				pr_err("error copy_from_user, ret is %d\n", ret);
-				return -EFAULT;
-			}
-			ret = bmdrv_thread_sync_api(bmdi, file, core_id);
+			ret = bmdrv_thread_sync_api(bmdi, file, arg);
 			bmdi->status_sync_api = ret;
 		} else {
 			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
@@ -1018,7 +958,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			snprintf(board_name, 20, "1684X-SOC");
 			break;
 		case 0x1686a200:
-			snprintf(board_name, 20, base_get_chip_id(bmdi));
+			snprintf(board_name, 20, "%s", base_get_chip_id(bmdi));
 			break;
 		}
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));
@@ -1160,16 +1100,16 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				return -EINVAL;
 			}
 
-			// spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+			mutex_lock(&bmdi->gmem_info.gmem_mutex);
 			api_pid = current->pid;
 			thd_info = bmdrv_find_thread_info(h_info, api_pid);
-			// spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+
 			if (!thd_info)
 				ret = -EFAULT;
 			else
 				ret = copy_to_user((unsigned long __user *)arg,
 						&thd_info->profile, sizeof(bm_profile_t));
-
+			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 			break;
 		}
 	case BMDEV_GET_VERSION:
@@ -1195,7 +1135,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			mutex_lock(&lib_info->bmcpu_lib_mutex);
 			list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-				if(!memcmp(lib_temp->md5, loaded_lib.md5, 16)) {
+				if(!memcmp(lib_temp->md5, loaded_lib.md5, 16) && loaded_lib.core_id == lib_temp->core_id) {
 					loaded_lib.loaded = 1;
 					break;
 				}

@@ -27,7 +27,7 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	struct bm_thread_info *thd_info;
 	int i;
 
-	thd_info = kmalloc(sizeof(struct bm_thread_info), GFP_ATOMIC);
+	thd_info = kmalloc(sizeof(struct bm_thread_info), GFP_KERNEL);
 	if (!thd_info)
 		return thd_info;
 	thd_info->user_pid = pid;
@@ -49,7 +49,7 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 
 	thd_info->trace_enable = 0;
 	thd_info->trace_item_num = 0ULL;
-	spin_lock_init(&thd_info->trace_spinlock);
+	mutex_init(&thd_info->trace_mutex);
 	INIT_LIST_HEAD(&thd_info->trace_list);
 
 	hash_add_rcu(h_info->api_htable, &thd_info->node, pid);

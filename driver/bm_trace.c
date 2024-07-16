@@ -50,7 +50,6 @@ int bmdev_trace_enable(struct bm_device_info *bmdi, struct file *file)
 	struct bm_thread_info *ti;
 	pid_t api_pid;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
@@ -63,9 +62,9 @@ int bmdev_trace_enable(struct bm_device_info *bmdi, struct file *file)
 	if (!ti) {
 		return -EFAULT;
 	} else {
-		spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
+		mutex_lock(&ti->trace_mutex);
 		ti->trace_enable = 1;
-		spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
+		mutex_unlock(&ti->trace_mutex);
 		return 0;
 	}
 }
@@ -75,7 +74,6 @@ int bmdev_trace_disable(struct bm_device_info *bmdi, struct file *file)
 	struct bm_thread_info *ti;
 	pid_t api_pid;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
@@ -88,9 +86,9 @@ int bmdev_trace_disable(struct bm_device_info *bmdi, struct file *file)
 	if (!ti) {
 		return -EFAULT;
 	} else {
-		spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
+		mutex_lock(&ti->trace_mutex);
 		ti->trace_enable = 0;
-		spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
+		mutex_unlock(&ti->trace_mutex);
 		return 0;
 	}
 }
@@ -113,9 +111,9 @@ int bmdev_traceitem_number(struct bm_device_info *bmdi, struct file *file, unsig
 	if (!ti) {
 		return -EFAULT;
 	} else {
-		// spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
+		mutex_lock(&ti->trace_mutex);
 		ret = put_user(ti->trace_item_num, (u64 __user *)arg);
-		// spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
+		mutex_unlock(&ti->trace_mutex);
 		return ret;
 	}
 }
@@ -128,7 +126,6 @@ int bmdev_trace_dump_one(struct bm_device_info *bmdi, struct file *file, unsigne
 	struct list_head *oldest = NULL;
 	struct bm_trace_item *ptitem = NULL;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
@@ -141,19 +138,17 @@ int bmdev_trace_dump_one(struct bm_device_info *bmdi, struct file *file, unsigne
 	if (!ti)
 		return -EFAULT;
 
-	spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
+	mutex_lock(&ti->trace_mutex);
 	if (!list_empty(&ti->trace_list)) {
 		oldest = ti->trace_list.next;
 		list_del(oldest);
-		ti->trace_item_num--;
-		spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
 		ptitem = container_of(oldest, struct bm_trace_item, node);
 		ret = copy_to_user((unsigned long __user *)arg, &ptitem->payload,
 				sizeof(struct bm_trace_item_data));
 		mempool_free(ptitem, bmdi->trace_info.trace_mempool);
-		return ret;
+		ti->trace_item_num--;
 	}
-	spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
+	mutex_unlock(&ti->trace_mutex);
 	return ret;
 }
 
@@ -178,7 +173,7 @@ int bmdev_trace_dump_all(struct bm_device_info *bmdi, struct file *file, unsigne
 	if (!ti)
 		return -EFAULT;
 
-	// spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
+	mutex_lock(&ti->trace_mutex);
 	while (!list_empty(&ti->trace_list)) {
 		oldest = ti->trace_list.next;
 		list_del(oldest);
@@ -188,7 +183,7 @@ int bmdev_trace_dump_all(struct bm_device_info *bmdi, struct file *file, unsigne
 		mempool_free(ptitem, bmdi->trace_info.trace_mempool);
 		i++;
 	}
-	// spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
+	mutex_unlock(&ti->trace_mutex);
 	return ret;
 }
 

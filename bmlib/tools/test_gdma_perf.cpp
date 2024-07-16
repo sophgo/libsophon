@@ -181,11 +181,13 @@ int main(int argc, char *argv[])
 	int count = 0x0;
 	int chip_num = 0x0;
 	int core_id = 0;
+	unsigned int core_num = 0x0;
 	int transfer_size = 0;
 	unsigned long long src_addr = 0;
 	unsigned long long dst_addr = 0;
 	int loop_num = 0;
 	int i = 0;
+	gdma_d2d_t arg[THREAD_NUM];
 	printf("I'm starting gdma_perf\n");
 
 	#ifdef __linux__
@@ -272,27 +274,37 @@ int main(int argc, char *argv[])
 				return -1;
 			}
 
+			ret = bm_get_tpu_scalar_num(handle, &core_num);
+			if (ret != BM_SUCCESS) {
+				printf("bm_get_tpu_scalar_num failed, ret = %d\n", ret);
+				return -1;
+			}
+
 			pthread_t threads[THREAD_NUM];
-			//gdma_d2d_t arg[]={{handle, 256 * 1024, 0, 0, 0, 1},
-			//					{handle, 256 * 1024, 0, 0, 1, 1},
-			//					{handle, 256 * 1024, 0, 0, 0, 1},
-			//					{handle, 256 * 1024, 0, 0, 1, 1},
-			//					{handle, 256 * 1024, 0, 0, 0, 1},
-			//					{handle, 256 * 1024, 0, 0, 1, 1},
-			//					{handle, 256 * 1024, 0, 0, 0, 1},
-			//					{handle, 256 * 1024, 0, 0, 1, 1},
-			//					{handle, 256 * 1024, 0, 0, 0, 1},
-			//					{handle, 256 * 1024, 0, 0, 1, 1}};
-			gdma_d2d_t arg[]={{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1},
-								{handle, 256 * 1024, 0, 0, 0, 1}};
+			if (core_num == 1){
+				arg[0] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[1] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[2] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[3] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[4] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[5] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[6] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[7] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[8] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[9] = {handle, 256 * 1024, 0, 0, 0, 1};
+			} else {
+				arg[0] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[1] = {handle, 256 * 1024, 0, 0, 1, 1};
+				arg[2] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[3] = {handle, 256 * 1024, 0, 0, 1, 1};
+				arg[4] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[5] = {handle, 256 * 1024, 0, 0, 1, 1};
+				arg[6] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[7] = {handle, 256 * 1024, 0, 0, 1, 1};
+				arg[8] = {handle, 256 * 1024, 0, 0, 0, 1};
+				arg[9] = {handle, 256 * 1024, 0, 0, 1, 1};
+			}
+
 
 			for (int thread_cnt = 0; thread_cnt < THREAD_NUM; thread_cnt++) {
 				if (pthread_create(&threads[thread_cnt], NULL, test_gdma_d2d, (void *)&arg[thread_cnt])) {

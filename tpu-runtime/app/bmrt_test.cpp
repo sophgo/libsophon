@@ -684,10 +684,10 @@ void save_neuron(void *p_bmrt, int net_idx, int stage_idx)
   bm_handle_t handle = ((Bmruntime *)p_bmrt)->get_bm_handle();
   size_t size = 0;
   for (const auto &mem : device_mem)
-    size += sg_mem_get_device_size(mem);
+    size += bm_mem_get_device_size_u64(mem);
   char *data = new char[size];
   for (const auto &mem : device_mem) {
-    sg_memcpy_d2s_partial(handle, data, mem, sg_mem_get_device_size(mem));
+    bm_memcpy_d2s_partial_u64(handle, data, mem, bm_mem_get_device_size_u64(mem));
   }
   string filename = str.str();
   FILE *fout = fopen(filename.c_str(), "wb");
@@ -1304,8 +1304,8 @@ void Usage()
       "  --output_shapes    : Set shapes of the output shapes.\n"
       "  --cascade_device   : Set devices to run for cascade model, e.g. 1,2\n"
       "  --core_list        : Set the core id list those will be used to inference\n"
-      "                         e.g. 0,1,2,3 means using 0,1,2,3 core to infer the bmodel.\n"
-      "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
+      "                         e.g. 0,1 means using 0,1 core together to infer the multi-core compiled bmodel.\n"
+      "                              0:1 means using 0,1 core to infer the single-core compiled bmodel with parallelly mession.\n"
 #ifdef DEBUG
       "  --test_case        : Test api case, \n"
       "                       Option:\n"

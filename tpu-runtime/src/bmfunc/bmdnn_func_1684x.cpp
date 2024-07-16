@@ -18,10 +18,15 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
       (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
       sizeof(u64) * 2 + (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() +
       sizeof(int);
+  if (net_info.do_allreduce) {
+    api_buffer_size += sizeof(u32);
+    api_buffer_size += sizeof(tpu_kernel_allreduce_1684x_t);
+  }
   api_info.api_data.resize(1);
   api_info.api_data[0].assign(api_buffer_size, 0);
   api_info.input_addr_offset.assign(input_info.size(), 0);
   api_info.output_addr_offset.assign(output_info.size(), 0);
+  api_info.api_id.emplace_back(net_info.kernel_func_ids[0]);
 
   void *p_api = api_info.api_data[0].data();
   // input global offset process
@@ -73,6 +78,13 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
     *(u32 *)p_api = cmd_info.at(i).gdma_cmd_byte_size;
     p_api = (u32 *)p_api + 1;
   }
+
+  if (net_info.do_allreduce == 1) {
+    *(u32 *)p_api = net_info.do_allreduce;
+    p_api = (u32 *)p_api + 1;
+    *(tpu_kernel_allreduce_1684x_t *)p_api = net_info.allreduce_param;
+    p_api = (tpu_kernel_allreduce_1684x_t *)p_api + 1;
+  }
 }
 bm_status_t
 bmdnn_func_1684x::_bmdnn_multi_fullnet_(bm_handle_t handle,
@@ -107,6 +119,8 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
         std::vector<unsigned long long> apd_ctx_mem_borders,
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         unsigned long long output_shape_global_addr)
 {
@@ -127,8 +141,8 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
                            output_num * sizeof(u64) +
                            //get_output_shape, global_shape_mem_addr, apd_ctx_start, (ctx_num, apd_ctx_mem_borders, apd_ctx_mem_offset),
                            sizeof(u32) + sizeof(u64) + sizeof(u64) + ( sizeof(u32)+sizeof(u64)*ctx_num*2 ) +
-                           //apd_coeff_mem_offset
-                           sizeof(u64);
+                           //apd_coeff_mem_offset, apd_io_start, apd_io_mem_offset
+                           sizeof(u64) + sizeof(u64) + sizeof(u64);
 
      if (api_buffer_size > MAX_API_MSG_SIZE) {
        //decrease the api buffer size
@@ -200,6 +214,12 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
      *(u64*)p_api = apd_coeff_mem_offset;
      p_api = (u64*)p_api + 1;
 
+     *(u64*)p_api = apd_io_start;
+     p_api = (u64*)p_api + 1;
+
+     *(u64*)p_api = apd_io_mem_offset;
+     p_api = (u64*)p_api + 1;
+
      bm_status_t status = tpu_kernel_launch_async(handle, func_id, api_buffer, api_buffer_size);
      if (BM_SUCCESS != status) {
        BMRT_LOG(WRONG, "tpu_kernel_launch failed, func id:%d, status:%d", func_id, status);
@@ -222,7 +242,7 @@ bm_status_t  bmdnn_func_1684x::_bmdnn_set_profile_enable_(bm_handle_t handle, tp
      u32 profile_enable = enable;
      bm_status_t status = tpu_kernel_launch(handle, func_id, (u8*)&profile_enable, api_buffer_size);
      if (BM_SUCCESS != status) {
-       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", SG_API_ID_SET_PROFILE_ENABLE, status);
+       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_SET_PROFILE_ENABLE, status);
      }
      return status;
 }
@@ -253,7 +273,7 @@ bm_status_t bmdnn_func_1684x::_bmdnn_get_profile_data_(
      api_data.byte_offset = byte_offset;
      api_data.data_category = data_category;
 
-     bm_api_id_t api_code = (bm_api_id_t)SG_API_ID_GET_PROFILE_DATA;
+     bm_api_id_t api_code = (bm_api_id_t)BM_API_ID_GET_PROFILE_DATA;
      bm_status_t status = tpu_kernel_launch_async(handle, func_id, (u8*)&api_data, api_buffer_size);
      if (BM_SUCCESS != status) {
        BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", api_code, status);

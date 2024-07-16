@@ -168,6 +168,8 @@ bm_status_t bmdnn_func_1688::_bmdnn_dynamic_fullnet_(
         const std::vector<unsigned long long> apd_ctx_mem_borders,
         const std::vector<unsigned long long> apd_ctx_mem_offset,
         const unsigned long long apd_coeff_mem_offset,
+        const unsigned long long apd_io_start,
+        const unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         const unsigned long long output_shape_global_addr,
         const std::vector<int32_t>& core_list) {
@@ -197,7 +199,9 @@ bm_status_t bmdnn_func_1688::_bmdnn_dynamic_fullnet_(
                         //apd_coeff_mem_offset
                         sizeof(u64) +
                         // core_idx + core_num + group_msg_id
-                        3 * sizeof(u32);
+                        3 * sizeof(u32) +
+                        //apd_io_start + apd_io_mem_offset
+                        sizeof(u64) + sizeof(u64);
 
   if (api_buffer_size > MAX_API_MSG_SIZE) {
     //decrease the api buffer size
@@ -286,6 +290,11 @@ bm_status_t bmdnn_func_1688::_bmdnn_dynamic_fullnet_(
     p_api = (u32*)p_api + 1;
     *(u32*)p_api = group_msg_id;
     p_api = (u32*)p_api + 1;
+
+    *(u64*)p_api = apd_io_start;
+    p_api = (u64*)p_api + 1;
+    *(u64*)p_api = apd_io_mem_offset;
+    p_api = (u64*)p_api + 1;
 
   BMRT_LOG_RUN(DEBUG, {
     for (size_t core_idx = 0; core_idx < core_list.size(); core_idx++) {
@@ -383,11 +392,11 @@ typedef struct {
     int engine;
     unsigned long long addr;
     unsigned long long size;
-} sg_api_engine_profile_param_t;
+} bm_api_engine_profile_param_t;
 #pragma pack()
 
 bm_status_t bmdnn_func_1688::_bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size){
-  sg_api_engine_profile_param_t param;
+  bm_api_engine_profile_param_t param;
   param.engine = engine_type;
   param.addr = addr;
   param.size = size;

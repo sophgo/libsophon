@@ -208,7 +208,7 @@ int bmdev_trace_dump_all(struct bm_device_info *bmdi, _In_ WDFREQUEST Request) {
 	//if (!ti)
 	//	return -1;
 
-	////spin_lock(&ti->trace_spinlock);
+	////mutex_lock(&ti->trace_spinlock);
 	//while (!list_empty(&ti->trace_list)) {
 	//	oldest = ti->trace_list.next;
 	//	list_del(oldest);
@@ -218,7 +218,7 @@ int bmdev_trace_dump_all(struct bm_device_info *bmdi, _In_ WDFREQUEST Request) {
 	//	mempool_free(ptitem, bmdi->trace_info.trace_mempool);
 	//	i++;
 	//}
-	////spin_unlock(&ti->trace_spinlock);
+	////mutex_unlock(&ti->trace_spinlock);
 	return ret;
 }
 

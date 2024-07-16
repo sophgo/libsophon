@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     int i = 0;
     if (argc != 3)
     {
-        printf("please input param just like: a53lite_load_lib 0 /lib/firmware/libbm1688_kernel_module.so\n");
+        printf("please input param just like: a53lite_load_lib 0 test.so\n");
         return -1;
     }
 
@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    f_id = tpu_kernel_get_function(handle, bm_module, "tpu_get_local_size");
+    f_id = tpu_kernel_get_function(handle, bm_module, "tpu_kernel_api_multi_crop_resize");
 
     ret = tpu_kernel_launch(handle, f_id, (void *)&args, sizeof(unsigned long long));
     printf("%s ret is %d\n", __FILE__, ret);

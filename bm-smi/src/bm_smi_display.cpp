@@ -1263,7 +1263,7 @@ int bm_smi_display::run_opmode() {
         return -EINVAL;
     chip_mode = misc_info.pcie_soc_mode;
     bm_dev_free(handle1);
-    if (g_cmdline.m_text_format) {
+  if (g_cmdline.m_text_format) {
         if (chip_mode == 1) {
             printf("text_format failed!\n");
             printf("this parameter is not support on SOC mode\n");

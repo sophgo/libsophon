@@ -427,13 +427,12 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 	struct bm_device_info *bmdi;
 	struct bm_handle_info *h_info;
 	int proc_cnt = 0;
-	unsigned long irq_flags;
 
 	bmdi = bmctl_get_bmdi(bmci, smi_proc_gmem->dev_id);
 	if (!bmdi)
 		return -1;
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_for_each_entry(h_info, &bmdi->handle_list, list) {
 		smi_proc_gmem->pid[proc_cnt] = h_info->open_pid;
 		smi_proc_gmem->gmem_used[proc_cnt] = h_info->gmem_used / 1024 / 1024;
@@ -441,7 +440,7 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 		if (proc_cnt == 128)
 			break;
 	}
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	smi_proc_gmem->proc_cnt = proc_cnt;
 	return 0;
 }

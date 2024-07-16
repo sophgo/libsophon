@@ -51,6 +51,20 @@ struct tpu_single_core_cmd_t {
   //// global addr of sdma command
   uint64_t sdma_cmd_addr;
 };
+
+typedef struct tpu_kernel_allreduce_1684x {
+  u64     i_global_addr[8];
+  u64     i_global_addr_1[8];
+  u64     o_global_addr[8];
+  u32     count;
+  int     dtype;
+  int     reduce_method;
+  int     group[8];
+  int     rank;
+  int     chip_num;
+  int     group_size;
+} tpu_kernel_allreduce_1684x_t;
+
 typedef struct {
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
@@ -62,6 +76,8 @@ typedef struct {
   uint64_t coeff_start_addr;
   /// neuron start addr
   std::vector<uint64_t> neuron_start_addr;
+  int32_t do_allreduce;
+  tpu_kernel_allreduce_1684x_t allreduce_param;
 } tpu_net_info_t;
 
 class bmdnn_func {
@@ -217,10 +233,10 @@ class bmdnn_func_1684x : public bmdnn_func {
   public:
 
     bmdnn_func_1684x() {
-        SG_API_ID_MULTI_FULLNET       = 0x0ffffffb;
-        SG_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
-        SG_API_ID_SET_PROFILE_ENABLE  = 986;
-        SG_API_ID_GET_PROFILE_DATA    = 987;
+        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        BM_API_ID_SET_PROFILE_ENABLE  = 986;
+        BM_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
     };
     virtual bm_status_t _bmdnn_multi_fullnet_(
@@ -246,6 +262,8 @@ class bmdnn_func_1684x : public bmdnn_func {
         std::vector<unsigned long long> apd_ctx_mem_borders,
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         unsigned long long output_shape_global_addr);
 
@@ -258,10 +276,10 @@ class bmdnn_func_1684x : public bmdnn_func {
                                          unsigned int data_category //0: profile time records, 1: extra data
                                          );
   private:
-    u32 SG_API_ID_MULTI_FULLNET;
-    u32 SG_API_ID_DYNAMIC_FULLNET;
-    u32 SG_API_ID_SET_PROFILE_ENABLE;
-    u32 SG_API_ID_GET_PROFILE_DATA;
+    u32 BM_API_ID_MULTI_FULLNET;
+    u32 BM_API_ID_DYNAMIC_FULLNET;
+    u32 BM_API_ID_SET_PROFILE_ENABLE;
+    u32 BM_API_ID_GET_PROFILE_DATA;
     u32 MAX_API_MSG_SIZE;
 };
 
@@ -294,6 +312,8 @@ class bmdnn_func_1688 : public bmdnn_func {
         const std::vector<unsigned long long> apd_ctx_mem_borders,
         const std::vector<unsigned long long> apd_ctx_mem_offset,
         const unsigned long long apd_coeff_mem_offset,
+        const unsigned long long apd_io_start,
+        const unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         const unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list);
@@ -316,10 +336,10 @@ class bmdnn_func_2260 : public bmdnn_func {
   public:
 
     bmdnn_func_2260() {
-        SG_API_ID_MULTI_FULLNET       = 0x0ffffffb;
-        SG_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
-        SG_API_ID_SET_PROFILE_ENABLE  = 986;
-        SG_API_ID_GET_PROFILE_DATA    = 987;
+        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        BM_API_ID_SET_PROFILE_ENABLE  = 986;
+        BM_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
     };
     virtual bm_status_t _bmdnn_multi_fullnet_(
@@ -344,6 +364,8 @@ class bmdnn_func_2260 : public bmdnn_func {
         std::vector<unsigned long long> apd_ctx_mem_borders,
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list);
@@ -356,10 +378,10 @@ class bmdnn_func_2260 : public bmdnn_func {
                                          unsigned int data_category //0: profile time records, 1: extra data
                                          );
   private:
-    u32 SG_API_ID_MULTI_FULLNET;
-    u32 SG_API_ID_DYNAMIC_FULLNET;
-    u32 SG_API_ID_SET_PROFILE_ENABLE;
-    u32 SG_API_ID_GET_PROFILE_DATA;
+    u32 BM_API_ID_MULTI_FULLNET;
+    u32 BM_API_ID_DYNAMIC_FULLNET;
+    u32 BM_API_ID_SET_PROFILE_ENABLE;
+    u32 BM_API_ID_GET_PROFILE_DATA;
     u32 MAX_API_MSG_SIZE;
 };
 
@@ -367,10 +389,10 @@ class bmdnn_func_mars3 : public bmdnn_func {
   public:
 
     bmdnn_func_mars3() {
-        SG_API_ID_MULTI_FULLNET       = 0x0ffffffb;
-        SG_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
-        SG_API_ID_SET_PROFILE_ENABLE  = 986;
-        SG_API_ID_GET_PROFILE_DATA    = 987;
+        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        BM_API_ID_SET_PROFILE_ENABLE  = 986;
+        BM_API_ID_GET_PROFILE_DATA    = 987;
         MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
     };
     virtual bm_status_t _bmdnn_multi_fullnet_(
@@ -395,6 +417,8 @@ class bmdnn_func_mars3 : public bmdnn_func {
         std::vector<unsigned long long> apd_ctx_mem_borders,
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list);
@@ -407,10 +431,10 @@ class bmdnn_func_mars3 : public bmdnn_func {
                                          unsigned int data_category //0: profile time records, 1: extra data
                                          );
   private:
-    u32 SG_API_ID_MULTI_FULLNET;
-    u32 SG_API_ID_DYNAMIC_FULLNET;
-    u32 SG_API_ID_SET_PROFILE_ENABLE;
-    u32 SG_API_ID_GET_PROFILE_DATA;
+    u32 BM_API_ID_MULTI_FULLNET;
+    u32 BM_API_ID_DYNAMIC_FULLNET;
+    u32 BM_API_ID_SET_PROFILE_ENABLE;
+    u32 BM_API_ID_GET_PROFILE_DATA;
     u32 MAX_API_MSG_SIZE;
 };
 }

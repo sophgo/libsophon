@@ -48,7 +48,7 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 #endif
 
 #ifdef PCIE_MODE_ENABLE_CPU
-	if (bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU || 
+	if (bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU ||
 	    bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU_A2_0 ||
 	    bmdi->cinfo.irq_id == MSG_IRQ_ID_CHANNEL_XPU_A2_1)
 		channel = BM_MSGFIFO_CHANNEL_XPU;
@@ -65,7 +65,7 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 #endif
 
 	api_info = &bmdi->api_info[core_id][channel];
-	spin_lock(&api_info->api_fifo_spinlock);
+	mutex_lock(&api_info->api_fifo_mutex);
 
 	while (pending_msgirq_cnt) {
 		if (BM_MSGFIFO_CHANNEL_XPU == channel) {
@@ -130,12 +130,10 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 			// device sync marker; NOT a real api entry
 			api_info->device_sync_cpl = api_entry.dev_api_seq;
 			complete(&api_info->dev_sync_done);
-			PR_TRACE("[%s: %d] error: core_id=%d\n", __func__, __LINE__, core_id);
-
 			continue;
 		} else {
 			// msg api done
-			spin_lock(&bmdi->gmem_info.gmem_spinlock);
+			mutex_lock(&bmdi->gmem_info.gmem_mutex);
 			list_for_each(handle_list, &bmdi->handle_list) {
 				if (container_of(handle_list, struct bm_handle_info, list) ==  api_entry.h_info)
 					break;
@@ -153,14 +151,11 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 				wake_up_all(&api_entry.h_info->h_msg_done);
 			if (api_entry.thd_info)	{
 				complete(&api_entry.thd_info->msg_done);
-				PR_TRACE("[%s: %d] pid=%d, core_id=%d complete api %lld\n",
-					__func__, __LINE__,
-					api_entry.thd_info->user_pid, core_id, api_entry.thd_api_seq[core_id]);
-			} else {
-				PR_TRACE("[%s: %d] waring: core_id=%d\n", __func__, __LINE__, core_id);
+				PR_TRACE("pid %d complete api %lld\n", api_entry.thd_info->user_pid,
+						 api_entry.thd_api_seq[core_id]);
 			}
 
-			spin_unlock(&bmdi->gmem_info.gmem_spinlock);
+			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 			if (BM_MSGFIFO_CHANNEL_XPU == channel) {
 				pending_msgirq_cnt--;
@@ -192,7 +187,7 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 			}
 		} while (count != 0);
 	}
-	spin_unlock(&api_info->api_fifo_spinlock);
+	mutex_unlock(&api_info->api_fifo_mutex);
 }
 
 #ifdef SOC_MODE
@@ -200,7 +195,7 @@ irqreturn_t bmdrv_irq_handler_msg0(int irq, void *data)
 {
 	struct bm_device_info *bmdi = data;
 
-	PR_TRACE("[%s: %d] msg irq=%d received.\n", __func__, __LINE__, irq);
+	PR_TRACE("bmdrv: msg irq received.\n");
 	bmdrv_msg_irq_handler(bmdi, 0);
 	return IRQ_HANDLED;
 }
@@ -209,7 +204,7 @@ irqreturn_t bmdrv_irq_handler_msg1(int irq, void *data)
 {
 	struct bm_device_info *bmdi = data;
 
-	PR_TRACE("[%s: %d] msg irq=%d received.\n", __func__, __LINE__, irq);
+	PR_TRACE("bmdrv: msg irq received.\n");
 	bmdrv_msg_irq_handler(bmdi, 1);
 	return IRQ_HANDLED;
 }
@@ -307,6 +302,7 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 			}
 		else
 			msg_buf = *((u32 *)(bm_api_p->api_addr) + idx);
+		//pr_debug("msg_buf = 0x%x, core_id=%d\n", msg_buf, core_id);
 		shmem_reg_write_enh(bmdi, next_wp, msg_buf, channel, core_id);
 	}
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, word_size);
@@ -382,7 +378,7 @@ int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api
 		timeout_ms = timeout;
 
 	api_info = &bmdi->api_info[0][channel];
-	spin_lock_irqsave(&api_info->api_fifo_spinlock, flags);
+	mutex_lock(&api_info->api_fifo_mutex);
 	list_for_each(list, &api_info->api_list) {
 		api_entry = &((struct api_list_entry *)list)->api_entry;
 		if (api_entry->global_api_seq == api_handle) {
@@ -392,7 +388,7 @@ int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api
 			break;
 		}
 	}
-	spin_unlock_irqrestore(&api_info->api_fifo_spinlock, flags);
+	mutex_unlock(&api_info->api_fifo_mutex);
 
 	if (1 == match) {
 		if (0 == (api_entry->api_done_flag & API_FLAG_DONE))

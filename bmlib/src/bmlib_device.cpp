@@ -62,6 +62,7 @@ void bm_device::cmodel_setup(void)
   cmodel_api_signal_begin_ = (t_cmodel_api_poll)dlsym(NULL, "api_signal_begin");
   cmodel_get_chip_id_ = (t_cmodel_get_chip_id)dlsym(NULL, "get_chip_id");
   cmodel_get_total_nodechip_num_ = (t_cmodel_get_total_nodechip_num)dlsym(NULL, "get_total_nodechip_num");
+  cmodel_get_gmem_start_addr_ = (t_cmodel_get_gmem_start_addr)dlsym(NULL, "cmodel_get_gmem_start_addr");
   cmodel_get_last_func_id = (t_cmodel_get_last_func_id)dlsym(NULL, "cmodel_get_last_func_id");
 
   if (cmodel_deinit_ == NULL) {
@@ -94,6 +95,7 @@ void bm_device::cmodel_setup(void)
       cmodel_api_signal_begin_ = (t_cmodel_api_poll)dlsym(cmodel_so_handle_, "api_signal_begin");
       cmodel_get_chip_id_ = (t_cmodel_get_chip_id)dlsym(cmodel_so_handle_, "get_chip_id");
       cmodel_get_total_nodechip_num_ = (t_cmodel_get_total_nodechip_num)dlsym(cmodel_so_handle_, "get_total_nodechip_num");
+      cmodel_get_gmem_start_addr_ = (t_cmodel_get_gmem_start_addr)dlsym(cmodel_so_handle_, "cmodel_get_gmem_start_addr");
       cmodel_get_last_func_id = (t_cmodel_get_last_func_id)dlsym(cmodel_so_handle_, "cmodel_get_last_func_id");
   }
   return;
@@ -411,6 +413,22 @@ bm_status_t bm_device::bm_device_memcpy_d2s(void *dst, bm_device_mem_t src, int 
   host_dma_copy_d2s_cmodel_(dst, src_addr, (u64)size_total, core_idx);
   return BM_SUCCESS;
 }
+
+bm_status_t bm_device::bm_device_memcpy_s2d_u64(bm_device_mem_u64_t dst, void *src, int core_idx) {
+  u64 size_total = bm_mem_get_size_u64(dst);
+  u64 dst_addr = bm_mem_get_device_addr_u64(dst);
+  host_dma_copy_s2d_cmodel_(dst_addr, src, (u64)size_total, core_idx);
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_device::bm_device_memcpy_d2s_u64(void *dst, bm_device_mem_u64_t src, int core_idx) {
+  u64 size_total = bm_mem_get_size_u64(src);
+  u64 src_addr = bm_mem_get_device_addr_u64(src);
+
+  host_dma_copy_d2s_cmodel_(dst, src_addr, (u64)size_total, core_idx);
+  return BM_SUCCESS;
+}
+
 bm_status_t bm_device::sg_device_memcpy_s2d(sg_device_mem_t dst, void *src, int core_idx) {
   u64 size_total = sg_mem_get_size(dst);
   u64 dst_addr = sg_mem_get_device_addr(dst);
@@ -433,9 +451,7 @@ void bm_device::bm_device_arm_reserved_rel() {
   pthread_mutex_unlock(&arm_reserved_lock);
 }
 
-extern int fun_id;
 bm_status_t bm_device::bm_device_thread_sync_from_core(int core_idx) {
-  if(fun_id != 0) return BM_SUCCESS;
   thread_api_info *thd_api_info;
   thd_api_info = bm_get_thread_api_info(pthread_self(), core_idx);
   if (!thd_api_info) {

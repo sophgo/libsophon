@@ -179,6 +179,8 @@ bm_status_t bm_load_file(bm_handle_t      handle,
 }
 
 bm_status_t bmcpu_reset_cpu(bm_handle_t handle){
+	int ret;
+
     if (handle == nullptr){
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -190,9 +192,12 @@ bm_status_t bmcpu_reset_cpu(bm_handle_t handle){
     }
 
     #ifdef __linux__
-    if(0 == platform_ioctl(handle, BMDEV_FORCE_RESET_A53, NULL)){
+	ret = platform_ioctl(handle, BMDEV_FORCE_RESET_A53, NULL);
+    if (ret == 0) {
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev force reset a53 failed, ioclt ret = %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
     #else
@@ -208,6 +213,7 @@ bm_status_t bmcpu_reset_cpu(bm_handle_t handle){
 
 #ifdef __linux__
 bm_status_t bm_setup_veth(bm_handle_t handle){
+	int ret;
     if (handle == nullptr){
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -217,15 +223,18 @@ bm_status_t bm_setup_veth(bm_handle_t handle){
                   __LINE__);
         return BM_ERR_DEVNOTREADY;
     }
-
-    if(0 == platform_ioctl(handle, BMDEV_SETUP_VETH, NULL)){
+	ret = platform_ioctl(handle, BMDEV_SETUP_VETH, NULL);
+    if (ret == 0) {
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev setup veth failed, ioclt ret = %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 }
 
 bm_status_t bm_remove_veth(bm_handle_t handle){
+	int ret;
     if (handle == nullptr){
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -235,28 +244,38 @@ bm_status_t bm_remove_veth(bm_handle_t handle){
                   __LINE__);
         return BM_ERR_DEVNOTREADY;
     }
-
-    if(0 == platform_ioctl(handle, BMDEV_RMDRV_VETH, NULL)){
+	ret = platform_ioctl(handle, BMDEV_RMDRV_VETH, NULL);
+    if (ret == 0) {
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev rmdrv veth failed, ioclt ret = %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 }
 
 bm_status_t bm_set_ip(bm_handle_t handle, bm_veth_ip_t ip_mask) {
+	int ret;
 
-    if(0 == platform_ioctl(handle, BMDEV_SET_IP, &ip_mask)){
+	ret = platform_ioctl(handle, BMDEV_SET_IP, &ip_mask);
+    if(ret == 0){
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev set ip failed, ioclt ret = %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 }
 
 bm_status_t bm_set_gate(bm_handle_t handle, u32 gate) {
+	int ret;
 
-    if(0 == platform_ioctl(handle, BMDEV_SET_GATE, &gate)){
+	ret = platform_ioctl(handle, BMDEV_SET_GATE, &gate);
+    if(ret == 0){
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev set gate failed, ioclt ret = %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 }
@@ -277,16 +296,14 @@ bm_status_t bm_trigger_a53(bm_handle_t handle, int id) {
     if (0 != platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay)) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "start cpu trigger error, ret %d\n",
-                  ret);
+                  "start cpu trigger error, ret %d:%d\n", ret, __LINE__);
         return BM_ERR_TIMEOUT;
     }
 
     if (0 != platform_ioctl(handle, BMDEV_COMM_SET_CARDID, (void *)&id)) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "set card id error, ret %d\n",
-                  ret);
+                  "set card id error, ret %d:%d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 
@@ -294,12 +311,16 @@ bm_status_t bm_trigger_a53(bm_handle_t handle, int id) {
 }
 
 bm_status_t bm_connect_a53(bm_handle_t handle, int timeout) {
-    int flag, state;
+    int flag, state, ret;
 
     while (timeout > 0) {
         flag = 0;
-        platform_ioctl(
-            handle, BMDEV_COMM_CONNECT_STATE, &state);
+
+        ret = platform_ioctl(handle, BMDEV_COMM_CONNECT_STATE, &state);
+		if (ret != 0)
+			bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev set gate failed, ioclt ret = %d:%d\n", ret, __LINE__);
+
         if (state == 1) {
             flag = 1;
             break;
@@ -320,6 +341,7 @@ bm_status_t bm_connect_a53(bm_handle_t handle, int timeout) {
 
 int bm_write_data(bm_handle_t handle, char *buf, int len)
 {
+	int ret;
     if (handle == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -333,8 +355,12 @@ int bm_write_data(bm_handle_t handle, char *buf, int len)
 
     data.data = buf;
     data.len = len;
+	ret = platform_ioctl(handle, BMDEV_COMM_WRITE, (void *)&data);
+	if (ret != 0)
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev common write failed, ioclt ret = %d:%d\n", ret, __LINE__);
 
-    return platform_ioctl(handle, BMDEV_COMM_WRITE, (void *)&data);
+    return ret;
 }
 
 int bm_read_data(bm_handle_t handle, char *buf, int len)
@@ -354,14 +380,19 @@ int bm_read_data(bm_handle_t handle, char *buf, int len)
     data.data = buf;
     data.len = len;
     cnt = platform_ioctl(handle, BMDEV_COMM_READ, &data);
-    if (cnt < 0)
-        return -1;
+    if (cnt < 0) {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev common read failed, ioclt ret = %d:%d\n", cnt, __LINE__);
+		return -1;
+	}
 
     return cnt;
 }
 
 int bm_write_msg(bm_handle_t handle, char *buf, int len)
 {
+	int ret;
+
     if (handle == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -374,8 +405,12 @@ int bm_write_msg(bm_handle_t handle, char *buf, int len)
     struct sgcpu_comm_data data;
     data.data = buf;
     data.len = len;
+	ret = platform_ioctl(handle, BMDEV_COMM_WRITE_MSG, (void *)&data);
+	if (ret != 0)
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev common write message failed, ioclt ret = %d:%d\n", ret, __LINE__);
 
-    return platform_ioctl(handle, BMDEV_COMM_WRITE_MSG, (void *)&data);
+    return ret;
 }
 
 int bm_read_msg(bm_handle_t handle, char *buf, int len)
@@ -413,6 +448,8 @@ bm_status_t bm_query_api_data(bm_handle_t handle,
                               u64         api_handle,
                               u64 *       data,
                               int         timeout) {
+	int ret;
+
     if (handle == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -422,6 +459,7 @@ bm_status_t bm_query_api_data(bm_handle_t handle,
                   __LINE__);
         return BM_ERR_DEVNOTREADY;
     }
+
     if (data == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -441,10 +479,13 @@ bm_status_t bm_query_api_data(bm_handle_t handle,
 #else
 
     bm_api_data_t api_data = {api_id, api_handle, 0, timeout};
-    if (0 == platform_ioctl(handle, BMDEV_QUERY_API_RESULT, &api_data)) {
+	ret = platform_ioctl(handle, BMDEV_QUERY_API_RESULT, &api_data);
+    if (ret == 0) {
         *data = api_data.data;
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                  "bmdev query api result error, ioclt ret = %d %d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
 #endif
@@ -466,6 +507,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
     bm_api_cpu_load_library_internal_t api_cpu_load_library_internal;
     bm_api_cpu_exec_func_internal_t api_cpu_exec_func_internal;
     u8 md5[16];
+	int ret;
 
     if (handle == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
@@ -476,6 +518,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                   __LINE__);
         return BM_ERR_DEVNOTREADY;
     }
+
     if (api == nullptr) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -485,6 +528,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                   __LINE__);
         return BM_ERR_PARAM;
     }
+
     if (size % sizeof(u32) != 0) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -492,6 +536,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                   size);
         return BM_ERR_PARAM;
     }
+
     if (api_id == BM_API_ID_LOAD_LIBRARY) {
         const char *tmp;
 
@@ -549,12 +594,16 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
         api_internal = (const u8 *)&api_cpu_exec_func_internal;
         api_size     = sizeof(bm_api_cpu_exec_func_internal_t);
     }
+
     if (api_handle != NULL) {
         bm_api_ext_t bm_api = {api_id, api_internal, api_size, 0};
-        if (0 == platform_ioctl(handle, BMDEV_SEND_API_EXT, &bm_api)) {
+		ret = platform_ioctl(handle, BMDEV_SEND_API_EXT, &bm_api);
+        if (ret == 0) {
             *api_handle = bm_api.api_handle;
             status      = BM_SUCCESS;
         } else {
+			bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                  "bmdev send api ext error, ioclt ret = %d %d\n", ret, __LINE__);
             status = BM_ERR_FAILURE;
         }
 
@@ -570,6 +619,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                     bm_free_device(handle, dev_mem);
                     return BM_ERR_FAILURE;
                 }
+
                 status = (bm_status_t)(s64)data;
                 if (status < 0) {
                     bmlib_log(BMCPU_RUNTIME_LOG_TAG,
@@ -580,19 +630,26 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                     return BM_ERR_FAILURE;
                 }
             }
+
             bm_free_device(handle, dev_mem);
         }
-        return status;
+
+		return status;
     } else {
         return bm_send_api(handle, api_id, api_internal, api_size);
     }
 }
 
 bm_status_t bmcpu_set_cpu_status(bm_handle_t handle, bm_cpu_status_t status) {
-    if (0 == platform_ioctl(handle, BMDEV_SET_BMCPU_STATUS, &status)) {
+	int ret;
+	ret = platform_ioctl(handle, BMDEV_SET_BMCPU_STATUS, &status);
+    if (ret == 0) {
         return BM_SUCCESS;
-    }
-    return BM_ERR_FAILURE;
+    } else {
+		bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                  "bmdev set bmcpu status error, ioclt ret = %d %d\n", ret, __LINE__);
+		return BM_ERR_FAILURE;
+	}
 }
 
 bm_cpu_status_t bmcpu_get_cpu_status(bm_handle_t handle) {
@@ -604,7 +661,7 @@ bm_cpu_status_t bmcpu_get_cpu_status(bm_handle_t handle) {
     if (ret != 0) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "get bmcpu status failed!, ret: %d\n", ret);
+                  "get bmcpu status failed!, ioclt ret = %d %d\n", ret, __LINE__);
         status = BMCPU_FAULT;
     }
 
@@ -620,6 +677,8 @@ bm_cpu_status_t bmcpu_get_cpu_status(bm_handle_t handle) {
 
 #ifdef __linux__
 bm_status_t bmcpu_set_arm9_fw_mode(bm_handle_t handle, bm_arm9_fw_mode mode) {
+	int ret;
+
     if (mode > 2) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -627,8 +686,13 @@ bm_status_t bmcpu_set_arm9_fw_mode(bm_handle_t handle, bm_arm9_fw_mode mode) {
                   mode);
         return BM_ERR_FAILURE;
     }
-    if (0 == platform_ioctl(handle, BMDEV_SET_FW_MODE, &mode))
+
+	ret = platform_ioctl(handle, BMDEV_SET_FW_MODE, &mode);
+    if (ret == 0)
         return BM_SUCCESS;
+
+	bmlib_log(BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+            "get set frimware mode failed!, ioclt ret = %d %d\n", ret, __LINE__);
     return BM_ERR_FAILURE;
 }
 
@@ -769,14 +833,16 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
         return BM_ERR_FAILURE;
     }
 
-    if (0 != platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay)) {
+	ret = platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay);
+    if (ret != 0) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "start cpu trigger error, ret %d\n",
-                  ret);
+                  "start cpu trigger error, ioclt ret = %d %d\n",
+                  ret, __LINE__);
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
     ret = bm_send_api_ext(handle,
                           BM_API_ID_START_CPU,
                           (const u8 *)&api_start_cpu,
@@ -790,6 +856,7 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
     ret = bm_query_api_data(
         handle, BM_API_ID_START_CPU, api_handle, &data, 10000);
     if (ret != 0) {
@@ -800,8 +867,8 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
-    bmcpu_sync_time(handle);
 
+    bmcpu_sync_time(handle);
     api_set_log.log_addr = 0x320000000;
     api_set_log.log_size = 0x200000;
     api_set_log.log_opt  = 1;
@@ -818,6 +885,7 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
     ret = bm_query_api_data(handle, BM_API_ID_SET_LOG, api_handle, &data, 10000);
     if (ret == 0) {
         bmcpu_set_cpu_status(handle, BMCPU_RUNNING);
@@ -886,6 +954,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
                   ret);
         return BM_ERR_FAILURE;
     }
+
     dev_mem.u.device.device_addr = 0x310000000;
     dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
     dev_mem.size                 = 0x10000000;
@@ -897,14 +966,17 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
                   ret);
         return BM_ERR_FAILURE;
     }
-    if (0 != platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay)) {
+
+	ret = platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay);
+    if (ret != 0) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "start cpu trigger error, ret %d\n",
-                  ret);
+                  "start cpu trigger error, ioclt ret = %d %d\n",
+                  ret, __LINE__);
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
     ret = bm_send_api_ext(handle,
                           BM_API_ID_START_CPU,
                           (const u8 *)&api_start_cpu,
@@ -918,6 +990,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
     sleep(15);
     platform_ioctl(handle, BMDEV_GET_VETH_STATE, &data);
     if (((u32)data) == 0x66668888)
@@ -930,6 +1003,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
     return BM_ERR_FAILURE;
 }
 #endif
+
 bm_status_t bmcpu_sync_time(bm_handle_t handle) {
     u64               api_handle;
     u64               data;
@@ -961,8 +1035,8 @@ bm_status_t bmcpu_sync_time(bm_handle_t handle) {
                   ret);
         return BM_ERR_FAILURE;
     }
-    ret =
-        bm_query_api_data(handle, BM_API_ID_SET_TIME, api_handle, &data, 10000);
+
+    ret = bm_query_api_data(handle, BM_API_ID_SET_TIME, api_handle, &data, 10000);
     if (ret == 0) {
         if ((s32)data != 0) {
             return BM_ERR_FAILURE;

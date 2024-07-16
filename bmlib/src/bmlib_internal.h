@@ -122,6 +122,7 @@ typedef struct bm_context {
     bm_cdma_iommu_mode               cdma_iommu_mode;
 #endif
     bmlib_profile_t *profile;
+    int enable_mem_guard;
 } bm_context_t, *bm_handle_t;
 
 DECL_EXPORT bm_status_t bm_send_api(
@@ -218,6 +219,7 @@ struct bm_efuse_param{
 typedef struct loaded_lib {
   unsigned char md5[MD5SUM_LEN];
   int loaded;
+  int core_id;
 } loaded_lib_t;
 
 DECL_EXPORT bm_status_t bm_sync_api(bm_handle_t handle);
@@ -390,6 +392,13 @@ struct bm_i2c_smbus_ioctl_info
   unsigned char data[32]; /*buf of read or write*/
   int op; /*0:write or 1:read*/
 };
+
+#define FUNC_MAX_CORE_NUM 2
+typedef struct {
+  char *func_name;
+  tpu_kernel_function_t f_ids[FUNC_MAX_CORE_NUM];
+} bm_basic_func_t;
+
 
 /**
  * @name    bm_trace_enable

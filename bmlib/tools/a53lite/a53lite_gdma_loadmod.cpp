@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
     tpu_kernel_module_t bm_module;
     bm_handle_t handle;
     tpu_kernel_function_t f_id, cnt = 0;
-    int transfer_size = 0x10000000;
+    int transfer_size = 0x40000000;
     bm_status_t ret = BM_SUCCESS;
     const char *module_name = "libgdma.so";
 

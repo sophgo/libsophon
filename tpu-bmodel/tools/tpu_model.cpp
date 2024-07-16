@@ -46,7 +46,7 @@ static void usage(char *argv[])
        << "    --version show tool version" << endl
        << "    --kernel_dump model_file -o kernel_file_name : dump kernel_module file" << endl
        << "    --kernel_update model_file kernel_name : add/update kernel_module file" << endl
-       << "    --custom_cpu_update model_file libcpuop_file : add/update custom libcpuop file" << endl
+       << "    --custom_ap_update model_file libcpuop_file : add/update custom libcpuop file" << endl
        << endl;
 }
 
@@ -139,10 +139,17 @@ static void show(const NetParameter *parameter, bool dynamic = false)
   }
 }
 
-static void reorder(std::vector<const Tensor *> &tensors) {
+static void reorder(std::vector<std::pair<int, const Tensor *>> &tensors) {
   std::sort(tensors.begin(), tensors.end(),
-            [](const Tensor *a, const Tensor *b) {
-              return a->index() <= b->index();
+            [](const std::pair<int, const Tensor *> &a,
+               const std::pair<int, const Tensor *> &b) {
+              if (a.first < b.first) {
+                return true;
+              } else if (a.first > b.first) {
+                return false;
+              } else {
+                return a.second->index() <= b.second->index();
+              }
             });
 }
 
@@ -236,37 +243,38 @@ static void show(const string &filename)
     cout << "==========================================" << endl;
     cout << "net: [" << it.first << "]  cascade" << endl;
     // show inputs
-    std::vector<const bmodel::Tensor *> ins;
-    std::vector<const bmodel::Tensor *> outs;
+    std::vector<std::pair<int, const bmodel::Tensor *>> ins;
+    std::vector<std::pair<int, const bmodel::Tensor *>> outs;
     for (auto idx : *it.second) {
       auto net = model->net()->Get(idx);
       auto parameter = net->parameter()->Get(0);
+      int devid = net->cascade()->device_id();
       auto input_tensors = parameter->input_tensor();
       auto output_tensors = parameter->output_tensor();
       for (uint32_t idx = 0; idx < input_tensors->size(); idx++) {
         auto in = input_tensors->Get(idx);
-        if (in->hidden() == 1) {
-          ins.push_back(in);
-        } else if (in->hidden() == 2) {
-          outs.push_back(in);
+        if (in->hidden() == 1 || in->hidden() == 3) {
+          ins.push_back({devid, in});
+        } else if (in->hidden() == 2 || in->hidden() == 4) {
+          outs.push_back({devid, in});
         }
       }
       for (uint32_t idx = 0; idx < output_tensors->size(); idx++) {
         auto out = output_tensors->Get(idx);
-        if (out->hidden() == 1) {
-          ins.push_back(out);
-        } else if (out->hidden() == 2) {
-          outs.push_back(out);
+        if (out->hidden() == 1 || out->hidden() == 3) {
+          ins.push_back({devid, out});
+        } else if (out->hidden() == 2 || out->hidden() == 4) {
+          outs.push_back({devid, out});
         }
       }
     }
     reorder(ins);
     reorder(outs);
     for (auto &in : ins) {
-      cout << tensor_str(in, false);
+      cout << tensor_str(in.second, false);
     }
     for (auto &out : outs) {
-      cout << tensor_str(out, true);
+      cout << tensor_str(out.second, true);
     }
   }
   cout << std::endl;
@@ -403,6 +411,7 @@ static void extract(const string &filename)
   for (uint32_t net_idx = 0; net_idx < model->net()->size(); net_idx++) {
     auto net = model->net()->Get(net_idx);
     string net_name = net->name()->str();
+    int32_t addr_mode = net->addr_mode();
     if (net->parameter() == NULL || net->parameter()->size() == 0) {
       continue;
     }
@@ -414,7 +423,7 @@ static void extract(const string &filename)
       auto net_offset = NetParameter::Pack(builder, netT);
       delete netT;
       model_gen.AddChip(model->chip()->str());
-      model_gen.AddNet(net_name, net_offset);
+      model_gen.AddNet(net_name, net_offset, NULL, NULL, NULL, addr_mode);
       model_gen.Finish();
       update_model(model_gen, model_ctx);
       ostringstream filename;
@@ -905,7 +914,7 @@ int main(int argc, char **argv)
     dump_kernel_module(argc, argv);
   } else if (cmd == "--kernel_update") {
     update_kernel_module(argc, argv);
-  } else if (cmd == "--custom_cpu_update") {
+  } else if (cmd == "--custom_ap_update") {
     update_cpuop_module(argc, argv);
   }else {
     usage(argv);

@@ -190,9 +190,13 @@ u64 bm_gmem_arm_reserved_request(bm_handle_t handle) {
   return handle->bm_dev->bm_device_arm_reserved_req();
 #else
   u64 val;
-  if (!platform_ioctl(handle, BMDEV_REQUEST_ARM_RESERVED, &val))
+  int ret;
+  ret = platform_ioctl(handle, BMDEV_REQUEST_ARM_RESERVED, &val);
+  if (!ret)
     return val;
   else
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev request arm reserverd failed, ioclt ret = %d %d\n", ret, __LINE__);
     return BM_MEM_ADDR_NULL;
 #endif
 }
@@ -201,7 +205,11 @@ void bm_gmem_arm_reserved_release(bm_handle_t handle) {
 #if defined USING_CMODEL
   handle->bm_dev->bm_device_arm_reserved_rel();
 #else
-  platform_ioctl(handle, BMDEV_RELEASE_ARM_RESERVED, 0);
+	int ret;
+	ret = platform_ioctl(handle, BMDEV_RELEASE_ARM_RESERVED, 0);
+	if (ret != 0)
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev release arm reserverd failed, ioclt ret = %d %d\n", ret, __LINE__);
 #endif
 }
 
@@ -209,36 +217,45 @@ void bm_gmem_arm_reserved_release(bm_handle_t handle) {
 bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
   unsigned int chip_id = 0;
   bm_status_t ret = BM_SUCCESS;
+  int ioclt_ret;
+
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n",
           __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (pfw == nullptr){
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "bm_update_firmware_a9 param err\n");
     return BM_ERR_PARAM;
   }
+
   ret = bm_get_chipid(handle, &chip_id);
   if (ret != BM_SUCCESS)
     return ret;
 
-  if (chip_id == 0x1684){
-      if((pfw->itcmfw_size % sizeof(u32) != 0) ||
-      (pfw->itcm_fw == nullptr)){
+  if (chip_id == 0x1684) {
+      if ((pfw->itcmfw_size % sizeof(u32) != 0) || (pfw->itcm_fw == nullptr)) {
         bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "bm_update_firmware_a9 param err\n");
         return BM_ERR_PARAM;
       }
   }
+
   bool should_profile = handle->profile != nullptr;
   if(should_profile) bm_profile_deinit(handle);
-  if (0 == platform_ioctl(handle, BMDEV_UPDATE_FW_A9, pfw)){
+
+	ioclt_ret = platform_ioctl(handle, BMDEV_UPDATE_FW_A9, pfw);
+  if (ioclt_ret == 0) {
       if(should_profile) bm_profile_init(handle, true);
       return BM_SUCCESS;
-  } else
-    return BM_ERR_FAILURE;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev update firmware A9 failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 }
 #endif
 
@@ -248,6 +265,7 @@ bm_status_t bm_send_api_to_core(
   const u8 *api,
   u32 size,
   int core_id) {
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
@@ -282,10 +300,15 @@ bm_status_t bm_send_api_to_core(
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
         "%s: %s: %d, core_id=%d\n",
         __FILE__, __func__, __LINE__, bm_api.core_id);
-  if (0 == platform_ioctl(handle, BMDEV_SEND_API, &bm_api))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+	ret = platform_ioctl(handle, BMDEV_SEND_API, &bm_api);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  }
+  else{
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev send api failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -342,6 +365,7 @@ bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api,
 }
 
 bm_status_t bm_device_sync(bm_handle_t handle) {
+	int ret;
 #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_sync();
 #else
@@ -351,15 +375,21 @@ bm_status_t bm_device_sync(bm_handle_t handle) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_DEVICE_SYNC_API, 0))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_DEVICE_SYNC_API, 0);
+  if (ret == 0){
+	return BM_SUCCESS;
+  }
+  else{
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev device sync api failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id)
 {
+	int ret;
 #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_sync();
 #else
@@ -369,10 +399,15 @@ bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id)
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_HANDLE_SYNC_API, &core_id))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_HANDLE_SYNC_API, &core_id);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  }
+  else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev handle sync api failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -402,6 +437,7 @@ u64 bm_get_version(bm_handle_t handle) {
 bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
     bm_profile_record_sync_begin(handle, core_id);
     bm_status_t status = BM_SUCCESS;
+	int ret;
 #ifdef USING_CMODEL
     status =  handle->bm_dev->bm_device_thread_sync_from_core(core_id);
 #else
@@ -410,11 +446,16 @@ bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
                   "handle is nullptr %s: %s: %d\n",
                   __FILE__, __func__, __LINE__);
         status = BM_ERR_DEVNOTREADY;
-    } else if (0 == platform_ioctl(handle, BMDEV_THREAD_SYNC_API, &core_id)) {
-        status = BM_SUCCESS;
     } else {
-        status = BM_ERR_FAILURE;
-    }
+		ret = platform_ioctl(handle, BMDEV_THREAD_SYNC_API, &core_id);
+		if (ret == 0) {
+        	status = BM_SUCCESS;
+		} else {
+			bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev handle sync api failed, ioclt ret = %d %d\n", ret, __LINE__);
+			status = BM_ERR_FAILURE;
+		}
+	}
 #endif
     bm_profile_record_sync_end(handle, core_id);
     return status;
@@ -439,6 +480,8 @@ bm_status_t bm_reset_tpu(bm_handle_t handle){
   #ifdef USING_CMODEL
   return BM_SUCCESS;
   #else
+	int ret;
+
     if (handle == nullptr){
         bmlib_log(BMLIB_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -449,9 +492,12 @@ bm_status_t bm_reset_tpu(bm_handle_t handle){
         return BM_ERR_DEVNOTREADY;
     }
 
-    if(0 == platform_ioctl(handle, BMDEV_FORCE_RESET_TPU, NULL)){
+	ret = platform_ioctl(handle, BMDEV_FORCE_RESET_TPU, NULL);
+    if(ret == 0){
         return BM_SUCCESS;
     } else {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev force reset tpu failed, ioclt ret = %d %d\n", ret, __LINE__);
         return BM_ERR_FAILURE;
     }
   #endif
@@ -619,6 +665,8 @@ void bm_disable_iommu(bm_handle_t handle) {
 #endif
 
 bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
+	int ret;
+
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -645,7 +693,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
     delete ctx;
     return BM_ERR_FAILURE;
   }
-  if (0 == platform_ioctl(ctx, BMDEV_GET_MISC_INFO, &ctx->misc_info)) {
+  ret = platform_ioctl(ctx, BMDEV_GET_MISC_INFO, &ctx->misc_info);
+  if (ret == 0) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
            "driver version is %1d.%1d.%1d\n",
            ctx->misc_info.driver_version >> 16,
@@ -667,7 +716,7 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
     }
   } else {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-           "get misc info failed\n");
+          		"bmdev get misc info failed, ioclt ret = %d %d\n", ret, __LINE__);
   }
   // add drvier version check here???? according to sc5 version format
   switch (ctx->misc_info.chipid) {
@@ -708,7 +757,9 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
         printf("Create device %d failed", ctx->dev_id);
         return BM_ERR_FAILURE;
     }
-      if (0 == platform_ioctl(ctx, BMDEV_GET_MISC_INFO, &ctx->misc_info)) {
+
+	ret = platform_ioctl(ctx, BMDEV_GET_MISC_INFO, &ctx->misc_info);
+      if (ret == 0) {
         bmlib_log(BMLIB_RUNTIME_LOG_TAG,
                   BMLIB_LOG_INFO,
                   "driver version is %1d.%1d.%1d\n",
@@ -721,8 +772,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
                   ctx->misc_info.chipid,
                   (ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
     } else {
-        bmlib_log(
-            BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "get misc info failed\n");
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          		"bmdev get misc info failed, ioclt ret = %d %d\n", ret, __LINE__);
     }
     // add drvier version check here???? according to sc5 version format
     switch (ctx->misc_info.chipid) {
@@ -751,6 +802,10 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
         bm_profile_init(ctx, true);
     }
 
+    ctx->enable_mem_guard = get_env_bool_value("BMLIB_ENABLE_MEM_GUARD", false);
+    if(ctx->enable_mem_guard) {
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "mem guard mode is enabled\n");
+    }
     return BM_SUCCESS;
 }
 
@@ -811,22 +866,29 @@ bm_status_t bm_get_profile(bm_handle_t handle, bm_profile_t *profile) {
 
   return BM_SUCCESS;
 #else
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (profile == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "profile is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_PROFILE, profile))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_PROFILE, profile);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get profile failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -836,16 +898,22 @@ bm_status_t bm_get_boot_loader_version(bm_handle_t handle, boot_loader_version *
 
   return BM_SUCCESS;
 #else
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_VERSION, version))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_VERSION, version);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get version failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -855,16 +923,22 @@ bm_status_t bm_get_smi_attr(bm_handle_t handle, struct bm_smi_attr_t *smi_attr) 
 
   return BM_SUCCESS;
 #else
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_SMI_ATTR, smi_attr))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_SMI_ATTR, smi_attr);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get smi attr failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -926,6 +1000,7 @@ bm_status_t bm_get_vpp_instant_usage(bm_handle_t handle, int *vpp_usage) {
 }
 
 bm_status_t bm_trace_enable(bm_handle_t handle) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
 
@@ -937,14 +1012,20 @@ bm_status_t bm_trace_enable(bm_handle_t handle) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_TRACE_ENABLE, 0))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_TRACE_ENABLE, 0);
+  if (ret == 0){
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trance enable failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_trace_disable(bm_handle_t handle) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
 
@@ -956,14 +1037,20 @@ bm_status_t bm_trace_disable(bm_handle_t handle) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_TRACE_DISABLE, 0))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_TRACE_DISABLE, 0);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trance disable failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_traceitem_number(bm_handle_t handle, long long *number) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(number);
@@ -976,20 +1063,27 @@ bm_status_t bm_traceitem_number(bm_handle_t handle, long long *number) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (number == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "tarce_data is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_TRACEITEM_NUMBER, number))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_TRACEITEM_NUMBER, number);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev tranceitem number failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_trace_dump(bm_handle_t handle, struct bm_trace_item_data *trace_data) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(trace_data);
@@ -1002,21 +1096,28 @@ bm_status_t bm_trace_dump(bm_handle_t handle, struct bm_trace_item_data *trace_d
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (trace_data == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "tarce_data is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_TRACE_DUMP, trace_data))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_TRACE_DUMP, trace_data);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trance dump failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_trace_dump_all(bm_handle_t handle,
                               struct bm_trace_item_data *trace_data) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(trace_data);
@@ -1029,20 +1130,27 @@ bm_status_t bm_trace_dump_all(bm_handle_t handle,
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (trace_data == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "tarce_data is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_TRACE_DUMP_ALL, trace_data))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_TRACE_DUMP_ALL, trace_data);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trance dump all failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_get_misc_info(bm_handle_t handle, bm_misc_info *pmisc_info) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(pmisc_info);
@@ -1055,16 +1163,22 @@ bm_status_t bm_get_misc_info(bm_handle_t handle, bm_misc_info *pmisc_info) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (pmisc_info == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "pmisc_info is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_MISC_INFO, pmisc_info))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_MISC_INFO, pmisc_info);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get misc info failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -1104,6 +1218,7 @@ bm_status_t bm_get_tpu_scalar_num(bm_handle_t handle, unsigned int *core_num) {
 }
 
 bm_status_t bm_get_boot_info(bm_handle_t handle, bm_boot_info *pboot_info) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(pboot_info);
@@ -1115,20 +1230,27 @@ bm_status_t bm_get_boot_info(bm_handle_t handle, bm_boot_info *pboot_info) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (pboot_info == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "pboot_info is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_BOOT_INFO, pboot_info))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_BOOT_INFO, pboot_info);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get boot info failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_update_boot_info(bm_handle_t handle, bm_boot_info *pboot_info) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(pboot_info);
@@ -1140,20 +1262,27 @@ bm_status_t bm_update_boot_info(bm_handle_t handle, bm_boot_info *pboot_info) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (pboot_info == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "pboot_info is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_PARAM;
   }
-  if (0 == platform_ioctl(handle, BMDEV_UPDATE_BOOT_INFO, pboot_info))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_UPDATE_BOOT_INFO, pboot_info);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev update boot info failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_set_clk_tpu_divider(bm_handle_t handle, int divider) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(divider);
@@ -1166,20 +1295,26 @@ bm_status_t bm_set_clk_tpu_divider(bm_handle_t handle, int divider) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+
   if (val <= 0) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "tpu clk divider = %d not support\n", val);
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_SET_TPU_DIVIDER, &val))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_SET_TPU_DIVIDER, &val);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev set tpu divider failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_set_clk_tpu_freq(bm_handle_t handle, int freq) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(freq);
@@ -1192,14 +1327,20 @@ bm_status_t bm_set_clk_tpu_freq(bm_handle_t handle, int freq) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_SET_TPU_FREQ, &freq))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_SET_TPU_FREQ, &freq);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev set tpu freq failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(freq);
@@ -1212,14 +1353,20 @@ bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPU_FREQ, freq))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_TPU_FREQ, freq);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpu freq failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_set_module_reset(bm_handle_t handle, MODULE_ID module) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(module);
@@ -1233,20 +1380,27 @@ bm_status_t bm_set_module_reset(bm_handle_t handle, MODULE_ID module) {
            "module reset id = %d is large \n", val);
     return BM_ERR_PARAM;
   }
+
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_SET_MODULE_RESET, &val))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_SET_MODULE_RESET, &val);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdevset moudle reset failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_get_device_time_us(bm_handle_t handle, unsigned long *time_us) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   *time_us = 0;
@@ -1259,14 +1413,20 @@ bm_status_t bm_get_device_time_us(bm_handle_t handle, unsigned long *time_us) {
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_GET_DEVICE_TIME, time_us))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_GET_DEVICE_TIME, time_us);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get device time failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_set_reg(bm_handle_t handle, struct bm_reg *reg) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(reg);
@@ -1280,14 +1440,19 @@ bm_status_t bm_set_reg(bm_handle_t handle, struct bm_reg *reg) {
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_SET_REG, reg))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret =  platform_ioctl(handle, BMDEV_SET_REG, reg);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev set reg failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
 bm_status_t bm_get_reg(bm_handle_t handle, struct bm_reg *reg) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(reg);
@@ -1301,10 +1466,14 @@ bm_status_t bm_get_reg(bm_handle_t handle, struct bm_reg *reg) {
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_REG, reg))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_REG, reg);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get reg failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -1340,6 +1509,7 @@ bm_status_t bm_get_stat(bm_handle_t handle, bm_dev_stat_t *stat) {
   u64 total_size = 0;
   u64 used_size = 0;
   bm_dev_stat_t hstat;
+  int ret;
 
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1388,12 +1558,13 @@ bm_status_t bm_get_stat(bm_handle_t handle, bm_dev_stat_t *stat) {
   } else
 #endif
   {
-    if (0 == platform_ioctl(handle, BMDEV_GET_DEV_STAT, stat)) {
+	ret = platform_ioctl(handle, BMDEV_GET_DEV_STAT, stat);
+    if (ret == 0) {
       return BM_SUCCESS;
     } else {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-          "get dev stat error: %s: %s: %d\n",
-          __FILE__, __func__, __LINE__);
+          "get dev stat error, ioclt ret = %d %d\n",
+          ret, __LINE__);
       return BM_ERR_FAILURE;
     }
   }
@@ -1413,18 +1584,21 @@ bm_status_t bm_trigger_vpp(bm_handle_t handle, struct vpp_batch_n* batch) {
     UNUSED(batch);
     return BM_SUCCESS;
 #else
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_VPP_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
         "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_DEVNOTREADY;
   }
 
-  bm_status_t ret = BM_SUCCESS;
-  if (0 != platform_ioctl(handle, BMDEV_TRIGGER_VPP, batch)) {
-    ret = BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_TRIGGER_VPP, batch);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trigger vpp failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-
-  return ret;
 #endif
 }
 
@@ -1434,17 +1608,21 @@ bm_status_t bm_trigger_spacc(bm_handle_t handle, struct spacc_batch* batch) {
     UNUSED(batch);
     return BM_SUCCESS;
 #else
+	int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
         "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_DEVNOTREADY;
   }
 
-  bm_status_t ret = BM_SUCCESS;
-  if (0 != platform_ioctl(handle, BMDEV_TRIGGER_SPACC, batch)) {
-    ret = BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_TRIGGER_SPACC, batch);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev trigger spacc failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  return ret;
 #endif
 }
 
@@ -1454,17 +1632,21 @@ bm_status_t bm_is_seckey_valid(bm_handle_t handle, int* is_valid) {
 	UNUSED(is_valid);
 	return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
         "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_DEVNOTREADY;
   }
 
-  bm_status_t ret = BM_SUCCESS;
-  if (0 != platform_ioctl(handle, BMDEV_SECKEY_VALID, is_valid)) {
-    ret = BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_SECKEY_VALID, is_valid);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev seckey valid failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  return ret;
 #endif
 }
 
@@ -1474,17 +1656,21 @@ bm_status_t bm_efuse_write(bm_handle_t handle, struct bm_efuse_param *efuse_para
 	UNUSED(efuse_param);
 	return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
         "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_DEVNOTREADY;
   }
 
-  bm_status_t ret = BM_SUCCESS;
-  if (0 != platform_ioctl(handle, BMDEV_EFUSE_WRITE, efuse_param)) {
-    ret = BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_EFUSE_WRITE, efuse_param);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev efuse write failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  return ret;
 #endif
 }
 
@@ -1494,17 +1680,21 @@ bm_status_t bm_efuse_read(bm_handle_t handle, struct bm_efuse_param *efuse_param
 	UNUSED(efuse_param);
 	return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
         "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_DEVNOTREADY;
   }
 
-  bm_status_t ret = BM_SUCCESS;
-  if (0 != platform_ioctl(handle, BMDEV_EFUSE_READ, efuse_param)) {
-    ret = BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_EFUSE_READ, efuse_param);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev efuse read failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  return ret;
 #endif
 }
 
@@ -1521,6 +1711,7 @@ bm_status_t bm_handle_i2c_read(bm_handle_t handle, struct bm_i2c_param *i2c_para
 
   return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1528,11 +1719,14 @@ bm_status_t bm_handle_i2c_read(bm_handle_t handle, struct bm_i2c_param *i2c_para
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_I2C_READ_SLAVE, i2c_param)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_I2C_READ_SLAVE, i2c_param);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev i2c read slave failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1543,6 +1737,7 @@ bm_status_t bm_handle_i2c_write(bm_handle_t handle, struct bm_i2c_param *i2c_par
 
   return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1550,11 +1745,14 @@ bm_status_t bm_handle_i2c_write(bm_handle_t handle, struct bm_i2c_param *i2c_par
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_I2C_WRITE_SLAVE, i2c_param)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_I2C_WRITE_SLAVE, i2c_param);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev i2c write slave failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1565,6 +1763,7 @@ bm_status_t bm_handle_i2c_access(bm_handle_t handle, struct bm_i2c_smbus_ioctl_i
 
   return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1572,11 +1771,14 @@ bm_status_t bm_handle_i2c_access(bm_handle_t handle, struct bm_i2c_smbus_ioctl_i
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_I2C_SMBUS_ACCESS, i2c_buf)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_I2C_SMBUS_ACCESS, i2c_buf);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev i2c smbus access failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1589,6 +1791,7 @@ bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1603,10 +1806,14 @@ bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPUC, tpuc))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_TPUC, tpuc);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpuc failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -1619,6 +1826,7 @@ bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1633,10 +1841,14 @@ bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_MAXP, maxp))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_MAXP, maxp;
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get maxp failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -1649,6 +1861,7 @@ bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1663,10 +1876,14 @@ bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_BOARDP, boardp))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_BOARDP, boardp);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get boardp failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -1714,6 +1931,7 @@ bm_status_t bm_get_ecc_correct_num(bm_handle_t         handle,
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1728,11 +1946,14 @@ bm_status_t bm_get_ecc_correct_num(bm_handle_t         handle,
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_CORRECTN, ecc_correct_num)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_CORRECTN, ecc_correct_num);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get coppectn failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1745,6 +1966,7 @@ bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1759,11 +1981,14 @@ bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_12V_ATX, atx_12v)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_12V_ATX, atx_12v);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get 12v atx failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1867,6 +2092,7 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
   }
   return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1881,11 +2107,14 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_SN, sn)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_SN, sn);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get SN failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1896,6 +2125,7 @@ bm_status_t bm_get_status(bm_handle_t handle, int *status) {
 
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1910,11 +2140,14 @@ bm_status_t bm_get_status(bm_handle_t handle, int *status) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_STATUS, status)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_STATUS, status);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get status failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1925,6 +2158,7 @@ bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk) {
 
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1939,11 +2173,14 @@ bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPU_MINCLK, tpu_minclk)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_TPU_MINCLK, tpu_minclk);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpu minclk failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1954,6 +2191,7 @@ bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk) {
 
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1968,11 +2206,14 @@ bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPU_MAXCLK, tpu_maxclk)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_TPU_MAXCLK, tpu_maxclk);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpu maxclk failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -1983,6 +2224,7 @@ bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version) {
 
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -1997,11 +2239,15 @@ bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version) {
     return BM_ERR_PARAM;
   }
 
-  if (platform_ioctl(handle, BMDEV_GET_DRIVER_VERSION, driver_version) < 0) {
+  ret = platform_ioctl(handle, BMDEV_GET_DRIVER_VERSION, driver_version);
+  if (ret < 0) {
     *driver_version = 1<<16;
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get driver version failed, ioclt ret = %d %d\n", ret, __LINE__);
     return BM_ERR_FAILURE;
-  } else
-    return BM_SUCCESS;
+  } else {
+	return BM_SUCCESS;
+  }
 #endif
 }
 
@@ -2012,6 +2258,7 @@ bm_status_t bm_get_board_name(bm_handle_t handle, char *name) {
 
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2019,18 +2266,21 @@ bm_status_t bm_get_board_name(bm_handle_t handle, char *name) {
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (name == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-          "name is nullptr %s: %s: %d\n",
-          __FILE__, __func__, __LINE__);
-    return BM_ERR_PARAM;
-  }
+//  if (name == nullptr) {
+//    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+//          "name is nullptr %s: %s: %d\n",
+//          __FILE__, __func__, __LINE__);
+//    return BM_ERR_PARAM;
+//  }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_BOARD_TYPE, name)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_BOARD_TYPE, name);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get board type failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -2043,6 +2293,7 @@ bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2057,10 +2308,14 @@ bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_BOARDT, board_temp))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_BOARDT, board_temp);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get boardt failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -2073,6 +2328,7 @@ bm_status_t bm_get_chip_temp(bm_handle_t handle, unsigned int *chip_temp) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2087,10 +2343,14 @@ bm_status_t bm_get_chip_temp(bm_handle_t handle, unsigned int *chip_temp) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_CHIPT, chip_temp))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+  ret = platform_ioctl(handle, BMDEV_GET_CHIPT, chip_temp);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get chip failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 
@@ -2104,6 +2364,7 @@ bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power) {
   return BM_NOT_SUPPORTED;
 #else
   u32 tpu_p = 0;
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2118,7 +2379,8 @@ bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPU_P, &tpu_p)) {
+  ret = platform_ioctl(handle, BMDEV_GET_TPU_P, &tpu_p);
+  if (ret == 0) {
 #ifdef __linux__
       *tpu_power = ((float)(tpu_p) / (1000 * 1000));
 #else
@@ -2127,6 +2389,8 @@ bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power) {
     return BM_SUCCESS;
   }
   else
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpu power failed, ioclt ret = %d %d\n", ret, __LINE__);
     return BM_ERR_FAILURE;
 #endif
 }
@@ -2140,6 +2404,7 @@ bm_status_t bm_get_tpu_volt(bm_handle_t handle, unsigned int *tpu_volt) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2154,11 +2419,14 @@ bm_status_t bm_get_tpu_volt(bm_handle_t handle, unsigned int *tpu_volt) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_TPU_V, tpu_volt)) {
-      return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_TPU_V, tpu_volt);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get tpu volt failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -2171,6 +2439,7 @@ bm_status_t bm_get_card_id(bm_handle_t handle, unsigned int *card_id) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2185,11 +2454,14 @@ bm_status_t bm_get_card_id(bm_handle_t handle, unsigned int *card_id) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_CARD_ID, card_id)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_CARD_ID, card_id);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get card id failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -2270,6 +2542,7 @@ bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2284,11 +2557,14 @@ bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status) {
     return BM_ERR_PARAM;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_GET_DYNFREQ_STATUS, dynfreq_status)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_GET_DYNFREQ_STATUS, dynfreq_status);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev get dynamic frequence status failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -2301,6 +2577,7 @@ bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status) {
 #elif SOC_MODE
   return BM_NOT_SUPPORTED;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
            "handle is nullptr %s: %s: %d\n",
@@ -2308,11 +2585,14 @@ bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status) {
     return BM_ERR_DEVNOTREADY;
   }
 
-  if (0 == platform_ioctl(handle, BMDEV_CHANGE_DYNFREQ_STATUS, &new_status)) {
-    return BM_SUCCESS;
+  ret = platform_ioctl(handle, BMDEV_CHANGE_DYNFREQ_STATUS, &new_status);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev change dynamic frequence status failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
   }
-  else
-    return BM_ERR_FAILURE;
 #endif
 }
 
@@ -2370,14 +2650,20 @@ bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
   UNUSED(bm_api_cfg_pwr_ctrl);
   return BM_SUCCESS;
 #else
+  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  if (0 == platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl))
-    return BM_SUCCESS;
-  else
-    return BM_ERR_FAILURE;
+
+  ret = platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl);
+  if (ret == 0) {
+	return BM_SUCCESS;
+  } else {
+	bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          	"bmdev pwr ctrl failed, ioclt ret = %d %d\n", ret, __LINE__);
+	return BM_ERR_FAILURE;
+  }
 #endif
 }
 DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {

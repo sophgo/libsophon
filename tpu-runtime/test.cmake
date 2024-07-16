@@ -28,3 +28,4 @@ set(app_srcs
 add_executable(bmrt_test ${app_srcs})
 target_link_libraries(bmrt_test bmrt)
 target_compile_definitions(bmrt_test PRIVATE VER="test")
+target_compile_definitions(bmrt_test PUBLIC -DUSING_CMODEL=1)

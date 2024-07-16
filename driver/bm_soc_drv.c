@@ -12,6 +12,7 @@
 #include <linux/version.h>
 #include "bm_common.h"
 #include "bm_drv.h"
+#include "bm_io.h"
 #include "bm_fw.h"
 #include "bm1688_msgfifo.h"
 #include "bm_msgfifo.h"
@@ -259,7 +260,11 @@ static int bmdrv_platform_init(struct bm_device_info *bmdi, struct platform_devi
 
 static void bmdrv_platform_deinit(struct bm_device_info *bmdi, struct platform_device *pdev)
 {
+	struct chip_info *cinfo = &bmdi->cinfo;
+
 	platform_set_drvdata(pdev, NULL);
+	cinfo->device->dma_mask = NULL;
+	cinfo->device->coherent_dma_mask = 0;
 }
 
 static int bmdrv_hardware_init(struct bm_device_info *bmdi)
@@ -558,12 +563,48 @@ static const struct of_device_id bmdrv_match_table[] = {
 
 MODULE_DEVICE_TABLE(of, bmdrv_match_table);
 
+#ifdef CONFIG_PM_SLEEP
+static int bmdrv_tpu_suspend(struct device *dev)
+{
+	struct bm_device_info *bmdi = dev_get_drvdata(dev);
+	u32 pm_status = 0;
+	u32 timeout_cnt = 0;
+
+	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, 1);
+	while(!(pm_status & 0x2) && (timeout_cnt < 100)) {
+		usleep_range(10000,20000);
+		pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET);
+		timeout_cnt++;
+	}
+	pr_err("bmdrv_tpu_suspend(%d)sus.\n", timeout_cnt);
+	return 0;
+}
+
+static int bmdrv_tpu_resume(struct device *dev)
+{
+	struct bm_device_info *bmdi = dev_get_drvdata(dev);
+	u32 pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) & (~0x01);
+	u32 timeout_cnt = 0;
+
+	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, pm_status); //set bit0 to 0
+	while(!gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) && (timeout_cnt < 100)) {
+		usleep_range(10000,20000);
+		timeout_cnt++;
+	}
+	pr_err("bmdrv_tpu_resume(%d) sus.\n", timeout_cnt);
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(tpu_pm_ops, bmdrv_tpu_suspend, bmdrv_tpu_resume);
+
 static struct platform_driver bm_driver = {
 	.probe = bmdrv_probe,
 	.remove = bmdrv_remove,
 	.driver = {
 		.owner = THIS_MODULE,
 		.name = BM_CDEV_NAME,
+		.pm	= &tpu_pm_ops,
 		.of_match_table = bmdrv_match_table,
 	},
 };

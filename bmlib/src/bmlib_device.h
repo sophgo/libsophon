@@ -57,6 +57,8 @@ extern "C"
     void bm_device_free_mem(u64 addr);
     bm_status_t bm_device_memcpy_s2d(bm_device_mem_t dst, void *src, int core_idx = 0);
     bm_status_t bm_device_memcpy_d2s(void *dst, bm_device_mem_t src, int core_idx = 0);
+    bm_status_t bm_device_memcpy_s2d_u64(bm_device_mem_u64_t dst, void *src, int core_idx = 0);
+    bm_status_t bm_device_memcpy_d2s_u64(void *dst, bm_device_mem_u64_t src, int core_idx = 0);
     bm_status_t sg_device_memcpy_s2d(sg_device_mem_t dst, void *src, int core_idx = 0);
     bm_status_t sg_device_memcpy_d2s(void *dst, sg_device_mem_t src, int core_idx = 0);
     u64 bm_device_arm_reserved_req();
@@ -80,8 +82,10 @@ extern "C"
     typedef void (*t_cmodel_wait_)(void *, u64, u64, u32);
     typedef void (*t_cmodel_wait_share_reg_equal)(u32, int, int, int, int);
     typedef int (*t_cmodel_get_total_nodechip_num)(void);
+    typedef u64 (*t_cmodel_get_gmem_start_addr)();
     typedef int (*t_cmodel_get_last_func_id)(int);
 
+    t_cmodel_get_gmem_start_addr cmodel_get_gmem_start_addr_;
     t_get_global_memaddr get_global_memaddr_;
     t_cmodel_init cmodel_init_;
     t_set_cur_nodechip_idx set_cur_nodechip_idx_;

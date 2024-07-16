@@ -48,15 +48,17 @@ class BmCoeff;
 class KernelModule;
 
 struct BmMemory {
-  string desc;  // description
+  string desc; // description
   bm_device_mem_t device_mem;
-  u8 check_code[bmodel::SHA256_LEN];  // sha256
+  u8 check_code[bmodel::SHA256_LEN]; // sha256
   u64 addr;
   u32 bytes;
   u32 dword_len;
   bm_handle_t bm_handle;
+  bool do_check;
 
-  void Init(const string& desc, bm_handle_t handle, const bm_device_mem_t& mem, void* buffer);
+  void Init(const string &desc, bm_handle_t handle, const bm_device_mem_t &mem,
+            void *buffer, bool do_check = false);
   int Check();
 };
 
@@ -188,7 +190,7 @@ struct net_stage_t {
   u64 ctx_start;
   vector<u64> ctx_offset;
   vector<u64> ctx_borders;
-  std::vector<sg_device_mem_t> neuron_mem;
+  std::vector<bm_device_mem_u64_t> neuron_mem;
   std::vector<u64> neuron_size;
 
   std::vector<single_core_command_t> core_commands;
@@ -221,7 +223,7 @@ struct dyn_neuron_stage_t {
   vector<tensor_attr_t> input_v;
   vector<tensor_attr_t> output_v;
   vector<u64> ctx_offset;
-  std::vector<sg_device_mem_t> neuron_mem;
+  std::vector<bm_device_mem_u64_t> neuron_mem;
 
   map<string, tensor_ext_t> subnet_tensor_v;
   float* cpu_addr;
@@ -241,7 +243,7 @@ struct net_ctx_t {
   std::unordered_map<size_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
 
   // Bulk neuron memories.
-  vector<sg_device_mem_t> neuron_mem;
+  vector<bm_device_mem_u64_t> neuron_mem;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
   bool is_dynamic;
@@ -263,6 +265,8 @@ struct net_ctx_t {
   vector<int> input_index_v;
   vector<int> output_hidden_v;
   vector<int> output_index_v;
+  int32_t do_allreduce;
+  tpu_kernel_allreduce_1684x_t allreduce_param;
 };
 
 // net with cascade
@@ -278,6 +282,8 @@ struct net_cascade_t {
   vector<vector<int>> step_ids;      // each step of nets
   std::vector<mem_cascade_t> hidden_inputs;
   std::vector<mem_cascade_t> hidden_outputs;
+  std::vector<int> hidden_inputs_step_ids;
+  std::vector<int> hidden_outputs_step_ids;
 
   vector<string> input_names;
   vector<bm_data_type_t> input_types;
@@ -296,6 +302,7 @@ struct net_cascade_t {
   vector<size_t> output_bytes;
   vector<bm_device_mem_t> output_mems;
   vector<int> output_loc_devices;
+  int32_t addr_mode;
 
   bm_net_info_t net_info;
 };
@@ -352,6 +359,9 @@ class Bmruntime {
                            int tensor_num[], int device_num);
   bool memcpy_d2s_parallel(void * datas[], bm_tensor_t tensors[],
                            int tensor_num[], int device_num);
+  bool memcpy_d2d_byte_parallel(bm_tensor_t dst_tensors[], size_t dst_offsets[],
+                                bm_tensor_t src_tensors[], size_t src_offsets[],
+                                size_t sizes[], int tensor_num[], int device_num);
 
   const bm_shape_t* get_input_max_shape(int net_idx, int input_idx);
   const bm_shape_t* get_output_max_shape(int net_idx, int output_idx);
@@ -418,7 +428,7 @@ class Bmruntime {
   const bm_net_info_t* get_net_info(int net_idx);
   const bm_net_info_t* get_net_info(const string& net_name);
 
-  const vector<sg_device_mem_t> &get_neuron_mem(int net_idx);
+  const vector<bm_device_mem_u64_t> &get_neuron_mem(int net_idx);
   void trace();
 
   size_t size_4N_align(const bm_shape_t& shape, const bm_data_type_t& type);
@@ -428,9 +438,9 @@ class Bmruntime {
   void must_free_device_mem(uint32_t devid, bm_device_mem_t& mem);
 
   // sg alloc for over 4GB
-  u64 must_alloc_sg_device_mem(uint32_t devid, sg_device_mem_t* mem, u64 size, const string& desc = "", int type_len=1);
-  sg_device_mem_t must_alloc_sg_device_mem(uint32_t devid, u64 size, const string& desc = "", int type_len=1);
-  void must_free_sg_device_mem(uint32_t devid, sg_device_mem_t& mem);
+  u64 must_alloc_device_mem_u64(uint32_t devid, bm_device_mem_u64_t* mem, u64 size, const string& desc = "", int type_len=1);
+  bm_device_mem_u64_t must_alloc_device_mem_u64(uint32_t devid, u64 size, const string& desc = "", int type_len=1);
+  void must_free_device_mem_u64(uint32_t devid, bm_device_mem_u64_t& mem);
 
  protected:
   void init();
@@ -447,7 +457,8 @@ class Bmruntime {
   int get_static_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
   int get_dynamic_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
   std::vector<int32_t> refine_core_list(const net_stage_t *stage,
-                                        const std::vector<int32_t> &core_list);
+                                        const std::vector<int32_t> &core_list,
+                                        bm_handle_t handle);
 
 protected:
   // functions for load bmodel
@@ -544,11 +555,12 @@ protected:                                                    // one bmruntime c
   bool using_internal_hidden_tensors; /* internal initlized hidden_tensors device_mem or accept from user parameter when launch */
   bool using_internal_bm_handle; /* internal initlized bm_handle or accept from user parameter */
   int m_devids[MAX_DEVICE_NUM];
+  bool using_fast_allreduce;
 
   vector<bm_device_mem_t> m_device_mem_vec;     /* save device memory address, for free */
   vector<uint32_t> m_device_mem_ids;            /* record each device memory belong which device*/
 
-  vector<sg_device_mem_t> m_sg_device_mem_vec;     /* save device memory address, for free */
+  vector<bm_device_mem_u64_t> m_sg_device_mem_vec;     /* save device memory address, for free */
   vector<uint32_t> m_sg_device_mem_ids;            /* record each device memory belong which device*/
 
   std::shared_ptr<BmCoeff> m_local_coeffs[MAX_DEVICE_NUM];
@@ -582,7 +594,7 @@ protected:                                                    // one bmruntime c
 
   // For neuron memory share
   u32 m_neuron_heap_mask;
-  vector<sg_device_mem_t> max_neuron_mem[MAX_DEVICE_NUM];
+  vector<bm_device_mem_u64_t> max_neuron_mem[MAX_DEVICE_NUM];
   std::shared_ptr<KernelModule> kernel_modules[MAX_DEVICE_NUM];
 
  protected:
@@ -638,6 +650,7 @@ protected:                                                    // one bmruntime c
   // temp custom cpu related
   void *tmpcpuso_handle_ = NULL;
   std::string temp_filename_;
+  int card_chip_num;
 };
 
 class BmCoeff {
@@ -648,17 +661,17 @@ class BmCoeff {
 
   u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem);
   int Check();
-  sg_device_mem_t GetCoeffDeviceMem() {
+  bm_device_mem_u64_t GetCoeffDeviceMem() {
     return m_latest_device_mem;
   }
 
  protected:
-  map<vector<u8>, sg_device_mem_t> m_coeff_map; /* to share the same coeff, by check code*/
+  map<vector<u8>, bm_device_mem_u64_t> m_coeff_map; /* to share the same coeff, by check code*/
   std::mutex m_coeff_mutex;
   bm_handle_t m_handle;
   bool m_inner_handle;
   int m_devid;
-  sg_device_mem_t m_latest_device_mem;
+  bm_device_mem_u64_t m_latest_device_mem;
 };
 
 class KernelModule {
@@ -691,6 +704,7 @@ class CascadeThread {
     NET_MODE = 0,
     S2D_MODE = 1,
     D2S_MODE = 2,
+    D2D_MODE = 3,
     UNKNOWN = -1,
   } FUNC_MODE_T;
 public:
@@ -729,7 +743,7 @@ public:
 
   void s2d(bm_tensor_t *tensors, void **datas, int tensor_num) {
     // std::unique_lock<std::mutex> lock(m_mutex);
-    m_tensors = tensors;
+    m_dst_tensors = tensors;
     m_datas = datas;
     m_mode = S2D_MODE;
     m_tensor_num = tensor_num;
@@ -740,9 +754,25 @@ public:
 
   void d2s(void **datas, bm_tensor_t *tensors, int tensor_num) {
     // std::unique_lock<std::mutex> lock(m_mutex);
-    m_tensors = tensors;
+    m_src_tensors = tensors;
     m_datas = datas;
     m_mode = D2S_MODE;
+    m_tensor_num = tensor_num;
+    m_paramReady = true;
+    m_done = false;
+    // m_condition.notify_all();
+  }
+
+  void d2d(bm_tensor_t *dst_tensors, size_t *dst_offsets,
+           bm_tensor_t *src_tensors, size_t *src_offsets,
+           size_t *sizes, int tensor_num) {
+    // std::unique_lock<std::mutex> lock(m_mutex);
+    m_src_tensors = src_tensors;
+    m_dst_tensors = dst_tensors;
+    m_src_offsets = src_offsets;
+    m_dst_offsets = dst_offsets;
+    m_sizes = sizes;
+    m_mode = D2D_MODE;
     m_tensor_num = tensor_num;
     m_paramReady = true;
     m_done = false;
@@ -775,7 +805,7 @@ private:
         }
       } else if (m_mode == S2D_MODE) {
         for (int i = 0; i < m_tensor_num; ++i) {
-          auto status = bm_memcpy_s2d(m_handle, m_tensors[i].device_mem, m_datas[i]);
+          auto status = bm_memcpy_s2d(m_handle, m_dst_tensors[i].device_mem, m_datas[i]);
           if (BM_SUCCESS != status) {
             m_ok = false;
             break;
@@ -785,7 +815,18 @@ private:
         }
       } else if (m_mode == D2S_MODE) {
         for (int i = 0; i < m_tensor_num; ++i) {
-          auto status = bm_memcpy_d2s(m_handle, m_datas[i], m_tensors[i].device_mem);
+          auto status = bm_memcpy_d2s(m_handle, m_datas[i], m_src_tensors[i].device_mem);
+          if (BM_SUCCESS != status) {
+            m_ok = false;
+            break;
+          } else {
+            m_ok = true;
+          }
+        }
+      } else if (m_mode == D2D_MODE) {
+        for (int i = 0; i < m_tensor_num; ++i) {
+          auto status = bm_memcpy_d2d_byte(m_handle, m_dst_tensors[i].device_mem, m_dst_offsets[i],
+                                          m_src_tensors[i].device_mem, m_src_offsets[i], m_sizes[i]);
           if (BM_SUCCESS != status) {
             m_ok = false;
             break;
@@ -811,11 +852,15 @@ private:
   // bool m_paramReady;
   // bool m_done;
   bool m_ok;
-  // s2d/d2s param
-  bm_tensor_t *m_tensors;
+  // s2d/d2s/d2d param
+  bm_tensor_t *m_src_tensors;
+  bm_tensor_t *m_dst_tensors;
   void **m_datas;
   FUNC_MODE_T m_mode;
   int m_tensor_num;
+  size_t *m_src_offsets;
+  size_t *m_dst_offsets;
+  size_t *m_sizes;
   // net param
   int m_net_idx;
   bm_handle_t m_handle;

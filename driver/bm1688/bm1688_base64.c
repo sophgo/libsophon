@@ -8,16 +8,10 @@ char *base_get_chip_id(struct bm_device_info *bmdi)
 	char *ret = NULL;
 
 	val	= (otp_reg_read(bmdi, 0x00002014) & 0x7);
-	switch (val) {
-	case 0x1:
-		ret = "CV186AH-SOC";
-		break;
-	case 0x0:
-	case 0x7:
+	if (val == 0 || val == 7) {
 		ret = "BM1688-SOC";
-		break;
-	default:
-		ret = "Unkown board";
+	} else {
+		ret = "CV186AH-SOC";
 	}
 
 	return ret;

@@ -973,7 +973,7 @@ static void thread_entry_bmrtmcore_launch(
   bm_tensor_t *output_tensors, int output_num,
   std::vector<int> core_list, int stage_idx) {
   bool ret = bmrt_launch_tensor_multi_cores(g_bmrt, net_name, input_tensors, input_num,
-                                            output_tensors, output_num, false, false, core_list.data(), core_list.size());
+                                            output_tensors, output_num, true, false, core_list.data(), core_list.size());
   if (ret == false) {
     BMRT_LOG(FATAL, "The network '%s' stage '%d' launch failed", net_name, stage_idx);
   }
@@ -1054,6 +1054,13 @@ static void test_bmrtmcore_launch_multi_mession()
         bmrt_tensor(&all_input_tensors[m_i][i], g_bmrt, g_launch_unit_v[model_idx].input_type_v[i],
                     g_launch_unit_v[model_idx].input_shape_v[i]);
         bm_memcpy_s2d(g_bm_handle, all_input_tensors[m_i][i].device_mem, g_launch_unit_v[model_idx].ref_input_v[i]);
+      }
+      auto output_num = output_nums[m_i];
+      for (int i = 0; i < output_num; ++i)
+      {
+        uint32_t model_idx = launch_i + m_i;
+        bmrt_tensor(&all_output_tensors[m_i][i], g_bmrt, g_launch_unit_v[model_idx].output_type_v[i],
+                    g_launch_unit_v[model_idx].output_shape_v[i]);
       }
     }
     for (uint32_t loop_i = 0; loop_i < LOOP_NUM; loop_i++)

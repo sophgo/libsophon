@@ -16,6 +16,7 @@
 #include "bm1684/bm1684_clkrst.h"
 #include "bm1688/bm1688_clkrst.h"
 #include "bm1684/bm1684_card.h"
+#include "bm1688/bm1688_base64.h"
 #ifndef SOC_MODE
 #include "bm_pcie.h"
 #include "console.h"
@@ -50,18 +51,16 @@ static ssize_t npu_usage_show(struct device *d, struct device_attribute *attr, c
 
 	// bm1688 core 1
 	if (bmdi->cinfo.chip_id == 0x1686a200) {
-		int chip_info = 1;
-		void *reg_virt_addr;
+		char *name;
 
-		reg_virt_addr = ioremap(0x27102014, 0x4);
-		chip_info = ioread32(reg_virt_addr);
-		iounmap(reg_virt_addr);
-
+		name = base_get_chip_id(bmdi);
 		usage1 = (int)atomic_read(&cattr->npu_utilization1);
 		usage_all1 = cattr->npu_busy_time_sum_ms1 * 100/cattr->npu_start_probe_time1;
-		if (chip_info == 0)
+		if (!strcmp(name, "BM1688-SOC"))
 			return sprintf(buf, "core 0 usage:%d avusage:%d\ncore 1 usage:%d avusage:%d\n",
 			usage, usage_all, usage1, usage_all1);
+		else if (!strcmp(name, "CV186AH-SOC"))
+			return sprintf(buf, "usage:%d avusage:%d\n", usage, usage_all);
 		else
 			return sprintf(buf, "usage:%d avusage:%d\n", usage, usage_all);
 	}

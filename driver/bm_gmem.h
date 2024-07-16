@@ -52,7 +52,7 @@ struct reserved_mem_info {
 };
 
 struct bm_gmem_info {
-	spinlock_t gmem_spinlock;
+	struct mutex gmem_mutex;
 	struct ion_device idev;
 	struct reserved_mem_info resmem_info;
 	int (*bm_gmem_init)(struct bm_device_info *);

@@ -254,7 +254,7 @@ int bmdrv_api_init(struct bm_device_info *bmdi, u32 core, u32 channel)
 	init_completion(&apinfo->msg_done);
 	mutex_init(&apinfo->api_mutex);
 	init_completion(&apinfo->dev_sync_done);
-	spin_lock_init(&apinfo->api_fifo_spinlock);
+	mutex_init(&apinfo->api_fifo_mutex);
 
 #ifndef SOC_MODE
 	if(bmdi->cinfo.chip_id == 0x1686) {
@@ -536,8 +536,6 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 			}
 			lib_node = kzalloc(sizeof(struct bmcpu_lib), GFP_KERNEL);
 			strncpy(lib_node->lib_name, api_cpu_load_library_internal.lib_name, LIB_MAX_NAME_LEN);
-			lib_node->cur_rec = lib_temp->cur_rec;
-			// lib_node->rec[lib_node->cur_rec] = 1;
 			lib_node->core_id = p_bm_api->core_id;
 			lib_node->refcount = 1;
 			memcpy(lib_node->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN);
@@ -547,23 +545,10 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 			return -1;
 		}
 	}
-	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-		if(!strncmp(lib_temp->lib_name, api_cpu_load_library_internal.lib_name, LIB_MAX_NAME_LEN)) {
-			(api_cpu_load_library_internal.cur_rec)++;
-		}
-	}
-
-	// if (api_cpu_load_library_internal.cur_rec >= LIB_MAX_REC_CNT) {
-	// 	mutex_unlock(&lib_info->bmcpu_lib_mutex);
-	// 	pr_err("%s out range.\n", __func__);
-	// 	return -1;
-	// }
 	mutex_unlock(&lib_info->bmcpu_lib_mutex);
 
 	lib_node = kzalloc(sizeof(struct bmcpu_lib), GFP_KERNEL);
 	strncpy(lib_node->lib_name, api_cpu_load_library_internal.lib_name, LIB_MAX_NAME_LEN);
-	lib_node->cur_rec = api_cpu_load_library_internal.cur_rec;
-	// lib_node->rec[lib_node->cur_rec] = 1;
 	lib_node->core_id = p_bm_api->core_id;
 	lib_node->refcount = 1;
 	memcpy(lib_node->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN);
@@ -653,7 +638,6 @@ int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg
 	u64 local_send_api_seq;
 	u32 channel;
 	int fifo_avail;
-	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -747,18 +731,18 @@ int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg
 		return -EBUSY;
 	}
 
-	spin_lock_irqsave(&apinfo->api_fifo_spinlock, irq_flags);
+	mutex_lock(&apinfo->api_fifo_mutex);
 	fifo_avail = kfifo_avail(&apinfo->api_fifo);
 	if (fifo_avail >= API_ENTRY_SIZE) {
 		kfifo_in(&apinfo->api_fifo, api_entry, API_ENTRY_SIZE);
-		spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+		mutex_unlock(&apinfo->api_fifo_mutex);
 	} else {
-		thd_info->last_api_seq[core_id]--;
-		spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
-		mutex_unlock(&apinfo->api_mutex);
 		dev_err(bmdi->dev, "api fifo full!%d\n", fifo_avail);
 		pr_err("%s bm-sophon%d api fifo full!\n", __func__, bmdi->dev_index);
+		thd_info->last_api_seq[core_id]--;
 		kfree(api_entry);
+		mutex_unlock(&apinfo->api_fifo_mutex);
+		mutex_unlock(&apinfo->api_mutex);
 		return -EBUSY;
 	}
 	kfree(api_entry);
@@ -798,9 +782,9 @@ void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file)
 
 			if (del_lib == 1) {
 				ksend_api(bmdi, file, (unsigned char *)&api_cpu_load_library_internal, core_id);
-				ret = bmdrv_thread_sync_api(bmdi, file, core_id);
+				ret = bmdrv_thread_sync_api(bmdi, file, (~0));
 				if (ret)
-					pr_err("[%s: %d] sync api error!\n", __func__, __LINE__);
+					pr_err("%s: sync api error!\n", __func__);
 
 
 				list_for_each_safe(pos, pos_next, &(bmdi->exec_func.func_list)) {
@@ -835,7 +819,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	u64 local_send_api_seq;
 	u32 channel;
 	int core_id = 0;
-	unsigned long irq_flags;
 	unsigned int param_num;
 	bm_api_ext_t *bm_api_list;
 	int i;
@@ -928,8 +911,8 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 		bm_api_list = kmalloc((sizeof(bm_api_ext_t) * param_num), GFP_KERNEL);
 
 		ret = copy_from_user(param_list, (tpu_launch_param_t __user *)bm_api.api_addr, bm_api.api_size);
-		PR_TRACE("%s bm-sophon%d param_num =0x%x, param_list[0].param_size=0x%x\n",
-							__func__, bmdi->dev_index, param_num, param_list[0].param_size);
+		//pr_debug("%s bm-sophon%d param_num =0x%x, param_list[0].param_size=0x%x\n",
+		//					__func__, bmdi->dev_index, param_num, param_list[0].param_size);
 		for(i=0; i<param_num; i++) {
 			u32 *api_addr_tmp = kmalloc(param_list[i].param_size + 8, GFP_KERNEL);
 			*(api_addr_tmp + 0) = param_list[i].func_id;
@@ -941,7 +924,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			bm_api_list[i].api_addr = (u8 *)api_addr_tmp;
 			bm_api_list[i].api_size = (param_list[i].param_size + 8);
 			api_from_userspace = 0;
-			// kfree(api_addr_tmp);
 		}
 		kfree(param_list);
 		mutex_lock(&apinfo_core0->api_mutex);
@@ -949,6 +931,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	} else {
 		mutex_lock(&apinfo->api_mutex);
 	}
+
 
 	api_pid = current->pid;
 	for (i = 0; i < param_num; i++){
@@ -1072,23 +1055,23 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 		}
 
 		if (BM_MSGFIFO_CHANNEL_CPU == channel) {
-			spin_lock_irqsave(&apinfo->api_fifo_spinlock, irq_flags);
+			mutex_lock(&apinfo->api_fifo_mutex);
 			list_add_tail(&(api_entry_list->api_list_node), &apinfo->api_list);
-			spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+			mutex_unlock(&apinfo->api_fifo_mutex);
 
 			api_opt_header.global_api_seq = local_send_api_seq;
 			api_opt_header.api_data = 0;
 			/* copy api data to fifo */
 			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, &api_opt_header, channel, api_from_userspace);
 		} else {
-			spin_lock_irqsave(&apinfo->api_fifo_spinlock, irq_flags);
+			mutex_unlock(&apinfo->api_fifo_mutex);
 			fifo_avail = kfifo_avail(&apinfo->api_fifo);
 			if (fifo_avail >= API_ENTRY_SIZE) {
 				kfifo_in(&apinfo->api_fifo, api_entry, API_ENTRY_SIZE);
-				spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+				mutex_unlock(&apinfo->api_fifo_mutex);
 			} else {
 				thd_info->last_api_seq[core_id]--;
-				spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+				mutex_unlock(&apinfo->api_fifo_mutex);
 				if (bm_api.api_id == 0x90000013) {
 					mutex_unlock(&apinfo_core1->api_mutex);
 					mutex_unlock(&apinfo_core0->api_mutex);
@@ -1153,17 +1136,27 @@ int bmdrv_query_api(struct bm_device_info *bmdi, struct file *file, unsigned lon
 }
 
 #if SYNC_API_INT_MODE == 1
-int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, int core_id)
+int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
 {
 	int ret = 1;
 	pid_t api_pid;
 	struct bm_thread_info *thd_info;
 	int timeout_ms = bmdi->cinfo.delay_ms;
 	struct bm_handle_info *h_info;
-	int time_cost;
+	int core_id;
+
+	if (arg == (~0) && bmdi->core_id >=0 && bmdi->core_id <=1) { // kernel space
+		core_id = bmdi->core_id;
+	} else { // user space
+		ret = copy_from_user(&core_id, (int __user *)arg, sizeof(int));
+		if (ret) {
+			pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+			return ret;
+		}
+	}
 
 	if (core_id >= BM_MAX_CORE_NUM) {
-		pr_err("bm-sophon%d error: core id %d not valid\n", bmdi->dev_index, core_id);
+		pr_err("bm-sophon%d core id %d not valid\n", bmdi->dev_index, core_id);
 		return -EINVAL;
 	}
 
@@ -1184,25 +1177,16 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, int co
 	}
 	ret = 1;
 	while ((thd_info->cpl_api_seq[core_id] != thd_info->last_api_seq[core_id]) && (ret != 0)) {
-		PR_TRACE("bm-sophon%d bmdrv: core_id=%d, pid=%d, last_api_seq=%llu, cpl_api_seq=%llu\n",
-				bmdi->dev_index, core_id, api_pid, thd_info->last_api_seq[core_id],
-				thd_info->cpl_api_seq[core_id]);
+		PR_TRACE("bm-sophon%d bmdrv: %d core_id: %d sync api, last is %llu -- cpl is %llu\n",
+				bmdi->dev_index, api_pid, core_id, thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
 		ret = wait_for_completion_timeout(&thd_info->msg_done, msecs_to_jiffies(timeout_ms));
 	}
 
-	if (ret) {
-		time_cost = timeout_ms - jiffies_to_msecs(ret);
-		if (time_cost > DELAY_MS_WARING && ret != 1) {
-			pr_err("bm-sophon%d %s, waring: time_cost=%dms, core_id=%d, pid=%d, last_api_seq=%llu, cpl_api_seq=%llu\n",
-				bmdi->dev_index, __func__, time_cost, core_id, api_pid,
-				thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
-		}
+	if (ret)
 		return 0;
-	}
 
-	pr_err("bm-sophon%d %s, timeout=%dms, core_id=%d, pid=%d, last_api_seq=%llu, cpl_api_seq=%llu\n",
-		 bmdi->dev_index, __func__,
-		 timeout_ms, core_id, api_pid, thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
+	pr_err("bm-sophon%d %s, wait api timeout, wait %dms, core_id=%d\n",
+		 bmdi->dev_index, __func__, timeout_ms, core_id);
 	if (bmdev_debug_tpusys(bmdi, core_id))
 		return -EBUSY;
 	else
@@ -1253,7 +1237,7 @@ int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 	return -EBUSY;
 }
 #else
-int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, int core_id)
+int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
 {
 	int polling_ms = bmdi->cinfo.polling_ms;
 	int cnt = 10;
@@ -1289,15 +1273,7 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, int co
 
 int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
 {
-	int core_id, ret;
-
-	ret = copy_from_user(&core_id, (void __user *)arg, sizeof(int));
-	if (ret != 0) {
-		pr_err("error copy_from_user, ret is %d\n", ret);
-		return -EFAULT;
-	}
-	ret = bmdrv_thread_sync_api(bmdi, file, core_id);
-	return ret;
+	return bmdrv_thread_sync_api(bmdi, file, arg);
 }
 #endif
 
@@ -1313,7 +1289,6 @@ int bmdrv_device_sync_api(struct bm_device_info *bmdi)
 	u32 core;
 	u32 channel;
 	struct api_list_entry *api_entry_list;
-	unsigned long irq_flags;
 
 #ifndef SOC_MODE
 	if (bmdi->cinfo.platform == PALLADIUM)
@@ -1331,25 +1306,25 @@ int bmdrv_device_sync_api(struct bm_device_info *bmdi)
 					mutex_unlock(&apinfo->api_mutex);
 					return -ENOMEM;
 				}
-				spin_lock_irqsave(&apinfo->api_fifo_spinlock, irq_flags);
+				mutex_lock(&apinfo->api_fifo_mutex);
 
 				/* if fifo empty, return success */
 				if (kfifo_is_empty(&apinfo->api_fifo)) {
-					spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
-					mutex_unlock(&apinfo->api_mutex);
+					mutex_unlock(&apinfo->api_fifo_mutex);
 					kfree(api_entry);
+					mutex_unlock(&apinfo->api_mutex);
 					return 0;
 				}
 			} else {
-				spin_lock_irqsave(&apinfo->api_fifo_spinlock, irq_flags);
+				mutex_lock(&apinfo->api_fifo_mutex);
 				if (bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_CPU, core)) {
-					spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+					mutex_unlock(&apinfo->api_fifo_mutex);
 					mutex_unlock(&apinfo->api_mutex);
 					return 0;
 				}
 				api_entry_list = kmalloc(sizeof(struct api_list_entry), GFP_KERNEL);
 				if (!api_entry_list) {
-					spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+					mutex_unlock(&apinfo->api_fifo_mutex);
 					mutex_unlock(&apinfo->api_mutex);
 					return -ENOMEM;
 				}
@@ -1368,20 +1343,20 @@ int bmdrv_device_sync_api(struct bm_device_info *bmdi)
 				fifo_avail = kfifo_avail(&apinfo->api_fifo);
 				if (fifo_avail >= API_ENTRY_SIZE) {
 					kfifo_in(&apinfo->api_fifo, api_entry, API_ENTRY_SIZE);
-					spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
-					mutex_unlock(&apinfo->api_mutex);
+					mutex_unlock(&apinfo->api_fifo_mutex);
 					kfree(api_entry);
+					mutex_unlock(&apinfo->api_mutex);
 				} else {
-					apinfo->device_sync_last--;
-					spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
-					mutex_unlock(&apinfo->api_mutex);
 					dev_err(bmdi->dev, "api fifo full!%d\n", fifo_avail);
+					apinfo->device_sync_last--;
+					mutex_unlock(&apinfo->api_fifo_mutex);
 					kfree(api_entry);
+					mutex_unlock(&apinfo->api_mutex);
 					return -EBUSY;
 				}
 			} else {
 				list_add_tail(&(api_entry_list->api_list_node), &apinfo->api_list);
-				spin_unlock_irqrestore(&apinfo->api_fifo_spinlock, irq_flags);
+				mutex_unlock(&apinfo->api_fifo_mutex);
 				mutex_unlock(&apinfo->api_mutex);
 			}
 		}

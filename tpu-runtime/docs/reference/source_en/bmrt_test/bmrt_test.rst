@@ -89,6 +89,11 @@ ____________________________________________
       bmrt_test --bmodel xxx.bmodel --stage_idx 0  --shapes "[1,3,224,224]" # Run the
       # multi-stage bmodel model and specify the bmodel for running stage 0.
 
+      bmrt_test --bmodel xxx.bmodel --core_list 0,1
+      # run the bmodel on the deep learning processor core0 and core1 at the same time
+      # note that the bmodel is multi-core compiled and can be architected to support multi-core
+      # the value in core_list is at least 0 and cannot be greater than the number of ( deep learning processor cores - 1 ).
+
       # The following instructions are functions provided by using environmental variables
       # and bmruntime and can be used by other applications.
       BMRUNTIME_ENABLE_PROFILE=1 bmrt_test --bmodel xxx.bmodel # Generate

@@ -56,7 +56,7 @@ int bmdrv_gmem_init(struct bm_device_info *bmdi)
 
 	heap_id = 0;
 
-	spin_lock_init(&gmem_info->gmem_spinlock);
+	mutex_init(&gmem_info->gmem_mutex);
 
 	npu_heap.type = ION_HEAP_TYPE_CARVEOUT;
 	npu_heap.name = "npu-heap";
@@ -251,17 +251,16 @@ int bmdev_gmem_get_handle_info(struct bm_device_info *bmdi, struct file *file,
 		struct bm_handle_info **f_list)
 {
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_for_each_entry(h_info, &bmdi->handle_list, list) {
 		if (h_info->file == file) {
 			*f_list = h_info;
-			spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+			mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 			return 0;
 		}
 	}
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	return -EINVAL;
 }
 
@@ -307,31 +306,27 @@ int bmdrv_gmem_ioctl_alloc_mem(struct bm_device_info *bmdi, struct file *file,
 	int ret = 0;
 	struct ion_allocation_data alloc_data;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: bm-sophon%d file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
-
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	if (copy_from_user(&alloc_data, (struct ion_allocation_data __user *)arg, sizeof(alloc_data))) {
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 		return -EFAULT;
 	}
-
 	if (!bmdrv_gmem_alloc(bmdi, h_info, &alloc_data)) {
 		ret = copy_to_user((void __user *)arg, &alloc_data, sizeof(alloc_data));
-		if (!ret) {
-			spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+		if (!ret)
 			h_info->gmem_used += BGM_4K_ALIGN(alloc_data.len);
-			spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
-		} else {
+		else
 			pr_err("bm-sophon%d %s: copy_to_user failed\n", bmdi->dev_index, __func__);
-		}
 	} else {
 		ret = -ENOMEM;
 		pr_err("bm-sophon%d bmdrv_gmem_ioctl_alloc_mem alloc failed!\n", bmdi->dev_index);
 	}
-
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	return ret;
 }
 
@@ -341,21 +336,18 @@ int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *fil
 	int ret = 0;
 	bm_device_mem_t device_mem;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
-
-	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
-		return -EFAULT;
-	}
-
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		return -EFAULT;
+	}
 	h_info->gmem_used += BGM_4K_ALIGN(device_mem.size);
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
-
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 	PR_TRACE("bmdrv: gmem ion alloc %x\n", device_mem.size);
 
 	return ret;
@@ -367,20 +359,20 @@ int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	int ret = 0;
 	bm_device_mem_t device_mem;
 	struct bm_handle_info *h_info;
-	unsigned long irq_flags;
-
-	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
-		return -EFAULT;
-	}
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
 	}
 
-	spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		return -EFAULT;
+	}
+
 	h_info->gmem_used -= BGM_4K_ALIGN(device_mem.size);
-	spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	PR_TRACE("%s 0x%lx, size 0x%x\n", __func__, device_mem.u.device.device_addr, device_mem.size);
 	return ret;

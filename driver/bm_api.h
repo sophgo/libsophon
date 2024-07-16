@@ -31,7 +31,7 @@ struct bm_api_info {
 	struct mutex api_mutex;
 	struct kfifo api_fifo;
 	struct list_head api_list;
-	spinlock_t api_fifo_spinlock;
+	struct mutex api_fifo_mutex;
 
 	int (*bm_api_init)(struct bm_device_info *, u32 core, u32 channel);
 	void (*bm_api_deinit)(struct bm_device_info *, u32 core, u32 channel);
@@ -54,6 +54,7 @@ typedef struct loaded_lib
 {
 	unsigned char md5[16];
 	int loaded;
+	int core_id;
 } loaded_lib_t;
 
 typedef struct bm_api_cpu_load_library_internal {
@@ -149,7 +150,7 @@ int bmdrv_api_init(struct bm_device_info *bmdi, u32 core, u32 channel);
 void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 core, u32 channel);
 int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg, bool flag, bool api_from_userspace);
 int bmdrv_query_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
-int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, int core_id);
+int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdrv_device_sync_api(struct bm_device_info *bmdi);
 void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file);

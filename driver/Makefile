@@ -82,8 +82,6 @@ ifeq ($(SOC_MODE), 1)
   cflags-y += -DSOC_MODE
 endif
 
-KBUILD_EXTRA_SYMBOLS = $(src)/../../osdrv/interdrv/v2/base/Module.symvers
-
 FW_SIMPLE ?= 0
 ifeq ($(FW_SIMPLE),1)
   ccflags-y += -DFW_SIMPLE

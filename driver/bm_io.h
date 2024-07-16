@@ -47,6 +47,7 @@ typedef enum {
 // C906_0 -> GP[0,1,9,11,12]; C906_1 -> GP[14,15,23,25,26]
 #define GP_REG_C906_FW_MODE              	10
 #define GP_REG_TPU1_OFFSET			14
+#define GP_REG_PM_OFFSET			27
 #define BD_ENGINE_TPU1_OFFSET		       	0x10000UL
 #define GDMA_ENGINE_TPU1_OFFSET		       	0x10000UL
 #define SHMEM_TPU1_OFFSET		       	0x10000UL

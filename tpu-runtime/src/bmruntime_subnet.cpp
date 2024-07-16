@@ -66,7 +66,7 @@ void Bmruntime::subnet_clear(net_ctx_t* net_ctx)
           BMRT_LOG(FATAL, "Only soc mode run here");
 #else
           if (m_flags & BM_RUNTIME_SHARE_MEM) {
-            bm_mem_unmap_device_mem(m_handle, bm_host_mem.addr, bm_host_mem.size);
+            bm_mem_unmap_device_mem(m_handles[net_ctx->device_id], bm_host_mem.addr, bm_host_mem.size);
             BMRT_DEBUG("HOSTMEM UNMAP %p SIZE %llx NAME %s", bm_host_mem.addr, bm_host_mem.size,
                         subnet_tensor.first.c_str());
           }
@@ -101,7 +101,7 @@ void Bmruntime::subnet_clear(net_ctx_t* net_ctx)
 #ifndef SOC_MODE
           BMRT_LOG(FATAL, "Only soc mode run here");
 #else
-          bm_mem_unmap_device_mem(m_handle, bm_host_mem.addr, bm_host_mem.size);
+          bm_mem_unmap_device_mem(m_handles[net_ctx->device_id], bm_host_mem.addr, bm_host_mem.size);
 #endif
           break;
         case HOST_MEM_ALLOC: /* free host memory */
@@ -486,7 +486,7 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->ctx_start,
         stage->ctx_borders, stage->ctx_offset,
-        stage->coeff_offset, true,
+        stage->coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr);
   } else if (arch == BM1688) {
     auto func_ids = net_ctx->kernel_module_->get_dynamic_fullnet_func_id(core_list);
@@ -496,7 +496,7 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->ctx_start,
         stage->ctx_borders, (m_flags & BM_RUNTIME_SHARE_MEM) ? stage->ctx_offset : net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->ctx_offset,
-        stage->coeff_offset, true,
+        stage->coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
   } else if (arch == BM1690) {
@@ -506,7 +506,7 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->ctx_start,
         stage->ctx_borders,  (m_flags & BM_RUNTIME_SHARE_MEM) ? stage->ctx_offset : net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->ctx_offset,
-        stage->coeff_offset, true,
+        stage->coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
   } else if (arch == MARS3) {
@@ -516,7 +516,7 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->ctx_start,
         stage->ctx_borders, stage->ctx_offset,
-        stage->coeff_offset, true,
+        stage->coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
   } else {

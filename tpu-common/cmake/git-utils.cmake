@@ -1,4 +1,5 @@
 function(get_version_from_tag ver_var sover_var revision_var)
+    find_package(Git)
     set(ver "1.0.0")
     set(sover "1.0")
     set(revision "1.0.0")

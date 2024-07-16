@@ -344,6 +344,9 @@ bool bmrt_pre_alloc_neuron_multi_cores(
       BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
       return false;
     }
+    if (auto net_c = ((Bmruntime*)p_bmrt)->get_net_cascade(net_name)) {
+      return true;
+    }
     int net_idx = ((Bmruntime *)p_bmrt)->get_net_idx(net_name);
     if (net_idx < 0) {
       BMRT_LOG(WRONG, "net name:%s invalid", net_name);
@@ -475,4 +478,17 @@ bool bmrt_memcpy_d2s_parallel(void *p_bmrt,
                               int device_num) {
   return ((Bmruntime*)p_bmrt)
     ->memcpy_d2s_parallel(datas, tensors, tensor_num, device_num);
+}
+
+bool bmrt_memcpy_d2d_byte_parallel(void *p_bmrt,
+                                  bm_tensor_t dst_tensors[],
+                                  size_t dst_offsets[],
+                                  bm_tensor_t src_tensors[],
+                                  size_t src_offsets[],
+                                  size_t sizes[],
+                                  int tensor_num[],
+                                  int device_num) {
+  return ((Bmruntime*)p_bmrt)
+    ->memcpy_d2d_byte_parallel(dst_tensors, dst_offsets, src_tensors, src_offsets,
+                              sizes, tensor_num, device_num);
 }

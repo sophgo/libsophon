@@ -58,7 +58,6 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	u32 api_size = 0;
 	u32 api_duration = 0;
 	u32 api_result = 0;
-	unsigned long irq_flags;
 
 	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, api_id) / sizeof(u32));
 	api_id = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
@@ -92,7 +91,7 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 		ti->profile.completed_api_counter++;
 		bmdi->profile.completed_api_counter++;
 
-
+		mutex_lock(&ti->trace_mutex);
 		if (ti->trace_enable) {
 			ptitem = (struct bm_trace_item *)mempool_alloc(bmdi->trace_info.trace_mempool, GFP_KERNEL);
 			ptitem->payload.trace_type = 1;
@@ -106,11 +105,10 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 #endif
 			ptitem->payload.start_time = ptitem->payload.end_time - api_duration * 4166;
 			INIT_LIST_HEAD(&ptitem->node);
-			spin_lock_irqsave(&ti->trace_spinlock, irq_flags);
 			list_add_tail(&ptitem->node, &ti->trace_list);
 			ti->trace_item_num++;
-			spin_unlock_irqrestore(&ti->trace_spinlock, irq_flags);
 		}
+		mutex_unlock(&ti->trace_mutex);
 	}
 }
 

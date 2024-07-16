@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.80)
+cmake_minimum_required(VERSION 3.6)
 project(tpu-runtime)
 if("$ENV{ONLY_TEST}" STREQUAL "1")
 include(test.cmake)

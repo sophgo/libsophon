@@ -29,18 +29,18 @@
 //	//init_completion(&h_info->h_msg_done);
 //	//mutex_init(&h_info->h_api_seq_spinlock);
 //
-//	//spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_lock(&bmdi->gmem_info.gmem_mutex);
 //	thd_info = bmdrv_create_thread_info(h_info, open_pid);
 //	if (!thd_info) {
 //		//kfree(h_info);
-//		//spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//		//mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 //		return -1;
 //	}
-//	//spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 //
-//	//spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_lock(&bmdi->gmem_info.gmem_mutex);
 //	//list_add(&h_info->list, &bmdi->handle_list);
-//	//spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 //
 //	//file->private_data = bmdi;
 //
@@ -97,11 +97,11 @@
 //	/* invalidate pending APIs in msgfifo */
 //	bmdev_invalidate_pending_apis(bmdi, h_info);
 //
-//	//spin_lock_irqsave(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_lock(&bmdi->gmem_info.gmem_mutex);
 //	bmdrv_delete_thread_info(h_info);
 //	list_del(&h_info->list);
 //	kfree(h_info);
-//	//spin_unlock_irqrestore(&bmdi->gmem_info.gmem_spinlock, irq_flags);
+//	//mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 //
 //	file->private_data = NULL;
 //

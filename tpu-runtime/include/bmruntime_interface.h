@@ -450,7 +450,7 @@ DECL_EXPORT bool bmrt_pre_alloc_neuron_multi_cores(
  *
  *  @param [in]     p_bmrt      Bmruntime that had been created with multi bm_handles
  *  @param [in]     tensors     Array of tensors that will be copied to devices
- *  @param [in]     datas       Array of satas allocated in system memory
+ *  @param [in]     datas       Array of datas allocated in system memory
  *  @param [in]     tensor_num  Array of tensor_num that will be copied to each device
  *  @param [in]     device_num  Device number
 */
@@ -472,7 +472,7 @@ DECL_EXPORT bool bmrt_memcpy_s2d_parallel(
  *  The process of copying data from different devices is done in parallel and from the same device is in sequence.
  *
  *  @param [in]     p_bmrt      Bmruntime that had been created with multi bm_handles
- *  @param [in]     datas       Array of satas allocated in system memory
+ *  @param [in]     datas       Array of datas allocated in system memory
  *  @param [in]     tensors     Array of tensors that will be copied from devices
  *  @param [in]     tensor_num  Array of tensor_num that will be copied from each device
  *  @param [in]     device_num  Device number
@@ -481,6 +481,39 @@ DECL_EXPORT bool bmrt_memcpy_d2s_parallel(
     void *p_bmrt,
     void *datas[],
     bm_tensor_t tensors[],
+    int tensor_num[],
+    int device_num);
+
+/**
+ *  @name    bmrt_memcpy_d2d_byte_parallel
+ *  @brief   To copy specified bytes of data from one piece of device memory to
+ *           another piece of device memory within one device and this will be
+ *           done in parallel across multi-devices. Both source and destination
+ *           offsets can be specified.
+ *  @ingroup bmruntime
+ *
+ *  This API only could be used when the p_bmrt is created with bmrt_create_ex on multi devices.
+ *  After calling this API, data in src_tensors[:tensor_num[0]] on the first device will be copied
+ *  to dst_tensors[:tensor_num[0]] , and src_tensors[tensor_num[0]:tensor_num[0]+tensor_num[1]] on the
+ *  second device will be copied to dst_tensors[tensor_num[0]:tensor_num[0]+tensor_num[1]] and so on.
+ *  The process is in parallel across different devices and is in sequence within the same device.
+ *
+ *  @param [in]     p_bmrt      Bmruntime that had been created with multi bm_handles
+ *  @param [in]     dst_tensors Array of tensors that will be copied to devices
+ *  @param [in]     dst_offsets Array of offsets for each dst_tensor (in bytes)
+ *  @param [in]     src_tensors Array of tensors that will be copied from devices
+ *  @param [in]     src_offsets Array of offsets for each src_tensor (in bytes)
+ *  @param [in]     sizes       Array of sizes that will be copyied for each tensor (in bytes)
+ *  @param [in]     tensor_num  Array of tensor_num that will be copied for each device
+ *  @param [in]     device_num  Device number
+*/
+DECL_EXPORT bool bmrt_memcpy_d2d_byte_parallel(
+    void *p_bmrt,
+    bm_tensor_t dst_tensors[],
+    size_t dst_offsets[],
+    bm_tensor_t src_tensors[],
+    size_t src_offsets[],
+    size_t sizes[],
     int tensor_num[],
     int device_num);
 

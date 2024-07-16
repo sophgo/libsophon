@@ -17,7 +17,7 @@ struct bm_thread_info {
 
 	/* profile trace information */
 	bm_profile_t profile;
-	spinlock_t trace_spinlock;
+	struct mutex trace_mutex;
 	struct list_head trace_list;
 	bool trace_enable;
 	u64 trace_item_num;

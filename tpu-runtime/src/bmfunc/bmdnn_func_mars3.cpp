@@ -32,7 +32,7 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
         sizeof(u64) * 2 +
         (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() + sizeof(int) +
         2 * sizeof(u64) + sizeof(int); // base message id
-    api_info.api_id.push_back(SG_API_ID_MULTI_FULLNET);
+    api_info.api_id.push_back(BM_API_ID_MULTI_FULLNET);
     api_info.api_data[core_idx].assign(api_buffer_size, 0);
     api_info.input_addr_offset.assign(input_info.size(), 0);
     api_info.output_addr_offset.assign(output_info.size(), 0);
@@ -126,7 +126,7 @@ bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
     if (BM_SUCCESS != core_status) {
       status = (status == BM_SUCCESS) ? core_status : status;
       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
-               SG_API_ID_MULTI_FULLNET, core_status);
+               BM_API_ID_MULTI_FULLNET, core_status);
     }
   }
   return status;
@@ -147,6 +147,8 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
         std::vector<unsigned long long> apd_ctx_mem_borders,
         std::vector<unsigned long long> apd_ctx_mem_offset,
         unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list)
@@ -169,8 +171,8 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
                            output_num * sizeof(u64) +
                            //get_output_shape, global_shape_mem_addr, apd_ctx_start, (ctx_num, apd_ctx_mem_borders, apd_ctx_mem_offset),
                            sizeof(u32) + sizeof(u64) + sizeof(u64) + ( sizeof(u32)+sizeof(u64)*ctx_num*2 ) +
-                           //apd_coeff_mem_offset
-                           sizeof(u64);
+                           //apd_coeff_mem_offset, apd_io_start, apd_io_mem_offset
+                           sizeof(u64) + sizeof(u64) + sizeof(u64);
 
      if (api_buffer_size > MAX_API_MSG_SIZE) {
        //decrease the api buffer size
@@ -242,14 +244,19 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
      *(u64*)p_api = apd_coeff_mem_offset;
      p_api = (u64*)p_api + 1;
 
+     *(u64*)p_api = apd_io_start;
+     p_api = (u64*)p_api + 1;
+     *(u64*)p_api = apd_io_mem_offset;
+     p_api = (u64*)p_api + 1;
+
      bm_status_t status =
-         bm_send_api(handle, (bm_api_id_t)SG_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);
+         bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);
      if (BM_SUCCESS != status) {
-       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", SG_API_ID_DYNAMIC_FULLNET, status);
+       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_DYNAMIC_FULLNET, status);
      } else {
        status = bm_sync_api(handle);
        if (BM_SUCCESS != status) {
-         BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", SG_API_ID_DYNAMIC_FULLNET, status);
+         BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", BM_API_ID_DYNAMIC_FULLNET, status);
        }
      }
 
@@ -263,9 +270,9 @@ bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, un
      BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
      u32 api_buffer_size = sizeof(u32);
      u32 profile_enable = enable;
-     bm_status_t status = bm_send_api(handle, (bm_api_id_t)SG_API_ID_SET_PROFILE_ENABLE, (u8*)&profile_enable, api_buffer_size);
+     bm_status_t status = bm_send_api(handle, (bm_api_id_t)BM_API_ID_SET_PROFILE_ENABLE, (u8*)&profile_enable, api_buffer_size);
      if (BM_SUCCESS != status) {
-       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", SG_API_ID_SET_PROFILE_ENABLE, status);
+       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_SET_PROFILE_ENABLE, status);
      }
      return status;
 }
@@ -295,7 +302,7 @@ bm_status_t bmdnn_func_mars3::_bmdnn_get_profile_data_(
      api_data.byte_offset = byte_offset;
      api_data.data_category = data_category;
 
-     bm_api_id_t api_code = (bm_api_id_t)SG_API_ID_GET_PROFILE_DATA;
+     bm_api_id_t api_code = (bm_api_id_t)BM_API_ID_GET_PROFILE_DATA;
      bm_status_t status =
          bm_send_api(handle, api_code, (u8*)&api_data, api_buffer_size);
      if (BM_SUCCESS != status) {
