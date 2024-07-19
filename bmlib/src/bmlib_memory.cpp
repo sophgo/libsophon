@@ -3560,8 +3560,7 @@ bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mo
   int tmp = 0;
   tpu_kernel_function_t f_id;
 
-  	pthread_t tid = pthread_self();
-	printf("running %s,  Thread ID: %lu\n", __func__, (unsigned long)tid);
+  pthread_t tid = pthread_self();
 
   if(!value) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "input NULL pointer = %d\n");
