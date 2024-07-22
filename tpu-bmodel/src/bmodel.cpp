@@ -385,7 +385,7 @@ void ModelGen::Save(void *buffer)
 ModelCtx::ModelCtx(const string &filename) : model_gen_(NULL), model_(NULL), bmodel_pointer_(NULL)
 {
   // read file
-  file_.open(filename, std::ios::binary | std::ios::in);
+  file_.open(filename, std::ios::binary | std::ios::in | std::ios::out);
   if (!file_) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] open failed." << std::endl;
     throw std::runtime_error("failed to construct");
@@ -520,6 +520,52 @@ void ModelCtx::read_binary(const Binary *binary, uint64_t offset, uint8_t *buffe
   } else {  // from buffer
     memcpy(buffer, (uint8_t *)bmodel_pointer_ + binary_offset_ + binary->start() + offset, size);
   }
+}
+
+void ModelCtx::write_binary(const Binary *binary, uint8_t *buffer) {
+  write_binary(binary, 0, buffer, binary->size());
+}
+
+// write buffer to binary offset
+void ModelCtx::write_binary(const Binary *binary, uint64_t offset,
+                            uint8_t *buffer, uint64_t size) {
+  ASSERT(binary != NULL);
+  ASSERT(buffer != NULL);
+  ASSERT(size + offset <= binary->size());
+  auto offset_file = binary_offset_ + binary->start() + offset;
+  if (bmodel_pointer_ == NULL) { // from file
+    file_.seekg(offset_file, std::ios::beg);
+    file_.write((char *)buffer, size);
+  } else { // from buffer
+    memcpy((uint8_t *)bmodel_pointer_ + offset_file, buffer, size);
+  }
+}
+
+bool ModelCtx::get_weight(const std::string &net_name, int stage_idx,
+                          uint64_t offset, Binary &bin,
+                          std::string &op_name) const {
+  auto num_net = model_->net()->size();
+  for (int i = 0; i < num_net; i++) {
+    auto param = model_->net()->Get(i)->parameter();
+    if (model_->net()->Get(i)->name()->str() == net_name) {
+      if (stage_idx >= 0 && stage_idx < param->size()) {
+        auto weight = param->Get(stage_idx)->coeff_mem();
+        auto num_weight = weight->location()->size();
+        for (int j = 0; j < num_weight; j++) {
+          auto loc = weight->location()->Get(j);
+          if (loc->offset() == offset) {
+            auto weight_bin = weight->binary_coeff();
+            op_name = loc->name()->str();
+            bin.mutate_start(weight_bin->start() + offset);
+            bin.mutate_size(loc->size());
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+  }
+  return false;
 }
 
 template <typename T>
@@ -881,34 +927,54 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
             } else if(subnet->subnet_mode() == 0) { // run on TPU static/dynamic
                 if(subnet->is_dynamic()){
                     info.dynamic_ir_mem_size += subnet->ir_len()*sizeof(uint32_t);
-                } else {
-                    const auto cmd_groups = subnet->cmd_group() ? subnet->cmd_group() :
-                        subnet->core_commands()->Get(0)->gdma_tiu_commands();
-                    int group_num = cmd_groups->size();
-                    for (int group_idx = 0; group_idx < group_num; group_idx++) {
-                      auto cmd_group = cmd_groups->Get(group_idx);
-                      // just for bm1684. bm1684x instructions may be of variable length
-                      if(model()->chip()->str() == "BM1682"){
-                        info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<8);
-                        info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<8);
-                      } else if(model()->chip()->str() == "BM1684"){
-                        info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<7);
-                        info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<7);
-                      } else {
-                        info.bd_cmd_mem_size += cmd_group->binary_bdc()->size();
-                        info.gdma_cmd_mem_size += cmd_group->binary_gdma()->size();
-                      }
+                    uint64_t output_num = subnet->output_tensor()->size();
+                    if (output_num > info.dynamic_output_number) {
+                      info.dynamic_output_number = output_num;
                     }
-                    if (model()->chip()->str() == "SG2260") {
-                      for (unsigned int i = 0; i < subnet->core_commands()->size(); ++i) {
-                        auto core_cmd = subnet->core_commands()->Get(i);
-                        if (core_cmd->hau_commands()) {
-                          for (unsigned int j = 0; j < core_cmd->hau_commands()->size(); ++j)
-                            info.hau_cmd_mem_size += core_cmd->hau_commands()->Get(j)->size();
+                } else {
+                    auto core_num = subnet->core_commands() ? subnet->core_commands()->size() : 1;
+                    for (uint32_t core_idx = 0; core_idx < core_num; ++core_idx) {
+                      const auto cmd_groups = subnet->cmd_group() ? subnet->cmd_group() :
+                          subnet->core_commands()->Get(core_idx)->gdma_tiu_commands();
+                      int group_num = cmd_groups->size();
+                      for (int group_idx = 0; group_idx < group_num; group_idx++) {
+                        auto cmd_group = cmd_groups->Get(group_idx);
+                        // just for bm1684. bm1684x instructions may be of variable length
+                        if(model()->chip()->str() == "BM1682"){
+                          info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<8);
+                          info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<8);
+                        } else if(model()->chip()->str() == "BM1684"){
+                          info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<7);
+                          info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<7);
+                        } else {
+                          info.bd_cmd_mem_size += cmd_group->binary_bdc()->size();
+                          info.gdma_cmd_mem_size += cmd_group->binary_gdma()->size();
                         }
-                        if (core_cmd->sdma_commands()) {
-                          for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
-                            info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
+                      }
+                      // for (int group_idx = 0; group_idx < group_num; group_idx++) {
+                      //   auto cmd_group = subnet->cmd_group()->Get(group_idx);
+                      //   if (cmd_group->bdc_cmd_byte() > 0) {
+                      //     info.bd_cmd_mem_size += cmd_group->bdc_cmd_byte();
+                      //   } else {
+                      //     info.bd_cmd_mem_size += cmd_group->bdc_num()*(1<<cmd_bit);
+                      //   }
+                      //   if (cmd_group->gdma_cmd_byte() > 0) {
+                      //     info.gdma_cmd_mem_size += cmd_group->gdma_cmd_byte();
+                      //   } else {
+                      //     info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<cmd_bit);
+                      //   }
+                      // }
+                      if (model()->chip()->str() == "SG2260") {
+                        for (unsigned int i = 0; i < subnet->core_commands()->size(); ++i) {
+                          auto core_cmd = subnet->core_commands()->Get(i);
+                          if (core_cmd->hau_commands()) {
+                            for (unsigned int j = 0; j < core_cmd->hau_commands()->size(); ++j)
+                              info.hau_cmd_mem_size += core_cmd->hau_commands()->Get(j)->size();
+                          }
+                          if (core_cmd->sdma_commands()) {
+                            for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
+                              info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
+                          }
                         }
                       }
                     }
@@ -919,18 +985,20 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
 
         info.host_neuron_mem_size  += param->cpu_mem_size()*sizeof(float);
 
-        for (size_t i = 0; i < param->input_tensor()->size(); i++) {
-          auto tensor = param->input_tensor()->Get(i);
-          auto tensor_buffer_size = get_tensor_buffer_size(tensor);
-          if(info.middle_buffer_size < tensor_buffer_size){
-              info.middle_buffer_size = tensor_buffer_size;
+        if (model()->chip()->str() == "BM1684") { // 1N to 4N buffer
+          for (size_t i = 0; i < param->input_tensor()->size(); i++) {
+            auto tensor = param->input_tensor()->Get(i);
+            auto tensor_buffer_size = get_tensor_buffer_size(tensor);
+            if(info.middle_buffer_size < tensor_buffer_size){
+                info.middle_buffer_size = tensor_buffer_size;
+            }
           }
-        }
-        for (size_t i = 0; i < param->output_tensor()->size(); i++) {
-          auto tensor = param->output_tensor()->Get(i);
-          auto tensor_buffer_size = get_tensor_buffer_size(tensor);
-          if(info.middle_buffer_size < tensor_buffer_size){
-              info.middle_buffer_size = tensor_buffer_size;
+          for (size_t i = 0; i < param->output_tensor()->size(); i++) {
+            auto tensor = param->output_tensor()->Get(i);
+            auto tensor_buffer_size = get_tensor_buffer_size(tensor);
+            if(info.middle_buffer_size < tensor_buffer_size){
+                info.middle_buffer_size = tensor_buffer_size;
+            }
           }
         }
       }
@@ -940,6 +1008,11 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
           if(net_max_neuron_size<max_neuron_size){
               net_max_neuron_size = max_neuron_size;
           }
+      }
+
+      if (model()->net()->Get(net_idx)->cascade()) {
+        // TODO: compute hidden buffer size
+        info.hidden_buffer_size = 0;
       }
     }
     info.neuron_mem_size += net_max_neuron_size;

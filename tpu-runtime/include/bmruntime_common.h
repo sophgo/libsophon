@@ -40,6 +40,7 @@ constexpr bool strings_equal(char const* a, char const* b)
 }
 
 typedef enum {
+    DUMP    =-2, // dump data
     DEBUG   =-1,
     INFO    = 0,
     WARNING = 1,
@@ -47,8 +48,17 @@ typedef enum {
     FATAL   = 3,
 } BMRT_LogLevel;
 
+extern BMRT_LogLevel BMRT_LOG_LEVEL_THRESHOLD;
 
-extern int BMRT_LOG_LEVEL_THRESHOLD;
+#ifdef __cplusplus
+extern "C" {
+#endif
+BMRT_LogLevel bmrt_get_current_log_level();
+void bmrt_set_current_log_level(BMRT_LogLevel level);
+#ifdef __cplusplus
+}
+#endif
+
 #ifdef __linux__
 template<int level, typename ... ArgTypes>
 typename std::enable_if<level<FATAL , void>::type __bmrt_log(const char*fmt, ArgTypes ...args){
@@ -299,7 +309,9 @@ extern int bm_get_devid(bm_handle_t handle);
 
 #if defined(__cplusplus)
 }
-
 #endif
+
+const char* _bmrt_version();
+const char* _libsophon_version();
 
 #endif

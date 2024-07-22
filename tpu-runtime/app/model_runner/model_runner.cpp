@@ -108,42 +108,43 @@ static void add_array(cnpy::npz_t &map, std::string name, bm_handle_t bm_handle,
     shape.push_back(d);
     count *= d;
   }
+  size_t real_bytes = bmrt_tensor_bytesize(&dst);
   switch (dst.dtype) {
   case BM_FLOAT32: {
     std::vector<float> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_INT32: {
     std::vector<int32_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_UINT32: {
     std::vector<uint32_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_UINT16:
   case BM_FLOAT16:
   case BM_BFLOAT16: {
     std::vector<uint16_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_INT16: {
     std::vector<int16_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_INT8: {
     std::vector<int8_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   case BM_UINT8: {
     std::vector<uint8_t> data(count);
-    bm_memcpy_d2s(bm_handle, data.data(), dst.device_mem);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
   default:
@@ -153,16 +154,22 @@ static void add_array(cnpy::npz_t &map, std::string name, bm_handle_t bm_handle,
 }
 
 void readTensor(cnpy::npz_t &map, const std::string &name, uint8_t *data,
-                size_t bytes) {
+                size_t bytes, bm_shape_t &shape) {
   auto it = map.find(name.c_str());
   if (it == map.end()) {
     BMRT_LOG(FATAL, "failed to find tensor %s\n", name.c_str());
     exit(-1);
   }
   auto arr = it->second;
-  if (arr.num_bytes() != bytes) {
-    BMRT_LOG(FATAL, "size does not match for tensor %s\n", name.c_str());
+  if (arr.num_bytes() > bytes) {
+    BMRT_LOG(FATAL, "size is too large for tensor %s\n", name.c_str());
     exit(-1);
+  }
+  if (arr.shape.size() > 0) {
+    shape.num_dims = arr.shape.size();
+    for (int i = 0; i < shape.num_dims; ++i) {
+      shape.dims[i] = arr.shape[i];
+    }
   }
   memcpy(data, arr.data_holder->data(), arr.num_bytes());
 }
@@ -220,11 +227,12 @@ int main(int argc, char **argv) {
   auto &stage = net_info->stages[0];
   for (int i = 0; i < net_info->input_num; i++) {
     int devid = net_info->input_loc_devices[i];
-    bmrt_tensor_ex(&input_tensors[i], p_bmrt, devid,
-                  net_info->input_dtypes[i], stage.input_shapes[i]);
     uint8_t *buffer = new uint8_t[net_info->max_input_bytes[i]];
+    auto real_shape = stage.input_shapes[i];
     readTensor(npz_in, net_info->input_names[i], buffer,
-               net_info->max_input_bytes[i]);
+               net_info->max_input_bytes[i], real_shape);
+    bmrt_tensor_ex(&input_tensors[i], p_bmrt, devid,
+                  net_info->input_dtypes[i], real_shape);
     bm_memcpy_s2d(bm_handles[devid], input_tensors[i].device_mem, buffer);
     delete[] buffer;
   }

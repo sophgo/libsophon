@@ -121,29 +121,43 @@ static void fill_io_tag_attr(const bmodel::Tensor *tensor, tensor_attr_t *attr) 
 }
 
 
-static void fill_io_tag_attr(const Vector<Offset<bmodel::Tensor>> *inputs,
-                             const Vector<Offset<bmodel::Tensor>> *outputs,
-                             vector<tensor_attr_t> &inputs_v,
-                             vector<tensor_attr_t> &outputs_v) {
-  u64 io_index = 3;
-  for (u32 i = 0; i < inputs->size(); i++) {
-    auto tensor = inputs->Get(i);
+static void fill_io_tag_attr(
+    const Vector<Offset<bmodel::Tensor>> *tensors,
+    vector<tensor_attr_t> &tensor_v,
+    u64 ctx_start,
+    const std::vector<u64> &ctx_borders,
+    const std::vector<u64> &ctx_offset,
+    uint32_t flags)
+{
+  for (u32 i = 0; i < tensors->size(); i++) {
+    auto tensor = tensors->Get(i);
     if (tensor->shape() == NULL || tensor->shape()->size() == 0) {
       continue;
     }
+    u64 addr = tensor->device_addr();
+    u64 tag = ((addr >> 36) & 0x7);
     tensor_attr_t attr;
-    fill_io_tag_attr(tensor, &attr);
-    inputs_v.push_back(attr);
+    if (tag >= 3){
+      fill_io_tag_attr(tensor, &attr);
+    }
+    else{
+      fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags);
+    }
+    tensor_v.push_back(attr);
   }
+}
 
-  for (u32 i = 0; i < outputs->size(); i++) {
-    auto tensor = outputs->Get(i);
+static void fill_io_tag_fuse_attr(
+    const Vector<Offset<bmodel::Tensor>> *tensors,
+    vector<tensor_attr_t> &tensor_v) {
+  for (u32 i = 0; i < tensors->size(); i++) {
+    auto tensor = tensors->Get(i);
     if (tensor->shape() == NULL || tensor->shape()->size() == 0) {
       continue;
     }
     tensor_attr_t attr;
     fill_io_tag_attr(tensor, &attr);
-    outputs_v.push_back(attr);
+    tensor_v.push_back(attr);
   }
 }
 
@@ -190,6 +204,7 @@ static uint32_t get_bdc_cmd_len(const u8 *bdc_buffer, u64 start_offset,
   case BM1880:
     len = 112;
     break;
+  case SG2380:
   case BM1690:
   case BM1688:
   case MARS3:
@@ -234,7 +249,7 @@ static uint32_t get_gdma_cmd_len(const u8 *gdma_buffer, u64 start_offset,
   uint32_t len = 96; // default: common gdma instrution size
 
   bmtpu_arch_t arch = bmrt_arch_info::get_bmtpu_arch();
-  if (BM1688 == arch || BM1690 == arch || MARS3 == arch) {
+  if (BM1688 == arch || BM1690 == arch || MARS3 == arch || SG2380 == arch) {
     u32 cmd_head[2] = {0};
     memcpy(cmd_head, gdma_buffer + start_offset, sizeof(cmd_head));
     u32 tsk_type = cmd_head[1] & 0xf;
@@ -296,10 +311,7 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
         cmd_word_num = bdc_total_id * BD_ENGINE_COMMAND_NUM_aligned;
       }
       if (cmd_word_num != 0) {
-        u64 cmd_buf_addr =
-            must_alloc_device_mem(devid, &pmem, cmd_word_num, "bd_cmd_mem", 4);
-        m_device_mem_vec.push_back(pmem);
-        m_device_mem_ids.push_back(devid);
+        u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
         cmd_buf = new u32[cmd_word_num];
         auto cmd_buf_sp = SP(cmd_buf, u32);
         p_cmd_buf = cmd_buf;
@@ -336,10 +348,7 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
         cmd_word_num = gdma_total_id * GDMA_ENGINE_COMMAND_NUM_aligned;
       }
       if (cmd_word_num != 0) {
-        u64 cmd_buf_addr =
-            must_alloc_device_mem(devid, &pmem, cmd_word_num, "gdma_cmd_mem", 4);
-        m_device_mem_vec.push_back(pmem);
-        m_device_mem_ids.push_back(devid);
+        u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "gdma_cmd_mem", 4);
         cmd_buf = new u32[cmd_word_num];
         auto cmd_buf_sp = SP(cmd_buf, u32);
         p_cmd_buf = cmd_buf;
@@ -385,10 +394,7 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
     // ENGINE_HAU
     if (hau_total_cmd_byte) {
       cmd_word_num = hau_total_cmd_byte / sizeof(u32);
-      u64 cmd_buf_addr =
-        must_alloc_device_mem(devid, &pmem, cmd_word_num, "hau_cmd_mem", 4);
-        m_device_mem_vec.push_back(pmem);
-        m_device_mem_ids.push_back(devid);
+      u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "hau_cmd_mem", 4);
         cmd_buf = new u32[cmd_word_num];
         auto cmd_buf_sp = SP(cmd_buf, u32);
         p_cmd_buf = cmd_buf;
@@ -402,10 +408,7 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
     // ENGINE_SDMA
     if (sdma_total_cmd_byte) {
       cmd_word_num = sdma_total_cmd_byte / sizeof(u32);
-      u64 cmd_buf_addr =
-        must_alloc_device_mem(devid, &pmem, cmd_word_num, "sdma_cmd_mem", 4);
-        m_device_mem_vec.push_back(pmem);
-        m_device_mem_ids.push_back(devid);
+      u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "sdma_cmd_mem", 4);
         cmd_buf = new u32[cmd_word_num];
         auto cmd_buf_sp = SP(cmd_buf, u32);
         p_cmd_buf = cmd_buf;
@@ -455,9 +458,7 @@ bool Bmruntime::setup_ir_context(ModelCtx* model_ctx, const bmodel::Binary* bina
   u32* ir_buffer = new u32[ir_len];
   auto ir_buffer_sp = SP(ir_buffer, u32);
   model_ctx->read_binary(binary_ir, 0, (u8*)ir_buffer, ir_len * sizeof(u32));
-  auto pmem = must_alloc_device_mem(devid, ir_len, "dynamic_ir", 4);
-  m_device_mem_vec.push_back(pmem);
-  m_device_mem_ids.push_back(devid);
+  auto pmem = alloc_device_mem(devid, ALIGN(ir_len, 64), "dynamic_ir", 4);
   // TODO: support multi core ir
   // only use commands 0 to run ir
   stage->core_commands[0].ir_mem.Init("ir", m_handles[devid], pmem, ir_buffer);
@@ -677,7 +678,23 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
       auto cpu_param = sub_net->cpu_param()->Get(0); /* 1 cpu layer per subnet */
       subnet->cpu_info.op_type = cpu_param->op_type();
       subnet->cpu_info.param_size = cpu_param->binary_param()->size();
-      subnet->cpu_info.user_param = new char[subnet->cpu_info.param_size];
+      if (false) {
+        auto iter = find(dmem_info.begin(), dmem_info.end(), "host_neuron_mem");
+        if (iter != dmem_info.end()) {
+          auto coeff_addr = iter->addr + iter->offset;
+          iter->offset += subnet->cpu_info.param_size;
+          BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
+          auto device_mem = bm_mem_from_device(coeff_addr, subnet->cpu_info.param_size);
+          bm_status_t ret = bm_mem_mmap_device_mem(m_handles[net_ctx->device_id], &device_mem, (u64 *)&(subnet->cpu_info.user_param));
+        } else {
+          BMRT_LOG(FATAL, "Error: device memory: coeff_mem don't alloc");
+        }
+      } else {
+        subnet->cpu_info.user_param = new char[subnet->cpu_info.param_size];
+      }
+      model_ctx->read_binary(cpu_param->binary_param(), 0, (uint8_t*)(subnet->cpu_info.user_param),
+                             subnet->cpu_info.param_size);
+
       if (cpu_param->cpu_const()) {
         int cpu_const_num = cpu_param->cpu_const()->size();
         for (int i = 0; i < cpu_const_num; i++) {
@@ -689,19 +706,33 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
           std::lock_guard<std::mutex> guard(m_global_cpu_const_mutex);
           auto iter = m_global_cpu_const_map.find(key);
           if (iter == m_global_cpu_const_map.end()) {
+            if (false) {
+              auto iter = find(dmem_info.begin(), dmem_info.end(), "host_coeff_mem");
+              if (iter != dmem_info.end()) {
+                auto coeff_addr = iter->addr + iter->offset;
+                iter->offset += cci->const_data()->size();
+                BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
+                auto device_mem = bm_mem_from_device(coeff_addr, cci->const_data()->size());
+                std::unique_ptr<uint8_t[]> ptr;
+                bm_status_t ret = bm_mem_mmap_device_mem(m_handles[net_ctx->device_id], &device_mem, (u64 *)ptr.get());
+                tensor->second.host_mem.addr = ptr.get();
+                m_global_cpu_const_map[key] = std::move(ptr);
+                tensor->second.host_mem.type = HOST_MEM_MMAP;
+              }
+            } else {
             std::unique_ptr<uint8_t[]> ptr(new uint8_t[cci->const_data()->size()]);
             tensor->second.host_mem.addr = ptr.get();
+            m_global_cpu_const_map[key] = std::move(ptr);
+            tensor->second.host_mem.type = HOST_MEM_ALLOC;
+            }
             model_ctx->read_binary(cci->const_data(), 0,
                                    (uint8_t*)(tensor->second.host_mem.addr),
                                    cci->const_data()->size());
-            m_global_cpu_const_map[key] = std::move(ptr);
           } else {
             tensor->second.host_mem.addr = m_global_cpu_const_map[key].get();
           }
         }
       }
-      model_ctx->read_binary(cpu_param->binary_param(), 0, (uint8_t*)(subnet->cpu_info.user_param),
-                             subnet->cpu_info.param_size);
 
     } else if (subnet_mode == SUBNET_MODE_TPU){ /* TPU */
       subnet->tpu_info.is_dynamic = sub_net->is_dynamic();
@@ -862,7 +893,7 @@ bool Bmruntime::fill_net_ctx(
     net_ctx->input_zero_point_v.push_back(tensor->zero_point());
     net_ctx->input_hidden_v.push_back(tensor->hidden());
     net_ctx->input_index_v.push_back(tensor->index());
-
+    // net_ctx->input_from.push_back();
   }
   for (u32 i = 0; i < param->output_tensor()->size(); i++) {
     auto tensor = param->output_tensor()->Get(i);
@@ -900,7 +931,21 @@ bool Bmruntime::fill_net_ctx(
     if (subnet != NULL && subnet->size() > 1) {
       multi_subnet = true;
     }
-    stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem());
+    if (alloc_mem == false) {
+      auto iter = find(dmem_info.begin(), dmem_info.end(), "coeff_mem");
+      if (iter != dmem_info.end()) {
+        auto coeff_addr = iter->addr + iter->offset;
+        if (m_local_coeffs[devid]->GetCoeffAddr(param->coeff_mem()) != -1 && param->coeff_mem() != NULL) {
+          iter->offset += param->coeff_mem()->binary_coeff()->size();
+        }
+        BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
+        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), coeff_addr);
+      } else {
+        BMRT_LOG(WRONG, "Error: device memory: coeff_mem don't alloc");
+      }
+    } else {
+      stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem());
+    }
     if (!(m_flags & BM_RUNTIME_SHARE_MEM)) {
       stages[stage_idx].neuron_size.resize(stage_sizes.size());
       stages[stage_idx].neuron_size = stage_sizes;
@@ -926,9 +971,7 @@ bool Bmruntime::fill_net_ctx(
       for (u32 i = 0; i < max_ctx_sizes.size(); ++i)
       {
         auto &mem = net_ctx->neuron_mem[i];
-        must_alloc_device_mem_u64(devid, &mem, max_ctx_sizes[i], "neuron_mem");
-        m_sg_device_mem_vec.push_back(mem);
-        m_sg_device_mem_ids.push_back(devid);
+        alloc_device_mem_u64(devid, mem, max_ctx_sizes[i], "neuron_mem");
       }
     } else {
       // Update max_neuron_mem_size
@@ -940,13 +983,11 @@ bool Bmruntime::fill_net_ctx(
     }
   }
 
-  if (net_ctx->addr_mode == 1) {
+  if (net_ctx->addr_mode == ADDR_MODE_IO_ALONE) {
     // addr alone allocate io mem
     for (u32 stage_idx = 0; stage_idx < params->size(); stage_idx++) {
       auto &s = stages[stage_idx];
-      s.io_mem = must_alloc_device_mem(devid, s.io_size, "io_mem");
-      m_device_mem_vec.push_back(s.io_mem);
-      m_device_mem_ids.push_back(devid);
+      s.io_mem = alloc_device_mem(devid, s.io_size, "io_mem");
       s.io_offset = bm_mem_get_device_addr(s.io_mem) - s.io_start;
     }
   }
@@ -959,6 +1000,7 @@ bool Bmruntime::cascade_insert_net(int net_idx, net_ctx_t *net_ctx,
   if (net_ctx->device_id == 0 && net_ctx->step_id == 0) {
     // fisrt step
     net_cascade_t nc;
+    nc.is_dynamic = net_ctx->is_dynamic;
     nc.addr_mode = net_ctx->addr_mode;
     nc.main_name = main_name;
     nc.num_device = net_ctx->device_id + 1;
@@ -1033,7 +1075,7 @@ void Bmruntime::cascade_update_output(net_cascade_t &v) {
                        "\n step: %d, net_idx: %d, net_step:%d\nError: step "
                        "error in net[%s]",
                        s, idx, m_net_ctx_v[idx]->step_id, v.main_name.c_str());
-      auto &ctx = m_net_ctx_v[idx];
+      auto ctx = m_net_ctx_v[idx];
       auto &outputs = ctx->output_name_v;
       for (size_t i = 0; i < outputs.size(); i++) {
         if (ctx->output_hidden_v[i] == 2 || ctx->output_hidden_v[i] == 4) {
@@ -1085,7 +1127,7 @@ void Bmruntime::cascade_update_input(net_cascade_t &v) {
   std::vector<tensor_info_t> input_tensors;
   for (size_t s = 0; s < v.step_ids.size(); s++) {
     for (auto &idx : v.step_ids[s]) {
-      auto &ctx = m_net_ctx_v[idx];
+      auto ctx = m_net_ctx_v[idx];
       auto &inputs = ctx->input_name_v;
       for (size_t i = 0; i < inputs.size(); i++) {
         if (ctx->input_hidden_v[i] == 1 || ctx->input_hidden_v[i] == 3) {
@@ -1257,6 +1299,8 @@ void Bmruntime::cascade_update_all_info() {
   for (int d = 0; d < m_device_num; ++d) {
     if ((u64)(bm_mem_get_device_size(max_hidden_buffer[d])) <
         max_hidden_buffer_size[d]) {
+      // alloc_device_mem(d, max_hidden_buffer[d], max_hidden_buffer_size[d], "hidden_buffer");
+      BMRT_ASSERT_INFO(alloc_mem == true, "hidden buffer do not support load bmodel with given memory");
       must_alloc_device_mem(d, &max_hidden_buffer[d], max_hidden_buffer_size[d],
           string("hidden_buffer") + std::to_string(hidden_buffer_num[d]));
       m_device_mem_vec.push_back(max_hidden_buffer[d]);
@@ -1274,13 +1318,26 @@ void Bmruntime::cascade_update_all_info() {
   }
 }
 
-bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net_ctx)
-{
-  auto net = model_ctx->model()->net()->Get(net_idx);
+bool Bmruntime::cascade_net_init(const Net* net, int net_idx, net_ctx_t* net_ctx) {
+  net_ctx->net_name = net->name()->str();
+  net_ctx->addr_mode = net->addr_mode();
+  // cascade initial
   net_ctx->device_id = 0;
   net_ctx->step_id = 0;
   net_ctx->in_cascade = false;
   net_ctx->addr_mode = net->addr_mode();
+  auto param = net->parameter()->Get(0);
+  net_ctx->is_dynamic = param->is_dynamic();
+  if (net_ctx->is_dynamic) {
+    net_ctx->n_can_change = param->n_dynamic();
+    net_ctx->h_w_can_change = param->h_w_dynamic();
+    if (!param->n_dynamic()) {
+      BMRT_LOG(WARNING, "Net[%s] may contains layers that not support dynamic N", net_ctx->net_name.c_str());
+    }
+    if (!param->h_w_dynamic()) {
+      BMRT_LOG(WARNING, "Net[%s] may contains layers that not support dynamic H/W", net_ctx->net_name.c_str());
+    }
+  }
   if (net->cascade()) {
     auto main_name = net->cascade()->main_name()->str();
     if (!main_name.empty()) {
@@ -1293,6 +1350,17 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
       }
     }
   }
+
+  return true;
+}
+
+bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net_ctx)
+{
+  auto net = model_ctx->model()->net()->Get(net_idx);
+  net_ctx->addr_mode = net->addr_mode();
+  if (cascade_net_init(net, net_idx, net_ctx) == false) {
+    return false;
+  }
   auto devid = net_ctx->device_id;
   auto net_params = net->parameter();
   std::vector<std::vector<u64>> stage_ctx_sizes;
@@ -1302,6 +1370,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     return false;
   }
 
+  // fill stage
   for (u32 stage_idx = 0; stage_idx < net_params->size(); stage_idx++) {
     auto param = net_params->Get(stage_idx);
     auto net_stage = stages + stage_idx;
@@ -1356,18 +1425,22 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     m_profile->record_alloc_device_mem(mem_pair, "coeff");
 
     // setup input and output tensor info
-    if (net_ctx->addr_mode == 1) {
+    if (net_ctx->addr_mode == ADDR_MODE_IO_ALONE) {
       fill_io_attr(param->input_tensor(), net_stage->input_v,
                    net_stage->io_offset);
       fill_io_attr(param->output_tensor(), net_stage->output_v,
                    net_stage->io_offset);
-    } else if(net_ctx->addr_mode == 2) {
-      fill_io_tag_attr(param->input_tensor(),
-                       param->output_tensor(),
-                       net_stage->input_v,
-                       net_stage->output_v);
-    }
-    else {
+    } else if (net_ctx->addr_mode == ADDR_MODE_IO_TAG) {
+      fill_io_tag_attr(param->input_tensor(), net_stage->input_v,
+                       net_stage->ctx_start, net_stage->ctx_borders,
+                       net_stage->ctx_offset, m_flags);
+      fill_io_tag_attr(param->output_tensor(), net_stage->output_v,
+                       net_stage->ctx_start, net_stage->ctx_borders,
+                       net_stage->ctx_offset, m_flags);
+    } else if (net_ctx->addr_mode == ADDR_MODE_IO_TAG_FUSE) {
+      fill_io_tag_fuse_attr(param->input_tensor(), net_stage->input_v);
+      fill_io_tag_fuse_attr(param->output_tensor(), net_stage->output_v);
+    } else {
       fill_tensor_attr(param->input_tensor(), net_stage->input_v,
                        net_stage->ctx_start, net_stage->ctx_borders,
                        net_stage->ctx_offset, m_flags);
@@ -1507,18 +1580,14 @@ void Bmruntime::update_max_neuron_mem(uint32_t devid, const std::vector<u64> &si
     if (sizes[i] > bm_mem_get_device_size_u64(mem)) {
       // DON'T free old memory.
       // In case any previously loaded model have already been bound with them.
-      must_alloc_device_mem_u64(devid, &mem, sizes[i], "neuron_mem" + std::to_string(i));
-      m_sg_device_mem_vec.push_back(mem);
-      m_sg_device_mem_ids.push_back(devid);
+      alloc_device_mem_u64(devid, mem, sizes[i], "neuron_mem");
     }
   }
   for (; i < sizes.size(); ++i)
   {
     bm_device_mem_u64_t mem;
-    must_alloc_device_mem_u64(devid, &mem, sizes[i], "neuron_mem" + std::to_string(i));
+    alloc_device_mem_u64(devid, mem, sizes[i], "neuron_mem");
     max_neuron_mem[devid].push_back(mem);
-    m_sg_device_mem_vec.push_back(mem);
-    m_sg_device_mem_ids.push_back(devid);
   }
 }
 
@@ -1628,7 +1697,7 @@ void Bmruntime::free_dyn_neuron(net_ctx_t* net_ctx) {
 void Bmruntime::cascade_fill_net_info(net_cascade_t * net_cascade) {
   auto &net_info = net_cascade->net_info;
   net_info.name = net_cascade->main_name.c_str();
-  net_info.is_dynamic = false;
+  net_info.is_dynamic = net_cascade->is_dynamic;
   net_info.input_num = net_cascade->input_names.size();
   net_info.input_dtypes = net_cascade->input_types.data();
   net_info.input_scales = net_cascade->input_scales.data();
@@ -1700,6 +1769,7 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
       } else if(model_chip == "CV186X" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
       } else if(model_chip == "MARS3"){
       } else if(model_chip == "BM1686" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
+      } else if(model_chip == "SG2380" && bmrt_arch_info::get_bmtpu_name() == "SG2380") {
       } else {
         BMRT_LOG(WRONG, "Error: runtime arch[%s] is not the same with bmodel arch[%s]",
              bmrt_arch_info::get_bmtpu_name().c_str(), model_chip.c_str());
@@ -1707,7 +1777,12 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
       }
   }
   auto version = model_ctx->model()->version()->c_str();
+  const char *bmrt_version = _bmrt_version();
+  const char *sophon_driver_version = _libsophon_version();
+  
   BMRT_LOG(INFO, "Bmodel loaded, version %s", version);
+  BMRT_LOG(INFO, "BM Runtime: %s", bmrt_version);
+  BMRT_LOG(INFO, "BM Sophon driver version: %s", sophon_driver_version);
   u32 load_net_num = model_ctx->model()->net()->size();
   BMRT_LOG(INFO, "pre net num: %lu, load net num: %u", static_cast<unsigned long>(m_net_ctx_v.size()), load_net_num);
   // remove load net num restrict
@@ -1732,18 +1807,22 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
    */
   // Process middle buffer and neuron memory share optimizaton.
   // Middle buffer is only used for BM1684 now, because of 1N/2N/4N transpose.
-  for (int i = 0; i < m_device_num; i++) {
-    if ((u64)(bm_mem_get_device_size(max_middle_buffer[i])) <
-        max_middle_buffer_size[i]) {
-      must_alloc_device_mem(i, &max_middle_buffer[i], max_middle_buffer_size[i],
-                            string("middle_buffer") + std::to_string(middle_buffer_num[i]));
-      m_device_mem_vec.push_back(max_middle_buffer[i]);
-      m_device_mem_ids.push_back(i);
-      middle_buffer_num[i]++;
+  if (model_chip == "BM1684") {
+    for (int i = 0; i < m_device_num; i++) {
+      if ((u64)(bm_mem_get_device_size(max_middle_buffer[i])) <
+          max_middle_buffer_size[i]) {
+        BMRT_ASSERT_INFO(alloc_mem == true, "middel buffer do not support load bmodel with given memory");
+        must_alloc_device_mem(i, &max_middle_buffer[i], max_middle_buffer_size[i],
+                              string("middle_buffer") + std::to_string(middle_buffer_num[i]));
+        m_device_mem_vec.push_back(max_middle_buffer[i]);
+        m_device_mem_ids.push_back(i);
+        // alloc_device_mem(i, max_middle_buffer[i], max_middle_buffer_size[i], "middle_buffer");
+        middle_buffer_num[i]++;
+      }
     }
-  }
-  for (u32 net_idx = cur_net_idx; net_idx < m_net_ctx_v.size(); net_idx++) {
-    update_net_middlebuf(m_net_ctx_v[net_idx]);
+    for (u32 net_idx = cur_net_idx; net_idx < m_net_ctx_v.size(); net_idx++) {
+      update_net_middlebuf(m_net_ctx_v[net_idx]);
+    }
   }
   return ret;
 }
@@ -1952,6 +2031,34 @@ bool Bmruntime::load_bmodel(const string& filepath)
   return load_bmodel(&model_ctx);
 }
 
+/* Load bmodel file, which is pre-compiled by bmcompiler */
+bool Bmruntime::load_bmodel_with_mem(const string& filepath, mem_info_t* mem_info)
+{
+  BMRT_LOG(INFO, "Loading bmodel from [%s]. Thanks for your patience...", filepath.c_str());
+  ModelCtx model_ctx(filepath);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load model failed.");
+      return false;
+  }
+  set_device_mem_info(&model_ctx, mem_info);
+  std::lock_guard<std::mutex> guard(m_load_mutex);
+  return load_bmodel(&model_ctx);
+}
+
+/* Load bmodel file, which is pre-compiled by bmcompiler */
+bool Bmruntime::load_bmodel_with_mem(const void* bmodel_data, size_t size, mem_info_t* mem_info)
+{
+  BMRT_LOG(INFO, "Loading bmodel data. Thanks for your patience...");
+  ModelCtx model_ctx(bmodel_data, size);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load model failed.");
+      return false;
+  }
+  set_device_mem_info(&model_ctx, mem_info);
+  std::lock_guard<std::mutex> guard(m_load_mutex);
+  return load_bmodel(&model_ctx);
+}
+
 /* Load bmodel data, which is pre-compiled by bmcompiler */
 bool Bmruntime::load_bmodel(const void* bmodel_data, size_t size)
 {
@@ -1970,36 +2077,112 @@ bool Bmruntime::load_context(const string& ctx_dir)
   return load_bmodel(ctx_dir + "/compilation.bmodel");
 }
 
-BmCoeff::BmCoeff(bm_handle_t handle)
-{
-  BMRT_ASSERT_INFO(handle != NULL,"handle shouldn't be NULL\n");
-  m_handle = handle;
-  m_inner_handle = false;
-  m_devid = bm_get_devid(handle);
+void Bmruntime::fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc) {
+  if (addr != -1) {
+    device_mem_info_t dmem;
+    dmem.addr = addr;
+    dmem.desc = desc;
+    dmem.offset = 0;
+    dmem.size = size;
+    dmem_info.push_back(dmem);
+  }
 }
 
+void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info)
+{
+  // init basic info
+  alloc_mem = false;
+  bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
+  dmem_info.clear();
+  if (mem_info->instruction_mem.addr != -1) {
+    // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
+    uint64_t offset = 0;
+    BMRT_ASSERT_INFO(offset + bmem_info.bd_cmd_mem_size <= mem_info->instruction_mem.size, "");
+    fill_dmem_info(mem_info->instruction_mem.addr, bmem_info.bd_cmd_mem_size, "bd_cmd_mem");
+    offset = ALIGN(bmem_info.bd_cmd_mem_size, 128);
+    BMRT_ASSERT_INFO(offset + bmem_info.hau_cmd_mem_size <= mem_info->instruction_mem.size, "");
+    fill_dmem_info(mem_info->instruction_mem.addr + offset, bmem_info.hau_cmd_mem_size, "hau_cmd_mem");
+    offset = ALIGN(offset + bmem_info.hau_cmd_mem_size, 128);
+    BMRT_ASSERT_INFO(offset + bmem_info.hau_cmd_mem_size <= mem_info->instruction_mem.size, "");
+    fill_dmem_info(mem_info->instruction_mem.addr + offset, bmem_info.dynamic_ir_mem_size, "dynamic_ir");
+  }
+  if (mem_info->variable_instruction_mem.addr != -1) {
+    // variable_instruction_mem: gdma_cmd + sdma_cmd
+    uint64_t offset = 0;
+    BMRT_ASSERT_INFO(offset + bmem_info.gdma_cmd_mem_size <= mem_info->variable_instruction_mem.size, "");
+    fill_dmem_info(mem_info->variable_instruction_mem.addr, bmem_info.gdma_cmd_mem_size, "gdma_cmd_mem");
+    offset = ALIGN(bmem_info.gdma_cmd_mem_size, 128);
+    BMRT_ASSERT_INFO(offset + bmem_info.sdma_cmd_mem_size <= mem_info->variable_instruction_mem.size, "");
+    fill_dmem_info(mem_info->variable_instruction_mem.addr + offset, bmem_info.sdma_cmd_mem_size, "sdma_cmd_mem");
+  }
+  // coeff_mem: coeff
+  if (mem_info->coeff_mem.addr != -1) {
+    BMRT_ASSERT_INFO(bmem_info.coeff_mem_size <= mem_info->coeff_mem.size, "");
+    fill_dmem_info(mem_info->coeff_mem.addr, bmem_info.coeff_mem_size, "coeff_mem");
+  }
+  if (mem_info->neuron_mem.addr != -1) {
+    // neuron_mem: neuron + dynamic_output
+    uint64_t offset = 0;
+    BMRT_ASSERT_INFO(offset + bmem_info.neuron_mem_size <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(mem_info->neuron_mem.addr, bmem_info.neuron_mem_size, "neuron_mem");
+    offset = ALIGN(bmem_info.neuron_mem_size, 128);
+    BMRT_ASSERT_INFO(offset + bmem_info.middle_buffer_size <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(mem_info->neuron_mem.addr, bmem_info.middle_buffer_size, "middle_buffer");
+    offset = ALIGN(bmem_info.middle_buffer_size, 128);
+    BMRT_ASSERT_INFO(offset + bmem_info.dynamic_output_number * sizeof(bm_shape_ex_t) <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(mem_info->neuron_mem.addr + offset, bmem_info.dynamic_output_number * sizeof(bm_shape_ex_t), "dynamic_out");
+  }
+  if (mem_info->io_mem.addr != -1) {
+    fill_dmem_info(mem_info->io_mem.addr, mem_info->io_mem.size, "io_mem");
+  }
+}
+
+// BmCoeff should not use the handle outside which may be released ahead in some cases.
 BmCoeff::BmCoeff(int devid)
 {
-  bm_status_t status = bm_dev_request(&m_handle, devid);
-  if (BM_SUCCESS != status) {
-    BMRT_LOG(FATAL, "bm_dev_request failed:[%d]", status);
+  if(!m_handle){
+    bm_status_t status = bm_dev_request(&m_handle, devid);
+    if (BM_SUCCESS != status) {
+      BMRT_LOG(FATAL, "bm_dev_request failed:[%d]", status);
+    }
+    m_devid = devid;
   }
-  m_inner_handle = true;
-  m_devid = devid;
 }
 
 BmCoeff::~BmCoeff()
 {
-  for(auto &mem: m_coeff_map)
-  {
-    bm_free_device_u64(m_handle, mem.second);
-  }
-  if (m_inner_handle) {
+    for(auto &mem: m_mem_need_free) {
+      BMRT_LOG_RUN(DEBUG, {
+        u64 mem_addr = bm_mem_get_device_addr_u64(mem);
+        u64 mem_size = bm_mem_get_device_size_u64(mem);
+        BMRT_LOG(DEBUG, "free mem : [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
+      });
+      bm_free_device_u64(m_handle, mem);
+    }
     bm_dev_free(m_handle);
-  }
 }
 
-u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem)
+u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem) {
+  return Register(model_ctx, coeff_mem, -1);
+}
+
+int64_t BmCoeff::GetCoeffAddr(const CoeffMem* coeff_mem) {
+  if (coeff_mem == NULL) {
+    return 0;
+  }
+  u64 coeff_size = coeff_mem->binary_coeff()->size();
+  u8* coeff_size_ptr = (u8*)&coeff_size;
+  vector<u8> check_code = {coeff_mem->check_code()->begin(), coeff_mem->check_code()->end()};
+  check_code.insert(check_code.end(), coeff_size_ptr, coeff_size_ptr + sizeof(u64));
+  std::lock_guard<std::mutex> guard(m_coeff_mutex);
+  auto iter = m_coeff_map.find(check_code);
+  if (iter != m_coeff_map.end()) {
+    return bm_mem_get_device_addr_u64(iter->second);
+  }
+  return -1;
+}
+
+u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr) // return coeff offset for cmd
 {
   if (coeff_mem == NULL || model_ctx == NULL) {
     return 0;
@@ -2016,13 +2199,19 @@ u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem)
   std::lock_guard<std::mutex> guard(m_coeff_mutex);
   auto iter = m_coeff_map.find(check_code);
   if (iter != m_coeff_map.end()) {
+    BMRT_LOG(DEBUG, "the coeff already exists");
     return bm_mem_get_device_addr_u64(iter->second) - coeff_start;
   }
 
   bm_device_mem_u64_t pmem;
-  // allocate device memory for coeff
-  if (BM_SUCCESS != bm_malloc_device_byte_heap_mask_u64(m_handle, &pmem, 7, coeff_size)) {
-    BMRT_LOG(FATAL, "coeff alloc failed, size[0x%llx]", coeff_size);
+  if (addr == -1) {
+    // allocate device memory for coeff
+    if (BM_SUCCESS != bm_malloc_device_byte_heap_mask_u64(m_handle, &pmem, 7, coeff_size)) {
+      BMRT_LOG(FATAL, "coeff alloc failed, size[0x%llx]", coeff_size);
+    }
+    m_mem_need_free.push_back(pmem);
+  } else {
+    bm_set_device_mem_u64(&pmem, coeff_size, addr);
   }
 
   m_latest_device_mem = pmem;
@@ -2078,6 +2267,17 @@ void BmMemory::Init(const string &description, bm_handle_t handle,
   CHECK_status(status);
 }
 
+void BmMemory::Update(const bm_device_mem_t &mem, void *buffer) {
+  addr = bm_mem_get_device_addr(mem);
+  bytes = bm_mem_get_device_size(mem);
+  dword_len = (bytes + 3) / 4;
+  if (do_check) {
+    bmodel::CalcSha256((uint8_t *)buffer, bytes, check_code);
+  }
+  bm_status_t status = bm_memcpy_s2d(bm_handle, mem, buffer);
+  CHECK_status(status);
+}
+
 int BmMemory::Check()
 {
   if ((!do_check) || desc.empty()) {
@@ -2096,6 +2296,21 @@ int BmMemory::Check()
     err_count++;
   } else {
     fprintf(stderr, "\n");
+  }
+  return err_count;
+}
+
+int BmMemory::GetData(void* buffer) {
+  bm_status_t status = bm_memcpy_d2s(bm_handle, buffer, device_mem);
+  CHECK_status(status);
+  int err_count = 0;
+  if (do_check && (!desc.empty())) {
+    uint8_t crc32[bmodel::SHA256_LEN];
+    bmodel::CalcSha256((uint8_t *)buffer, bytes, crc32);
+    if (0 != memcmp(crc32, check_code, bmodel::SHA256_LEN)) {
+      fprintf(stderr, ", Check: **FAILED**\n");
+      err_count++;
+    }
   }
   return err_count;
 }
@@ -2132,7 +2347,11 @@ void KernelModule::preload_funcs(int core_id) {
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
 
-  if(bmrt_arch_info::get_bmtpu_arch() == BM1688){
+  if(bmrt_arch_info::get_bmtpu_arch() == BM1684X){
+    _global_move_1684x_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "global_move_1684x", core_id);
+  }
+
+  if(bmrt_arch_info::get_bmtpu_arch() == BM1688 || bmrt_arch_info::get_bmtpu_arch() == SG2380){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }
@@ -2158,6 +2377,10 @@ vector<tpu_kernel_function_t> KernelModule::get_get_profile_func_id(const vector
 }
 vector<tpu_kernel_function_t> KernelModule::get_set_engine_profile_param_func_id(const vector<int>& core_list) {
   return __map_to_vector_funcs(core_list, _set_engine_profile_param_func_id);
+}
+
+vector<tpu_kernel_function_t> KernelModule::get_global_move_1684x_func_id(const vector<int>& core_list) {
+  return __map_to_vector_funcs(core_list, _global_move_1684x_func_id);
 }
 
 }  // namespace bmruntime

@@ -124,16 +124,65 @@ bmdnn_func_2260::_bmdnn_multi_fullnet_(bm_handle_t handle,
   api_info_t api_info;
   fill_api_info(net_info, api_info);
   bm_status_t status = BM_SUCCESS;
-  for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
-    bm_status_t core_status = bm_send_api_to_core(
+  if (api_info.api_data[0].size()<MAX_API_MSG_SIZE){
+    for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
+      bm_status_t core_status = bm_send_api_to_core(
         handle, (bm_api_id_t)api_info.api_id[0],
         api_info.api_data[core_idx].data(),
         api_info.api_data[core_idx].size(),
         net_info.core_list.at(core_idx));
-    if (BM_SUCCESS != core_status) {
-      status = (status == BM_SUCCESS) ? core_status : status;
-      BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
-               BM_API_ID_MULTI_FULLNET, core_status);
+      if (BM_SUCCESS != core_status) {
+        status = (status == BM_SUCCESS) ? core_status : status;
+        BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
+                BM_API_ID_MULTI_FULLNET, core_status);
+        }
+    }
+  } else {
+    std::vector<bm_device_mem_t> api_mem(net_info.core_list.size());
+    #pragma pack(1)
+    typedef struct{
+        u32 input_num = 0;
+        u64 cmd_addr;
+        u64 cmd_size;
+      }long_cmd_param_t;
+    #pragma pack()
+    for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
+      u32 malloc_size = api_info.api_data[core_idx].size();
+      bm_status_t mem_status = bm_malloc_device_byte(handle, &api_mem[core_idx], malloc_size);
+      if (mem_status != BM_SUCCESS) {
+          status = (status == BM_SUCCESS) ? mem_status : status;
+          BMRT_LOG(WRONG, "bm_malloc_device_byte failed, malloc mem:%d", malloc_size);
+          }
+      long_cmd_param_t new_api;
+      auto data = api_info.api_data[core_idx].data();
+      bm_status_t s2d_status = bm_memcpy_s2d(handle, api_mem[core_idx], (void*)data);
+      new_api.cmd_addr = api_mem[core_idx].u.device.device_addr;
+      printf("command_addr runtime: %lld\n",new_api.cmd_addr);
+      new_api.cmd_size = api_info.api_data[core_idx].size();
+      if (BM_SUCCESS != s2d_status) {
+        status = (status == BM_SUCCESS) ? s2d_status : status;
+        BMRT_LOG(WRONG, "bm_memcpy_s2d failed, ret = %d\n", s2d_status);
+      }
+      bm_status_t core_status = bm_send_api_to_core(
+          handle, (bm_api_id_t)api_info.api_id[0],
+          (u8 *)(&new_api),
+          sizeof(new_api),
+          net_info.core_list.at(core_idx));
+      if (BM_SUCCESS != core_status) {
+        status = (status == BM_SUCCESS) ? core_status : status;
+        BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
+                BM_API_ID_MULTI_FULLNET, status);
+      }
+  }
+    for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
+      bm_status_t core_status = bm_thread_sync_from_core(handle, core_idx);
+      if (core_status != BM_SUCCESS) {
+        status = (status == BM_SUCCESS) ? core_status : status;
+        BMRT_LOG(WRONG, "bm_thread_sync_from_core failed, core_idx:%d", core_idx);
+        }
+      }
+    for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
+      bm_free_device(handle, api_mem[core_idx]);
     }
   }
   return status;
@@ -256,8 +305,33 @@ bm_status_t bmdnn_func_2260::_bmdnn_dynamic_fullnet_(
      *(u64*)p_api = apd_io_mem_offset;
      p_api = (u64*)p_api + 1;
 
-     bm_status_t status =
-         bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);
+    bm_status_t status;
+    if (api_buffer_size<MAX_API_MSG_SIZE){
+      status = bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);
+    } else {
+      bm_device_mem_t api_mem;
+      #pragma pack(1)
+      typedef struct{
+          u64 compiled_addr = 0;
+          u64 cmd_addr;
+          u64 cmd_size;
+        }long_cmd_param_t;
+      #pragma pack()
+      bm_status_t mem_status = bm_malloc_device_byte(handle, &api_mem, api_buffer_size);
+      if (mem_status != BM_SUCCESS) {
+        BMRT_LOG(WRONG, "bm_malloc_device_byte failed, malloc mem:%d", api_buffer_size);
+          }
+      long_cmd_param_t new_api;
+      bm_status_t s2d_status = bm_memcpy_s2d(handle, api_mem, (void*)api_buffer);
+      new_api.cmd_addr = api_mem.u.device.device_addr;
+      new_api.cmd_size = api_buffer_size;
+      if (BM_SUCCESS != s2d_status) {
+        BMRT_LOG(WRONG, "bm_memcpy_s2d failed, ret = %d\n", s2d_status);
+        }
+      status =
+        bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, (u8 *)(&new_api),sizeof(new_api));
+    }
+
      if (BM_SUCCESS != status) {
        BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_DYNAMIC_FULLNET, status);
      } else {

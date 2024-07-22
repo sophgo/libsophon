@@ -782,7 +782,7 @@ input_loc_devices and output_loc_devices record the device id for inputs and out
 
 core_num records the number of cores required by the network.
 
-addr_mode records the network's address allocation mode, where 1 indicates the basic mode, and 2 indicates the io_alone mode.
+addr_mode records the network's address allocation mode, where 0 indicates the basic mode, 1 indicates the io_alone mode, 2 indicates the io_tag mode, and 3 indicates the io_tag_fuse mode.
 
 bmrt_get_network_info gets the information of a given network according to the network name. The interface is declared as follows:
 

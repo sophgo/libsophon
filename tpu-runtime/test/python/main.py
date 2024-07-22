@@ -32,6 +32,9 @@ if __name__ == "__main__":
         #basic bmrt_test (static, dynamic, multi_subnet)
         basic_test_func(bmodels, test_arch, 1)
 
+        # memory prealloc test
+        test_memeory_prealloc_func(bmodels, test_arch, 1)
+
         #bmrt api test "bmrt_load_bmodel_data","bmmc_multi_mession", ...
         test_api_func(bmodels, test_arch, 1)
 

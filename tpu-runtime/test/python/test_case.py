@@ -10,6 +10,17 @@ def basic_test_func(bmodels : defaultdict, runtime_arch : str, loop_num : int):
         case.set_bmodel_list(bmodel_list)
         case.run_single_mession()
 
+def test_memeory_prealloc_func(bmodels : defaultdict, runtime_arch : str, loop_num : int):
+    case = TestBase(["bmrt_test"], loop_num)
+    case.set_arch_name(runtime_arch)
+
+    for run_type in bmodels.keys():
+        bmodel_list = [info.full_path for info in bmodels[run_type][runtime_arch]]
+        if not bmodel_list: continue
+        case.set_bmodel_list(bmodel_list)
+        case.memory_prealloc = True
+        case.run_single_mession()
+
 def test_api_func(bmodels : defaultdict, runtime_arch : str, loop_num : int):
     common_cases = ["bmrt_load_bmodel_data",
                     "bmrt_load_context",

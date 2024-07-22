@@ -35,6 +35,10 @@ public:
     return (bmdnn_func_2260 *)(sta_bmfunc_ptr->bmdnn_fn);
   }
 
+  static bmdnn_func_2380 *bmdnn_2380() {
+    return (bmdnn_func_2380 *)(sta_bmfunc_ptr->bmdnn_fn);
+  }
+
   bmrt_arch_info *get_arch_info_ptr() { return p_bmtpu_arch; }
 
 private:

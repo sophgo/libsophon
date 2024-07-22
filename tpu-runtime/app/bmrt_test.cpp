@@ -55,6 +55,7 @@ bool b_enable_profile = false;
 bool b_enable_mmap = true;
 bool b_print_subnet_time = false;
 bool b_bmodel_dir = true;
+bool memory_prealloc = false;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -731,6 +732,15 @@ static void load_bmodel(const string &dir, void *p_bmrt)
   }
 }
 
+static void load_bmodel_with_mem(const string &dir, void *p_bmrt, mem_info_t *mem_info)
+{
+  string bmodel_path = fix_bmodel_path(dir);
+  bool flag = bmrt_load_bmodel_with_mem(p_bmrt, bmodel_path.c_str(), mem_info);
+  if (!flag) {
+    BMRT_LOG(FATAL, "Load bmodel[%s] failed", bmodel_path.c_str());
+  }
+}
+
 void bmrt_set_debug_mode(void * p_bmrt, int mode)
 {
   ((Bmruntime *)p_bmrt)->set_debug_mode(mode);
@@ -797,6 +807,16 @@ void bmrt_launch_tensor_thread_func(
   }
 }
 
+void malloc_device_mem(bm_handle_t bm_handle, memory_t &mem, std::vector<bm_device_mem_t> &prealloc_mem_v) {
+  if (mem.size > 0) {
+    bm_device_mem_t dmem;
+    if (bm_malloc_device_byte(bm_handle, &dmem, mem.size) == BM_SUCCESS) {
+       mem.addr = bm_mem_get_device_addr(dmem);
+       prealloc_mem_v.push_back(dmem);
+    }
+  }
+}
+
 void bmrt_test()
 {
 #ifdef __linux__
@@ -815,6 +835,7 @@ void bmrt_test()
   int device_num = devices.size();
   vector<bm_handle_t> bm_handles(device_num);
   bm_device_mem_t prealloc_mem;
+  vector<bm_device_mem_t> prealloc_mem_v;
   bm_status_t status;
   for (int i = 0; i < device_num; i++) {
     status = bm_dev_request(&bm_handles[i], devices[i]);
@@ -840,6 +861,21 @@ void bmrt_test()
     BMRT_LOG(INFO, "prealloc device mem, base[0x%llx], size[0x%x]",
               bm_mem_get_device_addr(prealloc_mem), bm_mem_get_device_size(prealloc_mem));
   }
+
+  mem_info_t mem_info;
+  if (memory_prealloc) {
+    if (bmrt_get_bmodel_info(fix_bmodel_path(CONTEXT_DIR_V[0]).c_str(), &mem_info) == false) {
+      BMRT_LOG(FATAL, "Load bmodel Failed");
+    }
+    BMRT_ASSERT(CONTEXT_DIR_V.size() == 1);
+    // malloc device memory
+    malloc_device_mem(bm_handle, mem_info.instruction_mem, prealloc_mem_v);
+    malloc_device_mem(bm_handle, mem_info.variable_instruction_mem, prealloc_mem_v);
+    malloc_device_mem(bm_handle, mem_info.neuron_mem, prealloc_mem_v);
+    malloc_device_mem(bm_handle, mem_info.coeff_mem, prealloc_mem_v);
+    malloc_device_mem(bm_handle, mem_info.io_mem, prealloc_mem_v);
+  }
+
   MEM_NUM = MEM_NUM == 1 ? 1 : CAL_TIMES;
   enable_print_subnet_time(p_bmrt);
 
@@ -863,7 +899,11 @@ void bmrt_test()
     context_info_t info;
     info.f_input_ref = NULL;
     info.f_output_ref = NULL;
-    load_bmodel(context_dir, p_bmrt);
+    if (memory_prealloc) {
+      load_bmodel_with_mem(context_dir, p_bmrt, &mem_info);
+    } else {
+      load_bmodel(context_dir, p_bmrt);
+    }
     open_ref_file(context_dir, info.f_input_ref, info.f_output_ref);
     open_output_file(context_dir, info.f_output);
     // get network number
@@ -903,20 +943,67 @@ void bmrt_test()
         }
 
         auto &stage = net_info->stages[stage_idx];
+        // setup united_output_shapes
+        vector<bm_shape_t> united_output_shapes;
+        for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
+          if (output_idx < (int)output_shapes.size()) {
+            united_output_shapes.push_back(output_shapes[output_idx]);
+          } else {
+            united_output_shapes.push_back(stage.output_shapes[output_idx]);
+          }
+        }
+        // setup united_input_shapes
+        vector<bm_shape_t> united_input_shapes;
+        for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
+          if (input_idx < (int)shapes.size()) {
+            united_input_shapes.push_back(shapes[input_idx]);
+          } else {
+            united_input_shapes.push_back(stage.input_shapes[input_idx]);
+          }
+        }
+
         // prepare output tensor
         std::vector<std::vector<std::vector<int8_t>>> host_output(REAL_MEM_NUM, std::vector<std::vector<int8_t>>(net_info->output_num));
         std::vector<int> output_count(net_info->output_num);
-
         size_t size,ref_size;
+        bm_device_mem_t all_output_device_mem;
         for (int mem_idx = 0; mem_idx < REAL_MEM_NUM; ++mem_idx) {
+          if (net_info->addr_mode == ADDR_MODE_IO_TAG_FUSE) {
+            BMRT_ASSERT_INFO(REAL_MEM_NUM <=1, "IO_TAG_FUSE not support REAL_MEM_NUM > 1\n");
+            // caculate all_output_size
+            size_t all_output_size = 0;
+            for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
+              int devid = net_info->output_loc_devices[output_idx];
+              if (output_idx > 0) {
+                // check whether the devid is the same
+                int last_devid = net_info->output_loc_devices[output_idx-1];
+                BMRT_ASSERT_INFO(devid == last_devid, "devid inconsistency\n");
+              }
+              all_output_size += bmrt_shape_count(&united_output_shapes[output_idx]) * bmrt_data_type_size(net_info->output_dtypes[output_idx]);
+            }
+            // malloc all_output_device_mem
+            int devid = net_info->output_loc_devices[0];
+            bm_malloc_device_byte(bm_handles[devid], &all_output_device_mem, all_output_size);
+            u64 all_output_addr = bm_mem_get_device_addr(all_output_device_mem);
+            // setup output tensors
+            size_t out_offset = 0;
+            for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
+              auto &output_tensor = output_tensors[mem_idx][output_idx];
+              size_t tensor_size = bmrt_shape_count(&united_output_shapes[output_idx]) * bmrt_data_type_size(net_info->output_dtypes[output_idx]);
+              auto tensor_mem = bm_mem_from_device(all_output_addr + out_offset, tensor_size);
+              bmrt_tensor_with_device(&output_tensor, tensor_mem, net_info->output_dtypes[output_idx], united_output_shapes[output_idx]);
+              out_offset += tensor_size;
+            }
+          } else {
+            for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
+              int devid = net_info->output_loc_devices[output_idx];
+              auto &output_tensor = output_tensors[mem_idx][output_idx];
+              bmrt_tensor_ex(&output_tensor, p_bmrt, devid, net_info->output_dtypes[output_idx], united_output_shapes[output_idx]);
+            }
+          }
           for (int output_idx = 0; output_idx < net_info->output_num; output_idx++) {
             int devid = net_info->output_loc_devices[output_idx];
             auto &output_tensor = output_tensors[mem_idx][output_idx];
-            if (output_idx < (int)output_shapes.size()) {
-              bmrt_tensor_ex(&output_tensor, p_bmrt, devid, net_info->input_dtypes[output_idx], shapes[output_idx]);
-            } else {
-              bmrt_tensor_ex(&output_tensor, p_bmrt, devid, net_info->output_dtypes[output_idx], stage.output_shapes[output_idx]);
-            }
             size = bmrt_tensor_bytesize(&output_tensor);
             ref_size = bmrt_shape_count(&stage.output_shapes[output_idx]) * bmrt_data_type_size(output_tensor.dtype);
             if (output_shapes.size() > 0) ref_size = size; // If we set shape, ref_size may be smaller than size
@@ -931,14 +1018,42 @@ void bmrt_test()
         bmrt_gettime(t1);
 
         std::vector<bm_tensor_t> input_tensors(net_info->input_num);
+        bm_device_mem_t all_input_device_mem;
+        if (net_info->addr_mode == ADDR_MODE_IO_TAG_FUSE) {
+          // caculate all_input_size
+          size_t all_input_size = 0;
+          for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
+            int devid = net_info->input_loc_devices[input_idx];
+            if (input_idx > 0) {
+              // check whether the devid is the same
+              int last_devid = net_info->input_loc_devices[input_idx-1];
+              BMRT_ASSERT_INFO(devid == last_devid, "devid inconsistency\n");
+            }
+            all_input_size += bmrt_shape_count(&united_input_shapes[input_idx]) * bmrt_data_type_size(net_info->input_dtypes[input_idx]);
+          }
+          // malloc all_input_device_mem
+          int devid = net_info->input_loc_devices[0];
+          bm_malloc_device_byte(bm_handles[devid], &all_input_device_mem, all_input_size);
+          u64 all_input_addr = bm_mem_get_device_addr(all_input_device_mem);
+          // setup input tensors
+          size_t in_offset = 0;
+          for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
+            auto &input_tensor = input_tensors[input_idx];
+            size_t tensor_size = bmrt_shape_count(&united_input_shapes[input_idx]) * bmrt_data_type_size(net_info->input_dtypes[input_idx]);
+            auto tensor_mem = bm_mem_from_device(all_input_addr + in_offset, tensor_size);
+            bmrt_tensor_with_device(&input_tensor, tensor_mem, net_info->input_dtypes[input_idx], united_input_shapes[input_idx]);
+            in_offset += tensor_size;
+          }
+        } else {
+          for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
+            int devid = net_info->input_loc_devices[input_idx];
+            auto &input_tensor = input_tensors[input_idx];
+            bmrt_tensor_ex(&input_tensor, p_bmrt, devid, net_info->input_dtypes[input_idx], united_input_shapes[input_idx]);
+          }
+        }
         for (int input_idx = 0; input_idx < net_info->input_num; input_idx++) {
           int devid = net_info->input_loc_devices[input_idx];
           auto &input_tensor = input_tensors[input_idx];
-          if (input_idx < (int)shapes.size()) {
-            bmrt_tensor_ex(&input_tensor, p_bmrt, devid, net_info->input_dtypes[input_idx], shapes[input_idx]);
-          } else {
-            bmrt_tensor_ex(&input_tensor, p_bmrt, devid, net_info->input_dtypes[input_idx], stage.input_shapes[input_idx]);
-          }
           size_t size = bmrt_tensor_bytesize(&input_tensor);
           std::vector<int8_t> host_data(size);
           BMRT_LOG(INFO, "reading input #%d, bytesize=%zu", input_idx, size);
@@ -950,11 +1065,7 @@ void bmrt_test()
               string tensor_name = "input_ref_" + std::to_string(input_idx);
               vector<int> shape;
               bm_shape_t input_shape;
-              if (input_idx < (int)shapes.size()) {
-                  input_shape = shapes[input_idx];
-              } else {
-                  input_shape = stage.input_shapes[input_idx];
-              }
+              input_shape = united_input_shapes[input_idx];
               for (int i = 0; i < input_shape.num_dims; i ++) {
                   shape.push_back(input_shape.dims[i]);
               }
@@ -1212,14 +1323,21 @@ void bmrt_test()
         BMRT_LOG(INFO, "compare    time(s): %f", (float)use5 / 1000000);
 
         // free memory
-        for (int i = 0; i < net_info->input_num; ++i) {
-          int devid = net_info->input_loc_devices[i];
-          bm_free_device(bm_handles[devid], input_tensors[i].device_mem);
-        }
-        for (int t = 0; t < REAL_MEM_NUM; t++) {
-          for (int i = 0; i < net_info->output_num; ++i) {
-            int devid = net_info->output_loc_devices[i];
-            bm_free_device(bm_handles[devid], output_tensors[t][i].device_mem);
+        if (net_info->addr_mode == ADDR_MODE_IO_TAG_FUSE) {
+          int input_devid = net_info->input_loc_devices[0];
+          int output_devid = net_info->output_loc_devices[0];
+          bm_free_device(bm_handles[input_devid], all_input_device_mem);
+          bm_free_device(bm_handles[output_devid], all_output_device_mem);
+        } else {
+          for (int i = 0; i < net_info->input_num; ++i) {
+            int devid = net_info->input_loc_devices[i];
+            bm_free_device(bm_handles[devid], input_tensors[i].device_mem);
+          }
+          for (int t = 0; t < REAL_MEM_NUM; t++) {
+            for (int i = 0; i < net_info->output_num; ++i) {
+              int devid = net_info->output_loc_devices[i];
+              bm_free_device(bm_handles[devid], output_tensors[t][i].device_mem);
+            }
           }
         }
         if (STAGE_SEL != -1) {
@@ -1239,6 +1357,9 @@ void bmrt_test()
   close_ref_file();
   if (PREALLOC_SIZE != 0) {
     bmrt_must_free_device_mem(p_bmrt, prealloc_mem);
+  }
+  for (int i = 0; i < prealloc_mem_v.size(); ++i) {
+    bm_free_device(bm_handle, prealloc_mem_v[i]);
   }
   bmrt_destroy(p_bmrt);
   for (int i = 0; i < device_num; i++) {
@@ -1306,6 +1427,7 @@ void Usage()
       "  --core_list        : Set the core id list those will be used to inference\n"
       "                         e.g. 0,1 means using 0,1 core together to infer the multi-core compiled bmodel.\n"
       "                              0:1 means using 0,1 core to infer the single-core compiled bmodel with parallelly mession.\n"
+      "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
 #ifdef DEBUG
       "  --test_case        : Test api case, \n"
       "                       Option:\n"
@@ -1346,6 +1468,7 @@ DEFINE_int32(calculate_times, 1, "Calculate time.");
 DEFINE_string(output_ref, "", "Output_ref");
 DEFINE_bool(only_cmp_last, false, "only cmp last");
 DEFINE_string(core_list, "", "");
+DEFINE_bool(memory_prealloc, false, "Memory alloc before load bmodel.");
 DECLARE_bool(help);
 #ifdef DEBUG
 DEFINE_string(test_case, "", "Test api case");
@@ -1516,6 +1639,7 @@ static void deal_with_options(int argc, char **argv)
                                          {"output_shapes", required_argument, &lopt, 16},
                                          {"cascade_device", required_argument, &lopt, 17},
                                          {"core_list", required_argument, &lopt, 18},
+                                         {"memory_prealloc", no_argument, &lopt, 19},
                                          {0, 0, 0, 0}};
 
   if (argc < 2) {
@@ -1621,6 +1745,9 @@ static void deal_with_options(int argc, char **argv)
           case 18:
             core_lists = parseMultipleList(optarg);
             break;
+          case 19:
+            memory_prealloc = true;
+            break;
         }
         break;
       case '?':
@@ -1660,6 +1787,7 @@ static void deal_with_options(int argc, char **argv)
       "  --core_list        : Set the core id list those will be used to inference.\n"
       "                         e.g. 0,1,2,3 means using 0,1,2,3 core to infer the bmodel.\n"
       "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
+      "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
     );
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
@@ -1698,6 +1826,7 @@ static void deal_with_options(int argc, char **argv)
   core_lists = parseMultipleList(FLAGS_core_list);
   if (FLAGS_only_cmp_last) MEM_NUM = 1;
   if (!NEED_CMP) MEM_NUM = 1;
+  if (FLAGS_memory_prealloc) memory_prealloc = true;
   gflags::HandleCommandLineHelpFlags();
   read_bmodel_list();
   check_options();
@@ -1709,8 +1838,16 @@ static void deal_with_options(int argc, char **argv)
   }
 }
 
+static inline void init_log() {
+  auto level = bmrt_get_current_log_level();
+  if(level > BMRT_LogLevel::INFO) {
+    bmrt_set_current_log_level(BMRT_LogLevel::INFO);
+  }
+}
+
 int main(int argc, char **argv)
 {
+  init_log();
   deal_with_options(argc, argv);
   try {
     if (TEST_CASE.empty()) {

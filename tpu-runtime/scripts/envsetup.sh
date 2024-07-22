@@ -14,7 +14,7 @@ function build_tpu_runtime_soc() {
   rm -rf build
   mkdir build && cd build
   ONLY_TEST=1 cmake ../ -DCMAKE_C_COMPILER=$C_COMPILER  -DCMAKE_CXX_COMPILER=$CXX_COMPILER -DCMAKE_BUILD_TYPE=Release $EXTRA_CONFIG
-  make -j
+  make -j$((`nproc`-1))
   RET=$?; if [ $RET -ne 0 ]; then popd; return $RET; fi
   popd
 }
@@ -31,7 +31,7 @@ function build_tpu_runtime() {
   rm -rf build
   mkdir build && cd build
   ONLY_TEST=1 cmake ../ -DCMAKE_BUILD_TYPE=Release $EXTRA_CONFIG
-  make -j
+  make -j$((`nproc`-1))
   RET=$?; if [ $RET -ne 0 ]; then popd; return $RET; fi
   popd
 }
@@ -69,7 +69,7 @@ function cmodel_run_bmodel() {
   elif [ $chip = 'bm1690' ]; then
     chip="sg2260"
   fi
-  TPUKERNEL_FIRMWARE_PATH=$THIRDPARTY_DIR/lib/libcmodel_${chip}.so $RUNTIME_DIR/build/bmrt_test $bmodel_args $*
+  TPUKERNEL_FIRMWARE_PATH=$THIRDPARTY_DIR/lib/libcmodel_${chip}.so $EXTRA_EXEC $RUNTIME_DIR/build/bmrt_test $bmodel_args $*
 }
 
 function cmodel_batch_run_bmodel() {
@@ -100,6 +100,6 @@ function update_firmware(){
     echo "TPU1686: `git rev-parse HEAD`" > ${FIRMWARE_PATH}/${LIBNAME}_version.txt
     echo "updated: `date`" >> ${FIRMWARE_PATH}/${LIBNAME}_version.txt
     popd
-    cat ${FIRMWARE_PATH}/${CHIP_ARCH}_version.txt
+    cat ${FIRMWARE_PATH}/${LIBNAME}_version.txt
 }
 

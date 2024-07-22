@@ -192,6 +192,7 @@ void read_md5(unsigned char *file_path, unsigned char *md5sum)
     MD5Init(&md5);
     MD5Update(&md5, file_buffer, u32FileSize);
     MD5Final(&md5, md5sum);
+    free(file_buffer);
 
     for(i=0; i<16; i++) {
         printf("%02x", md5sum[i]);

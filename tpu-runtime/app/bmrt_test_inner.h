@@ -37,6 +37,7 @@
 #include "bmruntime_cpp.h"
 #include "bmruntime_interface.h"
 #include "bmruntime_legacy.h"
+#include "bmruntime_common.h"
 
 using bmodel::ModelCtx;
 using bmruntime::Bmruntime;

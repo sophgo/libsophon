@@ -31,6 +31,8 @@ bmrt_arch_info::bmrt_arch_info(const string& arch_name)
       target_bmtpu_arch = BM1688;
     } else if (arch_name == "BM1690") {
       target_bmtpu_arch = BM1690;
+      } else if (arch_name == "SG2380") {
+      target_bmtpu_arch = SG2380;
     } else if (arch_name == "MARS3") {
       target_bmtpu_arch = MARS3;
     } else {
@@ -52,6 +54,7 @@ int bmrt_arch_info::get_npu_num()
       break;
     case BM1880:
     case BM1688:
+    case SG2380:
       npu_num = 32;
       break;
     case BM1690:
@@ -75,6 +78,7 @@ int bmrt_arch_info::get_eu_num(bm_data_type_t dtype)
       eu_num = 16;
       break;
     case BM1688:
+    case SG2380:
       eu_num = 4;
       break;
     case BM1690:
@@ -98,12 +102,15 @@ int bmrt_arch_info::get_lmem_size()
       lmem_size = (1<<19);  //512KB
       break;
     case BM1688:
+    case SG2380:
       lmem_size = (1<<17);  //128KB
+      break;
     case BM1880:
       lmem_size = (1<<16);  //64KB
       break;
     case BM1690:
       lmem_size = 1 << 18; // 256KB
+      break;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
   }
@@ -126,6 +133,7 @@ u64 bmrt_arch_info::get_gmem_start()
       gmem_start = 0x100000000;
       break;
     case BM1690:
+    case SG2380:
       gmem_start = 0x0;
       break;
     default:
@@ -165,6 +173,7 @@ u64 bmrt_arch_info::get_gmem_offset_soc()
     case BM1684X:
     case BM1688:
     case BM1690:
+    case SG2380:
       gmem_offset = 0x0;
       break;
     default:
@@ -185,6 +194,7 @@ int bmrt_arch_info::get_lmem_banks()
     case BM1684X:
     case BM1688:
     case BM1690:
+    case SG2380:
       lmem_banks = 16;
     default:
       BMRT_LOG(FATAL, "Unknown bmtpu arch");
@@ -209,6 +219,7 @@ u64 bmrt_arch_info::get_gmem_cmd_start_offset()
     case MARS3:
     case BM1688:
     case BM1690:
+    case SG2380:
       gmem_start = 0x0;
       break;
     default:
@@ -234,6 +245,7 @@ u64 bmrt_arch_info::get_ctx_start_addr()
     case BM1684X:
     case BM1688:
     case BM1690:
+    case SG2380:
       // BM1684X does not has arm reserved and const memory
       ctx_start_addr = get_gmem_start();
       break;
@@ -328,7 +340,8 @@ u64 bmrt_arch_info::addr_mask() {
   if (sta_bmtpu_ptr->target_bmtpu_arch == BM1688) {
     // relative address, only lower 35bit is valie
     mask = (1ull << 35) - 1;
-  } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690) {
+  } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690 ||
+             sta_bmtpu_ptr->target_bmtpu_arch == SG2380) {
     mask = (1ull << 40) - 1;
   }
   return mask;

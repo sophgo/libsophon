@@ -25,6 +25,7 @@ class TestBase:
       self.cmd = None
       self.seed = random.randint(0, 10000)
       self.runtime_mode = gloabl_def.DEF_CMODEL #todo, extend for soc
+      self.memory_prealloc = False
 
   def set_arch_name(self, arch_name):
       if arch_name not in gloabl_def.CONST_CORE_NUM_DICT.keys():
@@ -71,6 +72,8 @@ class TestBase:
           self.cmd += " -t " + case_name
       if len(self.bmodel_list) == 1:
           self.cmd += " --context " + self.bmodel_list[0]
+          if self.memory_prealloc:
+            self.cmd += " --memory_prealloc "
       else:
           random.seed(self.seed)
           random.shuffle(self.bmodel_list)

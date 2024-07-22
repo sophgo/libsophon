@@ -122,7 +122,8 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
         unsigned long long apd_io_start,
         unsigned long long apd_io_mem_offset,
         bool get_output_shape,
-        unsigned long long output_shape_global_addr)
+        unsigned long long output_shape_global_addr,
+        tpu_kernel_allreduce_1684x_t *p_allreduce_param)
 {
     BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
     BMRT_ASSERT_INFO(
@@ -143,6 +144,10 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
                            sizeof(u32) + sizeof(u64) + sizeof(u64) + ( sizeof(u32)+sizeof(u64)*ctx_num*2 ) +
                            //apd_coeff_mem_offset, apd_io_start, apd_io_mem_offset
                            sizeof(u64) + sizeof(u64) + sizeof(u64);
+    if (p_allreduce_param != NULL) {
+      api_buffer_size += sizeof(u32);
+      api_buffer_size += sizeof(tpu_kernel_allreduce_1684x_t);
+    }
 
      if (api_buffer_size > MAX_API_MSG_SIZE) {
        //decrease the api buffer size
@@ -219,6 +224,13 @@ bm_status_t bmdnn_func_1684x::_bmdnn_dynamic_fullnet_(
 
      *(u64*)p_api = apd_io_mem_offset;
      p_api = (u64*)p_api + 1;
+
+    if (p_allreduce_param != NULL) {
+      *(u32*)p_api = 1;
+      p_api = (u32*)p_api + 1;
+      *(tpu_kernel_allreduce_1684x_t *)p_api = *p_allreduce_param;
+      p_api = (tpu_kernel_allreduce_1684x_t *)p_api + 1;
+    }
 
      bm_status_t status = tpu_kernel_launch_async(handle, func_id, api_buffer, api_buffer_size);
      if (BM_SUCCESS != status) {

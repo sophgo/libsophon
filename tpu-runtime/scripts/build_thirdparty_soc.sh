@@ -42,7 +42,9 @@ build_soc_lib () {
         ret=$?
     fi
     popd
-    echo "build $1 failed!"
+    if [ $ret -ne 0 ]; then
+        echo "build $1 failed!"
+    fi
     return $ret
 }
 

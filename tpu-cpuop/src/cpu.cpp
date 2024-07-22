@@ -58,7 +58,7 @@ void* bmcpu_init()
         if (layer_idx != CPU_USER_DEFINED) {
             cpu_layers_[layer_idx] = CpuLayerRegistry::createlayer(layer_idx);
         } else {
-            printf("bmcpu init: skip cpu_user_defined\n");
+            // printf("bmcpu init: skip cpu_user_defined\n");
         }
     }
     cpu_layers_[CPU_DEBUG] = CpuLayerRegistry::createlayer(CPU_DEBUG);
@@ -98,11 +98,11 @@ void* bmcpu_init()
           CPU_ASSERT(bmcpu_user_reshape_ != NULL);
           CPU_ASSERT(bmcpu_user_dtype_ != NULL);
         } else {
-          #ifdef __linux__
-          printf("Cannot open libusercpu.so, disable user cpu layer.\n");
-          #else
-          printf("Cannot open libusercpu.dll, disable user cpu layer.\n");
-          #endif
+        //   #ifdef __linux__
+        //   printf("Cannot open libusercpu.so, disable user cpu layer.\n");
+        //   #else
+        //   printf("Cannot open libusercpu.dll, disable user cpu layer.\n");
+        //   #endif
         }
     } else {
         #ifdef __linux__
@@ -120,7 +120,7 @@ void* bmcpu_init()
         bmcpu_handle_->bmcpu_user_dtype_    = bmcpu_user_dtype_;
         bmcpu_handle_->user_cpu_handle      = bmcpu_user_init_();
         #ifdef __linux__
-        printf("open usercpu.so, init user_cpu_init \n");
+        // printf("open usercpu.so, init user_cpu_init \n");
         #else
         printf("open usercpu.dll, init user_cpu_init \n");
         #endif

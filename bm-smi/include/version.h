@@ -1,0 +1,12 @@
+#ifndef INCLUDE_GUARD
+#define INCLUDE_GUARD
+
+#define PROJECT_NAME "libsophon"
+#define PROJECT_VER "1.7.0"
+#define PROJECT_VER_MAJOR 1
+#define PROJECT_VER_MINOR 7
+#define PROJECT_VER_PATCH 0
+
+#define BUILD_DATE "20240722-084907"
+
+#endif //INCLUDE_GUARD

@@ -65,6 +65,16 @@ typedef struct tpu_kernel_allreduce_1684x {
   int     group_size;
 } tpu_kernel_allreduce_1684x_t;
 
+typedef struct tpu_kernel_global_move_1684x {
+  u64     src_global_addr;
+  u64     dst_global_addr;
+  int     num_dims;
+  int     shape[4];
+  int     src_stride[4];
+  int     dst_stride[4];
+  int     type_size;
+} tpu_kernel_global_move_1684x_t;
+
 typedef struct {
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
@@ -73,11 +83,12 @@ typedef struct {
   /// kernel func id(used for dynamic loading)
   std::vector<tpu_kernel_function_t> kernel_func_ids;
   /// coeff start addr
-  uint64_t coeff_start_addr;
+  uint64_t coeff_start_addr = -1;
   /// neuron start addr
   std::vector<uint64_t> neuron_start_addr;
-  int32_t do_allreduce;
+  int32_t do_allreduce = 0;
   tpu_kernel_allreduce_1684x_t allreduce_param;
+  int32_t addr_mode;
 } tpu_net_info_t;
 
 class bmdnn_func {
@@ -265,7 +276,8 @@ class bmdnn_func_1684x : public bmdnn_func {
         unsigned long long apd_io_start,
         unsigned long long apd_io_mem_offset,
         bool get_output_shape,
-        unsigned long long output_shape_global_addr);
+        unsigned long long output_shape_global_addr,
+        tpu_kernel_allreduce_1684x_t *p_allreduce_param);
 
     bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, tpu_kernel_function_t func_id, bool enable);
     bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
@@ -437,6 +449,63 @@ class bmdnn_func_mars3 : public bmdnn_func {
     u32 BM_API_ID_GET_PROFILE_DATA;
     u32 MAX_API_MSG_SIZE;
 };
+
+class bmdnn_func_2380 : public bmdnn_func {
+  public:
+
+    bmdnn_func_2380() {
+        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        BM_API_ID_SET_PROFILE_ENABLE  = 986;
+        BM_API_ID_GET_PROFILE_DATA    = 987;
+        MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
+    };
+    virtual bm_status_t _bmdnn_multi_fullnet_(
+        bm_handle_t handle,
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
+
+    bm_status_t _bmdnn_dynamic_fullnet_(
+        bm_handle_t handle,
+        const std::vector<tpu_kernel_function_t> & func_id_list,
+        const unsigned long long compiled_ir_global_addr,
+        const unsigned int compiled_ir_length, //unit dword
+        const unsigned int input_num,
+        const unsigned long long *input_addrs,
+        const int * const * input_shapes,
+        const int * input_elem_nums,
+        const int * input_dtype_and_dims,
+        const unsigned int output_num,
+        const unsigned long long *output_addrs,
+        const unsigned long long apd_ctx_start,
+        const std::vector<unsigned long long> apd_ctx_mem_borders,
+        const std::vector<unsigned long long> apd_ctx_mem_offset,
+        const unsigned long long apd_coeff_mem_offset,
+        const unsigned long long apd_io_mem_offset,
+        bool get_output_shape,
+        const unsigned long long output_shape_global_addr,
+        const std::vector<int32_t> &core_list);
+
+    bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size);
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable);
+    bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         int core,
+                                         tpu_kernel_function_t func_id,
+                                         unsigned long long output_global_addr,
+                                         unsigned int output_max_size,
+                                         unsigned int offset,
+                                         unsigned int data_category //0: profile time records, 1: extra data
+                                         );
+  private:
+    u32 BM_API_ID_MULTI_FULLNET;
+    u32 BM_API_ID_DYNAMIC_FULLNET;
+    u32 BM_API_ID_SET_PROFILE_ENABLE;
+    u32 BM_API_ID_GET_PROFILE_DATA;
+    u32 MAX_API_MSG_SIZE;
+};
+
 }
 
 #endif

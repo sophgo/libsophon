@@ -105,6 +105,8 @@ static std::string chip_name_by_id(unsigned int chipid) {
     chip_name = "BM1690";
   } else if (chipid == 0x3000) {
     chip_name = "MARS3";
+  } else if (chipid == 0x2380) {
+    chip_name = "SG2380";
   } else {
     BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
   }

@@ -18,6 +18,7 @@ size_t bmrt_data_type_size(bm_data_type_t dtype)
     case BM_FLOAT16:
     case BM_BFLOAT16:
     case BM_INT16:
+    case BM_UINT16:
       return 2;
     case BM_INT8:
     case BM_UINT8:
@@ -170,6 +171,8 @@ static std::string chip_name_by_id(unsigned int chipid) {
     chip_name = "BM1880";
   } else if (chipid == 0x2260) {
     chip_name = "BM1690";
+  } else if (chipid == 0x2380) {
+    chip_name = "SG2380";
   } else if (chipid == 0x3000) {
     chip_name = "MARS3";
   }
@@ -276,6 +279,111 @@ bool bmrt_load_bmodel_data(void* p_bmrt, const void* bmodel_data, size_t size)
   } catch (const std::runtime_error &e) {
       return false;
   }
+}
+
+bool bmrt_load_bmodel_with_mem(void* p_bmrt, const char* bmodel_path, mem_info_t* mem_info)
+{
+  if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel path is wrong.");
+    return false;
+  }
+  const std::string bmodel_dir = bmodel_path;
+  try {
+  return ((Bmruntime*)p_bmrt)->load_bmodel_with_mem(bmodel_dir, mem_info);
+  } catch (const std::runtime_error &e) {
+      return false;
+  }
+}
+
+bool bmrt_load_bmodel_data_with_mem(void* p_bmrt, const void* bmodel_data, size_t size, mem_info_t* mem_info)
+{
+  if (p_bmrt == NULL || bmodel_data == NULL || size == 0) {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel data is NULL.");
+    return false;
+  }
+  try {
+  return ((Bmruntime*)p_bmrt)->load_bmodel_with_mem(bmodel_data, size, mem_info);
+  } catch (const std::runtime_error &e) {
+      return false;
+  }
+}
+
+static inline void memory_init(memory_t &mem, uint64_t size, int type) {
+  mem.addr = -1;
+  mem.size = ALIGN(size, 128);
+  mem.type = type;
+}
+
+bool bmrt_get_bmodel_info(ModelCtx* model_ctx, mem_info_t *mem_info) {
+  bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
+  // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
+  uint64_t instruction_size = bmem_info.bd_cmd_mem_size;
+  instruction_size = ALIGN(instruction_size, 128) + bmem_info.hau_cmd_mem_size;
+  instruction_size = ALIGN(instruction_size, 128) + bmem_info.dynamic_ir_mem_size;
+  memory_init(mem_info->instruction_mem, instruction_size, 0);
+  // variable_instruction_mem: gdma_cmd + sdma_cmd
+  uint64_t v_instruction_size = bmem_info.gdma_cmd_mem_size;
+  v_instruction_size = ALIGN(v_instruction_size, 128) + bmem_info.sdma_cmd_mem_size;
+  // v_instruction_size = ALIGN(v_instruction_size, 128) + bmem_info.cdma_cmd_mem_size;
+  memory_init(mem_info->variable_instruction_mem, v_instruction_size, 0);
+  // coeff_mem: coeff
+  memory_init(mem_info->coeff_mem, bmem_info.coeff_mem_size, 0);
+  // neuron_mem: neuron + middle_buffer_size + dynamic_output
+  uint64_t neuron_size = bmem_info.neuron_mem_size;
+  neuron_size = ALIGN(neuron_size, 128) + bmem_info.middle_buffer_size;
+  neuron_size = ALIGN(neuron_size, 128) + bmem_info.dynamic_output_number * sizeof(bm_shape_ex_t);
+  //  neuron + middle_buffe + max_subnet_output_member
+  memory_init(mem_info->neuron_mem, neuron_size, 0);
+
+  // input & output size
+  uint64_t input_mem_size = 0, output_mem_size = 0;
+  for (int net_idx = 0; net_idx < model_ctx->model()->net()->size(); ++net_idx) {
+    auto net = model_ctx->model()->net()->Get(net_idx);
+    auto net_params = net->parameter();
+    for (int stage_idx = 0; stage_idx < net_params->size(); ++stage_idx) {
+      auto param = net_params->Get(stage_idx);
+      for (int tensor_idx = 0; tensor_idx < param->input_tensor()->size(); ++tensor_idx) {
+        auto tensor = param->input_tensor()->Get(tensor_idx);
+        input_mem_size += tensor->size();
+      }
+      for (int tensor_idx = 0; tensor_idx < param->output_tensor()->size(); ++tensor_idx) {
+        auto tensor = param->output_tensor()->Get(tensor_idx);
+        output_mem_size += tensor->size();
+      }
+    }
+  }
+  memory_init(mem_info->io_mem, input_mem_size + output_mem_size, 0);
+  // memory_init(mem_info->output_mem, 0, 0);
+  return true;
+}
+
+bool bmrt_get_bmodel_data_info(const void* bmodel_data, size_t size, mem_info_t *mem_info) {
+  if (bmodel_data == NULL || size == 0) {
+    BMRT_LOG(WRONG, "bmodel data is NULL.");
+    return false;
+  }
+  BMRT_LOG(DEBUG, "Loading bmodel info");
+  ModelCtx model_ctx(bmodel_data, size);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load model failed.");
+      return false;
+  }
+  return bmrt_get_bmodel_info(&model_ctx, mem_info);
+}
+
+bool bmrt_get_bmodel_info(const char *bmodel_path, mem_info_t *mem_info) {
+  if (bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "Bmodel path is wrong.");
+    return false;
+  }
+  BMRT_LOG(DEBUG, "Loading bmodel info from [%s].", bmodel_path);
+  const std::string bmodel_dir = bmodel_path;
+  ModelCtx model_ctx(bmodel_dir);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load model failed.");
+      return false;
+  }
+  return bmrt_get_bmodel_info(&model_ctx, mem_info);
 }
 
 bool bmrt_launch_tensor(void* p_bmrt, const char* net_name, const bm_tensor_t input_tensors[],
@@ -430,6 +538,22 @@ void bmrt_get_network_names(void* p_bmrt, const char*** network_names)
   }
 }
 
+const char *bmrt_get_network_name(void* p_bmrt, int index)
+{
+  if (p_bmrt == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid: p_bmrt is NULL");
+    return NULL;
+  }
+  vector<const char*> names;
+  ((Bmruntime*)p_bmrt)->get_network_names(&names);
+
+  if (names.size() < index + 1) {
+    BMRT_LOG(WRONG, "parameter invalid: index is larger than name sizes");
+    return NULL;
+  }
+  return names[index];
+}
+
 int bmrt_get_network_index(void* p_bmrt, const char* net_name)
 {
   if (p_bmrt == NULL || net_name == NULL) {
@@ -491,4 +615,22 @@ bool bmrt_memcpy_d2d_byte_parallel(void *p_bmrt,
   return ((Bmruntime*)p_bmrt)
     ->memcpy_d2d_byte_parallel(dst_tensors, dst_offsets, src_tensors, src_offsets,
                               sizes, tensor_num, device_num);
+}
+
+bool bmrt_memcpy_d2d_stride_ex_parallel(
+    void *p_bmrt,
+    bm_tensor_t dst_tensors[],
+    size_t dst_offsets[],
+    bm_shape_t dst_strides[],
+    bm_tensor_t src_tensors[],
+    size_t src_offsets[],
+    bm_shape_t src_strides[],
+    bm_shape_t shapes[],
+    int tensor_num[],
+    int device_num) {
+  return ((Bmruntime*)p_bmrt)
+    ->memcpy_d2d_stride_ex_parallel(
+        dst_tensors, dst_offsets, dst_strides,
+        src_tensors, src_offsets, src_strides,
+        shapes, tensor_num, device_num);
 }

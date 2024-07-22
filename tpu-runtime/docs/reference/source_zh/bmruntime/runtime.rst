@@ -777,7 +777,7 @@ input_loc_devices和output_loc_devices记录在分布式网络的情况下输入
 
 core_num记录网络所需的core数量。
 
-addr_mode记录网络的地址分配模式，0表示基础模式，1表示io_alone模式，2 表示 io_tag 模式。
+addr_mode记录网络的地址分配模式，0表示基础模式，1表示io_alone模式，2 表示 io_tag 模式，3 表示 io_tag_fuse 模式。
 
 bmrt_get_network_info根据网络名，得到某个网络的信息，接口声明如下：
 

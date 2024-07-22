@@ -22,6 +22,7 @@ typedef enum bmtpu_arch {
   BM1688,
   BM1690,
   MARS3,
+  SG2380,
   UNKOWN_ARCH
 } bmtpu_arch_t;
 

@@ -39,6 +39,8 @@ static void usage(char *argv[])
   cout << "  " << argv[0] << endl
        << "    --info model_file : show brief model info" << endl
        << "    --print model_file : show detailed model info" << endl
+       << "    --weight model_file : show model weight info" << endl
+       << "    --update_weight dst_model dst_net dst_offset src_model src_net src_offset" << endl
        << "    --extract model_file : extract one multi-net bmodel to multi one-net bmodels" << endl
        << "    --combine file1 .. fileN -o new_file: combine bmodels to one bmodel by filepath" << endl
        << "    --combine_dir dir1 .. dirN -o new_dir: combine bmodels to one bmodel by directory path" << endl
@@ -289,7 +291,7 @@ static void show(const string &filename)
           mem_info.sdma_cmd_mem_size +
           mem_info.middle_buffer_size +
           mem_info.dynamic_ir_mem_size
-        << " (coeff: "<<mem_info.coeff_mem_size
+        << " (weight: "<<mem_info.coeff_mem_size
         << ", instruct: "<<mem_info.bd_cmd_mem_size + mem_info.gdma_cmd_mem_size+mem_info.dynamic_ir_mem_size+
                            mem_info.hau_cmd_mem_size+mem_info.sdma_cmd_mem_size
         << ", runtime: "<<mem_info.neuron_mem_size + mem_info.middle_buffer_size
@@ -297,9 +299,100 @@ static void show(const string &filename)
   cout << "host mem size: "<<
           mem_info.host_coeff_mem_size +
           mem_info.host_neuron_mem_size
-        << " (coeff: "<<mem_info.host_coeff_mem_size
+        << " (weight: "<<mem_info.host_coeff_mem_size
         << ", runtime: "<<mem_info.host_neuron_mem_size
         << ")"<< std::endl;
+}
+
+// print weight of model
+void show_weight(const string &filename) {
+  ModelCtx model_ctx(filename);
+  if (!model_ctx) {
+    FATAL("file[%s] is not correct", filename.c_str());
+  }
+  auto model = model_ctx.model();
+  auto num_net = model->net()->size();
+  for (int i = 0; i < num_net; i++) {
+    auto net = model->net()->Get(i);
+    auto num_stage = model->net()->Get(i)->parameter()->size();
+    for (int j = 0; j < num_stage; j++) {
+      auto param = model->net()->Get(i)->parameter()->Get(j);
+      auto coeff = param->coeff_mem();
+      if (coeff == nullptr) {
+        continue;
+      }
+      auto location = coeff->location();
+      if (location == nullptr || location->size() == 0) {
+        continue;
+      }
+      printf("net %d : \"%s\", stage:%d\n", i, net->name()->c_str(), j);
+      cout << "-------------------------------" << endl;
+      for (int k = 0; k < location->size(); k++) {
+        auto info = location->Get(k);
+        printf("%s : [0x%lx, 0x%lx)\n", info->name()->c_str(), info->offset(),
+               info->offset() + info->size());
+      }
+      cout << "==========================================" << endl;
+    }
+  }
+}
+
+// read binary from bmodel
+static uint64_t str2ull(const char *str) {
+  string ull_str(str);
+  if (ull_str.empty()) {
+    return 0;
+  }
+  if (ull_str.compare(0, 2, "0x") == 0 || ull_str.compare(0, 2, "0X") == 0) {
+    return strtoull(ull_str.c_str(), 0, 16);
+  } else {
+    return strtoull(ull_str.c_str(), 0, 10);
+  }
+}
+
+static void update_weight(int argc, char **argv) {
+  if (argc != 8) {
+    FATAL("parameters are not correct");
+  }
+  auto dst_model = argv[2];
+  auto dst_net = argv[3];
+  auto dst_offset = str2ull(argv[4]);
+  auto src_model = argv[5];
+  auto src_net = argv[6];
+  auto src_offset = str2ull(argv[7]);
+  printf("read dst model:%s ...\n", dst_model);
+  ModelCtx dst_model_ctx(dst_model);
+  if (!dst_model_ctx) {
+    FATAL("file[%s] is not correct", dst_model);
+  }
+  printf("read src model:%s ...\n", src_model);
+  ModelCtx src_model_ctx(src_model);
+  if (!src_model_ctx) {
+    FATAL("file[%s] is not correct", src_model);
+  }
+  bmodel::Binary src_bin, dst_bin;
+  std::string src_name, dst_name;
+  auto dst_ret =
+      dst_model_ctx.get_weight(dst_net, 0, dst_offset, dst_bin, dst_name);
+  if (dst_ret == false || dst_bin.size() == 0) {
+    FATAL("get dst weight failed by net_name:%s, offset:%lx\n", dst_net,
+          dst_offset);
+  }
+  auto src_ret =
+      src_model_ctx.get_weight(src_net, 0, src_offset, src_bin, src_name);
+  if (src_ret == false || src_bin.size() == 0) {
+    FATAL("get src weight failed by net_name:%s, offset:%lx\n", src_net,
+          src_offset);
+  }
+  if (dst_name != src_name || dst_bin.size() != src_bin.size()) {
+    FATAL("weight not the same");
+  }
+  printf("update weight ...\n");
+  auto src_weight = new uint8_t[src_bin.size()];
+  src_model_ctx.read_binary(&src_bin, src_weight);
+  dst_model_ctx.write_binary(&dst_bin, src_weight);
+  delete[] src_weight;
+  printf("update success\n");
 }
 
 // update binary data when copy one net to new flatbuffers
@@ -675,20 +768,6 @@ static void combine_bmodels(int argc, char **argv, bool is_dir = false)
   cout << "Success: combined to [" << ofile << "]." << endl;
 }
 
-// read binary from bmodel
-static uint64_t str2ull(const char * str)
-{
-  string ull_str(str);
-  if (ull_str.empty()) {
-    return 0;
-  }
-  if (ull_str.compare(0, 2, "0x") == 0 || ull_str.compare(0, 2, "0X") == 0) {
-    return strtoull(ull_str.c_str(), 0, 16);
-  } else {
-    return strtoull(ull_str.c_str(), 0, 10);
-  }
-}
-
 static void dump_binary(int argc, char **argv)
 {
   if (argc != 6) {
@@ -900,6 +979,10 @@ int main(int argc, char **argv)
     print(argv[2]);
   } else if (cmd == "--info") {
     show(argv[2]);
+  } else if (cmd == "--weight") {
+    show_weight(argv[2]);
+  } else if (cmd == "--update_weight") {
+    update_weight(argc, argv);
   } else if (cmd == "--extract") {
     extract(argv[2]);
   } else if (cmd == "--combine") {

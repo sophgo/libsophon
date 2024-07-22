@@ -142,6 +142,10 @@ export BMRUNTIME_USING_FIRMWARE="/home/linaro/libfirmware_core.so"
 cmodel_run_bmodel xxx.bmodel
 cmodel_run_bmodel bmodel_dir
 cmodel_batch_run_bmodel dir_include_bmodels
+
+# 进入gdb调试模式
+export EXTRA_EXEC="gdb --args"
+cmodel_run_bmodel xxx.bmodel
 ```
 
 目前线上回归的入口脚本为`test/regression.sh`，后续如要加bmodel测试可在里面修改

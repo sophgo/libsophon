@@ -1,0 +1,4 @@
+*.bmodel filter=lfs diff=lfs merge=lfs -text
+*.dat filter=lfs diff=lfs merge=lfs -text
+*.json filter=lfs diff=lfs merge=lfs -text
+*.mlir filter=lfs diff=lfs merge=lfs -text

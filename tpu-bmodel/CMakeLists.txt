@@ -33,6 +33,14 @@ else()
     target_compile_definitions(tpu_model PRIVATE VER="${revision}")
     target_compile_features(tpu_model PUBLIC cxx_std_11)
 
+    add_custom_target(model_tool_link ALL
+        COMMAND ${CMAKE_COMMAND} -E create_symlink tpu_model model_tool
+        DEPENDS tpu_model)
+    install(PROGRAMS
+        "${CMAKE_CURRENT_BINARY_DIR}/model_tool"
+        DESTINATION bin
+        COMPONENT libsophon
+    )
     install(TARGETS tpu_model bmodel
         RUNTIME DESTINATION bin
         COMPONENT libsophon
