@@ -21,6 +21,7 @@ static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 {
 #ifndef SOC_MODE
 	u16 pcie_version;
+	u16 index;
 #endif
 	dev_info(cinfo->device, "bar0 0x%llx size 0x%llx, vaddr = 0x%p\n",
 			cinfo->bar_info.bar0_start, cinfo->bar_info.bar0_len,
@@ -32,15 +33,11 @@ static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 			cinfo->bar_info.bar2_start, cinfo->bar_info.bar2_len,
 			cinfo->bar_info.bar2_vaddr);
 #ifndef SOC_MODE
-	dev_info(cinfo->device, "bar1 part0 offset 0x%llx size 0x%llx, dev_addr = 0x%llx\n",
-			cinfo->bar_info.bar1_part0_offset, cinfo->bar_info.bar1_part0_len,
-			cinfo->bar_info.bar1_part0_dev_start);
-	dev_info(cinfo->device, "bar1 part1 offset 0x%llx size 0x%llx, dev_addr = 0x%llx\n",
-			cinfo->bar_info.bar1_part1_offset, cinfo->bar_info.bar1_part1_len,
-			cinfo->bar_info.bar1_part1_dev_start);
-	dev_info(cinfo->device, "bar1 part2 offset 0x%llx size 0x%llx, dev_addr = 0x%llx\n",
-			cinfo->bar_info.bar1_part2_offset, cinfo->bar_info.bar1_part2_len,
-			cinfo->bar_info.bar1_part2_dev_start);
+	for(index=0; index<PCIE_BAR1_PART_MAX; index++) {
+		dev_info(cinfo->device, "bar1 part offset 0x%llx size 0x%llx, dev_addr = 0x%llx\n",
+			cinfo->bar_info.bar1_part_info[index].offset, cinfo->bar_info.bar1_part_info[index].len,
+			cinfo->bar_info.bar1_part_info[index].dev_start);
+	}
 
 	pcie_version = pcie_caps_reg(cinfo->pcidev) & PCI_EXP_FLAGS_VERS;
 	dev_info(cinfo->device, "PCIe version 0x%x\n", pcie_version);
@@ -112,7 +109,11 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
 static char *bmdrv_class_devnode(struct device *dev, umode_t *mode)
+#else
+static char *bmdrv_class_devnode(const struct device *dev, umode_t *mode)
+#endif
 {
 	if (!mode || !dev)
 		return NULL;
@@ -145,9 +146,11 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 {
 	int ret = 0;
 	struct chip_info *cinfo = &bmdi->cinfo;
+#ifdef SOC_MODE
 	u32 channel = 0;
 	u32 core = 0;
 	u32 core_num = cinfo->tpu_core_num;
+#endif
 
 	INIT_LIST_HEAD(&bmdi->handle_list);
 	bmdrv_sw_register_init(bmdi);
@@ -157,7 +160,7 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	if (bmdi->gmem_info.bm_gmem_init &&
 		bmdi->gmem_info.bm_gmem_init(bmdi))
 		return -EFAULT;
-
+#ifdef SOC_MODE
 	for (core = 0; core < core_num; core++) {
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
 			if (bmdi->api_info[core][channel].bm_api_init &&
@@ -165,18 +168,24 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 				return -EFAULT;
 		}
 	}
+#endif
 
 	if (bmdi->c_attr.bm_card_attr_init &&
-		bmdi->c_attr.bm_card_attr_init(bmdi))
+		bmdi->c_attr.bm_card_attr_init(bmdi)) {
+		pr_err("bm_card_attr_init failed\n");
 		return -EFAULT;
-
+	}
 	if (bmdi->memcpy_info.bm_memcpy_init &&
-		bmdi->memcpy_info.bm_memcpy_init(bmdi))
+		bmdi->memcpy_info.bm_memcpy_init(bmdi)) {
+		pr_err("bm_card_attr_init failed\n");
 		return -EFAULT;
+	}
 
 	if (bmdi->trace_info.bm_trace_init &&
-		bmdi->trace_info.bm_trace_init(bmdi))
+		bmdi->trace_info.bm_trace_init(bmdi)) {
+		pr_err("bm_card_attr_init failed\n");
 		return -EFAULT;
+	}
 
 	bmdi->parent = cinfo->device;
 
@@ -189,6 +198,7 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 
 void bmdrv_software_deinit(struct bm_device_info *bmdi)
 {
+#ifdef SOC_MODE
 	u32 channel = 0;
 	u32 core = 0;
 	u32 core_num = bmdi->cinfo.tpu_core_num;
@@ -199,6 +209,7 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 				bmdi->api_info[core][channel].bm_api_deinit(bmdi, core, channel);
 		}
 	}
+#endif
 	if (bmdi->memcpy_info.bm_memcpy_deinit)
 		bmdi->memcpy_info.bm_memcpy_deinit(bmdi);
 
@@ -211,7 +222,9 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 
 struct class bmdev_class = {
 	.name		= BM_CLASS_NAME,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
 	.owner		= THIS_MODULE,
+#endif
 	.devnode = bmdrv_class_devnode,
 };
 

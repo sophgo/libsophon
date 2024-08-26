@@ -134,6 +134,14 @@ struct bm_bar_info {
 	struct bm_io_bar_vaddr io_bar_vaddr;
 };
 #else
+#define PCIE_BAR1_PART_MAX 24
+#define PCIE_BAR2_PART_MAX 1
+struct bm_bar_part {
+	u64 offset;
+	u64 len;
+	u64 dev_start;
+};
+
 struct bm_bar_info {
 	u64 bar0_start;
 	u64 bar0_dev_start;
@@ -143,68 +151,13 @@ struct bm_bar_info {
 	u64 bar1_start;
 	u64 bar1_len;		//for backforward.
 	u64 bar1_dev_start;
-	u64 bar1_part0_offset;
-	u64 bar1_part0_dev_start;
-	u64 bar1_part0_len;
-	u64 bar1_part1_offset;
-	u64 bar1_part1_dev_start;
-	u64 bar1_part1_len;
-	u64 bar1_part2_offset;
-	u64 bar1_part2_dev_start;
-	u64 bar1_part2_len;
-	u64 bar1_part3_offset;
-	u64 bar1_part3_dev_start;
-	u64 bar1_part3_len;
-	u64 bar1_part4_offset;
-	u64 bar1_part4_dev_start;
-	u64 bar1_part4_len;
-	u64 bar1_part5_offset;
-	u64 bar1_part5_dev_start;
-	u64 bar1_part5_len;
-	u64 bar1_part6_offset;
-	u64 bar1_part6_dev_start;
-	u64 bar1_part6_len;
-	u64 bar1_part7_offset;
-	u64 bar1_part7_dev_start;
-	u64 bar1_part7_len;
-	u64 bar1_part8_offset;
-	u64 bar1_part8_dev_start;
-	u64 bar1_part8_len;
-	u64 bar1_part9_offset;
-	u64 bar1_part9_dev_start;
-	u64 bar1_part9_len;
-	u64 bar1_part10_offset;
-	u64 bar1_part10_dev_start;
-	u64 bar1_part10_len;
-	u64 bar1_part11_offset;
-	u64 bar1_part11_dev_start;
-	u64 bar1_part11_len;
-	u64 bar1_part12_offset;
-	u64 bar1_part12_dev_start;
-	u64 bar1_part12_len;
-	u64 bar1_part13_offset;
-	u64 bar1_part13_dev_start;
-	u64 bar1_part13_len;
-	u64 bar1_part14_offset;
-	u64 bar1_part14_dev_start;
-	u64 bar1_part14_len;
-	u64 bar1_part15_offset;
-	u64 bar1_part15_dev_start;
-	u64 bar1_part15_len;
-	u64 bar1_part16_offset;
-	u64 bar1_part16_dev_start;
-	u64 bar1_part16_len;
-	u64 bar1_part17_offset;
-	u64 bar1_part17_dev_start;
-	u64 bar1_part17_len;
+	struct bm_bar_part bar1_part_info[PCIE_BAR1_PART_MAX];
 	void __iomem *bar1_vaddr;
 
 	u64 bar2_start;
 	u64 bar2_dev_start;
 	u64 bar2_len;
-	u64 bar2_part0_offset;
-	u64 bar2_part0_dev_start;
-	u64 bar2_part0_len;
+	struct bm_bar_part bar2_part_info[PCIE_BAR2_PART_MAX];
 	void __iomem *bar2_vaddr;
 
 	u64 bar4_start;
@@ -299,8 +252,8 @@ static const struct bm_card_reg bm_reg_1684x = {
 };
 
 static const struct bm_card_reg bm_reg_bm1688 = {
-	.mcu_info_base_addr  = 0x101fb000,
-	.dev_info_base_addr  = 0x101fb100,
+	.mcu_info_base_addr  = 0x05026800,
+	.dev_info_base_addr  = 0x05026f00,
 	.shmem_base_addr  = 0x2580c000, // TPU0
 	.ddr_base_addr  = 0x68000000,
 	.top_base_addr  = 0x28100000,

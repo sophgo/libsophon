@@ -69,13 +69,11 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "used_dir=\${dir_name##*/}" >> postinst
     COMMAND echo "sed -i '/Bitmain/d' /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "sed -i '/Sophgo/d' /usr/share/$used_dir/pci.ids" >> postinst
+    COMMAND echo "sed -i '/Sophon/d' /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "sed -i '/SC3 with BM1682/d' /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "sed -i '/BM1684/d' /usr/share/$used_dir/pci.ids" >> postinst
-    COMMAND echo "echo \"1e30	Bitmain Technologies Inc.\" >> /usr/share/$used_dir/pci.ids" >> postinst
-    COMMAND echo "echo \"	1682	SC3 with BM1682, Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
-    COMMAND echo "echo \"	1684	BM1684, Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "echo \"1f1c  Sophgo Technologies Inc.\" >> /usr/share/$used_dir/pci.ids" >> postinst
-    COMMAND echo "echo \"	1686	BM1684X, Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
+    COMMAND echo "echo \"	1686	BM1688, Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
 
     COMMAND echo "cp -r /opt/sophon/driver-${CPACK_PACKAGE_VERSION} /usr/src/${DKMS_NAME}-${PROJECT_VERSION}" >> postinst
     COMMAND echo "dkms add -m ${DKMS_NAME} -v ${PROJECT_VERSION}" >> postinst
@@ -83,9 +81,7 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "modprobe -r ${DKMS_NAME}" >> postinst
     COMMAND echo "modprobe ${DKMS_NAME}" >> postinst
 
-    COMMAND echo "pcinum_1684=`lspci | grep 1684 -c`" >> postinst
-    COMMAND echo "pcinum_1686=`lspci | grep 1686 -c`" >> postinst
-    COMMAND echo "pcinum=`expr $pcinum_1684 + $pcinum_1686`" >> postinst
+    COMMAND echo "pcinum=`lspci | grep BM1688 -c`" >> postinst
     COMMAND echo "devicenum=`ls /dev/ | grep bm-sophon -c`" >> postinst
     COMMAND echo "if [ \"$pcinum\" -ne \"$devicenum\" ]" >> postinst
     COMMAND echo "then" >> postinst
@@ -105,6 +101,17 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "then" >> prerm
     COMMAND echo "    echo \"sophon driver may busy or something wrong, please stop all application that use bmsophon.ko.Then run the command 'sudo rmmod bmsophon.ko' to remove the driver.\"" >> prerm
     COMMAND echo "fi" >> prerm
+    COMMAND echo "if [ -e \"/usr/share/misc/pci.ids\" ]; then" >> prerm
+    COMMAND echo "used_path=/usr/share/misc/pci.ids" >> prerm
+    COMMAND echo "elif [ -e \"/usr/share/hwdata/pci.ids\" ]; then" >> prerm
+    COMMAND echo "used_path=/usr/share/hwdata/pci.ids" >> prerm
+    COMMAND echo "else [ -e \"/usr/share/lshw/pci.ids\" ];" >> prerm
+    COMMAND echo "used_path=/usr/share/lshw/pci.ids" >> prerm
+    COMMAND echo "fi" >> prerm
+    COMMAND echo "dir_name=$(dirname $used_path)" >> prerm
+    COMMAND echo "used_dir=\${dir_name##*/}" >> prerm
+    COMMAND echo "sed -i '/Sophgo/d' /usr/share/$used_dir/pci.ids" >> prerm
+    COMMAND echo "sed -i '/Sophon/d' /usr/share/$used_dir/pci.ids" >> prerm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/debian
 )
 

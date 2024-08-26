@@ -25,49 +25,11 @@ static struct pci_dev *bm_pci_upstream_bridge(struct pci_dev *dev)
 
 int bm1688_card_get_chip_index(struct bm_device_info *bmdi)
 {
-	struct pci_dev *parent = NULL;
-	int mode = 0x0;
+	int mode = bmdi->cinfo.mode;
 
-	if ((BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
-	    (BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO)) {
-		parent = bm_pci_upstream_bridge(bmdi->cinfo.pcidev);
-		if (parent != NULL)
-			bmdi->cinfo.chip_index = PCI_SLOT(parent->devfn);
-		else {
-			bmdi->cinfo.chip_index = 0x0;
-			pr_info("parent is null\n");
-		}
-	} else if (BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) {
-		mode = bm1688_bmdrv_pcie_get_mode(bmdi) & 0x7;
-		if (mode == 0x6)
-			bmdi->cinfo.chip_index = 0x0;
-		else if (mode == 0x1)
-			bmdi->cinfo.chip_index = 0x1;
-		else if (mode == 0x0)
-			bmdi->cinfo.chip_index = 0x2;
-		else
-			bmdi->cinfo.chip_index = 0x0;
-	} else if (BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) {
-		mode = bm1688_bmdrv_pcie_get_mode(bmdi) & 0x7;
-		if ((mode == 0x7) || (mode == 0x6))
-			bmdi->cinfo.chip_index = 0x0;
-		else if (mode == 0x2)
-			bmdi->cinfo.chip_index = 0x1;
-		else if (mode == 0x1)
-			if ((int)BM1688_HW_VERSION(bmdi) == 17) {
-				bmdi->cinfo.chip_index = 0x1; //0x2;
-			} else {
-				bmdi->cinfo.chip_index = 0x2;
-			}
-		else if (mode == 0x0)
-			if ((int)BM1688_HW_VERSION(bmdi) == 17) {
-				bmdi->cinfo.chip_index = 0x2; //0x3;
-			} else {
-				bmdi->cinfo.chip_index = 0x3;
-			}
-		else
-			bmdi->cinfo.chip_index = 0x0;
-	} else
+	if (mode & 0x4)
+		bmdi->cinfo.chip_index = 0x1;
+	else
 		bmdi->cinfo.chip_index = 0x0;
 
 	return 0;
@@ -76,43 +38,16 @@ int bm1688_card_get_chip_index(struct bm_device_info *bmdi)
 int bm1688_card_get_chip_num(struct bm_device_info *bmdi)
 {
 	int mode = 0x0;
-	int num = 0x0;
+	int num = 0x1;
 
 	if (bmdi->bmcd != NULL)
 		return bmdi->bmcd->chip_num;
 
-	if ((BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
-		(BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO))
-		return 0x8;
+	mode = bmdi->cinfo.mode;
 
-	mode = bm1688_bmdrv_pcie_get_mode(bmdi) & 0x7;
+	if (mode & 0x8)
+		num = 0x2;
 
-	switch (mode) {
-	case 0x7:
-	case 0x2:
-		num = 0x4;
-		break;
-	case 0x6:
-		num = 0x3;
-		break;
-	case 0x0:
-	case 0x1:
-		if (BM1688_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) {
-			if ((int)BM1688_HW_VERSION(bmdi) != 17) {
-				num = 0x4;
-				break;
-			}
-		}
-		num = 0x3;
-		break;
-	case 0x4:
-	case 0x3:
-		num = 0x1;
-		break;
-	default:
-		num = 0x1;
-		break;
-	}
 	pr_info("chip num = %d\n", num);
 	return num;
 }
@@ -342,6 +277,9 @@ void bm1688_stop_smbus(struct bm_device_info *bmdi)
 
 void bm1688_stop_c906(struct bm_device_info *bmdi)
 {
+#ifndef SOC_MODE
+	u32 ctrl_word;
+#endif
 	/*send irq 183 to C906_0/1, let it get ready to die*/
 	top_reg_write(bmdi, TOP_GP_REG_C906_IRQ_SET_OFFSET, 0x1 << 6);
 	top_reg_write(bmdi, TOP_GP_REG_C906_IRQ_SET_OFFSET, 0x1 << 10);
@@ -351,7 +289,6 @@ void bm1688_stop_c906(struct bm_device_info *bmdi)
 	reset_control_assert(bmdi->cinfo.tc906b0);
 	reset_control_assert(bmdi->cinfo.tc906b1);
 #else
-	u32 ctrl_word;
 	/* reset C906 */
 	ctrl_word = top_reg_read(bmdi, TOP_SW_RESET0);
 	ctrl_word &= ~(0x3 << 27);
@@ -572,5 +509,4 @@ void bm1688_gdma_clk_disable(struct bm_device_info *bmdi)
 	PR_TRACE("bm1688 gdma clk is gating\n");
 	clk_disable_unprepare(bmdi->cinfo.gdma_clk);
 }
-
 #endif

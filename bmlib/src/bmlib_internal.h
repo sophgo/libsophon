@@ -15,6 +15,7 @@
 //#include "..\..\common\bm1684\include_win\common_win.h"
 #else
 #include "linux/bmlib_ioctl.h"
+#include "rbtree.h"
 #endif
 #ifdef USING_CMODEL
 #include "bmlib_device.h"
@@ -123,6 +124,8 @@ typedef struct bm_context {
 #endif
     bmlib_profile_t *profile;
     int enable_mem_guard;
+	struct rb_root root;
+	pthread_mutex_t mem_mutex;
 } bm_context_t, *bm_handle_t;
 
 DECL_EXPORT bm_status_t bm_send_api(

@@ -10215,7 +10215,7 @@ uint32_t ddr_bist_all(uint32_t mode, uint32_t capacity, uint32_t x16_mode)
 
 	// check xpi len
 	rddata = mmio_rd32(cfg_base + 0xc);
-	axi_len8 = FIELD_GET(rddata, 19, 19);
+	axi_len8 = BM_FIELD_GET(rddata, 19, 19);
 	KC_MSG("cap=%x, loop=%x, axi_len8=%x\n", cap, loop, axi_len8);
 
 	// bist clock enable
@@ -10260,12 +10260,12 @@ uint32_t ddr_bist_all(uint32_t mode, uint32_t capacity, uint32_t x16_mode)
 	// polling bist done
 	while (1) {
 		rddata = mmio_rd32(DDR_BIST_BASE + 0x80);
-		if (FIELD_GET(rddata, 2, 2) == 1)
+		if (BM_FIELD_GET(rddata, 2, 2) == 1)
 			break;
 	}
 
 	//aspi_axi_sr(`SPI_REG_DDR_BIST + 0x80, ptest_aspi_spi_rdata, 0x0000_000C, "INFO: polling bist done and pass")
-	if (FIELD_GET(rddata, 3, 2) == 1) {
+	if (BM_FIELD_GET(rddata, 3, 2) == 1) {
 		KC_MSG("bist_Pass\n");
 		bist_result = 1 & bist_result;
 	} else {
@@ -10380,7 +10380,7 @@ static void ddr_sys_init(void)
 static void set_ca_vref(uint32_t vref)
 {
 	rddata = mmio_rd32(0x0414 + PHYD_BASE_ADDR);
-	rddata = FIELD_SET(rddata, vref, 20, 16); //param_phya_reg_tx_vrefca_sel
+	rddata = BM_FIELD_SET(rddata, vref, 20, 16); //param_phya_reg_tx_vrefca_sel
 	mmio_wr32(0x0414 + PHYD_BASE_ADDR, rddata);
 	uartlog("vrefca = %08x\n", vref);
 	//time.sleep(0.01);

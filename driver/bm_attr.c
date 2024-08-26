@@ -2143,6 +2143,10 @@ int bm_get_sn(struct bm_device_info *bmdi, char *sn)
 		memcpy(sn, temp_sn, 17);
 		return 0;
 	}
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		strncpy(sn, "NA\n", 3);
+		return 0;
+	}
 
 
 	return bm_get_eeprom(bmdi, 0, sn, 17);
@@ -2416,7 +2420,7 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 	if(count == 17) {
 		mutex_lock(&c_attr->attr_mutex);
 		if (bmdi->cinfo.chip_id == 0x1686a200)
-			c_attr->tpu_current_clock = bm1688_bmdrv_1684_clk_get_tpu_freq(bmdi);
+			c_attr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
 		else
 			c_attr->tpu_current_clock = bmdrv_1684_clk_get_tpu_freq(bmdi);
 		mutex_unlock(&c_attr->attr_mutex);

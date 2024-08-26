@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <fcntl.h>
-#include "bmlib_runtime.h"
+// #include "bmlib_runtime.h"
 #include "bmlib_internal.h"
 #include "string.h"
 #ifdef __linux
@@ -15,7 +15,6 @@
 #pragma comment(lib, "libbmlib-static.lib")
 #endif
 
-#define CDMA_TEST_TIME 10
 int array_cmp_int(
     unsigned char *p_exp,
     unsigned char *p_got,
@@ -23,18 +22,14 @@ int array_cmp_int(
     const char *info_label)
 {
   int idx;
-  int ret = 0;
-  int cnt = 0;
   for (idx = 0; idx < len; idx++) {
     if (p_exp[idx] != p_got[idx]) {
       printf("%s error at index %d exp %x got %x\n",
              info_label, idx, p_exp[idx], p_got[idx]);
-      ret = -1;
-      cnt++;
+      return -1;
     }
   }
-  printf("TEST error count: 0x%x\n", cnt);
-  return ret;
+  return 0;
 }
 
 #ifdef __linux__
@@ -88,6 +83,7 @@ int test_cdma_ctoc_transfer(int chip_num, int transfer_size, unsigned long long 
   }
 
   ret = bm_dev_request(&handle, chip_num);
+  bm_enable_iommu(handle);
   if (ret != BM_SUCCESS || handle == NULL) {
     printf("bm_dev_request failed, ret = %d\n", ret);
     return -1;
@@ -142,10 +138,10 @@ int test_cdma_ctoc_transfer(int chip_num, int transfer_size, unsigned long long 
     printf("cdma traversal src device addr 0x%llx, dst device addr 0x%llx, size 0x%x failed\n", src_device_addr, dst_device_addr, transfer_size);
     return -1;
   }
-  printf("dev = %d, cdma transfer ctoc test Success.\n", chip_num);
 
   if (sys_send_buffer) free(sys_send_buffer);
   if (sys_recieve_buffer) free(sys_recieve_buffer);
+  bm_disable_iommu(handle);
   bm_dev_free(handle);
   return 0;
 }
@@ -173,7 +169,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   srand(tp.tv_nsec);
 
   if (transfer_size == 0x0)
-    transfer_size = rand()%(1024*1024*4) + 1;
+    transfer_size = 1024*1024*4;
 
   sys_send_buffer = (unsigned char *)malloc(transfer_size);
   sys_recieve_buffer = (unsigned char *)malloc(transfer_size);
@@ -188,6 +184,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   }
 
   ret = bm_dev_request(&handle, chip_num);
+  bm_enable_iommu(handle);
   if (ret != BM_SUCCESS || handle == NULL) {
     printf("bm_dev_request failed, ret = %d\n", ret);
     if (sys_send_buffer) free(sys_send_buffer);
@@ -196,7 +193,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   }
 
   if (dst_addr == 0x0) {
-    ret = bm_malloc_device_dword(handle, &dev_buffer, (transfer_size + 3)/4);
+    ret = bm_malloc_device_dword(handle, &dev_buffer, transfer_size/4);
     if (ret != BM_SUCCESS) {
       printf("malloc device memory size = %d failed, ret = %d\n", transfer_size, ret);
       return -1;
@@ -204,11 +201,11 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   } else {
       dev_buffer = bm_mem_from_device(dst_addr, transfer_size);
   }
-  for (int i = 0; i < CDMA_TEST_TIME; i++) {
+  for (int i = 0; i < 10; i++) {
     bm_trace_enable(handle);
     gettimeofday(&tv_start, NULL);
     bm_get_profile(handle, &profile_start);
-    ret = bm_memcpy_s2d(handle, dev_buffer, sys_send_buffer);
+    ret = bm_memcpy_s2d_gather(handle, dev_buffer, 2, (void *)sys_send_buffer, (unsigned long long)transfer_size);
     if (ret != BM_SUCCESS) {
       printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       return -1;
@@ -225,7 +222,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
 
     consume_real += consume;
   }
-  consume = consume_sys / CDMA_TEST_TIME;
+  consume = consume_sys / 10;
   if (consume > 0) {
     float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
     printf("S2D sys:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
@@ -233,7 +230,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
             consume,
             bandwidth);
   }
-  consume = consume_real / CDMA_TEST_TIME;
+  consume = consume_real / 10;
   if (consume > 0) {
     float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
     printf("S2D real:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
@@ -245,11 +242,11 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   consume_sys = 0x0;
   consume_real = 0x0;
 
-  for (int i = 0; i < CDMA_TEST_TIME; i++) {
+  for (int i = 0; i < 10; i++) {
     bm_trace_enable(handle);
     gettimeofday(&tv_start, NULL);
     bm_get_profile(handle, &profile_start);
-    ret = bm_memcpy_d2s(handle, sys_recieve_buffer, dev_buffer);
+    ret = bm_memcpy_d2s_scatter(handle, dev_buffer, 2, (void *)sys_recieve_buffer, (u64)transfer_size);
     if (ret != BM_SUCCESS) {
       printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       return -1;
@@ -264,7 +261,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
     consume_real += consume;
     bm_trace_disable(handle);
   }
-  consume = consume_sys / CDMA_TEST_TIME;
+  consume = consume_sys / 10;
   if (consume > 0) {
     float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
     printf("D2S sys:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
@@ -272,7 +269,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
             consume,
             bandwidth);
   }
-  consume = consume_real / CDMA_TEST_TIME;
+  consume = consume_real / 10;
   if (consume > 0) {
     float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
     printf("D2S real:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
@@ -288,6 +285,7 @@ int test_cdma_stod_transfer(int chip_num, int transfer_size, unsigned long long 
   if (dst_addr == 0x0) {
     bm_free_device(handle, dev_buffer);
   }
+  bm_disable_iommu(handle);
   bm_dev_free(handle);
   return cmp_ret;
 }
@@ -309,12 +307,15 @@ DWORD WINAPI test_cdma_thread(LPVOID arg) {
   bm_status_t ret = BM_SUCCESS;
   struct cdma_process_para *ppara = (struct cdma_process_para *)arg;
   unsigned char * sys_buffer;
+//   unsigned char * sys_buf2;
   bm_device_mem_t dev_buffer;
   int i = 0x0;
 
   sys_buffer = (unsigned char*)malloc(ppara->size);
+//   sys_buf2 = (unsigned char *)malloc(ppara->size/2);
 
   ret = bm_dev_request(&handle, ppara->dev_id);
+  bm_enable_iommu(handle);
   if (BM_SUCCESS != ret) {
     printf("request dev %d failed, ret = %d\n", ppara->dev_id, ret);
     return NULL;
@@ -324,24 +325,25 @@ DWORD WINAPI test_cdma_thread(LPVOID arg) {
   if (ret != BM_SUCCESS) {
     printf("malloc device memory size = %d failed, ret = %d\n", ppara->size, ret);
     free(sys_buffer);
+    // free(sys_buf2);
     return NULL;
   }
 
   for (i = 0; i < ppara->launch_num; i++) {
     if (ppara->dir == 0x0) {
-      ret = bm_memcpy_s2d(handle, dev_buffer, sys_buffer);
+      ret = bm_memcpy_s2d_gather(handle, dev_buffer, 2, (void *)sys_buffer, (unsigned long long)ppara->size);
       if (ret != BM_SUCCESS) {
         printf("CDMA transfer from system to device failed, ret = %d\n", ret);
       }
     } else {
-      ret = bm_memcpy_d2s(handle, sys_buffer, dev_buffer);
+      ret = bm_memcpy_d2s_scatter(handle, dev_buffer, 2, sys_buffer, ppara->size);
       if (ret != BM_SUCCESS) {
         printf("CDMA transfer from device to sys failed, ret = %d\n", ret);
       }
     }
 
   }
-
+  bm_disable_iommu(handle);
   bm_dev_free(handle);
   return NULL;
 }
@@ -457,6 +459,163 @@ int test_cmda_perf_mutithread(int thread_num, int dir, int dev_id, int size, int
   return 0;
 }
 
+int test_cdma_stod_transfer_sg(int chip_num, int transfer_size, unsigned long long dst_addr)
+{
+  bm_handle_t handle = NULL;
+  bm_status_t ret = BM_SUCCESS;
+  unsigned char *sys_send_buffer1, *sys_recieve_buffer1, *sys_send_buffer2, *sys_recieve_buffer2;
+  int cmp_ret = 0;
+  unsigned long consume_sys = 0;
+  unsigned long consume_real = 0;
+  unsigned long consume = 0;
+  struct timespec tp;
+  bm_device_mem_t dev_buffer;
+  bm_profile_t profile_start, profile_end;
+  struct timeval tv_start;
+  struct timeval tv_end;
+  struct timeval timediff;
+  #ifdef __linux__
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID,&tp);
+  #else
+  clock_gettime(0, &tp);
+  #endif
+  srand(tp.tv_nsec);
+
+  if (transfer_size == 0x0)
+    transfer_size = 1024*1024*4;
+
+  sys_send_buffer1 = (unsigned char *)malloc(transfer_size/2);
+  sys_recieve_buffer1 = (unsigned char *)malloc(transfer_size/2);
+  sys_send_buffer2 = (unsigned char *)malloc(transfer_size/2);
+  sys_recieve_buffer2 = (unsigned char *)malloc(transfer_size/2);
+  if (!sys_send_buffer1 || !sys_recieve_buffer1 || !sys_send_buffer2 || !sys_recieve_buffer2) {
+    printf("malloc buffer for test failed\n");
+    return -1;
+  }
+  printf("%s sys_send_buffer1: %p\t sys_send_buffer2: %p\n", __func__, sys_send_buffer1, sys_send_buffer2);
+  printf("%s sys_recieve_buffer1: %p\t sys_recieve_buffer2: %p\n", __func__, sys_recieve_buffer1, sys_recieve_buffer2);
+  for (int i = 0; i < transfer_size/2; i++) {
+    sys_send_buffer1[i] = rand()%0xff;
+    sys_send_buffer2[i] = rand()%0xff;
+    sys_recieve_buffer1[i] = 0x0;
+    sys_recieve_buffer2[i] = 0x0;
+  }
+
+  ret = bm_dev_request(&handle, chip_num);
+  bm_enable_iommu(handle);
+  if (ret != BM_SUCCESS || handle == NULL) {
+    printf("bm_dev_request failed, ret = %d\n", ret);
+    if (sys_send_buffer1) free(sys_send_buffer1);
+    if (sys_recieve_buffer1) free(sys_recieve_buffer1);
+    if (sys_send_buffer2) free(sys_send_buffer2);
+    if (sys_recieve_buffer2) free(sys_recieve_buffer2);
+    return -1;
+  }
+
+  if (dst_addr == 0x0) {
+    ret = bm_malloc_device_dword(handle, &dev_buffer, transfer_size/4);
+    if (ret != BM_SUCCESS) {
+      printf("malloc device memory size = %d failed, ret = %d\n", transfer_size, ret);
+      return -1;
+    }
+  } else {
+      dev_buffer = bm_mem_from_device(dst_addr, transfer_size);
+  }
+  for (int i = 0; i < 10; i++) {
+    bm_trace_enable(handle);
+    gettimeofday(&tv_start, NULL);
+    bm_get_profile(handle, &profile_start);
+    ret = bm_memcpy_s2d_gather(handle, dev_buffer, 4, (void *)sys_send_buffer1, (unsigned long long)transfer_size/2,
+                                (void *)sys_send_buffer2, (unsigned long long)transfer_size/2);
+    if (ret != BM_SUCCESS) {
+      printf("CDMA transfer from system to device failed, ret = %d\n", ret);
+      return -1;
+    }
+
+    gettimeofday(&tv_end, NULL);
+    timersub(&tv_end, &tv_start, &timediff);
+    consume = timediff.tv_sec * 1000000 + timediff.tv_usec;
+    consume_sys += consume;
+
+    bm_get_profile(handle, &profile_end);
+    consume = profile_end.cdma_out_time - profile_start.cdma_out_time;
+    bm_trace_disable(handle);
+
+    consume_real += consume;
+  }
+  consume = consume_sys / 10;
+  if (consume > 0) {
+    float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
+    printf("S2D sys:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
+            transfer_size,
+            consume,
+            bandwidth);
+  }
+  consume = consume_real / 10;
+  if (consume > 0) {
+    float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
+    printf("S2D real:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
+            transfer_size,
+            consume,
+            bandwidth);
+  }
+
+  consume_sys = 0x0;
+  consume_real = 0x0;
+
+  for (int i = 0; i < 10; i++) {
+    bm_trace_enable(handle);
+    gettimeofday(&tv_start, NULL);
+    bm_get_profile(handle, &profile_start);
+    ret = bm_memcpy_d2s_scatter(handle, dev_buffer, 4, (void *)sys_recieve_buffer1, (u64)transfer_size/2,
+                                (void *)sys_recieve_buffer2, (u64)transfer_size/2);
+    if (ret != BM_SUCCESS) {
+      printf("CDMA transfer from system to device failed, ret = %d\n", ret);
+      return -1;
+    }
+
+    gettimeofday(&tv_end, NULL);
+    timersub(&tv_end, &tv_start, &timediff);
+    consume = timediff.tv_sec * 1000000 + timediff.tv_usec;
+    consume_sys += consume;
+    bm_get_profile(handle, &profile_end);
+    consume = profile_end.cdma_in_time - profile_start.cdma_in_time;
+    consume_real += consume;
+    bm_trace_disable(handle);
+  }
+  consume = consume_sys / 10;
+  if (consume > 0) {
+    float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
+    printf("D2S sys:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
+            transfer_size,
+            consume,
+            bandwidth);
+  }
+  consume = consume_real / 10;
+  if (consume > 0) {
+    float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
+    printf("D2S real:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
+            transfer_size,
+            consume,
+            bandwidth);
+  }
+  cmp_ret = array_cmp_int(sys_send_buffer1, sys_recieve_buffer1, transfer_size/2, "cdma test");
+  printf("dev = %d, cdma transfer test1 %s.\n", chip_num, cmp_ret ? "Failed" : "Success");
+  cmp_ret = array_cmp_int(sys_send_buffer2, sys_recieve_buffer2, transfer_size/2, "cdma test");
+  printf("dev = %d, cdma transfer test2 %s.\n", chip_num, cmp_ret ? "Failed" : "Success");
+
+  if (sys_send_buffer1) free(sys_send_buffer1);
+  if (sys_recieve_buffer1) free(sys_recieve_buffer1);
+  if (sys_send_buffer2) free(sys_send_buffer2);
+  if (sys_recieve_buffer2) free(sys_recieve_buffer2);
+  if (dst_addr == 0x0) {
+    bm_free_device(handle, dev_buffer);
+  }
+  bm_disable_iommu(handle);
+  bm_dev_free(handle);
+  return cmp_ret;
+}
+
 int main(int argc, char *argv[])
 {
   int chip_num = 0;
@@ -469,6 +628,7 @@ int main(int argc, char *argv[])
   int count = 0;
   int i = 0;
   int j = 0;
+
   if (argv[1]) {
     if (strcmp("chip", argv[1])== 0) {
       if (argc != 5) {
@@ -485,6 +645,21 @@ int main(int argc, char *argv[])
              transfer_size,
              dst_addr);
       ret = test_cdma_stod_transfer(chip_num, transfer_size, dst_addr);
+    } else if (strcmp("smmu", argv[1]) == 0) {
+      if (argc != 5) {
+          printf("invalid arg\n");
+          printf("example test_cdma_perf chip chip_num size  address \n");
+          printf("like test_cdma_perf chip 0 0x400000  0x150000000 \n");
+          return -1;
+      }
+      chip_num = atoi(argv[2]);
+      transfer_size = (int)strtol(argv[3], NULL, 16);
+      dst_addr = strtoll(argv[4], NULL, 16);
+      printf("test chip num = 0x%x, transfer_size = 0x%x, dst_addr = 0x%llx\n",
+             chip_num,
+             transfer_size,
+             dst_addr);
+      ret = test_cdma_stod_transfer_sg(chip_num, transfer_size, dst_addr);
     } else if (strcmp("ctoc", argv[1]) == 0) {
       if (argc != 6) {
           printf("invalid arg\n");

@@ -23,7 +23,7 @@ void read_ddr_pkg_info(void)
 	NOTICE("FTSN4=0x%08x\n", mmio_read_32(0x03050110));
 #endif // DBG_SHMOO || DBG_SHMOO_CA || DBG_SHMOO_CS
 
-	pkg_type = FIELD_GET(conf_info, 30, 28);
+	pkg_type = BM_FIELD_GET(conf_info, 30, 28);
 	NOTICE("pkg_type=%x\n", pkg_type);
 
 	switch (pkg_type) {
@@ -44,9 +44,9 @@ void read_ddr_pkg_info(void)
 		break;
 	case 0x4: //2nd src need to read from efuse
 		NOTICE("2nd\n");
-		ddr_vendor = FIELD_GET(efuse_leakage, 25, 21);
-		ddr_capacity = FIELD_GET(efuse_leakage, 28, 26);
-		pkg = FIELD_GET(efuse_leakage, 31, 29);
+		ddr_vendor = BM_FIELD_GET(efuse_leakage, 25, 21);
+		ddr_capacity = BM_FIELD_GET(efuse_leakage, 28, 26);
+		pkg = BM_FIELD_GET(efuse_leakage, 31, 29);
 		break;
 	case 0x5: //QFN9x9, SIP 2Gb DDR3
 		ddr_vendor = DDR_VENDOR_NY_2G;

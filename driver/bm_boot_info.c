@@ -399,7 +399,7 @@ int bmdrv_set_pld_boot_info(struct bm_device_info *bmdi)
 	bmdi->boot_info.ddr_ecc_enable = 0;
 	bmdi->boot_info.ddr_0a_size = 0x80000000;
 	bmdi->boot_info.ddr_0b_size = 0x80000000;
-	bmdi->boot_info.ddr_mode = 0x1;
+	bmdi->boot_info.ddr_mode = 0x10001;
 	bmdi->boot_info.ddr_vendor_id = 0;
 	bmdi->boot_info.fan_exist = 0;
 	bmdi->boot_info.tpu_min_clk = 75;

@@ -655,7 +655,7 @@ void bm_destroy_ctx(bm_context_t *ctx) {
 }
 
 void bm_enable_iommu(bm_handle_t handle) {
-  handle->cdma_iommu_mode = BMLIB_USER_SETUP_IOMMU;
+  handle->cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
 }
 
 void bm_disable_iommu(bm_handle_t handle) {
@@ -1841,7 +1841,7 @@ bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp) {
     return BM_ERR_PARAM;
   }
 
-  ret = platform_ioctl(handle, BMDEV_GET_MAXP, maxp;
+  ret = platform_ioctl(handle, BMDEV_GET_MAXP, maxp);
   if (ret == 0) {
 	return BM_SUCCESS;
   } else {

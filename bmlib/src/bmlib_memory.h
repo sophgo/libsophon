@@ -30,18 +30,18 @@ typedef struct bm_memcpy_info {
 #endif
     u64                src_device_addr;
     u64                device_addr;
-	union {
-		u32 size;
-		struct {
-			u16 width;
-			u16 height;
-			u16 src_width;
-			u16 dst_width;
-			u16 format;   //2:2-byte format, others:1-byte format
-			u16 fixed_data;
-			bool flush;
-		};
-	};
+    union {
+        u32 size;
+        struct {
+            u16 width;
+            u16 height;
+            u16 src_width;
+            u16 dst_width;
+            u16 format;   //2:2-byte format, 1:1-byte format
+            u16 fixed_data;
+            bool flush;
+        } stride;
+    } u;
     HOST_CDMA_DIR      dir;
     HOST_XFER_TYPE     type;
 #ifdef __linux__
@@ -65,6 +65,12 @@ typedef struct bm_memcpy_p2p_info {
 struct bm_gmem_addr {
 	u64 vir_addr;
 	u64 phy_addr;
+};
+
+struct bm_mem_paddr {
+  struct rb_node node;
+  unsigned long long paddr;
+  bm_device_mem_u64_t *dev_buffer;
 };
 
 bm_status_t bm_init_basic_func_id(bm_handle_t handle);

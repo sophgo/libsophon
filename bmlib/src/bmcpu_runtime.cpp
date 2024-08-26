@@ -791,6 +791,7 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
                   "bmcpu is not enable in misc info, %d\n", misc_info.a53_enable);
         return BM_NOT_SUPPORTED;
     }
+    if (misc_info.chipid != 0x1686a200) {
     ret = bm_send_api_ext(handle,
                           BM_API_ID_START_CPU,
                           (const u8 *)&api_start_cpu,
@@ -806,22 +807,25 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
     ret = bm_query_api_data(handle, BM_API_ID_START_CPU, api_handle, &data, 3000);
     if (ret == 0)
         return BM_SUCCESS;
+    }
     #ifdef __linux__
     bmcpu_set_arm9_fw_mode(handle, FW_PCIE_MODE);
     #endif
-    dev_mem.u.device.device_addr = 0x10100000;
-    dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
-    dev_mem.size                 = 0x2B000;
-    ret = bm_load_file(handle, boot_file, &dev_mem, NULL);
-    if (ret != BM_SUCCESS) {
-        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "start cpu load fip error, ret %d\n",
-                  ret);
-        return BM_ERR_FAILURE;
+    if (misc_info.chipid != 0x1686a200) {
+        dev_mem.u.device.device_addr = 0x10100000;
+        dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
+        dev_mem.size                 = 0x2B000;
+        ret = bm_load_file(handle, boot_file, &dev_mem, NULL);
+        if (ret != BM_SUCCESS) {
+            bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                      BMLIB_LOG_ERROR,
+                      "start cpu load fip error, ret %d\n",
+                      ret);
+            return BM_ERR_FAILURE;
+        }
     }
 
-    dev_mem.u.device.device_addr = 0x310000000;
+    dev_mem.u.device.device_addr = 0x104000000;
     dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
     dev_mem.size                 = 0x10000000;
     ret = bm_load_file(handle, core_file, &dev_mem, NULL);
@@ -842,6 +846,9 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
+
+    if (misc_info.chipid == 0x1686a200) 
+        return BM_SUCCESS;
 
     ret = bm_send_api_ext(handle,
                           BM_API_ID_START_CPU,

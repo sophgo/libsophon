@@ -35,5 +35,5 @@ int bm1688_get_chip_index(struct bm_device_info *bmdi);
 int bm1688_bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int max_fun_num);
 int bm1688_config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari);
 
-#define BM1688_PCIE_DEVICE_ID 0x00A2
+#define BM1688_PCIE_DEVICE_ID 0x1686a200
 #endif

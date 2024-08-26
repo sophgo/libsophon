@@ -256,51 +256,20 @@ static const struct bm_bar_info bm1684_bar_layout[] = {
 
 		.bar1_len = 0x400000,
 		.bar1_dev_start = 0x00000000,
-		.bar1_part0_offset = 0,
-		.bar1_part0_len = 0x80000,
-		.bar1_part0_dev_start = 0x2000000,
-
-		.bar1_part1_offset = 0x80000,
-		.bar1_part1_len = 0x300000,
-		.bar1_part1_dev_start = 0x50000000,
-
-		.bar1_part2_offset = 0x380000,
-		.bar1_part2_len = 0x10000,
-		.bar1_part2_dev_start = 0x58000000,
-
-		.bar1_part3_offset = 0x390000,
-		.bar1_part3_len = 0x1000,
-		.bar1_part3_dev_start = 0x68000000,
-
-		.bar1_part4_offset = 0x391000,
-		.bar1_part4_len = 0x1000,
-		.bar1_part4_dev_start = 0x6a000000,
-
-		.bar1_part5_offset = 0x392000,
-		.bar1_part5_len = 0x1000,
-		.bar1_part5_dev_start = 0x6c000000,
-
-		.bar1_part6_offset = 0x393000,
-		.bar1_part6_len = 0x1000,
-		.bar1_part6_dev_start = 0x6e000000,
-
-		.bar1_part7_offset = 0x394000,
-		.bar1_part7_len = 0x1000,
-		.bar1_part7_dev_start = 0x6000000,
-
-		.bar1_part8_offset = 0x395000,
-		.bar1_part8_len = 0x1000,
-		.bar1_part8_dev_start = 0x102FF000,
-
-		.bar1_part9_offset = 0x395000,
-		.bar1_part9_len = 0x1000,
-		.bar1_part9_dev_start = 0x102FF000,
+		.bar1_part_info[0] = {       0,  0x80000, 0x02000000},
+		.bar1_part_info[1] = { 0x80000, 0x300000, 0x50000000},
+		.bar1_part_info[2] = {0x380000,  0x10000, 0x58000000},
+		.bar1_part_info[3] = {0x390000,   0x1000, 0x68000000},
+		.bar1_part_info[4] = {0x391000,   0x1000, 0x6a000000},
+		.bar1_part_info[5] = {0x392000,   0x1000, 0x6c000000},
+		.bar1_part_info[6] = {0x393000,   0x1000, 0x6e000000},
+		.bar1_part_info[7] = {0x394000,   0x1000, 0x60000000},
+		.bar1_part_info[8] = {0x395000,   0x1000, 0x102FF000},
+		.bar1_part_info[9] = {0x395000,   0x1000, 0x102FF000},
 
 		.bar2_len = 0x100000,
 		.bar2_dev_start = 0x0,
-		.bar2_part0_offset = 0x0,
-		.bar2_part0_len = 0x100000,
-		.bar2_part0_dev_start = 0x200000000,
+		.bar2_part_info[0] = {0x0, 0x100000, 0x200000000},
 
 		.bar4_len = 0x100000,
 		.bar4_dev_start = 0x0,
@@ -314,51 +283,20 @@ static const struct bm_bar_info bm1684x_bar_layout[] = {
 
 		.bar1_len = 0x400000,
 		.bar1_dev_start = 0x00000000,
-		.bar1_part0_offset = 0,
-		.bar1_part0_len = 0x80000,
-		.bar1_part0_dev_start = 0x900c000,
-
-		.bar1_part1_offset = 0x80000,
-		.bar1_part1_len = 0x300000,
-		.bar1_part1_dev_start = 0x50000000,
-
-		.bar1_part2_offset = 0x380000,
-		.bar1_part2_len = 0x10000,
-		.bar1_part2_dev_start = 0x58000000,
-
-		.bar1_part3_offset = 0x390000,
-		.bar1_part3_len = 0x1000,
-		.bar1_part3_dev_start = 0x68000000,
-
-		.bar1_part4_offset = 0x391000,
-		.bar1_part4_len = 0x1000,
-		.bar1_part4_dev_start = 0x6a000000,
-
-		.bar1_part5_offset = 0x392000,
-		.bar1_part5_len = 0x1000,
-		.bar1_part5_dev_start = 0x6c000000,
-
-		.bar1_part6_offset = 0x393000,
-		.bar1_part6_len = 0x1000,
-		.bar1_part6_dev_start = 0x6e000000,
-
-		.bar1_part7_offset = 0x394000,
-		.bar1_part7_len = 0x1000,
-		.bar1_part7_dev_start = 0x6000000,
-
-		.bar1_part8_offset = 0x395000,
-		.bar1_part8_len = 0x10000,
-		.bar1_part8_dev_start = 0x12000000,
-
-		.bar1_part9_offset = 0x3a5000,
-		.bar1_part9_len = 0x500,
-		.bar1_part9_dev_start = 0x101fb000,
+		.bar1_part_info[0] = {       0,  0x80000, 0x0900c000},
+		.bar1_part_info[1] = { 0x80000, 0x300000, 0x50000000},
+		.bar1_part_info[2] = {0x380000,  0x10000, 0x58000000},
+		.bar1_part_info[3] = {0x390000,   0x1000, 0x68000000},
+		.bar1_part_info[4] = {0x391000,   0x1000, 0x6a000000},
+		.bar1_part_info[5] = {0x392000,   0x1000, 0x6c000000},
+		.bar1_part_info[6] = {0x393000,   0x1000, 0x6e000000},
+		.bar1_part_info[7] = {0x394000,   0x1000, 0x60000000},
+		.bar1_part_info[8] = {0x395000,  0x10000, 0x12000000},
+		.bar1_part_info[9] = {0x3a5000,    0x500, 0x101FB000},
 
 		.bar2_len = 0x100000,
 		.bar2_dev_start = 0x0,
-		.bar2_part0_offset = 0x0,
-		.bar2_part0_len = 0x100000,
-		.bar2_part0_dev_start = 0x200000000,
+		.bar2_part_info[0] = {0x0, 0x100000, 0x200000000},
 
 		.bar4_len = 0x100000,
 		.bar4_dev_start = 0x0,
@@ -418,51 +356,20 @@ static struct bm_bar_info bm_mode_chose_layout_bm1684[] = {
 
 		.bar1_len = 0x400000,
 		.bar1_dev_start = 0x00000000,
-		.bar1_part0_offset = 0,
-		.bar1_part0_len = 0x80000,
-		.bar1_part0_dev_start = 0x2000000,
-
-		.bar1_part1_offset = 0x80000,
-		.bar1_part1_len = 0x300000,
-		.bar1_part1_dev_start = 0x50000000,
-
-		.bar1_part2_offset = 0x380000,
-		.bar1_part2_len = 0x10000,
-		.bar1_part2_dev_start = 0x58000000,
-
-		.bar1_part3_offset = 0x390000,
-		.bar1_part3_len = 0x1000,
-		.bar1_part3_dev_start = 0x68000000,
-
-		.bar1_part4_offset = 0x391000,
-		.bar1_part4_len = 0x1000,
-		.bar1_part4_dev_start = 0x6a000000,
-
-		.bar1_part5_offset = 0x392000,
-		.bar1_part5_len = 0x1000,
-		.bar1_part5_dev_start = 0x6c000000,
-
-		.bar1_part6_offset = 0x393000,
-		.bar1_part6_len = 0x1000,
-		.bar1_part6_dev_start = 0x6e000000,
-
-		.bar1_part7_offset = 0x394000,
-		.bar1_part7_len = 0x1000,
-		.bar1_part7_dev_start = 0x6000000,
-
-		.bar1_part8_offset = 0x395000,
-		.bar1_part8_len = 0x1000,
-		.bar1_part8_dev_start = 0x102FF000,
-
-		.bar1_part9_offset = 0x395000,
-		.bar1_part9_len = 0x1000,
-		.bar1_part9_dev_start = 0x102FF000,
+		.bar1_part_info[0] = {       0,  0x80000, 0x0900c000},
+		.bar1_part_info[1] = { 0x80000, 0x300000, 0x50000000},
+		.bar1_part_info[2] = {0x380000,  0x10000, 0x58000000},
+		.bar1_part_info[3] = {0x390000,   0x1000, 0x68000000},
+		.bar1_part_info[4] = {0x391000,   0x1000, 0x6a000000},
+		.bar1_part_info[5] = {0x392000,   0x1000, 0x6c000000},
+		.bar1_part_info[6] = {0x393000,   0x1000, 0x6e000000},
+		.bar1_part_info[7] = {0x394000,   0x1000, 0x60000000},
+		.bar1_part_info[8] = {0x395000,   0x1000, 0x102FF000},
+		.bar1_part_info[9] = {0x395000,   0x1000, 0x102FF000},
 
 		.bar2_len = 0x100000,
 		.bar2_dev_start = 0x0,
-		.bar2_part0_offset = 0x0,
-		.bar2_part0_len = 0x100000,
-		.bar2_part0_dev_start = 0x5ff00000,
+		.bar2_part_info[0] = {0x0, 0x100000, 0x5ff00000},
 
 		.bar4_len = 0x100000,
 		.bar4_dev_start = 0x60100000,
@@ -476,51 +383,20 @@ static struct bm_bar_info bm_mode_chose_layout_bm1684x[] = {
 
 		.bar1_len = 0x400000,
 		.bar1_dev_start = 0x00000000,
-		.bar1_part0_offset = 0,
-		.bar1_part0_len = 0x80000,
-		.bar1_part0_dev_start = 0x900c000, //temp debug
-
-		.bar1_part1_offset = 0x80000,
-		.bar1_part1_len = 0x300000,
-		.bar1_part1_dev_start = 0x50000000,
-
-		.bar1_part2_offset = 0x380000,
-		.bar1_part2_len = 0x10000,
-		.bar1_part2_dev_start = 0x58000000,
-
-		.bar1_part3_offset = 0x390000,
-		.bar1_part3_len = 0x1000,
-		.bar1_part3_dev_start = 0x68000000,
-
-		.bar1_part4_offset = 0x391000,
-		.bar1_part4_len = 0x1000,
-		.bar1_part4_dev_start = 0x6a000000,
-
-		.bar1_part5_offset = 0x392000,
-		.bar1_part5_len = 0x1000,
-		.bar1_part5_dev_start = 0x6c000000,
-
-		.bar1_part6_offset = 0x393000,
-		.bar1_part6_len = 0x1000,
-		.bar1_part6_dev_start = 0x6e000000,
-
-		.bar1_part7_offset = 0x394000,
-		.bar1_part7_len = 0x1000,
-		.bar1_part7_dev_start = 0x6000000,
-
-		.bar1_part8_offset = 0x395000,
-		.bar1_part8_len = 0x10000,
-		.bar1_part8_dev_start = 0x12000000,
-
-		.bar1_part9_offset = 0x3a5000,
-		.bar1_part9_len = 0x500,
-		.bar1_part9_dev_start = 0x101fb000,
+		.bar1_part_info[0] = {       0,  0x80000, 0x0900c000},
+		.bar1_part_info[1] = { 0x80000, 0x300000, 0x50000000},
+		.bar1_part_info[2] = {0x380000,  0x10000, 0x58000000},
+		.bar1_part_info[3] = {0x390000,   0x1000, 0x68000000},
+		.bar1_part_info[4] = {0x391000,   0x1000, 0x6a000000},
+		.bar1_part_info[5] = {0x392000,   0x1000, 0x6c000000},
+		.bar1_part_info[6] = {0x393000,   0x1000, 0x6e000000},
+		.bar1_part_info[7] = {0x394000,   0x1000, 0x60000000},
+		.bar1_part_info[8] = {0x395000,  0x10000, 0x12000000},
+		.bar1_part_info[9] = {0x3a5000,    0x200, 0x101FB000},
 
 		.bar2_len = 0x100000,
 		.bar2_dev_start = 0x0,
-		.bar2_part0_offset = 0x0,
-		.bar2_part0_len = 0x100000,
-		.bar2_part0_dev_start = 0x5ff00000,
+		.bar2_part_info[0] = {0x0, 0x100000, 0x5ff00000},
 
 		.bar4_len = 0x100000,
 		.bar4_dev_start = 0x60100000,
@@ -545,6 +421,7 @@ int bm1684_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE typ
 {
 	struct bm_bar_info *bar_info = &bmdi->cinfo.bar_info;
 	const struct bm_bar_info *bar_layout = NULL;
+	u16 index;
 
 	if (type == SETUP_BAR_DEV_LAYOUT) {
 		if (bmdi->cinfo.chip_id == 0x1684) {
@@ -563,42 +440,20 @@ int bm1684_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE typ
 	if (bar_layout->bar1_len == bar_info->bar1_len &&
 			bar_layout->bar2_len == bar_info->bar2_len) {
 		bar_info->bar0_dev_start = bar_layout->bar0_dev_start;
+
 		bar_info->bar1_dev_start = bar_layout->bar1_dev_start;
-		bar_info->bar1_part0_dev_start = bar_layout->bar1_part0_dev_start;
-		bar_info->bar1_part1_dev_start = bar_layout->bar1_part1_dev_start;
-		bar_info->bar1_part2_dev_start = bar_layout->bar1_part2_dev_start;
-		bar_info->bar1_part3_dev_start = bar_layout->bar1_part3_dev_start;
-		bar_info->bar1_part4_dev_start = bar_layout->bar1_part4_dev_start;
-		bar_info->bar1_part5_dev_start = bar_layout->bar1_part5_dev_start;
-		bar_info->bar1_part6_dev_start = bar_layout->bar1_part6_dev_start;
-		bar_info->bar1_part7_dev_start = bar_layout->bar1_part7_dev_start;
-		bar_info->bar1_part8_dev_start = bar_layout->bar1_part8_dev_start;
-		bar_info->bar1_part9_dev_start = bar_layout->bar1_part9_dev_start;
-		bar_info->bar1_part0_offset = bar_layout->bar1_part0_offset;
-		bar_info->bar1_part1_offset = bar_layout->bar1_part1_offset;
-		bar_info->bar1_part2_offset = bar_layout->bar1_part2_offset;
-		bar_info->bar1_part3_offset = bar_layout->bar1_part3_offset;
-		bar_info->bar1_part4_offset = bar_layout->bar1_part4_offset;
-		bar_info->bar1_part5_offset = bar_layout->bar1_part5_offset;
-		bar_info->bar1_part6_offset = bar_layout->bar1_part6_offset;
-		bar_info->bar1_part7_offset = bar_layout->bar1_part7_offset;
-		bar_info->bar1_part8_offset = bar_layout->bar1_part8_offset;
-		bar_info->bar1_part9_offset = bar_layout->bar1_part9_offset;
-		bar_info->bar1_part0_len = bar_layout->bar1_part0_len;
-		bar_info->bar1_part1_len = bar_layout->bar1_part1_len;
-		bar_info->bar1_part2_len = bar_layout->bar1_part2_len;
-		bar_info->bar1_part3_len = bar_layout->bar1_part3_len;
-		bar_info->bar1_part4_len = bar_layout->bar1_part4_len;
-		bar_info->bar1_part5_len = bar_layout->bar1_part5_len;
-		bar_info->bar1_part6_len = bar_layout->bar1_part6_len;
-		bar_info->bar1_part7_len = bar_layout->bar1_part7_len;
-		bar_info->bar1_part8_len = bar_layout->bar1_part8_len;
-		bar_info->bar1_part9_len = bar_layout->bar1_part9_len;
+		for(index=0; index<PCIE_BAR1_PART_MAX; index++) {
+			bar_info->bar1_part_info[index].dev_start = bar_layout->bar1_part_info[index].dev_start;
+			bar_info->bar1_part_info[index].offset = bar_layout->bar1_part_info[index].offset;
+			bar_info->bar1_part_info[index].len = bar_layout->bar1_part_info[index].len;
+		}
 
 		bar_info->bar2_dev_start = bar_layout->bar2_dev_start;
-		bar_info->bar2_part0_dev_start = bar_layout->bar2_part0_dev_start;
-		bar_info->bar2_part0_offset = bar_layout->bar2_part0_offset;
-		bar_info->bar2_part0_len = bar_layout->bar2_part0_len;
+		for(index=0; index<PCIE_BAR2_PART_MAX; index++) {
+			bar_info->bar2_part_info[index].dev_start = bar_layout->bar2_part_info[index].dev_start;
+			bar_info->bar2_part_info[index].offset = bar_layout->bar2_part_info[index].offset;
+			bar_info->bar2_part_info[index].len = bar_layout->bar2_part_info[index].len;
+		}
 
 		bar_info->bar4_dev_start = bar_layout->bar4_dev_start;
 		bar_info->bar4_len = bar_layout->bar4_len;

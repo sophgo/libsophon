@@ -383,7 +383,11 @@ static int jpu_map_to_register(struct file *filp, struct vm_area_struct *vm, int
 	unsigned long pfn;
 	struct bm_device_info *bmdi = (struct bm_device_info *)filp->private_data;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+	vm_flags_set(vm, VM_IO | VM_RESERVED);
+#else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#endif
 	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 	pfn = bmdi->jpudrvctx.jpu_register[core_idx].phys_addr >> PAGE_SHIFT;
 

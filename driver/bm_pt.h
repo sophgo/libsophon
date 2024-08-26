@@ -9,13 +9,13 @@ typedef unsigned int       u32;
 typedef unsigned long long u64;
 typedef u64                dma_addr_t;
 
-#define TOP_MISC_GP_REG14_STS_OFFSET 0x0b8
-#define TOP_MISC_GP_REG14_SET_OFFSET 0x190
-#define TOP_MISC_GP_REG14_CLR_OFFSET 0x194
+#define TOP_MISC_GP_REG30_STS_OFFSET 0xF8
+#define TOP_MISC_GP_REG30_SET_OFFSET 0xF8
+#define TOP_MISC_GP_REG30_CLR_OFFSET 0x78
 
-#define TOP_MISC_GP_REG15_STS_OFFSET 0x0bc
-#define TOP_MISC_GP_REG15_SET_OFFSET 0x198
-#define TOP_MISC_GP_REG15_CLR_OFFSET 0x19c
+#define TOP_MISC_GP_REG31_STS_OFFSET 0xFC
+#define TOP_MISC_GP_REG31_SET_OFFSET 0xFC
+#define TOP_MISC_GP_REG31_CLR_OFFSET 0x7C
 
 struct host_queue {
     u64                    phy;

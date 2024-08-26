@@ -108,11 +108,9 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	cdma_xfer_info.cdma_xfer_status = 0;
 	nv_cdma_send_us = bm1688_timer_get_time_us(bmdi);
 
-
 	if (bmdi->cinfo.platform == PALLADIUM)
 		timeout_ms *= PALLADIUM_CLK_RATIO;
 
-	timeout_ms *= PALLADIUM_CLK_RATIO;
 	if (file) {
 		if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 			pr_err("bmdrv: file list is not found!\n");
@@ -185,9 +183,9 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	if (parg->dir != CHIP2CHIP) {
 		if (!parg->use_iommu) {
 			if (parg->dir == CHIP2HOST)
-				dst |= (u64)0x800 << 32;
+				dst |= (u64)bmdi->cinfo.ob_base << 32;
 			else
-				src |= (u64)0x800 << 32;
+				src |= (u64)bmdi->cinfo.ob_base << 32;
 		}
 	}
 #endif
@@ -195,7 +193,7 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	src_addr_lo = src & 0xffffffff;
 	dst_addr_hi = dst >> 32;
 	dst_addr_lo = dst & 0xffffffff;
-	// printk("src:0x%llx dst:0x%llx size:%lld\n", src, dst, parg->size);
+	// pr_info("src:0x%llx dst:0x%llx size:%lld\n", src, dst, parg->size);
 	PR_TRACE("src_addr_hi 0x%x src_addr_low 0x%x\n", src_addr_hi, src_addr_lo);
 	PR_TRACE("dst_addr_hi 0x%x dst_addr_low 0x%x\n", dst_addr_hi, dst_addr_lo);
 
@@ -241,7 +239,7 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 			nv_cdma_start_us, nv_cdma_end_us, parg->size, cdma_max_payload);
 
 		if (ret_wait) {
-			PR_TRACE("End : wait cdma done\n");
+			PR_TRACE("End: wait cdma done\n");
 		} else {
 			pr_info("bmsophon%d, wait cdma timeout, src:0x%llx dst:0x%llx size:0x%llx dir:%d\n", bmdi->dev_index, src, dst, parg->size, parg->dir);
 			if (lock_cdma)
@@ -423,7 +421,7 @@ int bm1688_dual_cdma_init(struct bm_device_info* bmdi)
 	bmdrv_submodule_request_irq(bmdi, BM1688_CDMA1_IRQ_ID, bm1688_cdma1_irq_handler);
 #endif
 
-	printk("dual cdma device initialized\n");
+	pr_info("dual cdma device initialized\n");
 	return 0;
 }
 
@@ -440,7 +438,7 @@ int bm1688_dual_cdma_remove(struct bm_device_info* bmdi)
 	unregister_chrdev(CDMA_DUAL_MAJOR, CDMA_DUAL_NAME);
 #endif
 	// request_irq
-	printk("dual cdma device removed\n");
+	pr_info("dual cdma device removed\n");
 	return 0;
 }
 
@@ -487,9 +485,9 @@ static void cdma_setting_apply(struct bm_device_info* bmdi, pbm_cdma_arg parg, u
 	if (parg->dir != CHIP2CHIP) {
 		if (!parg->use_iommu) {
 			if (parg->dir == CHIP2HOST)
-				dst |= (u64)0x800 << 32;
+				dst |= (u64)bmdi->cinfo.ob_base << 32;
 			else
-				src |= (u64)0x800 << 32;
+				src |= (u64)bmdi->cinfo.ob_base << 32;
 		}
 	}
 #endif

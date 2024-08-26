@@ -21,7 +21,7 @@ static inline uint32_t get_bits_from_value(uint32_t value, uint32_t msb, uint32_
 	return ((value & GEN_MASK(msb, lsb)) >> lsb);
 }
 
-#define FIELD_SET modified_bits_by_value
-#define FIELD_GET get_bits_from_value
+#define BM_FIELD_SET modified_bits_by_value
+#define BM_FIELD_GET get_bits_from_value
 
 #endif /* __BITWISE_OPS_H__ */

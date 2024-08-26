@@ -43,7 +43,6 @@
 #include "bm1684/bm1684_ce.h"
 #include "bm1688/bm1688_irq.h"
 #include "bm1688/bm1688_card.h"
-#include "bm1688/bm1688_msgfifo.h"
 #include "bm1688/ddr/ddr.h"
 #include "bm_card.h"
 #include "bm_napi.h"
@@ -189,14 +188,15 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 {
 	struct chip_info *cinfo = &bmdi->cinfo;
 	u32 device_id = 0;
-	u16 device_id_u16 = 0;
+	u16 dev_id = 0;
 	u16 subdev_id = 0;
 
-	pci_read_config_word(pdev, PCI_DEVICE_ID, &device_id_u16);
+	pci_read_config_word(pdev, PCI_DEVICE_ID, &dev_id);
 	pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &subdev_id);
-	device_id = device_id_u16;
 	if(subdev_id == 0xa200)
 		device_id = 0x1686a200;
+	else
+		device_id = (u32)dev_id;
 
 	switch (device_id) {
 	case 0x1682:
@@ -317,7 +317,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->bmdrv_stop_arm9 = bm1688_stop_c906;
 
 		cinfo->bm_reg = &bm_reg_bm1688;
-		cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
+		//cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
 		cinfo->chip_type = "bm1688";
 #ifdef PLATFORM_PALLADIUM
 		cinfo->platform = PALLADIUM;
@@ -333,8 +333,8 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->bmdrv_get_irq_status =  bm1688_get_irq_status;
 		cinfo->bmdrv_unmaskall_intc_irq = bm1688_unmaskall_intc_irq;
 		cinfo->bmdrv_clear_cdmairq = bm1688_clear_cdmairq;
-		cinfo->bmdrv_clear_msgirq_by_core = bm1688_clear_msgirq;
-		cinfo->bmdrv_pending_msgirq_cnt = bm1688_pending_msgirq_cnt;
+		//cinfo->bmdrv_clear_msgirq = bm1684_clear_msgirq;
+		//cinfo->bmdrv_pending_msgirq_cnt = bm1684_pending_msgirq_cnt;
 		cinfo->bmdrv_config_iatu_for_function_x = bm1688_config_iatu_for_function_x;
 
 		//cinfo->dev_info.chip_temp_reg = 0x00;
@@ -543,19 +543,18 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		}
 		break;
 	case 0x1686a200:
-		if (a2_ddr_init(bmdi)) {
-			pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
-			return -1;
-		}
-		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
-			vpp_init(bmdi);
-			bm_vpu_init(bmdi);
-			bmdrv_jpu_init(bmdi);
-			spacc_init(bmdi);
-			mutex_init(&bmdi->efuse_mutex);
-		}
-		gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
-		// bmdrv_clk_set_tpu_divider_fpll(bmdi, 4);
+		//if (a2_ddr_init(bmdi)) {
+		//	pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
+		//	return -1;
+		//}
+		// if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+		// 	vpp_init(bmdi);
+		// 	bm_vpu_init(bmdi);
+		// 	bmdrv_jpu_init(bmdi);
+		// 	spacc_init(bmdi);
+		// 	mutex_init(&bmdi->efuse_mutex);
+		// }
+		//gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
 		break;
 	default:
 		return -EINVAL;
@@ -795,7 +794,7 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	bmdi->status_reset = A53_RESET_STATUS_TRUE;
 	bmdrv_set_a53_boot_args(bmdi);
 
-	bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0Xdeadbeef);
+	bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_RESET_REG, 0Xdeadbeef);
 	msleep(1000);
 
 	bmdrv_set_a53_boot_args(bmdi);
@@ -844,7 +843,7 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 		bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
 	}
 
-	bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
+	bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_RESET_REG, 0);
 
 	return ret;
 }
@@ -1158,11 +1157,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_irq;
 	}
 
-	rc = bmdrv_fw_load(bmdi, NULL, NULL);
-	if (rc) {
-		pr_err("bmdrv: firmware load failed!\n");
-		goto err_enable_attr;
-	}
+	//rc = bmdrv_fw_load(bmdi, NULL, NULL);
+	//if (rc) {
+	//	pr_err("bmdrv: firmware load failed!\n");
+	//	goto err_enable_attr;
+	//}
 
 	bmdrv_smbus_set_default_value(pdev, bmdi);
 
@@ -1215,11 +1214,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_card_init;
 	}
 
-	// rc = bmdrv_proc_file_init(bmdi);
-	// if (rc) {
-	// 	dev_err(&pdev->dev, "bmdrv_proc_file_init failed!\n");
-	// 	goto err_proc_file_init;
-	// }
+	rc = bmdrv_proc_file_init(bmdi);
+	if (rc) {
+		dev_err(&pdev->dev, "bmdrv_proc_file_init failed!\n");
+		goto err_proc_file_init;
+	}
 
 	bmdev_register_device(bmdi);
 
@@ -1235,8 +1234,8 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	return 0;
 
 err_card_init:
-	// bmdrv_proc_file_deinit(bmdi);
-// err_proc_file_init:
+	bmdrv_proc_file_deinit(bmdi);
+err_proc_file_init:
 //	bm_monitor_thread_deinit(bmdi);
 //err_monitor_thread_init:
 	// bmdrv_ctrl_del_dev(bmci, bmdi);
@@ -1295,7 +1294,7 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	// bmdrv_record_boot_loader_version(bmdi);
 	bmdev_unregister_device(bmdi);
 	bmdrv_card_deinit(bmdi);
-	// bmdrv_proc_file_deinit(bmdi);
+	bmdrv_proc_file_deinit(bmdi);
 
 #ifdef USE_RUNTIME_PM
 	pm_runtime_get_sync(cinfo->device); // FIXME
@@ -1391,10 +1390,7 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 }
 
 static struct pci_device_id bmdrv_devices_tbl[] = {
-	{PCI_DEVICE(BITMAIN_VENDOR_ID, BM1682_DEVICE_ID)},
-	{PCI_DEVICE(SYNOPSYS_VENDOR_ID, BM1682_DEVICE_ID)},
-	{PCI_DEVICE(BITMAIN_VENDOR_ID, BM1684_DEVICE_ID)},
-	{PCI_DEVICE(SOPHGO_VENDOR_ID, BM1684X_DEVICE_ID)},
+	{PCI_DEVICE_SUB(SOPHGO_VENDOR_ID, 0x1686, PCI_ANY_ID, 0xA200)},
 	{0, 0, 0, 0, 0, 0, 0}
 };
 

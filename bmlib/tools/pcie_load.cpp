@@ -92,9 +92,8 @@ int main(int argc, char *argv[])
 	struct timeval timediff;
 
 	if (argc != 4) {
-		printf("Usage: ./pcie_download file_name dst_address check_enable\n");
-		printf("eg: ./pcie_download fip.bin 0x110000000 1\n");
-		printf("eg: ./pcie_download ramroot.itb 0x110080000 0\n");
+		printf("Usage: ./pcie_load file_name dst_address check_enable\n");
+		printf("eg: ./pcie_load ramroot.itb 0x104000000 0\n");
 		goto err;
 	}
 	dst_addr = strtoll(argv[2], NULL, 16);
@@ -185,7 +184,7 @@ int main(int argc, char *argv[])
 	}
 
 	cmp_ret = array_cmp_int(sys_in_buffer, sys_out_buffer, transfer_size, "pcie_download");
-	printf("cdma transfer test %s.\n", cmp_ret ? "Failed" : "Success");
+	printf("pcie_load transfer %s.\n", cmp_ret ? "Failed" : "Success");
 
 finish:
 	bm_dev_free(handle);

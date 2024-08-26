@@ -27,7 +27,6 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     #include <io.h>
     EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
-#include "rbtree.h"
 
 #define BMLIB_MEMORY_LOG_TAG "bmlib_memory"
 #define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
@@ -2327,7 +2326,7 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
   bm_mem_s2d.host_addr = (u64)src;
 #endif
   bm_mem_s2d.device_addr = bm_mem_get_device_addr(dst);
-  bm_mem_s2d.u.size = bm_mem_get_size(dst);
+  bm_mem_s2d.size = bm_mem_get_size(dst);
   bm_mem_s2d.dir = HOST2CHIP;
   bm_mem_s2d.type = TRANS_1D;
   bm_mem_s2d.src_device_addr = 0;
@@ -2340,7 +2339,7 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
   if (res != 0)
 	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-  bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
+  bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
 #endif
 }
@@ -2429,10 +2428,10 @@ bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
 #endif
     bm_mem_s2d.device_addr = sg_mem_get_device_addr(dst) + i * trans_size;
     if(size > trans_size) {
-      bm_mem_s2d.u.size = trans_size;
+      bm_mem_s2d.size = trans_size;
       size -= trans_size;
     } else {
-      bm_mem_s2d.u.size = size;
+      bm_mem_s2d.size = size;
       tran_over = 1;
     }
 
@@ -2445,7 +2444,7 @@ bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
     ptr_to_u64.ptr = (void *)((u64)src + i * trans_size);
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-    bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
+    bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
     if (0 != res){
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
@@ -2491,10 +2490,10 @@ bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void 
 #endif
     bm_mem_s2d.device_addr = bm_mem_get_device_addr_u64(dst) + i * trans_size;
     if(size > trans_size) {
-      bm_mem_s2d.u.size = trans_size;
+      bm_mem_s2d.size = trans_size;
       size -= trans_size;
     } else {
-      bm_mem_s2d.u.size = size;
+      bm_mem_s2d.size = size;
       tran_over = 1;
     }
 
@@ -2506,7 +2505,7 @@ bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void 
     ptr_to_u64.ptr = (void *)((u64)src + i * trans_size);
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-    bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
+    bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
     if (0 != res) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
@@ -2546,7 +2545,7 @@ bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
     bm_mem_s2d.host_addr = (u64)src;
 #endif
     bm_mem_s2d.device_addr     = bm_mem_get_device_addr(dst);
-    bm_mem_s2d.u.size            = bm_mem_get_size(dst);
+    bm_mem_s2d.size            = bm_mem_get_size(dst);
     bm_mem_s2d.dir             = HOST2CHIP;
     bm_mem_s2d.type            = TRANS_1D;
     bm_mem_s2d.src_device_addr = 0;
@@ -2565,7 +2564,7 @@ bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
     bm_profile_record_memcpy_end(handle,
                                  ptr_to_u64.val,
                                  bm_mem_s2d.device_addr,
-                                 bm_mem_s2d.u.size,
+                                 bm_mem_s2d.size,
                                  bm_mem_s2d.dir);
     return (0 != res) ? BM_ERR_FAILURE : BM_SUCCESS;
 #endif
@@ -2608,10 +2607,10 @@ bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
 #endif
       bm_mem_s2d.device_addr     = sg_mem_get_device_addr(dst) + i * trans_size;
       if(size > trans_size) {
-        bm_mem_s2d.u.size = trans_size;
+        bm_mem_s2d.size = trans_size;
         size -= trans_size;
       } else {
-        bm_mem_s2d.u.size = size;
+        bm_mem_s2d.size = size;
         tran_over = 1;
       }
       bm_mem_s2d.dir             = HOST2CHIP;
@@ -2632,7 +2631,7 @@ bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
       bm_profile_record_memcpy_end(handle,
                                   ptr_to_u64.val,
                                   bm_mem_s2d.device_addr,
-                                  bm_mem_s2d.u.size,
+                                  bm_mem_s2d.size,
                                   bm_mem_s2d.dir);
       if (0 != res)
         return BM_ERR_FAILURE;
@@ -2678,10 +2677,10 @@ bm_status_t bm_memcpy_s2d_poll_u64(bm_handle_t     handle,
 #endif
       bm_mem_s2d.device_addr     = bm_mem_get_device_addr_u64(dst) + i * trans_size;
       if(size > trans_size) {
-        bm_mem_s2d.u.size = trans_size;
+        bm_mem_s2d.size = trans_size;
         size -= trans_size;
       } else {
-        bm_mem_s2d.u.size = size;
+        bm_mem_s2d.size = size;
         tran_over = 1;
       }
       bm_mem_s2d.dir             = HOST2CHIP;
@@ -2701,7 +2700,7 @@ bm_status_t bm_memcpy_s2d_poll_u64(bm_handle_t     handle,
       bm_profile_record_memcpy_end(handle,
                                   ptr_to_u64.val,
                                   bm_mem_s2d.device_addr,
-                                  bm_mem_s2d.u.size,
+                                  bm_mem_s2d.size,
                                   bm_mem_s2d.dir);
       if (0 != res)
         return BM_ERR_FAILURE;
@@ -2811,7 +2810,7 @@ bm_status_t bm_memcpy_d2s_normal(bm_handle_t handle, void *dst, bm_device_mem_t 
 #endif
 
   bm_mem_d2s.device_addr = bm_mem_get_device_addr(src);
-  bm_mem_d2s.u.size = bm_mem_get_size(src);
+  bm_mem_d2s.size = bm_mem_get_size(src);
   bm_mem_d2s.dir = CHIP2HOST;
   bm_mem_d2s.type = TRANS_1D;
   bm_mem_d2s.src_device_addr = 0;
@@ -2824,7 +2823,7 @@ bm_status_t bm_memcpy_d2s_normal(bm_handle_t handle, void *dst, bm_device_mem_t 
   if (res != 0)
 	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-  bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
+  bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
   if(0 != res) return BM_ERR_FAILURE;
 #else
   UNUSED(handle);
@@ -2858,10 +2857,10 @@ bm_status_t sg_memcpy_d2s_normal(bm_handle_t handle, void *dst, sg_device_mem_t 
 
     bm_mem_d2s.device_addr = sg_mem_get_device_addr(src) + i * trans_size;
     if (size > trans_size) {
-      bm_mem_d2s.u.size = trans_size;
+      bm_mem_d2s.size = trans_size;
       size -= trans_size;
     } else {
-      bm_mem_d2s.u.size = size;
+      bm_mem_d2s.size = size;
       tran_over = 1;
     }
 
@@ -2877,7 +2876,7 @@ bm_status_t sg_memcpy_d2s_normal(bm_handle_t handle, void *dst, sg_device_mem_t 
 	if (res != 0)
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-    bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
+    bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
     if(0 != res) return BM_ERR_FAILURE;
   }
 #else
@@ -2912,10 +2911,10 @@ bm_status_t bm_memcpy_d2s_normal_u64(bm_handle_t handle, void *dst, bm_device_me
 
     bm_mem_d2s.device_addr = bm_mem_get_device_addr_u64(src) + i * trans_size;
     if (size > trans_size) {
-      bm_mem_d2s.u.size = trans_size;
+      bm_mem_d2s.size = trans_size;
       size -= trans_size;
     } else {
-      bm_mem_d2s.u.size = size;
+      bm_mem_d2s.size = size;
       tran_over = 1;
     }
 
@@ -2930,7 +2929,7 @@ bm_status_t bm_memcpy_d2s_normal_u64(bm_handle_t handle, void *dst, bm_device_me
 	if (res != 0)
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-    bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
+    bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
     if(0 != res) return BM_ERR_FAILURE;
   }
 #else
@@ -3302,7 +3301,7 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
 #endif
 
         bm_mem_d2s.device_addr     = bm_mem_get_device_addr(src);
-        bm_mem_d2s.u.size            = bm_mem_get_size(src);
+        bm_mem_d2s.size            = bm_mem_get_size(src);
         bm_mem_d2s.dir             = CHIP2HOST;
         bm_mem_d2s.type            = TRANS_1D;
         bm_mem_d2s.src_device_addr = 0;
@@ -3321,7 +3320,7 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
         bm_profile_record_memcpy_end(handle,
                                      bm_mem_d2s.device_addr,
                                      ptr_to_u64.val,
-                                     bm_mem_d2s.u.size,
+                                     bm_mem_d2s.size,
                                      bm_mem_d2s.dir);
         if (0 != res)
             return BM_ERR_FAILURE;
@@ -3385,10 +3384,10 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
 
           bm_mem_d2s.device_addr     = sg_mem_get_device_addr(src) + i * trans_size;
           if (size > trans_size) {
-            bm_mem_d2s.u.size = trans_size;
+            bm_mem_d2s.size = trans_size;
             size -= trans_size;
           } else {
-            bm_mem_d2s.u.size = size;
+            bm_mem_d2s.size = size;
             tran_over = 1;
           }
 
@@ -3410,7 +3409,7 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
           bm_profile_record_memcpy_end(handle,
                                       bm_mem_d2s.device_addr,
                                       ptr_to_u64.val,
-                                      bm_mem_d2s.u.size,
+                                      bm_mem_d2s.size,
                                       bm_mem_d2s.dir);
           if (0 != res)
               return BM_ERR_FAILURE;
@@ -3474,10 +3473,10 @@ bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
 
           bm_mem_d2s.device_addr     = bm_mem_get_device_addr_u64(src) + i * trans_size;
           if (size > trans_size) {
-            bm_mem_d2s.u.size = trans_size;
+            bm_mem_d2s.size = trans_size;
             size -= trans_size;
           } else {
-            bm_mem_d2s.u.size = size;
+            bm_mem_d2s.size = size;
             tran_over = 1;
           }
 
@@ -3498,7 +3497,7 @@ bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
           bm_profile_record_memcpy_end(handle,
                                       bm_mem_d2s.device_addr,
                                       ptr_to_u64.val,
-                                      bm_mem_d2s.u.size,
+                                      bm_mem_d2s.size,
                                       bm_mem_d2s.dir);
           if (0 != res)
               return BM_ERR_FAILURE;
@@ -3560,6 +3559,8 @@ bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mo
   bm_status_t ret = BM_SUCCESS;
   int tmp = 0;
   tpu_kernel_function_t f_id;
+
+  pthread_t tid = pthread_self();
 
   if(!value) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "input NULL pointer = %d\n");
@@ -3804,17 +3805,6 @@ bm_status_t bm_calculate_cdma_addr(bm_handle_t src_handle,
 	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           	"dst get misc info failed, ioclt ret = %d:%d\n", ret, __LINE__);
 
-  if (src_info.chipid == 0x1686a200) {
-    if ((src_info.domain_bdf & 0x7) == 0x1)
-      *src |= 0x1000ULL << 32;
-    if ((dst_info.domain_bdf & 0x7) == 0x1)
-      *dst |= 0x1000ULL << 32;
-
-    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_INFO,
-          "src addr = 0x%llx, dst addr = 0x%llx \n", *src, *dst);
-    return BM_SUCCESS;
-  }
-
   if ((src_info.domain_bdf & ~0x7) != (dst_info.domain_bdf & ~0x7)) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG,
         BMLIB_LOG_ERROR,
@@ -3888,7 +3878,7 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
   #endif
   bm_mem_c2c.device_addr = dst_addr;
   bm_mem_c2c.src_device_addr = src_addr;
-  bm_mem_c2c.u.size = size;
+  bm_mem_c2c.size = size;
   bm_mem_c2c.dir = CHIP2CHIP;
   bm_mem_c2c.type = TRANS_1D;
   bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
@@ -3912,7 +3902,7 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
 #endif
 }
 
-bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src, struct stride_cfg* stride) {
+bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src, struct stride_cfg stride) {
 #ifdef USING_CMODEL
   return BM_NOT_SUPPORTED;
 #else
@@ -3939,13 +3929,13 @@ bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *
   bm_mem_s2d.host_addr = (u64)src;
 #endif
   bm_mem_s2d.device_addr = bm_mem_get_device_addr(dst);
-  bm_mem_s2d.u.stride.width = stride->width;
-  bm_mem_s2d.u.stride.height = stride->height;
-  bm_mem_s2d.u.stride.src_width = stride->src_width;
-  bm_mem_s2d.u.stride.dst_width = stride->dst_width;
-  bm_mem_s2d.u.stride.format = stride->format;
-  bm_mem_s2d.u.stride.flush = stride->flush;
-  bm_mem_s2d.u.stride.fixed_data = stride->fixed_data;
+  bm_mem_s2d.width = stride.width;
+  bm_mem_s2d.height = stride.height;
+  bm_mem_s2d.src_width = stride.src_width;
+  bm_mem_s2d.dst_width = stride.dst_width;
+  bm_mem_s2d.format = stride.format;
+  bm_mem_s2d.flush = stride.flush;
+  bm_mem_s2d.fixed_data = stride.fixed_data;
   bm_mem_s2d.dir = HOST2CHIP;
   bm_mem_s2d.type = TRANS_2D;
   bm_mem_s2d.src_device_addr = 0;
@@ -3958,12 +3948,12 @@ bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *
   if (res != 0)
 	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           	"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-  bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
+  bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
 #endif
 }
 
-bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src, struct stride_cfg* stride) {
+bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src, struct stride_cfg stride) {
 #ifdef USING_CMODEL
   return BM_NOT_SUPPORTED;
 #else
@@ -3995,13 +3985,13 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 #endif
 
 	bm_mem_d2s.device_addr = bm_mem_get_device_addr(src);
-	bm_mem_d2s.u.stride.width = stride->width;
-	bm_mem_d2s.u.stride.height = stride->height;
-	bm_mem_d2s.u.stride.src_width = stride->src_width;
-	bm_mem_d2s.u.stride.dst_width = stride->dst_width;
-	bm_mem_d2s.u.stride.format = stride->format;
-	bm_mem_d2s.u.stride.flush = stride->flush;
-	bm_mem_d2s.u.stride.fixed_data = stride->fixed_data;
+	bm_mem_d2s.width = stride.width;
+	bm_mem_d2s.height = stride.height;
+	bm_mem_d2s.src_width = stride.src_width;
+	bm_mem_d2s.dst_width = stride.dst_width;
+	bm_mem_d2s.format = stride.format;
+	bm_mem_d2s.flush = stride.flush;
+	bm_mem_d2s.fixed_data = stride.fixed_data;
 	bm_mem_d2s.dir = CHIP2HOST;
 	bm_mem_d2s.type = TRANS_2D;
 	bm_mem_d2s.src_device_addr = 0;
@@ -4014,7 +4004,7 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 	if (res != 0)
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
           		"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-	bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
+	bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.size, bm_mem_d2s.dir);
 	if(0 != res) return BM_ERR_FAILURE;
   } else {
     //TODO SoC mode
@@ -4025,8 +4015,8 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 
 bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
                           bm_device_mem_t src, bm_device_mem_t dst,
-                          struct stride_cfg* stride, bool force_use_dst_cdma) {
-  int ret;
+                          struct stride_cfg stride, bool force_use_dst_cdma) {
+	int ret;
 #ifdef USING_CMODEL
   UNUSED(src_handle);
   UNUSED(dst_handle);
@@ -4058,13 +4048,13 @@ bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
   #endif
   bm_mem_c2c.device_addr = dst_addr;
   bm_mem_c2c.src_device_addr = src_addr;
-  bm_mem_c2c.u.stride.width = stride->width;
-  bm_mem_c2c.u.stride.height = stride->height;
-  bm_mem_c2c.u.stride.src_width = stride->src_width;
-  bm_mem_c2c.u.stride.dst_width = stride->dst_width;
-  bm_mem_c2c.u.stride.format = stride->format;
-  bm_mem_c2c.u.stride.flush = stride->flush;
-  bm_mem_c2c.u.stride.fixed_data = stride->fixed_data;
+  bm_mem_c2c.width = stride.width;
+  bm_mem_c2c.height = stride.height;
+  bm_mem_c2c.src_width = stride.src_width;
+  bm_mem_c2c.dst_width = stride.dst_width;
+  bm_mem_c2c.format = stride.format;
+  bm_mem_c2c.flush = stride.flush;
+  bm_mem_c2c.fixed_data = stride.fixed_data;
   bm_mem_c2c.dir = CHIP2CHIP;
   bm_mem_c2c.type = TRANS_2D;
   bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
@@ -4210,155 +4200,4 @@ bm_status_t bm_mem_convert_system_to_device_coeff_byte(
         bm_memcpy_s2d(handle, *dev_mem, bm_mem_get_system_addr(sys_mem)));
   }
   return BM_SUCCESS;
-}
-
-/*
- *兼容1684x
- */
-static bm_status_t buffer_add(bm_handle_t handle,
-          struct bm_mem_paddr *buffer)
-{
-  struct rb_node **p = &(handle->root.rb_node);
-  struct rb_node *parent = NULL;
-  struct bm_mem_paddr *entry;
-  long long result;
-
-  while (*p) {
-    entry = container_of(*p, struct bm_mem_paddr, node);
-    result = buffer->paddr - entry->paddr;
-    parent = *p;
-    if (result < 0)
-      p = &((*p)->rb_left);
-    else if (result > 0)
-      p = &((*p)->rb_right);
-    else
-    return BM_ERR_FAILURE;
-  }
-
-  rb_link_node(&buffer->node, parent, p);
-  rb_insert_color(&buffer->node, &handle->root);
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
-                                  int heap_id, unsigned long long size) {
-  int ret;
-  bm_device_mem_u64_t *dev_buffer;
-  struct bm_mem_paddr *bm_mem;
-
-  bm_mem = (struct bm_mem_paddr *)malloc(sizeof(struct bm_mem_paddr));
-  dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
-
-  ret = bm_malloc_device_byte_heap_u64(handle, dev_buffer, heap_id, size);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  *paddr = bm_mem_get_device_addr_u64(*dev_buffer);
-  bm_mem->paddr = *paddr;
-  bm_mem->dev_buffer = dev_buffer;
-
-  pthread_mutex_lock(&handle->mem_mutex);
-  ret = buffer_add(handle, bm_mem);
-  pthread_mutex_unlock(&handle->mem_mutex);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
-                                  int heap_id_mask, unsigned long long size) {
-  int ret;
-  bm_device_mem_u64_t *dev_buffer;
-  struct bm_mem_paddr *bm_mem;
-
-  bm_mem = (struct bm_mem_paddr *)malloc(sizeof(struct bm_mem_paddr));
-  dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
-
-  ret = bm_malloc_device_byte_heap_mask_u64(handle, dev_buffer, heap_id_mask, size);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  *paddr = bm_mem_get_device_addr_u64(*dev_buffer);
-  bm_mem->paddr = *paddr;
-  bm_mem->dev_buffer = dev_buffer;
-
-  pthread_mutex_lock(&handle->mem_mutex);
-  ret = buffer_add(handle, bm_mem);
-  pthread_mutex_unlock(&handle->mem_mutex);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_memcpy_s2d_gather(bm_handle_t handle, bm_device_mem_t dst, int argc, ...)
-{
-  bm_status_t ret;
-  va_list args;
-  void *vaddr;
-  u64 len;
-  u32 total = dst.size;
-  u64 sum = 0;
-
-  va_start(args, argc);
-  for (int i = 0; i < argc; i+=2) {
-      vaddr = va_arg(args, void *);
-      len = va_arg(args, unsigned long long);
-      sum += len;
-      if (sum > total) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s sum: %u, total: %lu\n", __func__, sum, total);
-      }
-      dst.size = len;
-      ret = bm_memcpy_s2d(handle, dst, vaddr);
-      if (ret != BM_SUCCESS) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s failed, dst address: %lu, len: %llu\n", __func__, dst.u.device.device_addr, dst.size);
-      }
-      dst.u.device.device_addr += len;
-  }
-  va_end(args);
-
-  return ret;
-}
-
-bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int argc, ...)
-{
-  bm_status_t ret;
-  va_list args;
-  void *vaddr;
-  u64 len;
-  u32 total = src.size;
-  u64 sum = 0;
-
-  va_start(args, argc);
-  for (int i = 0; i < argc; i+=2) {
-      vaddr = va_arg(args, void *);
-      len = va_arg(args, unsigned long long);
-      sum += len;
-      if (sum > total) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s sum: %u, total: %lu\n", __func__, sum, total);
-      }
-      src.size = len;
-      ret = bm_memcpy_d2s(handle, vaddr, src);
-      if (ret != BM_SUCCESS) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s failed, src address: %lu, len: %llu\n", __func__, src.u.device.device_addr, src.size);
-      }
-      src.u.device.device_addr += len;
-  }
-  va_end(args);
-
-  return ret;
 }

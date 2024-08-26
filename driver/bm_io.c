@@ -1,5 +1,6 @@
 #include "bm_common.h"
 #include "bm_io.h"
+#include "bm1688/bm1688_pcie.h"
 
 #ifdef SOC_MODE
 void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
@@ -30,6 +31,7 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 		void __iomem **bar_vaddr, u32 *offset)
 {
+	u16 index;
 	/* Choose bar the address belongs to, and compute the offset on bar */
 	if (address >= pbar_info->bar4_dev_start &&
 			address < pbar_info->bar4_dev_start + pbar_info->bar4_len) {
@@ -47,86 +49,38 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 			address < pbar_info->bar1_dev_start + pbar_info->bar1_len) {
 		*bar_vaddr = pbar_info->bar1_vaddr;
 		*offset = address - pbar_info->bar1_dev_start;
-	} else if (address >= pbar_info->bar1_part17_dev_start &&
-			address < pbar_info->bar1_part17_dev_start + pbar_info->bar1_part17_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part17_dev_start + pbar_info->bar1_part17_offset;
-	} else if (address >= pbar_info->bar1_part16_dev_start &&
-			address < pbar_info->bar1_part16_dev_start + pbar_info->bar1_part16_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part16_dev_start + pbar_info->bar1_part16_offset;
-	} else if (address >= pbar_info->bar1_part15_dev_start &&
-			address < pbar_info->bar1_part15_dev_start + pbar_info->bar1_part15_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part15_dev_start + pbar_info->bar1_part15_offset;
-	} else if (address >= pbar_info->bar1_part14_dev_start &&
-			address < pbar_info->bar1_part14_dev_start + pbar_info->bar1_part14_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part14_dev_start + pbar_info->bar1_part14_offset;
-	} else if (address >= pbar_info->bar1_part13_dev_start &&
-			address < pbar_info->bar1_part13_dev_start + pbar_info->bar1_part13_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part13_dev_start + pbar_info->bar1_part13_offset;
-	} else if (address >= pbar_info->bar1_part12_dev_start &&
-			address < pbar_info->bar1_part12_dev_start + pbar_info->bar1_part12_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part12_dev_start + pbar_info->bar1_part12_offset;
-	} else if (address >= pbar_info->bar1_part11_dev_start &&
-			address < pbar_info->bar1_part11_dev_start + pbar_info->bar1_part11_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part11_dev_start + pbar_info->bar1_part11_offset;
-	} else if (address >= pbar_info->bar1_part10_dev_start &&
-			address < pbar_info->bar1_part10_dev_start + pbar_info->bar1_part10_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part10_dev_start + pbar_info->bar1_part10_offset;
-	} else if (address >= pbar_info->bar1_part9_dev_start &&
-			address < pbar_info->bar1_part9_dev_start + pbar_info->bar1_part9_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part9_dev_start + pbar_info->bar1_part9_offset;
-	} else if (address >= pbar_info->bar1_part8_dev_start &&
-			address < pbar_info->bar1_part8_dev_start + pbar_info->bar1_part8_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part8_dev_start + pbar_info->bar1_part8_offset;
-	} else if (address >= pbar_info->bar1_part7_dev_start &&
-			address < pbar_info->bar1_part7_dev_start + pbar_info->bar1_part7_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part7_dev_start + pbar_info->bar1_part7_offset;
-	} else if (address >= pbar_info->bar1_part6_dev_start &&
-			address < pbar_info->bar1_part6_dev_start + pbar_info->bar1_part6_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part6_dev_start + pbar_info->bar1_part6_offset;
-	} else if (address >= pbar_info->bar1_part5_dev_start &&
-			address < pbar_info->bar1_part5_dev_start + pbar_info->bar1_part5_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part5_dev_start + pbar_info->bar1_part5_offset;
-	} else if (address >= pbar_info->bar1_part4_dev_start &&
-			address < pbar_info->bar1_part4_dev_start + pbar_info->bar1_part4_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part4_dev_start + pbar_info->bar1_part4_offset;
-	} else if (address >= pbar_info->bar1_part3_dev_start &&
-			address < pbar_info->bar1_part3_dev_start + pbar_info->bar1_part3_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part3_dev_start + pbar_info->bar1_part3_offset;
-	} else if (address >= pbar_info->bar1_part0_dev_start &&
-			address < pbar_info->bar1_part0_dev_start + pbar_info->bar1_part0_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part0_dev_start + pbar_info->bar1_part0_offset;
-	} else if (address >= pbar_info->bar1_part1_dev_start &&
-			address < pbar_info->bar1_part1_dev_start + pbar_info->bar1_part1_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part1_dev_start + pbar_info->bar1_part1_offset;
-	} else if (address >= pbar_info->bar1_part2_dev_start &&
-			address < pbar_info->bar1_part2_dev_start + pbar_info->bar1_part2_len) {
-		*bar_vaddr = pbar_info->bar1_vaddr;
-		*offset = address - pbar_info->bar1_part2_dev_start + pbar_info->bar1_part2_offset;
 	} else {
-		pr_err("%s invalid address address = 0x%x\n", __func__, address);
+		for(index=0; index<PCIE_BAR1_PART_MAX; index++) {
+			u64 start = pbar_info->bar1_part_info[index].dev_start;
+			u64 end = pbar_info->bar1_part_info[index].dev_start +  pbar_info->bar1_part_info[index].len;
+			if(address >= start && address < end) {
+				*bar_vaddr = pbar_info->bar1_vaddr;
+				*offset = address - start + pbar_info->bar1_part_info[index].offset;
+				break;//return;
+			}
+		}
+		for(index=0; index<PCIE_BAR2_PART_MAX; index++) {
+			u64 start = pbar_info->bar2_part_info[index].dev_start;
+			u64 end = pbar_info->bar2_part_info[index].dev_start +  pbar_info->bar2_part_info[index].len;
+			if(address >= start && address < end) {
+				*bar_vaddr = pbar_info->bar2_vaddr;
+				*offset = address - start + pbar_info->bar2_part_info[index].offset;
+				break;//return;
+			}
+		}
 	}
-	//	pr_info("bar addr = 0x%p, offset = 0x%x, address 0x%x\n", *bar_vaddr, *offset, address);
+	if (!bar_vaddr) {
+		pr_err("%s invalid address value = 0x%x\n", __func__, address);
+		bm1688_pci_slider_bar4_config_device_addr(pbar_info, address);
+		*bar_vaddr = pbar_info->bar4_vaddr;
+		*offset = address & 0xfffff;
+	}
+	//pr_info("bar addr = 0x%p, offset = 0x%x, address 0x%x\n", *bar_vaddr, *offset, address);
 }
 
 void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base)
 {
+	u16 index;
 	/* Choose bar the address belongs to, and compute the offset on bar */
 	if (address >= pbar_info->bar2_dev_start &&
 			address < pbar_info->bar2_dev_start + pbar_info->bar2_len) {
@@ -134,31 +88,20 @@ void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base)
 	} else if (address >= pbar_info->bar0_dev_start &&
 			address < pbar_info->bar0_dev_start + pbar_info->bar0_len) {
 		*base = pbar_info->bar0_start;
-	} else if (address >= pbar_info->bar1_dev_start &&
-			address < pbar_info->bar1_dev_start + pbar_info->bar1_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part6_dev_start &&
-			address < pbar_info->bar1_part6_dev_start + pbar_info->bar1_part6_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part5_dev_start &&
-			address < pbar_info->bar1_part5_dev_start + pbar_info->bar1_part5_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part4_dev_start &&
-			address < pbar_info->bar1_part4_dev_start + pbar_info->bar1_part4_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part3_dev_start &&
-			address < pbar_info->bar1_part3_dev_start + pbar_info->bar1_part3_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part0_dev_start &&
-			address < pbar_info->bar1_part0_dev_start + pbar_info->bar1_part0_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part1_dev_start &&
-			address < pbar_info->bar1_part1_dev_start + pbar_info->bar1_part1_len) {
-		*base = pbar_info->bar1_start;
-	} else if (address >= pbar_info->bar1_part2_dev_start &&
-			address < pbar_info->bar1_part2_dev_start + pbar_info->bar1_part2_len) {
-		*base = pbar_info->bar1_start;
+	} else if (address >= pbar_info->bar4_dev_start &&
+			address < pbar_info->bar4_dev_start + pbar_info->bar4_len) {
+		*base = pbar_info->bar4_start;
 	} else {
+		for(index=0; index<PCIE_BAR1_PART_MAX; index++) {
+			u64 start = pbar_info->bar1_part_info[index].dev_start;
+			u64 end = pbar_info->bar1_part_info[index].dev_start +  pbar_info->bar1_part_info[index].len;
+			if(address >= start && address < end) {
+				*base = pbar_info->bar1_start ;
+				break;
+			}
+		}
+	}
+	if (!base) {
 		pr_err("%s pcie mode invalid address\n", __func__);
 	}
 }
@@ -181,7 +124,11 @@ u32 bm_read32(struct bm_device_info *bmdi, u32 address)
 	struct bm_bar_info *pbar_info = &bmdi->cinfo.bar_info;
 
 	bm_get_bar_offset(pbar_info, address, &bar_vaddr, &offset);
-	return ioread32(bar_vaddr + offset);
+	if (bar_vaddr) {
+		return ioread32(bar_vaddr + offset);
+	} else {
+		return -1;
+	}
 }
 
 u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data)
@@ -191,8 +138,12 @@ u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data)
 	struct bm_bar_info *pbar_info = &bmdi->cinfo.bar_info;
 
 	bm_get_bar_offset(pbar_info, address, &bar_vaddr, &offset);
-	iowrite32(data, bar_vaddr + offset);
-	return 0;
+	if (bar_vaddr) {
+		iowrite32(data, bar_vaddr + offset);
+		return 0;
+	} else {
+		return -1;
+	}
 }
 
 u8 bm_read8(struct bm_device_info *bmdi, u32 address)

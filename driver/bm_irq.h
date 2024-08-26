@@ -11,7 +11,7 @@ struct bm_device_info;
 #define CDMA_IRQ_ID	46
 #define VETH_IRQ_ID	50
 typedef void (*bmdrv_submodule_irq_handler)(struct bm_device_info *bmdi);
-extern bmdrv_submodule_irq_handler bmdrv_module_irq_handler[128];
+extern bmdrv_submodule_irq_handler bmdrv_module_irq_handler[192];
 void bmdrv_enable_irq(struct bm_device_info *bmdi, int irq_num);
 void bmdrv_disable_irq(struct bm_device_info *bmdi, int irq_num);
 void bmdrv_submodule_request_irq(struct bm_device_info *bmdi, int irq_num,

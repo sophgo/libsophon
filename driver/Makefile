@@ -75,9 +75,10 @@ endif
 ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684  -I$(src)/bm1688 \
 			 -I$(src)/bm1688/ddr \
 			 -I$(src)/bm1688/ddr/include \
-			 -I$(src)/bm1688/ddr/ddr_config/lp4_x16_4ch_pld \
-       -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
+			 -I$(src)/bm1688/ddr/ddr_config/lp4_x16_4ch_pld
+
 ifeq ($(SOC_MODE), 1)
+  ccflags-y += -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
   ccflags-y += -DSOC_MODE
   cflags-y += -DSOC_MODE
 endif

@@ -29,6 +29,7 @@ set(SRCS
   src/bmlib_profile.cpp
   src/linux/bmlib_ioctl.cpp
   src/bmlib_md5.cpp
+  src/rbtree.c
 )
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/debian-lib")

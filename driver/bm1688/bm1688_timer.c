@@ -2,6 +2,27 @@
 #include "bm_io.h"
 #include "bm1688_timer.h"
 
+#ifdef SOC_MODE
+#include <linux/time.h>
+uint32_t bm1688_timer_current_value(struct bm_device_info *bmdi)
+{
+#if 0 //open it when needed
+	struct timeval time_now = do_gettimeofday(&tstart);
+	return (uint32_t)(time_now.tv_sec * 1000000 + time_now.tv_usec);
+#endif
+	return 0;
+}
+uint32_t bm1688_timer_get_time_ms(struct bm_device_info *bmdi)
+{
+	return bm1688_timer_current_value(bmdi) / 1000;
+}
+uint32_t bm1688_timer_get_time_us(struct bm_device_info *bmdi)
+{
+	return bm1688_timer_current_value(bmdi);
+}
+int bm1688_timer_start(struct bm_device_info *bmdi){return 0;}
+void bm1688_timer_stop(struct bm_device_info *bmdi){ }
+#else
 uint32_t bm1688_timer_current_value(struct bm_device_info *bmdi)
 {
 	return nv_timer_reg_read(bmdi, 0x4);
@@ -31,3 +52,4 @@ void bm1688_timer_stop(struct bm_device_info *bmdi)
 	uint32_t val = nv_timer_reg_read(bmdi, 0x8);
 	nv_timer_reg_write(bmdi, 0x8, val & (~0x1));
 }
+#endif

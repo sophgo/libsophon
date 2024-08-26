@@ -262,7 +262,7 @@ void bm1688_bmdrv_clk_set_close(struct bm_device_info *bmdi)
 	bm1688_bmdev_clk_hwlock_unlock(bmdi);
 }
 
-int bm1688_bmdrv_1684_clk_get_tpu_freq(struct bm_device_info *bmdi)
+int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi)
 {
 	int prediv = 0;
 	int postdiv = 0;
@@ -364,7 +364,7 @@ int bm1688_bmdev_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned lo
 	int freq = 0;
 	int ret = 0;
 
-	freq = bm1688_bmdrv_1684_clk_get_tpu_freq(bmdi);
+	freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
 	ret = put_user(freq, (int __user *)arg);
 	return ret;
 }

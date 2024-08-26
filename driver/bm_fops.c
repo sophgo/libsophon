@@ -99,10 +99,10 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	file->private_data = bmdi;
 
 #ifndef SOC_MODE
-	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
-		bm_vpu_open(inode, file);
-		bm_jpu_open(inode, file);
-	}
+	//if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+	//	bm_vpu_open(inode, file);
+	//	bm_jpu_open(inode, file);
+	//}
 #endif
 
 #ifdef USE_RUNTIME_PM
@@ -142,16 +142,20 @@ static int bmdev_fasync(int fd, struct file *filp, int mode)
 static int bmdev_close(struct inode *inode, struct file *file)
 {
 	struct bm_device_info *bmdi = file->private_data;
-	struct bm_handle_info *h_info, *h_node;
+	struct bm_handle_info *h_info;
+#ifdef SOC_MODE
+	struct bm_handle_info *h_node;
 	int handle_num = 0;
 	//int core = 0;
 	//int core_num = bmdi->cinfo.tpu_core_num;
+#endif
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bmdrv: file list is not found!\n");
 		return -EINVAL;
 	}
 
+#ifdef SOC_MODE
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_for_each_entry(h_node, &bmdi->handle_list, list) {
 		if (h_node->open_pid == h_info->open_pid) {
@@ -160,18 +164,23 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	}
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	if (handle_num == 1)
-		bmdrv_api_clear_lib(bmdi, file);
+	if (handle_num == 1) {
+		if (h_info->open_pid != current->pid)
+			pr_warn("Going to clear lib,current pid is different from open pid, it may cause the library unloaded abnormally.\n");
 
-#ifndef SOC_MODE
-	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
-		bm_vpu_release(inode, file);
-		bm_jpu_release(inode, file);
+		bmdrv_api_clear_lib(bmdi, file);
 	}
-#endif
+
 	/* invalidate pending APIs in msgfifo */
 	//for (core = 0; core < core_num; core++)
 	//	bmdev_invalidate_pending_apis(bmdi, h_info, core);
+
+#else
+	//if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+	//	bm_vpu_release(inode, file);
+	//	bm_jpu_release(inode, file);
+	//}
+#endif
 
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	bmdrv_delete_thread_info(h_info);
@@ -307,6 +316,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				val |= 1;
 				top_reg_write(bmdi, 0x214, val);
 				break;
+			} else if (bmdi->cinfo.chip_id == 0x1686a200) {
+				val = top_reg_read(bmdi, 0xb0);
+				val |= 0x10;
+				top_reg_write(bmdi, 0xb0, val);
+				break;
 			}
 
 			if (bmdi->misc_info.a53_enable == 1) {
@@ -359,19 +373,32 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		} ip_mask;
 
 		ret = copy_from_user(&ip_mask, (void *)arg, sizeof(struct bm_veth_ip));
-		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, ip_mask.ip);
-		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, ip_mask.mask);
+		if (bmdi->cinfo.chip_id == 0x1686a200) {
+			u32 status = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG);
+			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_IPADDRESS_REG, ip_mask.ip);
+			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_MASK_REG, ip_mask.mask);
+			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG, status | 0x1);
+		} else {
+			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, ip_mask.ip);
+			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, ip_mask.mask);
+		}
 		break;
-	};
+	}
 
 	case BMDEV_SET_GATE:
 	{
 		u32 gate;
 
 		ret = copy_from_user(&gate, (void *)arg, sizeof(u32));
-		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, gate);
+		if (bmdi->cinfo.chip_id == 0x1686a200) {
+			u32 status = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG);
+			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_GATE_ADDRESS_REG, gate);
+			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG, status | 0x1);
+		} else {
+			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, gate);
+		}
 		break;
-	};
+	}
 
 	case BMDEV_GET_SMI_ATTR:
 	{
@@ -400,7 +427,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		else
 			gp_reg_write_enh(bmdi, GP_REG_ARM9_FW_MODE, mode);
 		break;
-	};
+	}
 
 	case BMDEV_GET_VETH_STATE:
 	{
@@ -409,9 +436,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			value = bm_read32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_A53_STATE_REG);
 		else if (bmdi->cinfo.chip_id == 0x1686)
 			value = bm_read32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_A53_STATE_REG);
+		else if (bmdi->cinfo.chip_id == 0x1686a200)
+			value = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_A53_STATE_REG);
 		ret = copy_to_user((unsigned int __user *)arg, &value, sizeof(value));
 		break;
-	};
+	}
 
 	case BMDEV_COMM_READ:
 	{
@@ -971,6 +1000,9 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			break;
 		case 0x1686:
 			snprintf(board_name, 25, "1684X-%s", board_type);
+			break;
+		case 0x1686a200:
+			snprintf(board_name, 25, "%s", base_get_chip_id(bmdi));
 			break;
 		}
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));

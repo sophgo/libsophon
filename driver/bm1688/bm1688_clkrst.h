@@ -42,7 +42,7 @@ void bm1688_bmdrv_clk_set_close(struct bm_device_info *bmdi);
 int bm1688_bmdrv_clk_get_tpu_divider(struct bm_device_info *bmdi);
 int bm1688_bmdev_clk_ioctl_set_tpu_divider(struct bm_device_info* bmdi, unsigned long arg);
 int bm1688_bmdev_clk_ioctl_set_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
-int bm1688_bmdrv_1684_clk_get_tpu_freq(struct bm_device_info *bmdi);
+int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi);
 int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target);
 int bm1688_bmdev_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
 int bm1688_bmdev_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigned long arg);

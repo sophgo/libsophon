@@ -1,5 +1,6 @@
 #include "bm_card.h"
 #include "bm1684_card.h"
+#include "bm1688_card.h"
 #include "bm_common.h"
 
 #ifndef SOC_MODE
@@ -18,6 +19,8 @@ int bm_card_get_chip_num(struct bm_device_info *bmdi)
 		return 1;
 	if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686))
 		return bm1684_card_get_chip_num(bmdi);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		return bm1688_card_get_chip_num(bmdi);
 	else
 		return 1;
 #endif
@@ -95,7 +98,10 @@ static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 	struct bm_card *bmcd = NULL;
 
 #ifndef SOC_MODE
-	bm1684_card_get_chip_index(bmdi);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		bm1688_card_get_chip_index(bmdi);
+	else
+		bm1684_card_get_chip_index(bmdi);
 #else
 	bmdi->cinfo.chip_index = 0x0;
 #endif
@@ -183,6 +189,10 @@ int bmdrv_card_init(struct bm_device_info *bmdi)
 		pr_err("add chip to card fail\n");
 		return ret;
 	}
+
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		return ret;
+
 
 	for (i = 0; i < 17; i++)
 		dev_info_write_byte(bmdi, bmdi->cinfo.dev_info.sn_reg + i, bmdi->bmcd->sn[i]);

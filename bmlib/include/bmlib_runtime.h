@@ -3209,11 +3209,69 @@ DECL_EXPORT bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctr
 
 bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
                           bm_device_mem_t src, bm_device_mem_t dst,
-                          struct stride_cfg stride, bool force_use_dst_cdma);
+                          struct stride_cfg *stride, bool force_use_dst_cdma);
 bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src,
-                          struct stride_cfg stride);
+                          struct stride_cfg *stride);
 bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src,
-                          struct stride_cfg stride);
+                          struct stride_cfg *stride);
+
+/**
+ * @name    bm_malloc_device_mem
+ * @brief   To malloc device memory in size of byte and output paddr
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out]  paddr  The result malloc device memory addr
+ * @param [in]  heap_id The heap where to allocate  0/1/2
+ * @param [in]  size    The number of bytes to allocate
+ * @retval  paddr
+ */
+DECL_EXPORT bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
+                                              int heap_id, unsigned long long size);
+
+/**
+ * @name    bm_malloc_device_mem_mask
+ * @brief   To malloc device memory in size of byte within the specified heaps and output paddr
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out]  paddr  The result malloc device memory addr
+ * @param [in]  heap_id_mask The mask which heaps allocate from. each bit indicate one heap
+ * @param [in]  size    The number of bytes to allocate
+ * @retval  paddr
+ */
+DECL_EXPORT bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
+                                              int heap_id_mask, unsigned long long size);
+
+/**
+ * @name    bm_memcpy_s2d_gather
+ * @brief   To copy data from system virtual memory to device memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] dst     The destination memory (device memory descriptor )
+ * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
+ * @param [in] ...     void *src and unsigned long long len
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_s2d_gather(bm_handle_t handle, bm_device_mem_t dst, int argc, ...);
+
+/**
+ * @name    bm_memcpy_d2s_scatter
+ * @brief   To copy data from  device memory to system virtual memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] src     The destination memory (device memory descriptor )
+ * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
+ * @param [in] ...     void *dst and unsigned long long len
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int argc, ...);
 #if defined(__cplusplus)
 }
 #endif

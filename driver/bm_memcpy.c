@@ -2,6 +2,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <asm/set_memory.h>
 #include <linux/uaccess.h>
 #include <linux/dma-mapping.h>
 #include "bm_common.h"
@@ -43,7 +44,6 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 		memcpy_info->bm_disable_smmu_transfer = bm1684_disable_smmu_transfer;
 		memcpy_info->bm_enable_smmu_transfer = bm1684_enable_smmu_transfer;
 		break;
-	//TODO:
 	case 0x1686a200:
 		memcpy_info->bm_cdma_transfer = bm1688_cdma_transfer;
 		memcpy_info->bm_dual_cdma_transfer = bm1688_dual_cdma_transfer;
@@ -655,7 +655,7 @@ struct bm_dual_cdma_memcpy_param {
 	struct bm_memcpy_param cdma_param[2];
 };
 
-void dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
+int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
 		struct bm_memcpy_param *memcpy_param, struct bm_cdma_arg *cdma_arg)
 {
 	u64 size = 0;
@@ -667,15 +667,20 @@ void dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem 
 			size = memcpy_param->src_width * memcpy_param->height;
 			size = memcpy_param->format == 2 ? (size * 2) : size;
 		}
-		bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		pr_info("dual_cdma_transfer_prepare: size=%llx\n", size);
+		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		if (ret) {
+			pr_err("bm-sophon%d dual_cdma_transfer_prepare fail\n", bmdi->dev_index);
+			return -1;
+		}
 		stagemem->size = size;
 		ret = copy_from_user(stagemem->v_addr, (void __user *)memcpy_param->host_addr, size);
 		if (ret) {
 			pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
-			return;
+			return -1;
 		}
 		bmdev_construct_2d_cdma_arg(cdma_arg, stagemem->p_addr,
-			       	memcpy_param->device_addr, memcpy_param, false);
+				memcpy_param->device_addr, memcpy_param, false);
 	} else if (memcpy_param->dir == CHIP2HOST) {
 		if (memcpy_param->type == 0) {
 			size = memcpy_param->size;
@@ -683,7 +688,12 @@ void dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem 
 			size = memcpy_param->dst_width * memcpy_param->height;
 			size = memcpy_param->format == 2 ? (size * 2) : size;
 		}
-		bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		pr_info("dual_cdma_transfer_prepare: size=%llx\n", size);
+		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		if (ret) {
+			pr_err("bm-sophon%d dual_cdma_transfer_prepare fail\n", bmdi->dev_index);
+			return -1;
+		}
 		stagemem->size = size;
 		bmdev_construct_2d_cdma_arg(cdma_arg, memcpy_param->device_addr,
 				stagemem->p_addr, memcpy_param, false);
@@ -691,7 +701,7 @@ void dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem 
 		bmdev_construct_2d_cdma_arg(cdma_arg, memcpy_param->src_device_addr,
 				memcpy_param->device_addr, memcpy_param, false);
 	}
-
+	return 0;
 }
 
 void dual_cdma_post_transfer(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
@@ -728,12 +738,18 @@ int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsig
 		return ret;
 	}
 	if (0 != dual_param.cdma_param[0].size) {
-		cdma0_arg_ptr = &cdma0_arg;
-		dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[0], &dual_param.cdma_param[0], &cdma0_arg);
+		pr_info("dual_cdma_transfer_prepare: size=%x\n", dual_param.cdma_param[0].size);
+		ret = dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[0], &dual_param.cdma_param[0], &cdma0_arg);
+		if(!ret) {
+			cdma0_arg_ptr = &cdma0_arg;
+		}
 	}
 	if (0 != dual_param.cdma_param[1].size) {
-		cdma1_arg_ptr = &cdma1_arg;
-		dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[1], &dual_param.cdma_param[1], &cdma1_arg);
+		pr_info("dual_cdma_transfer_prepare: size=%x\n", dual_param.cdma_param[1].size);
+		ret = dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[1], &dual_param.cdma_param[1], &cdma1_arg);
+		if(!ret) {
+			cdma1_arg_ptr = &cdma1_arg;
+		}
 	}
 
 	if (!(cdma0_arg_ptr || cdma1_arg_ptr)) {

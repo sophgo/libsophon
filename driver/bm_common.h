@@ -149,6 +149,8 @@ struct chip_info {
 	PLATFORM platform;
 	u32 delay_ms;
 	u32 polling_ms;
+	u32 ob_base;
+	u32 mode;
 	unsigned int chip_id;
 	int chip_index;
 	struct bootloader_version version;
