@@ -70,6 +70,11 @@ int bmdrv_api_init(struct bm_device_info *bmdi, u32 channel)
 		bmdi->lib_info = kzalloc(sizeof(struct bmcpu_lib), GFP_KERNEL);
 		INIT_LIST_HEAD(&(bmdi->lib_info->lib_list));
 		mutex_init(&(bmdi->lib_info->bmcpu_lib_mutex));
+#ifndef SOC_MODE
+		bmdi->process_info = kzalloc(sizeof(struct bmcpu_process), GFP_KERNEL);
+		INIT_LIST_HEAD(&(bmdi->process_info->process_list));
+		mutex_init(&(bmdi->process_info->bmcpu_process_mutex));
+#endif
 	}
 
 	return ret;
@@ -80,6 +85,10 @@ void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 channel)
 	struct bmcpu_lib *lib_temp, *lib_next;
 	struct bmcpu_lib *lib_info = bmdi->lib_info;
 	struct bmcpu_lib *lib_dyn_info = bmdi->lib_dyn_info;
+#ifndef SOC_MODE
+	struct bmcpu_process *process_temp, *process_next;
+	struct bmcpu_process *process_info = bmdi->process_info;
+#endif
 
 	if (BM_MSGFIFO_CHANNEL_XPU == channel) {
 		mutex_lock(&lib_dyn_info->bmcpu_lib_mutex);
@@ -97,6 +106,15 @@ void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 channel)
 		}
 		mutex_unlock(&lib_info->bmcpu_lib_mutex);
 		kfree(bmdi->lib_info);
+#ifndef SOC_MODE
+		mutex_lock(&process_info->bmcpu_process_mutex);
+		list_for_each_entry_safe(process_temp, process_next, &process_info->process_list, process_list) {
+			list_del(&process_temp->process_list);
+			kfree(process_temp);
+		}
+		mutex_unlock(&process_info->bmcpu_process_mutex);
+		kfree(bmdi->process_info);
+#endif
 	}
 
 	kfifo_free(&bmdi->api_info[channel].api_fifo);
@@ -406,6 +424,119 @@ int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *
 	return -1;
 }
 
+int bmdrv_send_api_close(struct bm_device_info *bmdi, struct file *file, u8 *process_handle)
+{
+	int ret = 0;
+	struct bm_thread_info *thd_info;
+	struct api_fifo_entry *api_entry;
+	struct api_list_entry *api_entry_list = NULL;
+	struct bm_api_info *apinfo;
+	pid_t api_pid;
+	bm_api_ext_t bm_api;
+	bm_kapi_header_t api_header;
+	bm_kapi_opt_header_t api_opt_header;
+	u32 fifo_empty_number;
+	struct bm_handle_info *h_info;
+	u64 local_send_api_seq;
+	u32 channel;
+
+	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
+		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
+		return -EINVAL;
+	}
+
+	bm_api.api_id = BM_API_ID_CLOSE_PROCESS;
+	bm_api.api_addr = process_handle;
+	bm_api.api_size = sizeof(bm_api_close_process_t);
+	bm_api.api_handle = 0;
+
+	channel = BM_MSGFIFO_CHANNEL_CPU;
+	apinfo = &bmdi->api_info[BM_MSGFIFO_CHANNEL_CPU];
+
+	mutex_lock(&apinfo->api_mutex);
+	api_pid = current->pid;
+	/* check if current pid already recorded */
+	thd_info = bmdrv_find_thread_info(h_info, api_pid);
+	if (!thd_info) {
+		thd_info = bmdrv_create_thread_info(h_info, api_pid);
+		if (!thd_info) {
+			mutex_unlock(&apinfo->api_mutex);
+			pr_err("%s bm-sophon%d bmdrv: bmdrv_create_thread_info failed!\n",
+				__func__, bmdi->dev_index);
+			return -ENOMEM;
+		}
+	}
+
+	fifo_empty_number = bm_api.api_size / sizeof(u32) + sizeof(bm_kapi_header_t) / sizeof(u32) + sizeof(bm_kapi_opt_header_t) / sizeof(u32);
+
+	api_entry_list = kmalloc(sizeof(struct api_list_entry), GFP_KERNEL);
+	if (!api_entry_list) {
+		mutex_unlock(&apinfo->api_mutex);
+		pr_err("%s bm-sophon%d bmdrv: kmalloc api_list_entry failed!\n",
+			__func__, bmdi->dev_index);
+		return -ENOMEM;
+	}
+	api_entry = &api_entry_list->api_entry;
+
+	/* update global api sequence number */
+	local_send_api_seq = atomic64_inc_return((atomic64_t *)&bmdi->bm_send_api_seq);
+	/* update handle api sequence number */
+	mutex_lock(&h_info->h_api_seq_mutex);
+	h_info->h_send_api_seq = local_send_api_seq;
+	mutex_unlock(&h_info->h_api_seq_mutex);
+	/* update last_api_seq of current thread */
+	/* may overflow */
+	thd_info->last_api_seq = local_send_api_seq;
+	thd_info->profile.sent_api_counter++;
+	bmdi->profile.sent_api_counter++;
+
+	api_header.api_id = bm_api.api_id;
+	api_header.api_size = bm_api.api_size / sizeof(u32);
+	api_header.api_handle = (u64)h_info->file;
+	api_header.api_seq = thd_info->last_api_seq;
+	api_header.duration = 0; /* not get from this area now */
+	api_header.result = 0;
+
+	/* insert api info to api fifo */
+	api_entry->thd_info = thd_info;
+	api_entry->h_info = h_info;
+	api_entry->thd_api_seq = thd_info->last_api_seq;
+	api_entry->dev_api_seq = 0;
+	api_entry->api_id = bm_api.api_id;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+	api_entry->sent_time_us = ktime_get_boottime_ns() / 1000;
+#else
+	api_entry->sent_time_us = ktime_get_boot_ns() / 1000;
+#endif
+	api_entry->global_api_seq = local_send_api_seq;
+	api_entry->api_done_flag = 0;
+	init_completion(&api_entry->api_done);
+
+	PR_TRACE("bmdrv: %d last_api_seq is %d\n", api_pid, thd_info->last_api_seq);
+
+	/* wait for available fifo space */
+	if (bmdev_wait_msgfifo(bmdi, fifo_empty_number, bmdi->cinfo.delay_ms, channel)) {
+		thd_info->last_api_seq--;
+		kfree(api_entry);
+		mutex_unlock(&apinfo->api_mutex);
+		pr_err("%s bm-sophon%d bmdrv: bmdev_wait_msgfifo timeout!\n",
+			__func__, bmdi->dev_index);
+		return -EBUSY;
+	}
+
+	mutex_lock(&apinfo->api_fifo_mutex);
+	list_add_tail(&(api_entry_list->api_list_node), &apinfo->api_list);
+	mutex_unlock(&apinfo->api_fifo_mutex);
+
+	api_opt_header.global_api_seq = local_send_api_seq;
+	api_opt_header.api_data = 0;
+	/* copy api data to fifo */
+	ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)&bm_api, &api_opt_header, channel, false);
+
+	mutex_unlock(&apinfo->api_mutex);
+	return ret;
+}
+
 int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg)
 {
 	int ret = 0;
@@ -593,6 +724,11 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	struct bm_handle_info *h_info;
 	u64 local_send_api_seq;
 	u32 channel;
+#ifdef PCIE_MODE_ENABLE_CPU
+	struct bmcpu_process *process_temp, *process_next;
+	u8 process_close_handle;
+	struct bmcpu_process *process_info = bmdi->process_info;
+#endif
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -659,6 +795,25 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			return ret;
 		}
 	}
+
+#ifdef PCIE_MODE_ENABLE_CPU
+	if (bm_api.api_id == BM_API_ID_CLOSE_PROCESS) {
+		ret = copy_from_user(&process_close_handle, bm_api.api_addr, sizeof(u8));
+		if (ret) {
+			pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+			return ret;
+		}
+		mutex_lock(&process_info->bmcpu_process_mutex);
+		list_for_each_entry_safe(process_temp, process_next, &process_info->process_list, process_list) {
+			if (process_temp->bmcpu_handle == process_close_handle) {
+				list_del(&process_temp->process_list);
+				kfree(process_temp);
+				break;
+			}
+		}
+		mutex_unlock(&process_info->bmcpu_process_mutex);
+	}
+#endif
 
 	mutex_lock(&apinfo->api_mutex);
 	api_pid = current->pid;
@@ -791,6 +946,10 @@ int bmdrv_query_api(struct bm_device_info *bmdi, struct file *file, unsigned lon
 	bm_api_data_t bm_api_data;
 	u32 channel;
 	u64 data;
+#ifdef PCIE_MODE_ENABLE_CPU
+	struct bmcpu_process *process_node;
+	struct bmcpu_process *process_info = bmdi->process_info;
+#endif
 
 	ret = copy_from_user(&bm_api_data, (bm_api_data_t __user *)arg, sizeof(bm_api_data_t));
 	if (ret) {
@@ -813,6 +972,16 @@ int bmdrv_query_api(struct bm_device_info *bmdi, struct file *file, unsigned lon
 	if (0 == ret)
 		put_user(data, (u64 __user *)&(((bm_api_data_t __user *)arg)->data));
 
+#ifdef PCIE_MODE_ENABLE_CPU
+	if (bm_api_data.api_id == BM_API_ID_OPEN_PROCESS) {
+		process_node = kzalloc(sizeof(struct bmcpu_process), GFP_KERNEL);
+		process_node->bmcpu_handle = data;
+		process_node->current_pid = current->pid;
+		mutex_lock(&process_info->bmcpu_process_mutex);
+		list_add_tail(&(process_node->process_list), &(process_info->process_list));
+		mutex_unlock(&process_info->bmcpu_process_mutex);
+	}
+#endif
 	return ret;
 }
 
@@ -1013,6 +1182,26 @@ int bmdrv_device_sync_api(struct bm_device_info *bmdi)
 		bmdev_dump_reg(bmdi, channel);
 		return -EBUSY;
 	}
+
+	return 0;
+}
+
+int bmdrv_set_sync_timeout(struct bm_device_info *bmdi, unsigned long arg)
+{
+	int ret, timeout;
+
+	ret = copy_from_user(&timeout, (int __user *)arg, sizeof(int));
+	if (ret) {
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+		return ret;
+	}
+
+	if (timeout < 0) {
+		pr_info("set sync timeout error!\n");
+		return -1;
+	}
+
+	bmdi->cinfo.delay_ms = timeout;
 
 	return 0;
 }

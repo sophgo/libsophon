@@ -76,6 +76,7 @@ add_custom_target(GEN_KERNEL_MODULE
     COMMAND cd ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 add_library(libbmrt SHARED ${SRCS})
 add_dependencies(libbmrt GEN_KERNEL_MODULE)
 target_include_directories(libbmrt PUBLIC ${CMAKE_BINARY_DIR})
@@ -98,5 +99,5 @@ file(COPY
 
 file(
     COPY ${CMAKE_CURRENT_SOURCE_DIR}/lib/libbm1684x_kernel_module.so
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/tpu_module
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/tpu_module
 )

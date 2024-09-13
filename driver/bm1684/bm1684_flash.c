@@ -102,7 +102,8 @@ int bm1684_get_bootload_version(struct bm_device_info *bmdi)
 		boot_load_spi_addr + i * SPI_BLOCK, SPI_BLOCK);
 	}
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB) ||
-	    (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO))
+	    (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150))
 		bm1684_cat_message(BLv_cat_bm1686, len, 4, (char *)stagemem_s2d->v_addr, bmdi->cinfo.boot_loader_version[0]);
 	else
 		bm1684_cat_message(BLv_cat, len, 4, (char *)stagemem_s2d->v_addr, bmdi->cinfo.boot_loader_version[0]);
@@ -111,7 +112,8 @@ int bm1684_get_bootload_version(struct bm_device_info *bmdi)
 	mutex_unlock(&memcpy_info->stagemem_s2d.stage_mutex);
 
 	if ((BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_BM1684X_EVB) &&
-	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO)) {
+	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO) &&
+		(BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150)) {
 		ret = bm1684_get_bootload_version_number(bmdi);
 		if (ret < 0) {
 			bmdi->cinfo.boot_loader_num = 0;

@@ -225,13 +225,27 @@ long bm_jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				if (ret)
 					ret = -EFAULT;
 			}
-		}
+                        if (signal_pending(current))
+                        {
+                                if (core_idx >= 0) {
+                                        dprintk("signal_pending down_interruptible ret=%d core_idx=%d \n",ret, core_idx);
+                                        break;
+                                } else {
+                                        dprintk("signal_pending down_interruptible->up ret=%d   core_idx=%d \n",ret, core_idx);
+                                        up(&bmdi->jpudrvctx.jpu_sem);
+                                        ret = -ERESTARTSYS;
+                                        break;
+                                }
+                        }
+                } else {
+                    if (signal_pending(current))
+                    {
+                        dprintk("signal_pending down_interruptible failed. ret=%d core_index=%d \n",ret, core_idx);
+                        ret = -ERESTARTSYS;
+                        break;
+                    }
+                }
 
-		if (signal_pending(current)) {
-			pr_err("down_interruptible ret=%d\n", ret);
-			ret = -ERESTARTSYS;
-			break;
-		}
 		break;
 	}
 
@@ -248,11 +262,11 @@ long bm_jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				if (jil->core_idx == core_idx && jil->filp == filp) {
 					jil->inuse = 0;
 					bmdi->jpudrvctx.s_jpu_usage_info.jpu_open_status[core_idx] = 0;
+					up(&bmdi->jpudrvctx.jpu_sem);
 					dprintk("[jpudrv]:core_idx=%d,filp=%p\n", core_idx, filp);
 					break;
 				}
 			}
-			up(&bmdi->jpudrvctx.jpu_sem);
 			mutex_unlock(&bmdi->jpudrvctx.jpu_core_lock);
 		}
 
@@ -369,6 +383,11 @@ long bm_jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 		dprintk("[jpudrv]:JDI_IOCTL_GET_MAX_NUM_JPU_CORE: max_num_jpu_core=%d\n", max_num_jpu_core);
 		break;
 	}
+	case JDI_IOCTL_RESET_ALL: {
+		jpu_cores_reset(bmdi);
+		dprintk("[jpudrv]:JDI_IOCTL_RESET_ALL\n");
+		break;
+	}
 	default:
 		pr_err("[jpudrv]:No such ioctl, cmd is %d\n", cmd);
 		ret = -EFAULT;
@@ -383,7 +402,11 @@ static int jpu_map_to_register(struct file *filp, struct vm_area_struct *vm, int
 	unsigned long pfn;
 	struct bm_device_info *bmdi = (struct bm_device_info *)filp->private_data;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)
+	vm_flags_set(vm, VM_IO | VM_RESERVED);
+#else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#endif
 	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 	pfn = bmdi->jpudrvctx.jpu_register[core_idx].phys_addr >> PAGE_SHIFT;
 

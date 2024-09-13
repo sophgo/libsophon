@@ -12,8 +12,8 @@
 bm_status_t bmcpu_pre_start(int dev_id) {
     bm_handle_t handle;
     bm_status_t ret;
-    char* dev = "/dev/bm-sophon";
-    char*       kernel_path = "/opt/sophon/libsophon-current/data";
+    const char* dev = "/dev/bm-sophon";
+    const char*       kernel_path = "/opt/sophon/libsophon-current/data";
     char fip_path[100];
     char ramdisk_path[100];
     char dev_path[30];
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     int    ret;
 
     if (argc != 2) {
-        printf("please input param just like: test_pre_start_one bm-sophon0\n");
+        printf("please input param just like: test_pre_start_one 0\n");
         return -1;
     }
 
@@ -71,11 +71,9 @@ int main(int argc, char* argv[]) {
     }
 
     rel_num = atoi(argv[1]);
-    printf("%s %d: input param is %s\n", __func__, __LINE__, argv[1]);
-    rel_num = atoi(argv[1]);
     ret = bmcpu_pre_start(rel_num);
     if (ret != BM_SUCCESS) {
-        printf("bm-sophon%d start a53 failed!\n");
+        printf("bm-sophon%d start a53 failed!\n", rel_num);
         return -1;
     }
 

@@ -25,6 +25,7 @@
 #define JDI_IOCTL_WRITE_VMEM                     _IO(JDI_IOCTL_MAGIC, 16)
 #define JDI_IOCTL_READ_VMEM                      _IO(JDI_IOCTL_MAGIC, 17)
 #define JDI_IOCTL_GET_MAX_NUM_JPU_CORE           _IO(JDI_IOCTL_MAGIC, 19)
+#define JDI_IOCTL_RESET_ALL                      _IO(JDI_IOCTL_MAGIC, 20)
 
 #define MAX_NUM_BOARD    128
 #define MAX_NUM_JPU_CORE 4

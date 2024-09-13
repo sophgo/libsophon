@@ -411,8 +411,11 @@ static int bm_setup_iommu_pages(struct iommu_ctrl *ctrl, struct bm_buffer_object
         return ret;
     }
 
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)
+     page_done = get_user_pages(bo->iommu.start_aligned, bo->nr_pages,
+                    bo->iommu.is_dst == 1 ? 1 : 0, // dst need write, src only need read
+                    bo->pages);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
     page_done = get_user_pages(bo->iommu.start_aligned, bo->nr_pages,
                     bo->iommu.is_dst == 1 ? 1 : 0, // dst need write, src only need read
                     bo->pages, NULL);

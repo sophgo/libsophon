@@ -40,6 +40,7 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	thd_info->profile.cdma_out_time = 0ULL;
 	thd_info->profile.cdma_out_counter = 0ULL;
 	thd_info->profile.tpu_process_time = 0ULL;
+	thd_info->profile.tpu1_process_time = 0ULL;
 	thd_info->profile.sent_api_counter = 0ULL;
 	thd_info->profile.completed_api_counter = 0ULL;
 

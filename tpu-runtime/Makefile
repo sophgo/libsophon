@@ -46,7 +46,7 @@ SRCS_CXX   += $(wildcard src/bmfunc/*.cpp)
 SRCS_CXX   += $(wildcard src/bmtap2/*.cpp)
 SRCS_CXX   += $(wildcard src/cpp/*.cpp)
 APP_C       = $(wildcard app/*.c)
-APP_CXX    += $(wildcard app/*.cpp)
+APP_CXX    += app/bmrt_test.cpp app/bmrt_test_case.cpp
 
 ########translate the *cpp path to *.o path under the obj path ################
 OBJS_C      = $(addprefix $(OBJ_DIR)/, $(notdir $(SRCS_C:.c=.o)))

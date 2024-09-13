@@ -1,10 +1,10 @@
 .. vim: syntax=rst
 
-Introduction of TPU Drive Sysfs File System
+Introduction of Tensor Computing Processor Drive Sysfs File System
 ------------------------------------------------
 
-The sysfs file system interface is used to obtain information such as the usage of TPU. 
-The table below lists the device information that can be obtained by TPU Drive Sysfs File System and the support information in PCIe and SOC modes:
+The sysfs file system interface is used to obtain information such as the usage of Tensor Computing Processor. 
+The table below lists the device information that can be obtained by Tensor Computing Processor Drive Sysfs File System and the support information in PCIe and SOC modes:
 
 .. list-table::
    :widths: 40 30 30
@@ -38,13 +38,13 @@ Meanings of Parameters
 
 The meaning of each part is introduced below.
 
--  npu_usage, the percentage of time TPU (NPU) is working over a period of time (window width)
+-  npu_usage, the percentage of time Tensor Computing Processor is working over a period of time (window width)
 
 -  npu_usage_enable, npu_usage_enable, whether to enable statistics on NPU usage, enabled by default.
 
 -  npu_usage_interval, the time window width of statistics on NPU usage (in ms). The default is 500ms and the value range is [200,2000].
 
-Specific use method of TPU Drive Sysfs File System interface
+Specific use method of Tensor Computing Processor Drive Sysfs File System interface
 -------------------------------------------------------------
 
 Examples are as follows:

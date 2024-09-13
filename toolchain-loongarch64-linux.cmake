@@ -8,7 +8,7 @@ set( CMAKE_SYSTEM_PROCESSOR     loongarch64 )
 
 # The toolchain prefix for all toolchain executables
 set( CROSS_COMPILE ${CROSS_COMPILE_PATH}/bin/loongarch64-linux-gnu- )
-set( ARCH lonngarch64 )
+set( ARCH loongarch64 )
 
 # specify the cross compiler. We force the compiler so that CMake doesn't
 # attempt to build a simple test program as this will fail without us using

@@ -492,7 +492,8 @@ int bm_spi_flash_program(struct bm_device_info *bmdi, u8 *src_buf, u32 base, u32
 	id = bm_spi_read_id(bmdi);
 	if (id == SPI_ID_M25P128)
 		sector_size = 256 * 1024;
-	else if (id == SPI_ID_N25Q128 || id == SPI_ID_GD25LQ128 || id == SPI_ID_XM25QU128C)
+	else if (id == SPI_ID_N25Q128 || id == SPI_ID_GD25LQ128 ||
+		id == SPI_ID_XM25QU128C || id == SPI_ID_W25Q128JWSIQ)
 		sector_size = 64 * 1024;
 	else {
 		dev_err(bmdi->cinfo.device, "unrecognized flash ID 0x%x\n", id);

@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <string.h>
 #include "bmlib_runtime.h"
 #include "bmruntime_interface.h"
 #include "bmruntime_legacy.h"
@@ -39,14 +40,24 @@ constexpr bool strings_equal(char const* a, char const* b)
 }
 
 typedef enum {
+    DEBUG   =-1,
     INFO    = 0,
     WARNING = 1,
     WRONG   = 2,
     FATAL   = 3,
 } BMRT_LogLevel;
 
+extern BMRT_LogLevel BMRT_LOG_LEVEL_THRESHOLD;
 
-extern int BMRT_LOG_LEVEL_THRESHOLD;
+#ifdef __cplusplus
+extern "C" {
+#endif
+BMRT_LogLevel bmrt_get_current_log_level();
+void bmrt_set_current_log_level(BMRT_LogLevel level);
+#ifdef __cplusplus
+}
+#endif
+
 #ifdef __linux__
 template<int level, typename ... ArgTypes>
 typename std::enable_if<level<FATAL , void>::type __bmrt_log(const char*fmt, ArgTypes ...args){
@@ -66,10 +77,20 @@ typename std::enable_if<level==FATAL , void>::type __bmrt_log(const char*fmt, Ar
 #define BMRT_LOG(severity, fmt, ...) \
    __bmrt_log<severity>("[BMRT][%s:%d] %s:" fmt "\n", __func__, __LINE__, #severity, ##__VA_ARGS__)
 
+#define BMRT_LOG_RUN(severity, code)          \
+  do                                          \
+  {                                           \
+    if (severity >= BMRT_LOG_LEVEL_THRESHOLD) \
+    {                                         \
+      code                                    \
+    }                                         \
+  } while (0)
+
 #else
 #include <stdarg.h>
 void bmrt_log_default_callback(int level, const char* fmt, va_list args);
 void BMRT_LOG(int level, const char* fmt, ...);
+#define BMRT_LOG_RUN(code)
 #endif
 
 using std::cout;
@@ -150,6 +171,8 @@ typedef enum {
   ENGINE_GDMA = 1,
   ENGINE_CDMA = 2,
   ENGINE_HDMA = 3,
+  ENGINE_HAU = 4,
+  ENGINE_SDMA = 5,
   ENGINE_END
 } ENGINE_ID;
 
@@ -239,6 +262,39 @@ inline u32 get_mem_index(const std::vector<u64> &ctx_borders, u64 ctx_start, u64
   return i;
 }
 
+template<typename T>
+std::string vector_to_string(const std::vector<T>& list, const std::string& prefix="[", const std::string& suffix="]", const std::string& sep=", "){
+  std::string result = prefix;
+  for(size_t i=0; i<list.size(); i++){
+    result += std::to_string(list[i]);
+    if(i != list.size()-1) {
+      result += sep;
+    }
+  }
+  result += suffix;
+  return result;
+}
+
+static inline const char* dtype_to_string(bm_data_type_t t){
+  #define DTYPE_CASE(T) case BM_##T: return #T
+  switch(t){
+    DTYPE_CASE(FLOAT32);
+    DTYPE_CASE(FLOAT16);
+    DTYPE_CASE(INT8);
+    DTYPE_CASE(UINT8);
+    DTYPE_CASE(INT16);
+    DTYPE_CASE(UINT16);
+    DTYPE_CASE(INT32);
+    DTYPE_CASE(UINT32);
+    DTYPE_CASE(BFLOAT16);
+    DTYPE_CASE(INT4);
+    DTYPE_CASE(UINT4);
+  }
+  return "";
+  #undef DTYPE_CASE
+}
+
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -252,7 +308,9 @@ extern int bm_get_devid(bm_handle_t handle);
 
 #if defined(__cplusplus)
 }
-
 #endif
+
+const char* _bmrt_version();
+const char* _libsophon_version();
 
 #endif

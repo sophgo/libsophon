@@ -145,6 +145,7 @@
 /* VPU COMMON MEMORY                                                    */
 /************************************************************************/
 #define COMMAND_QUEUE_DEPTH             4
+#define COMMAND_QUEUE_DEPTH_ENC         1
 
 #define ENC_SRC_BUF_NUM             (12+COMMAND_QUEUE_DEPTH)          //!< case of GOPsize = 8 (IBBBBBBBP), max src buffer num  = 12
 
@@ -155,6 +156,7 @@
 #define ONE_TASKBUF_SIZE_FOR_CQ     ONE_TASKBUF_SIZE_FOR_W5DEC_CQ
 
 #define SIZE_COMMON                 ((2*1024*1024) + (COMMAND_QUEUE_DEPTH*ONE_TASKBUF_SIZE_FOR_CQ))
+#define SIZE_COMMON_ENC             ((2*1024*1024) + (COMMAND_QUEUE_DEPTH_ENC*ONE_TASKBUF_SIZE_FOR_CQ))
 
 //=====4. VPU REPORT MEMORY  ======================//
 #define SIZE_REPORT_BUF                 (0x10000)

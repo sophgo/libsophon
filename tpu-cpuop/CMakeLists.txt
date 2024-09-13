@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.80)
+cmake_minimum_required(VERSION 3.6)
 project(tpu-cpuop)
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 include(old.cmake)

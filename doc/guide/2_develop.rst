@@ -1,7 +1,7 @@
 使用libsophon开发
 ------------------
 
-.. |ver| replace:: 0.4.9
+.. |ver| replace:: 0.5.1
 
 PCIE MODE
 ~~~~~~~~~~~~~~

@@ -5,6 +5,7 @@
 #ifndef SOC_MODE
 #include "bm_pcie.h"
 #include "bm_attr.h"
+#include "bm_memcpy.h"
 #endif
 
 static struct bm_card *g_bmcd[BM_MAX_CARD_NUM] = {NULL};
@@ -62,7 +63,12 @@ static int bm_update_sc5p_mcu_bmdi_to_card(struct bm_device_info *bmdi)
 {
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
 		if (bmdrv_sc5pro_uart_is_connect_mcu(bmdi) != 0x1)
 			return -1;
 		else {
@@ -80,6 +86,10 @@ static int bm_update_sc5p_mcu_bmdi_to_card(struct bm_device_info *bmdi)
 int bm_card_update_sn(struct bm_device_info *bmdi, char *sn)
 {
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		if (bmdi->cinfo.chip_index != 0)
 			return -1;
@@ -89,10 +99,26 @@ int bm_card_update_sn(struct bm_device_info *bmdi, char *sn)
 }
 #endif
 
+/*
+ * Purpose: calculate the chip index of the card to avoid FP150 using index list
+ * like {1,2,4,5,6,7}
+ * @chip_index	The dev index of this chip
+ * @start_index The dev index of the first probe chip in this card
+ * @chip_num	The number of chips in this card
+*/
+static int bm_get_chip_no(int chip_index, int start_index, int chip_num)
+{
+	return ((chip_index - start_index) % chip_num);
+}
+
 static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 {
 	int i = 0;
+	int chip_index = 0;
 	struct bm_card *bmcd = NULL;
+	struct rdrop_info ri;
+	ri.tpu_rdrop = 200;
+	ri.vddc_rdrop = 50;
 
 #ifndef SOC_MODE
 	bm1684_card_get_chip_index(bmdi);
@@ -115,9 +141,13 @@ static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 				g_bmcd[i] = bmcd;
 				g_bmcd[i]->card_index = i;
 				g_bmcd[i]->chip_num = bm_card_get_chip_num(bmdi);
+
+				chip_index = bm_get_chip_no(bmdi->dev_index,bmdi->dev_index,g_bmcd[i]->chip_num);
+				bmdi->cinfo.chip_no = chip_index;
 				g_bmcd[i]->dev_start_index = bmdi->dev_index;
-				g_bmcd[i]->card_bmdi[bmdi->cinfo.chip_index] = bmdi;
+				g_bmcd[i]->card_bmdi[chip_index] = bmdi;
 				g_bmcd[i]->first_probe_bmdi = bmdi;
+				g_bmcd[i]->rdrop = ri;
 				bmdi->bmcd = g_bmcd[i];
 				g_bmcd[i]->running_chip_num = 0x1;
 				g_bmcd[i]->cdma_max_payload = bmdi->memcpy_info.cdma_max_payload;
@@ -132,7 +162,9 @@ static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 		return -1;
 	} else {
 		bmdi->bmcd = bmcd;
-		bmcd->card_bmdi[bmdi->cinfo.chip_index] = bmdi;
+		chip_index = bm_get_chip_no(bmdi->dev_index,bmdi->bmcd->first_probe_bmdi->dev_index,bmdi->bmcd->chip_num);
+		bmdi->cinfo.chip_no = chip_index;
+		bmcd->card_bmdi[chip_index] = bmdi;
 		bmcd->running_chip_num++;
 		bmcd->cdma_max_payload = bmdi->memcpy_info.cdma_max_payload;
 #ifndef SOC_MODE
@@ -146,6 +178,7 @@ static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 static int bm_remove_chip_from_card(struct bm_device_info *bmdi)
 {
 	int index = 0x0;
+	int chip_index = 0;
 
 	if (bmdi->bmcd == NULL)
 		return 0;
@@ -154,7 +187,9 @@ static int bm_remove_chip_from_card(struct bm_device_info *bmdi)
 	if (g_bmcd[index] == NULL)
 		return 0;
 
-	g_bmcd[index]->card_bmdi[bmdi->cinfo.chip_index] = NULL;
+	chip_index = bm_get_chip_no(bmdi->dev_index,g_bmcd[index]->dev_start_index,g_bmcd[index]->chip_num);
+	pr_info("Card %d ,chip num = %d\n", index, chip_index);
+	g_bmcd[index]->card_bmdi[chip_index] = NULL;
 	g_bmcd[index]->running_chip_num--;
 	if (g_bmcd[index]->running_chip_num == 0x0) {
 		pr_info("free card %d\n", index);
@@ -186,6 +221,10 @@ int bmdrv_card_init(struct bm_device_info *bmdi)
 
 	for (i = 0; i < 17; i++)
 		dev_info_write_byte(bmdi, bmdi->cinfo.dev_info.sn_reg + i, bmdi->bmcd->sn[i]);
+
+#ifndef SOC_MODE
+	bmdev_test_p2p_available(bmdi);
+#endif
 
 	return ret;
 }

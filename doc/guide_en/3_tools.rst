@@ -19,7 +19,7 @@ Operation instructions for proc file system
 
    3_2_proc_description
 
-Operation Instructions for Tpu Drive Sysfs File System
+Operation Instructions for Tensor Computing Processor Drive Sysfs File System
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. toctree::

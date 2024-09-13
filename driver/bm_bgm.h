@@ -50,6 +50,26 @@ typedef struct bm_mem_desc {
 
 typedef struct bm_mem_desc   bm_device_mem_t;
 
+typedef struct bm_mem_desc_u64 {
+	union {
+		struct {
+			unsigned long device_addr;
+			unsigned int reserved0;
+			int dmabuf_fd;
+		} device;
+		struct {
+			void *system_addr;
+			unsigned int reserved;
+			int reserved1;
+		} system;
+	} u;
+
+	bm_mem_flags_t flags;
+	unsigned long long size;
+} bm_mem_desc_u64_t;
+
+typedef struct bm_mem_desc_u64 bm_device_mem_u64_t;
+
 enum ion_heap_type {
 	ION_HEAP_TYPE_SYSTEM,
 	ION_HEAP_TYPE_SYSTEM_CONTIG,

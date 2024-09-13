@@ -77,6 +77,7 @@
 #define SPI_ID_N25Q128          0x0018ba20
 #define SPI_ID_GD25LQ128        0x001860c8
 #define SPI_ID_XM25QU128C        0x00184120
+#define SPI_ID_W25Q128JWSIQ     0x001860ef
 
 struct bm_device_info;
 struct bm_boot_info;

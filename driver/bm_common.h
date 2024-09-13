@@ -35,6 +35,7 @@
 #endif
 
 //#define PR_DEBUG
+//#define FEATURE_DEBUG
 
 #define BM_CHIP_VERSION 	PROJECT_VER_MAJOR
 #define BM_MAJOR_VERSION	PROJECT_VER_MINOR
@@ -84,6 +85,10 @@
 #define UBOOT_VERSION_BASE		(BL31_VERSION_BASE + BL31_VERSION_SIZE) // 0x101fb2c0
 #define UBOOT_VERSION_SIZE		0x50
 
+// after kernel 5.17, PDE_DATA() has been deleted
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+    #define PDE_DATA pde_data
+#endif
 
 typedef enum {
 	DEVICE,
@@ -147,6 +152,7 @@ struct chip_info {
 	u32 polling_ms;
 	unsigned int chip_id;
 	int chip_index;
+	int chip_no;
 	struct bootloader_version version;
 #ifdef SOC_MODE
 	u32 irq_id_cdma;
@@ -220,6 +226,21 @@ struct bmdrv_exec_func
 	bm_get_func_t exec_func;
 };
 
+enum bm_rw_op {
+	BM_READ = 0,
+	BM_WRITE = 1,
+	BM_MALLOC = 2,
+	BM_FREE = 3,
+};
+
+struct bm_rw
+{
+	enum bm_rw_op op;
+	u64 paddr;
+	u32 value;
+	void *vaddr;
+};
+
 struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
@@ -273,6 +294,7 @@ struct bm_device_info {
 
 	struct proc_dir_entry *proc_dir;
 
+	struct bm_rw bm_rw_t;
 #ifndef SOC_MODE
 	vpp_drv_context_t vppdrvctx;
 	vpu_drv_context_t vpudrvctx;
@@ -288,6 +310,7 @@ struct bm_device_info {
 #ifdef PCIE_MODE_ENABLE_CPU
 	int status_bmcpu;
 	int status_reset;
+	struct bmcpu_process *process_info;
 #endif
 };
 

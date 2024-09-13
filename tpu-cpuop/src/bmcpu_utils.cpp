@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include "bmcpu_utils.hpp"
 namespace bmcpu {
 int using_thread_num(int N){

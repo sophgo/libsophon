@@ -77,7 +77,7 @@ static int ion_carveout_heap_allocate(struct ion_heap *heap,
 	paddr = ion_carveout_allocate(heap, size);
 	if (paddr == ION_CARVEOUT_ALLOCATE_FAIL) {
 		ret = -ENOMEM;
-		goto err_free;
+		goto err_free_table;
 	}
 
 //	sg_set_page(table->sgl, pfn_to_page(PFN_DOWN(paddr)), size, 0);
@@ -89,6 +89,8 @@ static int ion_carveout_heap_allocate(struct ion_heap *heap,
 
 	return 0;
 
+err_free_table:
+	sg_free_table(table);
 err_free:
 	kfree(table);
 	return ret;
@@ -366,7 +368,13 @@ static void ion_dma_buf_kunmap(struct dma_buf *dmabuf, unsigned long offset,
 			       void *ptr)
 {
 }
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+static int ion_dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map) {
+	return 0;
+}
+static void ion_dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map) {
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 static int ion_dma_buf_vmap(struct dma_buf *dmabuf, struct dma_buf_map *map) {
 	return 0;
 }
@@ -390,26 +398,24 @@ static const struct dma_buf_ops dma_buf_ops = {
 	.detach = ion_dma_buf_detatch,
 	.mmap = ion_mmap,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-	#if (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18,0)) && (CENTOS_KERNEL_FIX >= 240)
+	#if (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18,0)) && (CENTOS_KERNEL_FIX >= 147)
 	#else
 
-	#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 6,0))
-		.map = ion_dma_buf_kmap,
-		.unmap = ion_dma_buf_kunmap,
-		.vmap = ion_dma_buf_vmap,
-		.vunmap = ion_dma_buf_vunmap,
-	#else
-		.vmap = ion_dma_buf_vmap,
-		.vunmap = ion_dma_buf_vunmap,
-	#endif
-
-	#endif
-	#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0)) && (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0))
-		#if (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18,0)) && (CENTOS_KERNEL_FIX >= 147)
-		#else
-		.map_atomic = ion_dma_buf_kmap,
-		.unmap_atomic = ion_dma_buf_kunmap,
+		#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
+			.map_atomic = ion_dma_buf_kmap,
+			.unmap_atomic = ion_dma_buf_kunmap,
 		#endif
+
+		#if (LINUX_VERSION_CODE <= KERNEL_VERSION(5, 6,0) && LINUX_VERSION_CODE != KERNEL_VERSION(4, 19,0))
+			.map = ion_dma_buf_kmap,
+			.unmap = ion_dma_buf_kunmap,
+			.vmap = ion_dma_buf_vmap,
+			.vunmap = ion_dma_buf_vunmap,
+		#else
+			.vmap = ion_dma_buf_vmap,
+			.vunmap = ion_dma_buf_vunmap,
+		#endif
+
 	#endif
 #else
 	#if (LINUX_VERSION_CODE == KERNEL_VERSION(3, 10, 0)) && (CENTOS_KERNEL_FIX > 693)
