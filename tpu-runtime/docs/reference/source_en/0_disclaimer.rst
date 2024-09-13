@@ -9,11 +9,11 @@ Disclaimer
    :alt: SOPHGO LOGO
 
 | **Legal Disclaimer**
-| Copyright © SOPHGO 2022. All rights reserved.
+| Copyright © SOPHGO 2024. All rights reserved.
 | No part of this document may be reproduced or transmitted in any form or by any means without prior written consent of SOPHGO .
 
 | **Notice**
-| The purchased products, services and features are stipulated by the contract made between SOPHGO and the 
+| The purchased products, services and features are stipulated by the contract made between SOPHGO and the
    customer. All or part of the products, services and features described in this document may not be within the
    purchase scope or the usage scope. Unless otherwise specified in the contract, all statements, information,
    and recommendations in this document are provided "AS IS" without warranties, guarantees or
@@ -60,7 +60,7 @@ Disclaimer
    ---------- ------------- ------------------------------
    V2.6.0     2021.01.30    Revised and released Version V.2.6.0.
    ---------- ------------- ------------------------------
-   V2.7.0     2022.03.16    Released Version V2.7.0, patch version on May 31, 2022.
+   V2.7.0     2024.03.16    Released Version V2.7.0, patch version on May 31, 2024.
    ---------- ------------- ------------------------------
-   V3.0.0     2022.07.16    Released Version V3.0.0.
+   V3.0.0     2024.07.16    Released Version V3.0.0.
    ========== ============= ==============================

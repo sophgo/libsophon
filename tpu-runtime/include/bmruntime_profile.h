@@ -23,6 +23,10 @@
 #define ENV_DISABLE_BDC "BMRUNTIME_DISABLE_BDC_PERF"
 #define ENV_DISABLE_ARM "BMRUNTIME_DISABLE_ARM_PERF"
 
+#define PROFILE_ENGINE_MCU 0
+#define PROFILE_ENGINE_GDMA 1
+#define PROFILE_ENGINE_TIU 2
+
 namespace bmruntime {
 
 typedef enum {
@@ -47,7 +51,7 @@ typedef enum {
 typedef struct {
     PROFILE_MEM_TYPE_T type;
     u64 addr;
-    u32 size;
+    u64 size;
     u64 alloc_usec;
     u64 free_usec;
     string desc;
@@ -87,24 +91,14 @@ typedef struct {
     bm_device_mem_t mem;
 } buffer_pair;
 
+typedef pair < u64, u64> mem_pair_t;
+
 class BMProfile;
 class Bmruntime;
+class BMProfileDeviceBase;
 struct net_ctx_t;
 
 // struct net_ctx_t;
-class BMProfileDeviceBase {
-public:
-    BMProfileDeviceBase(BMProfile* profile):profile(profile) {}
-    virtual bool enabled() = 0;
-    virtual bool init() = 0;
-    virtual bool begin(net_ctx_t* net_ctx) = 0;
-    virtual bool end(net_ctx_t* net_ctx) = 0;
-    virtual void deinit() = 0;
-    virtual ~BMProfileDeviceBase(){}
-protected:
-    BMProfile* profile;
-};
-
 class BMProfile {
 public:
     BMProfile(Bmruntime* p_bmrt);
@@ -114,20 +108,26 @@ public:
                     set<int> iterations=set<int>(),
                     set<int> subnet_ids = set<int>(),
                     set<int> subnet_modes = set<int>());
-    void init(const std::string &net_name, const vector<u8> &data, const vector<u8> &stat);
+    void init(const std::string &net_name, const vector<u8> &data, const vector<u8> &stat, const std::vector<int>& core_list);
     void begin_subnet(net_ctx_t* net_ctx, int iteration, int subnet_id, int subnet_mode);
     void set_extra_data(u64 data);
     void end_subnet(net_ctx_t* net_ctx);
     void deinit();
     void print_note();
     bool is_enabled() { return enabled; }
-    void record_alloc_device_mem(const bm_device_mem_t& mem, const string& desc="");
-    void record_cpu_mem(const void* ptr, u32 len, const string& desc="");
-    void record_mem(PROFILE_MEM_TYPE_T mtype, u64 addr, u32 size, const string& desc="");
-    void record_free_device_mem(const bm_device_mem_t &mem);
+    void record_alloc_device_mem(const mem_pair_t &mem, const string& desc="");
 
-    profile_cmd_num_t* record_subnet_cmd_info(u64 gdma_addr, u64 gdma_offset, u64 bdc_addr, u64 bdc_offset, u32 group_num);
-    void record_cmd_data(ENGINE_ID engine, const void* cmd_ptr, u32 cmd_len, u64 store_addr);
+    void record_cpu_mem(const void* ptr, u32 len, const string& desc="");
+    void record_mem(PROFILE_MEM_TYPE_T mtype, u64 addr, u64 size, const string& desc="");
+    void record_free_device_mem(u64 mem_addr);
+
+    profile_cmd_num_t* record_subnet_cmd_info(int core, u64 gdma_addr, u64 gdma_offset, u64 bdc_addr, u64 bdc_offset, u32 group_num);
+    void record_cmd_data(int core, ENGINE_ID engine, const void* cmd_ptr, u32 cmd_len, u64 store_addr);
+
+    void set_core_list(const vector<int>& core_list);
+    const vector<int>& get_core_list() {
+        return this->core_list;
+    }
 
 private:
     profile_subnet_summary_t summary;
@@ -138,7 +138,6 @@ private:
     string get_save_dir() const;
     void set_save_dir(const string &value);
     string get_global_filename();
-
 
   public:
     bool need_profile(int iteration, int subnet_id, int subnet_mode);
@@ -152,11 +151,11 @@ private:
     void save_cmd_profile();
     int getenv_int(const char* name, int default_val = 0);
     bool getenv_bool(const char* name, bool default_val = false);
+    bm_handle_t get_handle() { return handle; }
 
-    bm_handle_t handle = nullptr;
 private:
     Bmruntime* p_bmrt = nullptr;
-    profile_cmd_info_t *cmd_info = nullptr;
+    std::vector<profile_cmd_info_t*> cmd_infos;
     int arch = -1;
     int devid = -1;
     bool enabled = false;
@@ -171,7 +170,43 @@ private:
 
     string save_dir = "bmprofile_data";
     vector<profile_mem_info_t> mem_info;
+    vector<int> core_list;
+    bm_handle_t handle = nullptr;
 };
+
+class BMProfileDeviceBase {
+public:
+    BMProfileDeviceBase(BMProfile* profile):profile(profile) {
+      enable = profile->getenv_bool(ENV_ENABLE_PROFILE);
+      if(enable){
+        gdma_record_len = profile->getenv_int(ENV_PROFILE_GDMA_SIZE, gdma_record_len);
+        bdc_record_len = profile->getenv_int(ENV_PROFILE_BDC_SIZE, bdc_record_len);
+        dyn_max_size = profile->getenv_int(ENV_PROFILE_ARM_SIZE, dyn_max_size);
+        enable_gdma = !profile->getenv_bool(ENV_DISABLE_GDMA) && gdma_record_len > 0;
+        enable_bdc = !profile->getenv_bool(ENV_DISABLE_BDC) && bdc_record_len > 0;
+        enable_arm = !profile->getenv_bool(ENV_DISABLE_ARM) && dyn_max_size > 0;
+        enable = enable_gdma || enable_arm || enable_bdc;
+      }
+      BMRT_LOG(INFO, "gdma=%d, tiu=%d, mcu=%d", enable_gdma, enable_bdc, enable_gdma);
+    }
+    virtual bool enabled() = 0;
+    virtual bool init() = 0;
+    virtual bool begin(net_ctx_t* net_ctx) = 0;
+    virtual bool end(net_ctx_t* net_ctx) = 0;
+    virtual void deinit() = 0;
+    virtual ~BMProfileDeviceBase(){}
+
+protected:
+    BMProfile* profile;
+    size_t gdma_record_len = 1024*1024;
+    size_t bdc_record_len = 1024*1024;
+    size_t dyn_max_size = 16*1024*1024;
+    bool enable_gdma = false;
+    bool enable_bdc = false;
+    bool enable_arm = false;
+    bool enable = false;
+};
+
 }
 
 #endif // BMRUNTIME_PROFILE_H

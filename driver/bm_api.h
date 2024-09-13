@@ -105,13 +105,26 @@ typedef struct bm_kapi_opt_header {
 	u64 api_data;
 } bm_kapi_opt_header_t;
 
+struct bmcpu_process {
+	u64 bmcpu_handle;
+	u32 current_pid;
+	struct mutex bmcpu_process_mutex;
+	struct list_head process_list;
+};
+
+typedef struct bm_api_close_process {
+    u64 process_handle;
+} bm_api_close_process_t;
+
 #define API_ENTRY_SIZE sizeof(struct api_fifo_entry)
 
 int bmdrv_api_init(struct bm_device_info *bmdi, u32 channel);
 void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 channel);
 int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg, bool flag);
+int bmdrv_send_api_close(struct bm_device_info *bmdi, struct file *file, u8 *process_handle);
 int bmdrv_query_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file);
+int bmdrv_set_sync_timeout(struct bm_device_info *bmdi, unsigned long arg);
 int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file);
 int bmdrv_device_sync_api(struct bm_device_info *bmdi);
 void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file);

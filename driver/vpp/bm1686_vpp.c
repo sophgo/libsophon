@@ -447,9 +447,9 @@ static int vpp_handle_setup(struct bm_device_info *bmdi, struct vpp_batch_n *bat
 
 	if (signal_pending(current)) {
 		ret |= VPP_ERESTARTSYS;
-		pr_err("signal_pending ret=%d,current->pid %d,current->tgid %d,vpp_idle_bit_map %ld, dev_index %d\n",
-		       ret, current->pid, current->tgid,
-		       bmdi->vppdrvctx.vpp_idle_bit_map, bmdi->dev_index);
+		// pr_err("signal_pending ret=%d,current->pid %d,current->tgid %d,vpp_idle_bit_map %ld, dev_index %d\n",
+		//        ret, current->pid, current->tgid,
+		//        bmdi->vppdrvctx.vpp_idle_bit_map, bmdi->dev_index);
 	}
 
 	return ret;

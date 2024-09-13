@@ -48,7 +48,8 @@
 
 /* bm_smi_attr defines all the attributes fetched from kernel;
  * it will be displayed by bm-smi and saved in files if needed.
- * this struct is also defined in driver/bm_uapi.h.*/
+ * this struct is also defined in driver/bm_uapi.h.
+ * The two definitions must be modified synchronously. */
 typedef struct bm_smi_attr {
   int dev_id;
   int chip_id;
@@ -81,7 +82,7 @@ typedef struct bm_smi_attr {
   int ecc_correct_num;
 
   char sn[18];
-  char board_type[6];
+  char board_type[10];
 
   /* vpu mem and instant info*/
   int vpu_instant_usage[MAX_NUM_VPU_CORE];

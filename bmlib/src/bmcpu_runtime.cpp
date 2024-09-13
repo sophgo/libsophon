@@ -131,7 +131,11 @@ bm_status_t bm_load_file(bm_handle_t      handle,
     }
 
     dev_mem_ptr->size = copy_size;
-    ret               = bm_memcpy_s2d_poll(handle, *dev_mem_ptr, file_buffer);
+    if (handle->cdma_iommu_mode == BMLIB_USER_SETUP_IOMMU) {
+        ret               = bm_smmu_s2d_poll(handle, *dev_mem_ptr, file_buffer);
+    } else {
+	ret               = bm_memcpy_s2d_poll(handle, *dev_mem_ptr, file_buffer);
+    }
     if (ret != BM_SUCCESS) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -144,7 +148,11 @@ bm_status_t bm_load_file(bm_handle_t      handle,
         free(file_buffer);
         return BM_ERR_FAILURE;
     }
-    ret = bm_memcpy_d2s_poll(handle, file_buffer_verify, *dev_mem_ptr, copy_size);
+    if (handle->cdma_iommu_mode == BMLIB_USER_SETUP_IOMMU) {
+        ret = bm_smmu_d2s_poll(handle, file_buffer_verify, *dev_mem_ptr, copy_size);
+    } else {
+	ret = bm_memcpy_d2s_poll(handle, file_buffer_verify, *dev_mem_ptr, copy_size);
+    }
     if (ret != BM_SUCCESS) {
         bmlib_log(
             BMCPU_RUNTIME_LOG_TAG,
@@ -859,21 +867,6 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
                   "bmcpu is not enable in misc info, %d\n", misc_info.a53_enable);
         return BM_ERR_FAILURE;
     }
-    ret = bm_send_api_ext(handle,
-                          BM_API_ID_START_CPU,
-                          (const u8 *)&api_start_cpu,
-                          sizeof(bm_api_start_cpu_t),
-                          &api_handle);
-    if (ret != BM_SUCCESS) {
-        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "start cpu send api error, ret %d\n",
-                  ret);
-        return BM_ERR_FAILURE;
-    }
-    ret = bm_query_api_data(handle, BM_API_ID_START_CPU, api_handle, &data, 3000);
-    if (ret == 0)
-        return BM_SUCCESS;
 
     bmcpu_set_arm9_fw_mode(handle, FW_MIX_MODE);
     dev_mem.u.device.device_addr = 0x10100000;
@@ -889,7 +882,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
     }
     dev_mem.u.device.device_addr = 0x310000000;
     dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
-    dev_mem.size                 = 0x10000000;
+    dev_mem.size                 = 0x18000000;
     ret = bm_load_file(handle, core_file, &dev_mem, NULL);
     if (ret != BM_SUCCESS) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
@@ -898,6 +891,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
                   ret);
         return BM_ERR_FAILURE;
     }
+
     if (0 != platform_ioctl(handle, BMDEV_TRIGGER_BMCPU, (void *)&delay)) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -906,24 +900,19 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
         bmcpu_set_cpu_status(handle, BMCPU_FAULT);
         return BM_ERR_FAILURE;
     }
-    ret = bm_send_api_ext(handle,
-                          BM_API_ID_START_CPU,
-                          (const u8 *)&api_start_cpu,
-                          sizeof(bm_api_start_cpu_t),
-                          &api_handle);
-    if (ret != BM_SUCCESS) {
-        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "start cpu send api error, ret %d\n",
-                  ret);
-        bmcpu_set_cpu_status(handle, BMCPU_FAULT);
-        return BM_ERR_FAILURE;
-    }
-    sleep(15);
+
+    sleep(30);
     platform_ioctl(handle, BMDEV_GET_VETH_STATE, &data);
     if (((u32)data) == 0x66668888)
     {
         bmcpu_set_cpu_status(handle, BMCPU_RUNNING);
+
+        ret = bmcpu_sync_time_mix(handle);
+        if (ret != BM_SUCCESS) {
+            printf("ERROR!!! sync cpu time error!\n");
+            return BM_ERR_FAILURE;
+        }
+
         return BM_SUCCESS;
     }
 
@@ -975,6 +964,27 @@ bm_status_t bmcpu_sync_time(bm_handle_t handle) {
                   BMLIB_LOG_ERROR,
                   "sync cpu set time error, ret %d\n",
                   ret);
+        return BM_ERR_FAILURE;
+    }
+}
+
+bm_status_t bmcpu_sync_time_mix(bm_handle_t handle) {
+    u64               api_handle;
+    u64               data;
+    int               ret;
+    bm_api_set_time_t api_set_time;
+    struct timeval    tv;
+    struct timezone   tz;
+
+    (void)gettimeofday(&tv, &tz);
+    api_set_time.tv_sec  = tv.tv_sec + UTC_8;
+    api_set_time.tv_usec = tv.tv_usec;
+    api_set_time.tz_minuteswest = tz.tz_minuteswest;
+    api_set_time.tz_dsttime     = tz.tz_dsttime;
+
+    if(0 == platform_ioctl(handle, BMDEV_SYNC_TIME_MIX, &api_set_time)){
+        return BM_SUCCESS;
+    } else {
         return BM_ERR_FAILURE;
     }
 }

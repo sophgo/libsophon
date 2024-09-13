@@ -39,6 +39,8 @@ static void usage(char *argv[])
   cout << "  " << argv[0] << endl
        << "    --info model_file : show brief model info" << endl
        << "    --print model_file : show detailed model info" << endl
+       << "    --weight model_file : show model weight info" << endl
+       << "    --update_weight dst_model dst_net dst_offset src_model src_net src_offset" << endl
        << "    --extract model_file : extract one multi-net bmodel to multi one-net bmodels" << endl
        << "    --combine file1 .. fileN -o new_file: combine bmodels to one bmodel by filepath" << endl
        << "    --combine_dir dir1 .. dirN -o new_dir: combine bmodels to one bmodel by directory path" << endl
@@ -46,6 +48,7 @@ static void usage(char *argv[])
        << "    --version show tool version" << endl
        << "    --kernel_dump model_file -o kernel_file_name : dump kernel_module file" << endl
        << "    --kernel_update model_file kernel_name : add/update kernel_module file" << endl
+       << "    --custom_ap_update model_file libcpuop_file : add/update custom libcpuop file" << endl
        << endl;
 }
 
@@ -71,8 +74,10 @@ static void print(const string &filename)
   cout << json_text << endl;
 }
 
-static const char *type_name_array[] = {"float32", "float16", "int8", "uint8", "int16", "uint16", "int32", "uint32"};
-static const int  type_size_array[]  = {4, 2, 1, 1, 2, 2, 4, 4};
+static const char *type_name_array[] = {
+    "float32", "float16", "int8",     "uint8", "int16", "uint16",
+    "int32",   "uint32",  "bfloat16", "int4",  "uint4"};
+static const float type_size_array[] = {4, 2, 1, 1, 2, 2, 4, 4, 2, 0.5, 0.5};
 static const int DATA_TYPE_NUM = sizeof(type_name_array) / sizeof(char *);
 
 static const char *type_name(uint32_t data_type)
@@ -136,6 +141,20 @@ static void show(const NetParameter *parameter, bool dynamic = false)
   }
 }
 
+static void reorder(std::vector<std::pair<int, const Tensor *>> &tensors) {
+  std::sort(tensors.begin(), tensors.end(),
+            [](const std::pair<int, const Tensor *> &a,
+               const std::pair<int, const Tensor *> &b) {
+              if (a.first < b.first) {
+                return true;
+              } else if (a.first > b.first) {
+                return false;
+              } else {
+                return a.second->index() <= b.second->index();
+              }
+            });
+}
+
 // print brief model info
 static void show(const string &filename)
 {
@@ -145,8 +164,11 @@ static void show(const string &filename)
   }
   auto model = model_ctx.model();
   cout << "bmodel version: " << model->type()->c_str() << "." << model->version()->c_str() << endl;
-  cout << "chip: " << model->chip()->c_str() << endl;
-  cout << "create time: " << model->time()->c_str() << endl;
+  cout << "chip: " << model->chip()->c_str();
+  if (model->device_num() > 1) {
+    cout << ",  device num: " << model->device_num();
+  }
+  cout << "\ncreate time: " << model->time()->c_str() << endl;
 
   // kernel_module info
   auto kernel_module = model->kernel_module();
@@ -163,8 +185,39 @@ static void show(const string &filename)
     cout << "kernel_module md5: " << module_md5 << endl;
   }
 
+  // cpuop_module info
+  auto cpuop_module = model->cpuop_module();
+  if (!cpuop_module) {
+    cout << "cpuop_module: not found!" << endl;
+  } else {
+    auto module_binary = cpuop_module->binary();
+    size_t module_size = module_binary->size();
+    std::unique_ptr<uint8_t[]> binary(new uint8_t[module_size]);
+    model_ctx.read_binary(module_binary, binary.get());
+    string module_md5 = gen_md5_string((unsigned char *)binary.get(), module_size);
+    cout << "cpuop_module name: " << cpuop_module->file_name()->c_str() << endl;
+    cout << "cpuop_module size: " << module_size << endl;
+    cout << "cpuop_module md5: " << module_md5 << endl;
+  }
+
+  std::map<std::string, std::shared_ptr<vector<uint32_t>>> cascade_nets;
   for (uint32_t idx = 0; idx < model->net()->size(); idx++) {
     auto net = model->net()->Get(idx);
+    auto cascade = net->cascade();
+    if (cascade) {
+      auto main_name = cascade->main_name()->str();
+      if (!main_name.empty()) {
+        auto it = cascade_nets.find(main_name);
+        if (it != cascade_nets.end()) {
+          it->second->push_back(idx);
+        } else {
+          auto net_idx = std::make_shared<vector<uint32_t>>();
+          net_idx->push_back(idx);
+          cascade_nets[main_name] = net_idx;
+        }
+        continue;
+      }
+    }
     auto parameter = net->parameter();
     if (parameter == NULL || parameter->size() == 0) {
       continue;
@@ -173,36 +226,173 @@ static void show(const string &filename)
     string net_type = is_dynamic ? "dynamic" : "static";
     cout << "==========================================" << endl;
     cout << "net " << idx << ": [" << net->name()->c_str() << "]  " << net_type << endl;
+    if (net->addr_mode()) {
+      cout << "addr mode: " << net->addr_mode() << endl;
+    }
     for (uint32_t i = 0; i < parameter->size(); i++) {
       auto net_param = parameter->Get(i);
       auto subnet = net_param->sub_net();
+      const int core_num = net_param->core_num() == 0 ? 1 : net_param->core_num();
       cout << "------------" << endl;
-      cout << "stage " << i << ":" << endl;
+      cout << "stage " << i << ", core num: " << core_num << endl;
       if (subnet != NULL && subnet->size() > 1) {
         cout << "subnet number: " << subnet->size() << endl;
       }
       show(parameter->Get(i), is_dynamic);
     }
-    auto mem_info = model_ctx.get_bmodel_mem_info();
-    cout << std::endl;
-    cout << "device mem size: "<<
-            mem_info.coeff_mem_size +
-            mem_info.neuron_mem_size +
-            mem_info.bd_cmd_mem_size +
-            mem_info.gdma_cmd_mem_size +
-            mem_info.middle_buffer_size +
-            mem_info.dynamic_ir_mem_size
-         << " (coeff: "<<mem_info.coeff_mem_size
-         << ", instruct: "<<mem_info.bd_cmd_mem_size + mem_info.gdma_cmd_mem_size+mem_info.dynamic_ir_mem_size
-         << ", runtime: "<<mem_info.neuron_mem_size + mem_info.middle_buffer_size
-         << ")"<< std::endl;
-    cout << "host mem size: "<<
-            mem_info.host_coeff_mem_size +
-            mem_info.host_neuron_mem_size
-         << " (coeff: "<<mem_info.host_coeff_mem_size
-         << ", runtime: "<<mem_info.host_neuron_mem_size
-         << ")"<< std::endl;
   }
+  for (auto &it : cascade_nets) {
+    cout << "==========================================" << endl;
+    cout << "net: [" << it.first << "]  cascade" << endl;
+    // show inputs
+    std::vector<std::pair<int, const bmodel::Tensor *>> ins;
+    std::vector<std::pair<int, const bmodel::Tensor *>> outs;
+    for (auto idx : *it.second) {
+      auto net = model->net()->Get(idx);
+      auto parameter = net->parameter()->Get(0);
+      int devid = net->cascade()->device_id();
+      auto input_tensors = parameter->input_tensor();
+      auto output_tensors = parameter->output_tensor();
+      for (uint32_t idx = 0; idx < input_tensors->size(); idx++) {
+        auto in = input_tensors->Get(idx);
+        if (in->hidden() == 1 || in->hidden() == 3) {
+          ins.push_back({devid, in});
+        } else if (in->hidden() == 2 || in->hidden() == 4) {
+          outs.push_back({devid, in});
+        }
+      }
+      for (uint32_t idx = 0; idx < output_tensors->size(); idx++) {
+        auto out = output_tensors->Get(idx);
+        if (out->hidden() == 1 || out->hidden() == 3) {
+          ins.push_back({devid, out});
+        } else if (out->hidden() == 2 || out->hidden() == 4) {
+          outs.push_back({devid, out});
+        }
+      }
+    }
+    reorder(ins);
+    reorder(outs);
+    for (auto &in : ins) {
+      cout << tensor_str(in.second, false);
+    }
+    for (auto &out : outs) {
+      cout << tensor_str(out.second, true);
+    }
+  }
+  cout << std::endl;
+  auto mem_info = model_ctx.get_bmodel_mem_info();
+  cout << std::endl;
+  cout << "device mem size: "<<
+          mem_info.coeff_mem_size +
+          mem_info.neuron_mem_size +
+          mem_info.bd_cmd_mem_size +
+          mem_info.gdma_cmd_mem_size +
+          mem_info.hau_cmd_mem_size +
+          mem_info.sdma_cmd_mem_size +
+          mem_info.middle_buffer_size +
+          mem_info.dynamic_ir_mem_size
+        << " (weight: "<<mem_info.coeff_mem_size
+        << ", instruct: "<<mem_info.bd_cmd_mem_size + mem_info.gdma_cmd_mem_size+mem_info.dynamic_ir_mem_size+
+                           mem_info.hau_cmd_mem_size+mem_info.sdma_cmd_mem_size
+        << ", runtime: "<<mem_info.neuron_mem_size + mem_info.middle_buffer_size
+        << ")"<< std::endl;
+  cout << "host mem size: "<<
+          mem_info.host_coeff_mem_size +
+          mem_info.host_neuron_mem_size
+        << " (weight: "<<mem_info.host_coeff_mem_size
+        << ", runtime: "<<mem_info.host_neuron_mem_size
+        << ")"<< std::endl;
+}
+
+// print weight of model
+void show_weight(const string &filename) {
+  ModelCtx model_ctx(filename);
+  if (!model_ctx) {
+    FATAL("file[%s] is not correct", filename.c_str());
+  }
+  auto model = model_ctx.model();
+  auto num_net = model->net()->size();
+  for (int i = 0; i < num_net; i++) {
+    auto net = model->net()->Get(i);
+    auto num_stage = model->net()->Get(i)->parameter()->size();
+    for (int j = 0; j < num_stage; j++) {
+      auto param = model->net()->Get(i)->parameter()->Get(j);
+      auto coeff = param->coeff_mem();
+      if (coeff == nullptr) {
+        continue;
+      }
+      auto location = coeff->location();
+      if (location == nullptr || location->size() == 0) {
+        continue;
+      }
+      printf("net %d : \"%s\", stage:%d\n", i, net->name()->c_str(), j);
+      cout << "-------------------------------" << endl;
+      for (int k = 0; k < location->size(); k++) {
+        auto info = location->Get(k);
+        printf("%s : [0x%lx, 0x%lx)\n", info->name()->c_str(), info->offset(),
+               info->offset() + info->size());
+      }
+      cout << "==========================================" << endl;
+    }
+  }
+}
+
+// read binary from bmodel
+static uint64_t str2ull(const char *str) {
+  string ull_str(str);
+  if (ull_str.empty()) {
+    return 0;
+  }
+  if (ull_str.compare(0, 2, "0x") == 0 || ull_str.compare(0, 2, "0X") == 0) {
+    return strtoull(ull_str.c_str(), 0, 16);
+  } else {
+    return strtoull(ull_str.c_str(), 0, 10);
+  }
+}
+
+static void update_weight(int argc, char **argv) {
+  if (argc != 8) {
+    FATAL("parameters are not correct");
+  }
+  auto dst_model = argv[2];
+  auto dst_net = argv[3];
+  auto dst_offset = str2ull(argv[4]);
+  auto src_model = argv[5];
+  auto src_net = argv[6];
+  auto src_offset = str2ull(argv[7]);
+  printf("read dst model:%s ...\n", dst_model);
+  ModelCtx dst_model_ctx(dst_model);
+  if (!dst_model_ctx) {
+    FATAL("file[%s] is not correct", dst_model);
+  }
+  printf("read src model:%s ...\n", src_model);
+  ModelCtx src_model_ctx(src_model);
+  if (!src_model_ctx) {
+    FATAL("file[%s] is not correct", src_model);
+  }
+  bmodel::Binary src_bin, dst_bin;
+  std::string src_name, dst_name;
+  auto dst_ret =
+      dst_model_ctx.get_weight(dst_net, 0, dst_offset, dst_bin, dst_name);
+  if (dst_ret == false || dst_bin.size() == 0) {
+    FATAL("get dst weight failed by net_name:%s, offset:%lx\n", dst_net,
+          dst_offset);
+  }
+  auto src_ret =
+      src_model_ctx.get_weight(src_net, 0, src_offset, src_bin, src_name);
+  if (src_ret == false || src_bin.size() == 0) {
+    FATAL("get src weight failed by net_name:%s, offset:%lx\n", src_net,
+          src_offset);
+  }
+  if (dst_name != src_name || dst_bin.size() != src_bin.size()) {
+    FATAL("weight not the same");
+  }
+  printf("update weight ...\n");
+  auto src_weight = new uint8_t[src_bin.size()];
+  src_model_ctx.read_binary(&src_bin, src_weight);
+  dst_model_ctx.write_binary(&dst_bin, src_weight);
+  delete[] src_weight;
+  printf("update success\n");
 }
 
 // update binary data when copy one net to new flatbuffers
@@ -250,6 +440,7 @@ static void update_table(Table *table, const StructDef *struct_def, ModelGen &mo
               model_ctx.read_binary(binary, data);
               auto new_binary = model_gen.WriteBinary(binary->size(), data);
               binary->mutate_start(new_binary.start());
+              delete[] data;
             }
           }
           break;
@@ -313,6 +504,7 @@ static void extract(const string &filename)
   for (uint32_t net_idx = 0; net_idx < model->net()->size(); net_idx++) {
     auto net = model->net()->Get(net_idx);
     string net_name = net->name()->str();
+    int32_t addr_mode = net->addr_mode();
     if (net->parameter() == NULL || net->parameter()->size() == 0) {
       continue;
     }
@@ -324,7 +516,7 @@ static void extract(const string &filename)
       auto net_offset = NetParameter::Pack(builder, netT);
       delete netT;
       model_gen.AddChip(model->chip()->str());
-      model_gen.AddNet(net_name, net_offset);
+      model_gen.AddNet(net_name, net_offset, NULL, NULL, NULL, addr_mode);
       model_gen.Finish();
       update_model(model_gen, model_ctx);
       ostringstream filename;
@@ -364,12 +556,12 @@ static size_t tensor_bytes(const Vector<Offset<Tensor>> * tensor)
     if (type >= DATA_TYPE_NUM) {
       FATAL("unknown data type[%u]", type);
     }
-    size_t lsize = type_size_array[type];
+    float lsize = type_size_array[type];
     auto shape = tensor->Get(idx)->shape()->Get(0)->dim();
     for (uint32_t i = 0; i < shape->size(); i++) {
-      lsize *= shape->Get(i);
+      lsize *= (float)shape->Get(i);
     }
-    size += lsize;
+    size += (size_t)lsize;
   }
   return size;
 }
@@ -422,15 +614,25 @@ static void combine_bmodels(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>>
 {
   model_gen.AddChip(model_vec[0]->model_ctx->model()->chip()->str());
   auto &builder = model_gen.Builder();
+  uint32_t device_num = 0;
   for (uint32_t model_idx = 0; model_idx < model_vec.size(); model_idx++) {
     auto &model_info = model_vec[model_idx];
     auto model = model_info->model_ctx->model();
+    if (model->device_num() > device_num) {
+        device_num = model->device_num();
+    }
     for (uint32_t net_idx = 0; net_idx < model->net()->size(); net_idx++) {
       auto net = model->net()->Get(net_idx);
       if (net->parameter() == NULL || net->parameter()->size() == 0) {
         continue;
       }
       auto net_name = net->name()->str();
+      auto cascade = net->cascade();
+      if (cascade) {
+        // no more stage
+        assert(net->parameter()->size() == 1);
+      }
+      auto addr_mode = net->addr_mode();
       for (uint32_t idx = 0; idx < net->parameter()->size(); idx++) {
         shared_ptr<NET_INDEX_T> net_idx(new NET_INDEX_T);
         if (is_dir) {
@@ -439,7 +641,8 @@ static void combine_bmodels(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>>
         }
         auto netT = net->parameter()->Get(idx)->UnPack();
         auto net_offset = NetParameter::Pack(builder, netT);
-        model_gen.AddNet(net_name, net_offset, &net_idx->net_idx, &net_idx->stage_idx);
+        model_gen.AddNet(net_name, net_offset, &net_idx->net_idx,
+                         &net_idx->stage_idx, cascade, addr_mode);
         delete netT;
         model_info->net_index_v.push_back(net_idx);
       }
@@ -454,6 +657,16 @@ static void combine_bmodels(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>>
     auto module_tmp = model_gen.WriteBinary(module_binary->size(), binary.get());
     model_gen.AddKernelModule(module_name, module_tmp);
   }
+  auto cpuop_module = model_vec[0]->model_ctx->model()->cpuop_module();
+  if (cpuop_module) {
+    auto module_binary = cpuop_module->binary();
+    auto module_name = cpuop_module->file_name()->str();
+    std::unique_ptr<uint8_t[]> binary(new uint8_t[module_binary->size()]);
+    model_vec[0]->model_ctx->read_binary(module_binary, binary.get());
+    auto module_tmp = model_gen.WriteBinary(module_binary->size(), binary.get());
+    model_gen.AddCpuModule(module_name, module_tmp);
+  }
+  model_gen.AddNumDevice(device_num);
   model_gen.Finish();
   for (uint32_t idx = 0; idx < model_vec.size(); idx++) {
     auto &model_info = model_vec[idx];
@@ -555,20 +768,6 @@ static void combine_bmodels(int argc, char **argv, bool is_dir = false)
   cout << "Success: combined to [" << ofile << "]." << endl;
 }
 
-// read binary from bmodel
-static uint64_t str2ull(const char * str)
-{
-  string ull_str(str);
-  if (ull_str.empty()) {
-    return 0;
-  }
-  if (ull_str.compare(0, 2, "0x") == 0 || ull_str.compare(0, 2, "0X") == 0) {
-    return strtoull(ull_str.c_str(), 0, 16);
-  } else {
-    return strtoull(ull_str.c_str(), 0, 10);
-  }
-}
-
 static void dump_binary(int argc, char **argv)
 {
   if (argc != 6) {
@@ -639,6 +838,7 @@ static void dump_kernel_module(int argc, char **argv) {
 static void update_kernel(ModelGen &model_gen, shared_ptr<MODEL_CTX_T>& model_info, uint8_t* module_binary, size_t binary_size, string module_name)
 {
   model_gen.AddChip(model_info->model_ctx->model()->chip()->str());
+  model_gen.AddNumDevice(model_info->model_ctx->model()->device_num());
   auto &builder = model_gen.Builder();
   auto model = model_info->model_ctx->model();
   for (uint32_t net_idx = 0; net_idx < model->net()->size(); net_idx++) {
@@ -651,13 +851,54 @@ static void update_kernel(ModelGen &model_gen, shared_ptr<MODEL_CTX_T>& model_in
       shared_ptr<NET_INDEX_T> net_idx(new NET_INDEX_T);
       auto netT = net->parameter()->Get(idx)->UnPack();
       auto net_offset = NetParameter::Pack(builder, netT);
-      model_gen.AddNet(net_name, net_offset, &net_idx->net_idx, &net_idx->stage_idx);
+      auto cascade = net->cascade();
+      if (cascade) {
+        // no more stage
+        assert(net->parameter()->size() == 1);
+      }
+      model_gen.AddNet(net_name, net_offset, &net_idx->net_idx,
+                       &net_idx->stage_idx, cascade, net->addr_mode());
       delete netT;
       model_info->net_index_v.push_back(net_idx);
     }
   }
   auto kernel_module = model_gen.WriteBinary(binary_size, module_binary);
   model_gen.AddKernelModule(module_name, kernel_module);
+  model_gen.Finish();
+  for (auto &net_index : model_info->net_index_v) {
+    update_net(model_gen, *model_info->model_ctx, net_index->net_idx, net_index->stage_idx);
+  }
+}
+
+static void update_cpuop(ModelGen &model_gen, shared_ptr<MODEL_CTX_T>& model_info, uint8_t* libcpu_binary, size_t binary_size, string libcpu_name)
+{
+  model_gen.AddChip(model_info->model_ctx->model()->chip()->str());
+  model_gen.AddNumDevice(model_info->model_ctx->model()->device_num());
+  auto &builder = model_gen.Builder();
+  auto model = model_info->model_ctx->model();
+  for (uint32_t net_idx = 0; net_idx < model->net()->size(); net_idx++) {
+    auto net = model->net()->Get(net_idx);
+    if (net->parameter() == NULL || net->parameter()->size() == 0) {
+      continue;
+    }
+    auto net_name = net->name()->str();
+    for (uint32_t idx = 0; idx < net->parameter()->size(); idx++) {
+      shared_ptr<NET_INDEX_T> net_idx(new NET_INDEX_T);
+      auto netT = net->parameter()->Get(idx)->UnPack();
+      auto net_offset = NetParameter::Pack(builder, netT);
+      auto cascade = net->cascade();
+      if (cascade) {
+        // no more stage
+        assert(net->parameter()->size() == 1);
+      }
+      model_gen.AddNet(net_name, net_offset, &net_idx->net_idx,
+                       &net_idx->stage_idx, cascade, net->addr_mode());
+      delete netT;
+      model_info->net_index_v.push_back(net_idx);
+    }
+  }
+  Binary cpuop_module = model_gen.WriteBinary(binary_size, libcpu_binary);
+  model_gen.AddCpuModule(libcpu_name, cpuop_module);
   model_gen.Finish();
   for (auto &net_index : model_info->net_index_v) {
     update_net(model_gen, *model_info->model_ctx, net_index->net_idx, net_index->stage_idx);
@@ -696,6 +937,36 @@ static void update_kernel_module(int argc, char **argv) {
   f_kernel.close();
 }
 
+static void update_cpuop_module(int argc, char **argv) {
+  if (argc != 4) {
+    FATAL("--update_cpuop parameter error.");
+  }
+  string model_path = argv[2];
+  string libcpu_path = argv[3];
+  ifstream f_kernel(libcpu_path, ios::in | ios::binary);
+  if (!f_kernel) {
+    FATAL("libcpuop name [%s] is not correct", libcpu_path.c_str());
+  }
+  shared_ptr<MODEL_CTX_T> model_info(new MODEL_CTX_T);
+  model_info->model_ctx = make_shared<ModelCtx>(model_path);
+  if (model_info->model_ctx == NULL || !(*model_info->model_ctx)) {
+    FATAL("file[%s] is not correct", model_path.c_str());
+  }
+
+  f_kernel.seekg(0, f_kernel.end);
+  int binary_size = f_kernel.tellg();
+  f_kernel.seekg(0, f_kernel.beg);
+  shared_ptr<char> libcpu_binary(new char[binary_size]);
+  f_kernel.read(libcpu_binary.get(), binary_size);
+  string libcpu_name = libcpu_path.substr(libcpu_path.find_last_of('/') + 1);
+
+  ModelGen model_gen;
+  update_cpuop(model_gen, model_info, (uint8_t*)libcpu_binary.get(), binary_size, libcpu_name);
+  model_gen.Save(model_path);
+  cout << "Success: update to [" << libcpu_name << "]." << endl;
+  f_kernel.close();
+}
+
 int main(int argc, char **argv)
 {
   if (argc < 2) {
@@ -708,6 +979,10 @@ int main(int argc, char **argv)
     print(argv[2]);
   } else if (cmd == "--info") {
     show(argv[2]);
+  } else if (cmd == "--weight") {
+    show_weight(argv[2]);
+  } else if (cmd == "--update_weight") {
+    update_weight(argc, argv);
   } else if (cmd == "--extract") {
     extract(argv[2]);
   } else if (cmd == "--combine") {
@@ -722,6 +997,8 @@ int main(int argc, char **argv)
     dump_kernel_module(argc, argv);
   } else if (cmd == "--kernel_update") {
     update_kernel_module(argc, argv);
+  } else if (cmd == "--custom_ap_update") {
+    update_cpuop_module(argc, argv);
   }else {
     usage(argv);
     exit(-1);

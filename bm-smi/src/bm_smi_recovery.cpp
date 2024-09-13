@@ -19,6 +19,7 @@ int bm_smi_recovery::validate_input_para() {
 #else
   if ((g_cmdline.m_dev == 0xff) || ((g_cmdline.m_dev < 0) || (g_cmdline.m_dev >= dev_cnt))) {
     printf("error dev = %d\n", g_cmdline.m_dev);
+    printf("error No input dev parameter, eg. bm-smi --recovery --dev=0\n");
     return -EINVAL;
   } else {
     start_dev = g_cmdline.m_dev;
@@ -57,7 +58,9 @@ int bm_smi_recovery::run_opmode() {
                     ",and some servers will restart.\n"
                     "For more information, please refer to the documents provided.\n");
     printf("Are you sure to perform recovery option?(yes/no)\n");
-    scanf("%s", conf);
+    if (0 >= scanf("%s", conf))
+      printf("no input!\n");
+
     if (strcmp(conf, "yes") == 0 || strcmp(conf, "Y") == 0 || strcmp(conf, "y") == 0 || strcmp(conf, "YES") == 0) {
       if (dev_cnt == 1) {
         ret = ioctl(fd, BMCTL_DEV_RECOVERY, start_dev);

@@ -319,6 +319,8 @@ static int bm_demand_iommu_entries(struct iommu_ctrl *ctrl, struct iommu_region 
 	int real_num;
 	int ret;
 	int t_half, b_half;
+	int count = 1000;
+
 	if (iommu_src->user_start == 0 || iommu_src->user_size == 0 || iommu_dst->user_start == 0 || iommu_dst->user_size == 0) {
 		dev_err(ctrl->device, "invalid input param from user space.");
 		return -EINVAL;
@@ -334,7 +336,9 @@ static int bm_demand_iommu_entries(struct iommu_ctrl *ctrl, struct iommu_region 
 
 	demand_pages = round_up(demand_src_pages, IOMMU_TASK_ALIGNMENT) + round_up(demand_dst_pages, IOMMU_TASK_ALIGNMENT); // entry boundry between src and dst need aligned to 16
 retry:
-
+	if (count <= 0) {
+		return -EINTR;
+	}
 	/* best effort to fulfil user request */
 	real_num = iommu_alloc_entries(ctrl, demand_pages, &iommu_src->entry_start);
 	if (!real_num) {
@@ -342,10 +346,12 @@ retry:
 		ret = wait_event_interruptible(ctrl->entry_waitq, iommu_get_free_entries(ctrl, &t_half, &b_half));
 		if (ret == -ERESTARTSYS)
 			return -EINTR;
+		count--;
 		goto retry;
 	} else {
 		if (real_num < 32) {
 			iommu_free_entries(ctrl, real_num);
+			count--;
 			goto retry;
 		}
 		while (real_num < demand_pages) {
@@ -413,7 +419,11 @@ static int bm_setup_iommu_pages(struct iommu_ctrl *ctrl, struct bm_buffer_object
 	}
 
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 5, 0)
+     page_done = get_user_pages(bo->iommu.start_aligned, bo->nr_pages,
+                    bo->iommu.is_dst == 1 ? 1 : 0, // dst need write, src only need read
+                    bo->pages);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
 	page_done = get_user_pages(bo->iommu.start_aligned, bo->nr_pages,
 			bo->iommu.is_dst == 1 ? 1 : 0, // dst need write, src only need read
 			bo->pages, NULL);
@@ -773,14 +783,15 @@ int bm1684_enable_smmu_transfer(struct bm_memcpy_info *memcpy_info, struct iommu
 
 	ret = bm_bo_create(bo_buffer, bo_rgn);
 	if (ret != 0) {
+		bm_release_iommu_entries(&memcpy_info->iommuctl, iommu_rgn_src, iommu_rgn_dst);
 		dev_err(memcpy_info->iommuctl.device, "bm_bo_create src failed %d\n", ret);
 		ret = -ENOMEM;
 		return ret;
 	}
 
 	ret = bm_setup_iommu_pages(&memcpy_info->iommuctl, *bo_buffer);
-
 	if (ret < 0) {
+		bm_release_iommu_entries(&memcpy_info->iommuctl, iommu_rgn_src, iommu_rgn_dst);
 		list_del(&(*bo_buffer)->entry);
 		bm_bo_release(*bo_buffer);
 		dev_err(memcpy_info->iommuctl.device, "bm_setup_iommu_pages src failed %d\n", ret);

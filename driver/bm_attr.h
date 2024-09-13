@@ -6,12 +6,18 @@
 #define FAN_PWM_PERIOD 4000
 #define LED_PWM_PERIOD 100000000UL  // p_clk 100MHz
 #define BM_THERMAL_WINDOW_WIDTH 5
-#define VFS_MAX_LEVEL_SC7_PRO    20
-#define VFS_MAX_LEVEL_SC7_PLUS   3
+#define VFS_MAX_LEVEL_SC7_PRO    19
+#define VFS_MAX_LEVEL_SC7_FP150    16
+#define VFS_MAX_LEVEL_SC7_PLUS   8
+#define VFS_MAX_LEVEL_AIV02X   9
 #define VFS_INIT_LEVEL_SC7_PLUS   0
+#define VFS_INIT_LEVEL_AIV02X   0
 #define VFS_INIT_LEVEL_SC7_PRO   0
-#define VFS_RELBL_LEVEL_SC7_PLUS   1
+#define VFS_INIT_LEVEL_SC7_FP150   0
+#define VFS_RELBL_LEVEL_SC7_PLUS   4
+#define VFS_RELBL_LEVEL_AIV02X   5
 #define VFS_RELBL_LEVEL_SC7_PRO   5
+#define VFS_RELBL_LEVEL_SC7_FP150  5
 #define VFS_PWR_MEAN_SAMPLE_SIZE  10
 
 #define LED_OFF 0
@@ -205,8 +211,10 @@ void bm_npu_utilization_stat(struct bm_device_info *bmdi);
 void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed);
 void bmdrv_fetch_attr_board_power(struct bm_device_info *bmdi, int count);
 int bmdev_ioctl_get_attr(struct bm_device_info *bmdi, void *arg);
-int bm_set_sc7_rdrop(struct bm_device_info *bmdi);
+int bm_set_sc7_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
 int bm_get_sc7_rdrop(struct bm_device_info *bmdi);
+int bm_set_sc7_vddc_rdrop(struct bm_device_info *bmdi, struct bm_rdrop param);
+int bm_get_sc7_vddc_rdrop(struct bm_device_info *bmdi);
 int bm_set_rdrop(struct bm_device_info *bmdi);
 
 #endif

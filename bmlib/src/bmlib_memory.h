@@ -54,6 +54,12 @@ struct bm_gmem_addr {
 	u64 phy_addr;
 };
 
+struct bm_mem_paddr {
+  struct rb_node node;
+  unsigned long long paddr;
+  bm_device_mem_u64_t *dev_buffer;
+};
+
 bm_status_t bm_total_gmem(bm_handle_t ctx, u64* total);
 bm_status_t bm_avail_gmem(bm_handle_t ctx, u64* avail);
 bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
@@ -64,15 +70,30 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
                                void *          dst,
                                sg_device_mem_t src,
                                unsigned long long size);
+bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
+                               void *          dst,
+                               bm_device_mem_u64_t src,
+                               unsigned long long size);
 bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
                                bm_device_mem_t dst,
                                void *          src);
 bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
                                sg_device_mem_t dst,
                                void *          src);
+bm_status_t bm_memcpy_s2d_poll_u64(bm_handle_t     handle,
+                               bm_device_mem_u64_t dst,
+                               void *          src);
+bm_status_t bm_smmu_d2s_poll(bm_handle_t     handle,
+                               void *          dst,
+                               bm_device_mem_t src,
+                               unsigned int size);
+bm_status_t bm_smmu_s2d_poll(bm_handle_t     handle,
+                               bm_device_mem_t dst,
+                               void *          src);
 void *bm_mem_get_system_addr(struct bm_mem_desc mem);
 u32 bm_mem_get_size(struct bm_mem_desc mem);
 u64 sg_mem_get_size(struct sg_mem_desc mem);
+u64 bm_mem_get_size_u64(struct bm_mem_desc_u64 mem);
 bm_status_t bm_mem_mmap_device_mem(
     bm_handle_t      handle,
     bm_device_mem_t *dmem,
@@ -108,6 +129,8 @@ bm_status_t bm_mem_unmap_device_mem(
     void *           vmem,
     int              size);
 bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx);
+extern void rb_insert_color(struct rb_node *, struct rb_root *);
+extern void rb_erase(struct rb_node *, struct rb_root *);
 #ifdef __cplusplus
 }
 #endif

@@ -56,6 +56,36 @@ SM5MS	12
 SM5MA	13
 */
 
+/**
+ * The board id of PCIe EP device
+ */
+#define BOARD_TYPE_EVB       0x0
+#define BOARD_TYPE_SA5       0x1
+#define BOARD_TYPE_SC5       0x2
+#define BOARD_TYPE_SE5       0x3
+#define BOARD_TYPE_SM5_P     0x4
+#define BOARD_TYPE_SM5_S     0x5
+#define BOARD_TYPE_SA6       0x6
+#define BOARD_TYPE_SC5_PLUS  0x7
+#define BOARD_TYPE_SC5_H     0x8
+#define BOARD_TYPE_SC5_PRO   0x9
+#define BOARD_TYPE_AIV01T    0x10
+#define BOARD_TYPE_AIV02T    0x11
+#define BOARD_TYPE_AIV03T    0x12
+#define BOARD_TYPE_AIV03T_24G    0x13
+
+#define BOARD_TYPE_SM5M_P    0xb
+#define BOARD_TYPE_BM1684X_EVB    0x20
+#define BOARD_TYPE_SC7_PRO   0x21
+#define BOARD_TYPE_SC7_PLUS  0x22
+#define BOARD_TYPE_SC7_FP150  0x23
+#define BOARD_TYPE_SM7_V0_0	 0x30
+#define BOARD_TYPE_SM7_MP1_1	 0x36
+#define BOARD_TYPE_CP24		 0x40
+#define BOARD_TYPE_AIV01X	 0x50
+#define BOARD_TYPE_AIV02X	 0x51
+#define BOARD_TYPE_AIV03X	 0x52
+
 #define EVB "EVB"
 #define SA5 "SA5"
 #define SC5 "SC5"
@@ -74,9 +104,15 @@ SM5MA	13
 #define SM5MS "SM5M"
 #define SM5MA "SM5M"
 #define BM1684X_EVB "BM1684X_EVB"
-#define SC7P "SC7P"
+#define SC7P "SC7-224T"
 #define SC7PLUS "SC7+"
+#define SC7FP150 "SC7-FP150"
+#define CP24 "CP24"
 #define SM7M_V1_0 "SM7"
+
+// EMA product NAME
+#define AIV02X "AIV02X"
+#define AIV03X "AIV03X"
 
 DEFINE_int32(dev, 0, "device id");
 DEFINE_string(file, "", "bin file with pathname");
@@ -110,10 +146,15 @@ struct {
     {"SC5PRO", {9, -1}, {SC5PRO, "Error"}},
     {"SM5MINI", {10, -1}, {SM5ME, SM5MP, SM5MS, SM5MA, "Error"}},
     {"BM1684X_EVB", {32, -1}, {EVB, "Error"}},
-    {"SC7P", {33, -1}, {SC7P, "Error"}},
+    {"SC7-224T", {33, -1}, {SC7P, "Error"}},
+    {"CP24/SM7_V0_0", {48, -1}, {CP24, SM7M_V1_0, "Error"}},
     {"SC7+", {34, -1}, {SC7PLUS, "Error"}},
-    {"SM7_V0_0",{48,-1},{SM7M_V1_0, "Error"}},
-    {"SM7_MP1_1",{54,-1},{SM7M_V1_0, "Error"}}
+    {"SC7-FP150", {35, -1}, {SC7FP150, "Error"}},
+    {"SM7_MP1_1",{54,-1},{SM7M_V1_0, "Error"}},
+
+    // EMA product
+    {"AIV02X", {81,-1}, {AIV02X, "Error"}},
+    {"AIV03X", {82,-1}, {AIV03X, "Error"}},
 
 };
 
@@ -568,6 +609,7 @@ static int validate_firmware_and_board_type(bm_handle_t handle, Bin_buffer *bin_
   if (strcmp(board_type, "SC5R") == 0) {
 	  strcpy(board_type, "SC5+");
   }
+
   printf("board type=%s\n", board_type);
 
   for (j = 0; strcmp(firmware_table[i].type[j], "Error") != 0; j++) {
@@ -590,7 +632,9 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   int board_type = (int)((handle->misc_info.board_version & 0x0000FFFF) >> 8);
 
   /* check file size */
-  if ((board_type == 33) || (board_type == 34)) {
+  if ((board_type == BOARD_TYPE_SC7_PRO) || (board_type == BOARD_TYPE_SC7_PLUS) ||
+	(board_type == BOARD_TYPE_SC7_FP150) || (board_type == BOARD_TYPE_CP24) ||
+	(board_type ==BOARD_TYPE_AIV02X) || (board_type == BOARD_TYPE_AIV03X)) {
     if (size != FLASH_SIZE_SC7P) {
       printf("wrong upgrade file size %ld, it should %ld bytes\n",
         size, (unsigned long)FLASH_SIZE_SC7P);
@@ -608,7 +652,9 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   MD5_CTX md_ctx;
   MD5Init(&md_ctx);
   unsigned long md_size;
-  if ((board_type == 33) || (board_type == 34)) {
+  if ((board_type == BOARD_TYPE_SC7_PRO) || (board_type == BOARD_TYPE_SC7_PLUS) ||
+	(board_type == BOARD_TYPE_SC7_FP150) || (board_type == BOARD_TYPE_CP24) ||
+	(board_type ==BOARD_TYPE_AIV02X) || (board_type == BOARD_TYPE_AIV03X)) {
     md_size = PROGRAM_LIMIT_SC7P;
   } else {
     md_size = PROGRAM_LIMIT;
@@ -628,7 +674,9 @@ bool is_valid_mcu(bm_handle_t handle, Bin_buffer *bin_buf) {
   /* check application efie */
   struct efie *app_efie;
 
-  if ((board_type == 33) || (board_type == 34)) {
+  if ((board_type == BOARD_TYPE_SC7_PRO) || (board_type == BOARD_TYPE_SC7_PLUS) ||
+      (board_type == BOARD_TYPE_SC7_FP150) || (board_type == BOARD_TYPE_CP24) ||
+      (board_type ==BOARD_TYPE_AIV02X) || (board_type == BOARD_TYPE_AIV03X)) {
     app_efie = (struct efie *)(image + EFIT_START_SC7P);
     if (app_efie->offset + app_efie->length > PROGRAM_LIMIT_SC7P) {
       printf("wrong efie of app\n");
@@ -671,7 +719,9 @@ bm_status_t bm1684_firmware_update_mcu_app(bm_handle_t handle, Bin_buffer *bin_b
 
   int board_type = (int)((handle->misc_info.board_version & 0x0000FFFF) >> 8);
 
-  if ((board_type == 33) || (board_type == 34)) {
+  if ((board_type == BOARD_TYPE_SC7_PRO) || (board_type == BOARD_TYPE_SC7_PLUS) ||
+      (board_type == BOARD_TYPE_SC7_FP150) || (board_type == BOARD_TYPE_CP24) ||
+      (board_type ==BOARD_TYPE_AIV02X) || (board_type == BOARD_TYPE_AIV03X)) {
 	efie_buf.buf = bin_buf->buf + EFIT_START_SC7P;
 	efie_buf.size = sizeof(struct efie);
 	efie_buf.target_addr = EFIT_START_SC7P;
@@ -718,7 +768,9 @@ bm_status_t bm1684_firmware_update_mcu_app(bm_handle_t handle, Bin_buffer *bin_b
   }
   printf("program app succeeds.\n");
   // calculate checksum
-  if((board_type != 33) && (board_type != 34)) {
+  if ((board_type != BOARD_TYPE_SC7_PRO) && (board_type != BOARD_TYPE_SC7_PLUS) &&
+      (board_type != BOARD_TYPE_SC7_FP150) && (board_type != BOARD_TYPE_CP24) &&
+      (board_type !=BOARD_TYPE_AIV02X) && (board_type != BOARD_TYPE_AIV03X)) {
     memset(calc_cksum, 0x0, sizeof(calc_cksum));
     chksum_buf.buf = calc_cksum;
     chksum_buf.size = app_efie->length;

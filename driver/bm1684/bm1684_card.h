@@ -42,6 +42,7 @@ int bm1684_card_get_chip_index(struct bm_device_info *bmdi);
 #define BM1684_BOARD_TYPE(bmdi) ((u8)(((bmdi->cinfo.board_version) >> 8) & 0xff))
 #define BM1684_HW_VERSION(bmdi) ((u8)((bmdi->cinfo.board_version) & 0xff))
 #define BM1684_MCU_VERSION(bmdi) ((u8)(((bmdi->cinfo.board_version) >> 16) & 0xff))
+//#define BM1684_UNI_VERSION(bmdi) ((u8)(((bmdi->cinfo.board_version) >> 24) & 0xff))
 
 #endif
 #endif

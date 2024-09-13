@@ -49,7 +49,7 @@ Docker 测试环境搭建
 构建镜像
 """"""""
 
-使用 dockerfile 构建测试所需的 Docker 镜像, dockerfile 位于 libsophon 文件夹下。构建镜像前请检查系统时间是否准确，错误的系统时间会导致构建过程中更新 package list 时证书验证失败。
+使用 dockerfile 构建测试所需的 Docker 镜像, dockerfile 位于 从官网下载的SDK包中libsophon 文件夹下。构建镜像前请检查系统时间是否准确，错误的系统时间会导致构建过程中更新 package list 时证书验证失败。
 
 .. code-block:: shell
 
@@ -65,9 +65,9 @@ Docker 测试环境搭建
 
     $ sudo docker images
     REPOSITORY   TAG               IMAGE ID     CREATED          SIZE
-    image_name      image_version  image_id        create_time        1.74GB
+    image_name      image_version  image_id        create_time         size
 
-以上内容中 ``image_name`` 与 ``image_version`` 应与构建时设置内容一致, ``image_id`` 与 ``create_time`` 应与实际情况相符合。
+以上内容中 ``image_name`` 与 ``image_version`` 应与构建时设置内容一致, ``image_id`` 、 ``create_time`` 与 ``size`` 应与实际情况相符合。
 
 创建容器
 """"""""
@@ -118,3 +118,5 @@ Docker 测试环境搭建
     for f in /etc/profile.d/*sophon*; do source $f; done
 
 运行以上命令后可运行 ``bm-smi`` 命令以检查是否可正常使用 libsophon, 命令输出应与 :doc:`bm-smi使用说明 <3_1_bmsmi_description>` 中对应内容相符。
+
+注意Docker内部时区为UTC时区，用户可根据需要手动修改Docker内的时区。

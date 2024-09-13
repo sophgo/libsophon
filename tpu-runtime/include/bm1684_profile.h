@@ -72,18 +72,7 @@ class BMProfileDevice:public bmruntime::BMProfileDeviceBase {
 
     // BMProfileDeviceBase interface
 public:
-    BMProfileDevice(BMProfile* profile):BMProfileDeviceBase(profile) {
-        enable = profile->getenv_bool(ENV_ENABLE_PROFILE);
-        if(enable){
-          gdma_record_len = profile->getenv_int(ENV_PROFILE_GDMA_SIZE, gdma_record_len);
-          bdc_record_len = profile->getenv_int(ENV_PROFILE_BDC_SIZE, bdc_record_len);
-          dyn_max_size = profile->getenv_int(ENV_PROFILE_ARM_SIZE, dyn_max_size);
-          enable_gdma = !profile->getenv_bool(ENV_DISABLE_GDMA) && gdma_record_len > 0;
-          enable_bdc = !profile->getenv_bool(ENV_DISABLE_BDC) && bdc_record_len > 0;
-          enable_arm = !profile->getenv_bool(ENV_DISABLE_ARM) && dyn_max_size > 0;
-          enable = enable_gdma || enable_arm || enable_bdc;
-        }
-    }
+    BMProfileDevice(BMProfile* profile):BMProfileDeviceBase(profile) { }
     bool init();
     bool begin(net_ctx_t* net_ctx);
     bool end(net_ctx_t* net_ctx);
@@ -96,13 +85,6 @@ private:
     buffer_pair dyn_buffer;
     bm_perf_monitor tpu_perf_monitor;
     bm_perf_monitor gdma_perf_monitor;
-    size_t gdma_record_len = 1024*1024;
-    size_t bdc_record_len = 1024*1024;
-    size_t dyn_max_size = 16*1024*1024;
-    bool enable_gdma =false;
-    bool enable_bdc = false;
-    bool enable_arm = false;
-    bool enable = false;
     bm_device_mem_t aligned_mem;
 
     // BMProfileDeviceBase interface

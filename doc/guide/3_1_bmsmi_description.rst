@@ -17,11 +17,11 @@
    * - BM1684X
      - 算能面向深度学习领域推出的第四代张量处理器
 
-   * - TPU
-     - 芯片内部神经网络处理单元
+   * - NPU
+     - 神经网络处理单元
 
    * - SOC模式
-     - 一种产品形态，SDK运行于A53 AARCH64平台，TPU作为平台总线设备
+     - 一种产品形态，SDK运行于A53 AARCH64平台，智能视觉深度学习处理器作为平台总线设备
 
    * - PCIe模式
      - 一种产品形态，SDK运行于X86平台，BM1684、BM1684X存在于PCIe接口的深度学习计算加速卡上
@@ -30,7 +30,7 @@
      - Drivers是API接口访问硬件的通道
 
    * - Gmem
-     - 卡上用于TPU加速的DDR内存
+     - 卡上用于智能视觉深度学习处理器加速的DDR内存
 
    * - F
      - FAULT 故障状态
@@ -49,7 +49,7 @@ bm-smi介绍
 
    -  查看物理板卡ID
 
-   -  查看设备芯片ID，所在PCIe总线ID
+   -  查看设备npu ID，所在PCIe总线ID
 
    -  查看设备温度和功耗
 
@@ -57,7 +57,7 @@ bm-smi介绍
 
    -  查看gmem总数和利率
 
-   -  查看tpu利用率
+   -  查看智能视觉深度学习处理器利用率
 
    -  查看设备工作频率信息
 
@@ -100,7 +100,7 @@ bm-smi介绍
      - 支持       
      - 支持
 
-   * - tpu的设备号              
+   * - 智能视觉深度学习处理器的设备号              
      - 支持
      - 支持
 
@@ -116,7 +116,7 @@ bm-smi介绍
      - 支持
      - 不支持
 
-   * - 芯片温度
+   * - 片上温度
      - 支持
      - 不支持
 
@@ -180,7 +180,7 @@ bm-smi介绍
      - 支持
      - 支持
 
-   * - tpu的瞬时利用率
+   * - 智能视觉深度学习处理器的瞬时利用率
      - 支持
      - 支持
 
@@ -206,7 +206,7 @@ bm-smi介绍
    :height: 6.22083in
    :alt: "图1"
 
-图1为SC5+(三芯)/SC5H/SC5P(八芯)的显示状态，每张卡之间用=======隔开，最左边显示的板卡级别的属性，右边和中间显示的是单个芯片的状态。
+图1为SC5+(三芯)/SC5H/SC5P(八芯)的显示状态，每张卡之间用=======隔开，最左边显示的板卡级别的属性，右边和中间显示的是单个npu的状态。
 
 bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/libsophon-current/bin目录下，上图为一个执行bm-smi的示意图。
 
@@ -229,21 +229,21 @@ bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/li
 
 -  SN : 板卡序列号（共17位）
 
--  TPU : tpu的设备号
+-  TPU : 智能视觉深度学习处理器的设备号
 
 -  BoardT:板级温度
 
--  chipT:芯片温度
+-  chipT:片上温度
 
--  TPU_P:TPU模块功耗
+-  TPU_P:智能视觉深度学习处理器模块功耗
 
--  TPU_V:TPU模块电压
+-  TPU_V:智能视觉深度学习处理器模块电压
 
 -  ECC: DDR ECC是否使能
 
 -  CorrectNum:若DDR使能，纠正错误的次数
 
--  Tpu-Util:tpu的瞬时利用率
+-  Tpu-Util:智能视觉深度学习处理器的瞬时利用率
 
 -  12V_ATX：板级12V供电电流
 
@@ -251,9 +251,9 @@ bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/li
 
 -  boardP:板级功耗
 
--  Minclk:tpu最小工作频率
+-  Minclk:智能视觉深度学习处理器最小工作频率
 
--  Maxclk:tpu最大工作频率
+-  Maxclk:智能视觉深度学习处理器最大工作频率
 
 -  Fan:风扇转速，显示N/A 表示本卡无风扇，显示F 表示有风扇故障
 
@@ -261,9 +261,9 @@ bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/li
 
 -  Status:板卡状态，Active为活动状态， Fault为故障状态
 
--  Curclk:tpu当前工作频率，显示的值的颜色根据当前工作频率而不同，550M（bm1684）或1000M（bm1684x）显示白色，75M显示红色，其他频率显示黄色；红色和黄色用于提示用户当前工作频率不是最大工作频率。显示不同颜色只在2.1.0版本及以上版本才有。
+-  Curclk:智能视觉深度学习处理器当前工作频率，显示的值的颜色根据当前工作频率而不同，550M（bm1684）或1000M（bm1684x）显示白色，75M显示红色，其他频率显示黄色；红色和黄色用于提示用户当前工作频率不是最大工作频率。显示不同颜色只在2.1.0版本及以上版本才有。
 
--  TPU_C: tpu模块的工作电流
+-  TPU_C: 智能视觉深度学习处理器模块的工作电流
 
 -  Memory-Usage:gmem总数和已使用数量；默认106M表示VPU的固件占用的内存大小。板卡上的memory有可能分布在不同的地址空间，我们分配的内存都是地址连续的内存，而且由于每次分配的大小不一样，会导致内存的碎片化，所以有可能出现利用率达不到100%的情况。
 
@@ -343,7 +343,7 @@ bm-smi支持的参数有：
 
    bm-smi --dev=0x0 --led=off
 
-  注意：此功能在SC5+和SC5P上支持 on/off/blink，在SC5H上支持on/off，其它板卡类型不支持。SC5+板卡只有第一个芯片才能控制LED灯的状态，SC5P拥有8个led，每个设备都对应一个led，每个led都支持单独设置状态。
+  注意：此功能在SC5+和SC5P上支持 on/off/blink，在SC5H上支持on/off，其它板卡类型不支持。SC5+板卡只有第一个NPU才能控制LED灯的状态，SC5P拥有8个led，每个设备都对应一个led，每个led都支持单独设置状态。
 
   该功能SOC模式不支持。
 
@@ -424,7 +424,7 @@ bm-smi输出的是一个简单的图形界面，描述了板卡的状态，为�
    1684-SC5+ PCIE chip0: 0 000:01:00.0 Active 56C 55C 2W 615mV OFF N/A 0% 75M 550M 550M
    3.3A 0MB 7086MB
 
-| 三芯卡上的第0个chip的状态，1684-SC5+ PCIE chip0:
+| 三芯卡上的第0个processor的状态，1684-SC5+ PCIE chip0:
 | 后面的信息依次对应bm-smi中的：TPU Bus-ID Status boardT chipT TPU_P TPU_V ECC CorrectN Tpu-Util Minclk Maxclk Curclk TPU_C Memory-Usage
 
 第二个区域：
@@ -432,7 +432,7 @@ bm-smi输出的是一个简单的图形界面，描述了板卡的状态，为�
    1684-SC5+ PCIE chip1: 1 000:01:00.1 Active 56C 55C 2W 613mV OFF N/A 0% 75M 550M 550M
    4.2A 0MB 7086MB
 
-| 三芯卡上的第1个chip的状态，1684-SC5+ PCIE chip1:
+| 三芯卡上的第1个processor的状态，1684-SC5+ PCIE chip1:
 | 后面的信息依次对应bm-smi中的：TPU Bus-ID Status boardT chipT TPU_P TPU_V ECC CorrectN Tpu-Util Minclk Maxclk Curclk TPU_C Memory-Usage
 
 第三个区域：
@@ -440,14 +440,14 @@ bm-smi输出的是一个简单的图形界面，描述了板卡的状态，为�
    1684-SC5+ PCIE chip2: 2 000:01:00.2 Active 54C 53C 1W 615mV OFF N/A 0% 75M 550M 550M
    2.6A 0MB 7086MB
 
-| 三芯卡上的第2个chip的状态，1684-SC5+ PCIE chip2:
+| 三芯卡上的第2个processor的状态，1684-SC5+ PCIE chip2:
 | 后面的信息依次对应bm-smi中的：TPU Bus-ID Status boardT chipT TPU_P TPU_V ECC CorrectN Tpu-Util Minclk Maxclk Curclk TPU_C Memory-Usage
 
 .. parsed-literal::
 
   注意事项：
 
-  1、--start_dev=0 --last_dev=2 表示bm-smi中显示的某张卡的第0个和最后1个chip对应的设备号；
+  1、--start_dev=0 --last_dev=2 表示bm-smi中显示的某张卡的第0个和最后1个processor对应的设备号；
 
   2、--start_dev --last_dev --text_format要一起使用。
 

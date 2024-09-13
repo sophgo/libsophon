@@ -20,9 +20,12 @@
 #define BMDEV_FLUSH_GMEM              _IOWR('p', 0x18, unsigned long)
 #define BMDEV_ALLOC_GMEM_ION          _IOW('p', 0x19, unsigned long)
 #define BMDEV_GMEM_ADDR               _IOW('p', 0x1a, unsigned long)
+#define BMDEV_ALLOC_GMEM_ION_U64      _IOW('p', 0x1b, unsigned long)
+#define BMDEV_FREE_GMEM_U64           _IOW('p', 0x1c, unsigned long)
 
 #define BMDEV_SEND_API                _IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API         _IOW('p', 0x21, unsigned long)
+#define BMDEV_SYNC_TIMEOUT_API        _IOW('p', 0x22, unsigned long)
 #define BMDEV_DEVICE_SYNC_API         _IOW('p', 0x23, unsigned long)
 #define BMDEV_HANDLE_SYNC_API         _IOW('p', 0x27, unsigned long)
 #define BMDEV_SEND_API_EXT            _IOW('p', 0x28, unsigned long)
@@ -43,6 +46,7 @@
 #define BMDEV_SET_REG                 _IOWR('p', 0x3c, unsigned long)
 #define BMDEV_GET_REG                 _IOWR('p', 0x3d, unsigned long)
 #define BMDEV_GET_DEV_STAT            _IOWR('p', 0x3e, unsigned long)
+#define BMDEV_RW_MIX                  _IOWR('p', 0x3f, unsigned long)
 
 #define BMDEV_TRACE_ENABLE            _IOW('p',  0x40, unsigned long)
 #define BMDEV_TRACE_DISABLE           _IOW('p',  0x41, unsigned long)
@@ -52,11 +56,16 @@
 #define BMDEV_ENABLE_PERF_MONITOR     _IOWR('p', 0x45, unsigned long)
 #define BMDEV_DISABLE_PERF_MONITOR    _IOWR('p', 0x46, unsigned long)
 #define BMDEV_GET_DEVICE_TIME         _IOWR('p', 0x47, unsigned long)
+#define BMDEV_RW_HOST                 _IOWR('p', 0x48, unsigned long)
 
 #define BMDEV_SET_TPU_DIVIDER         _IOWR('p', 0x50, unsigned long)
 #define BMDEV_SET_MODULE_RESET        _IOWR('p', 0x51, unsigned long)
 #define BMDEV_SET_TPU_FREQ            _IOWR('p', 0x52, unsigned long)
 #define BMDEV_GET_TPU_FREQ            _IOWR('p', 0x53, unsigned long)
+#define BMDEV_SET_TPU_VOLT            _IOWR('p', 0x54, unsigned long)
+#define BMDEV_SET_RDROP            _IOWR('p', 0x55, unsigned long)
+#define BMDEV_GET_RDROP            _IOWR('p', 0x56, unsigned long)
+#define BMDEV_SET_VDDC_VOLT            _IOWR('p', 0x57, unsigned long)
 
 #define BMDEV_TRIGGER_VPP             _IOWR('p', 0x60, unsigned long)
 #define BMDEV_TRIGGER_SPACC           _IOWR('p', 0x61, unsigned long)
@@ -93,6 +102,7 @@
 #define BMDEV_COMM_SET_CARDID         _IOWR('p', 0xAA, unsigned long)
 #define BMDEV_SET_IP                  _IOWR('p', 0xAC, unsigned long)
 #define BMDEV_SET_GATE                _IOWR('p', 0xAD, unsigned long)
+#define BMDEV_SYNC_TIME_MIX           _IOWR('p', 0xAE, unsigned long)
 
 #define BMDEV_GET_TPUC                _IOWR('p', 0x81, unsigned long)
 #define BMDEV_GET_MAXP                _IOWR('p', 0x82, unsigned long)

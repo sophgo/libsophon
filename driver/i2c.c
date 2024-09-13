@@ -153,6 +153,11 @@ void bmdrv_power_and_temp_i2c_init(struct bm_device_info  *bmdi)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		i2c_addr = 0x4c;
 		rx_level = 0;

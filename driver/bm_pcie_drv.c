@@ -313,9 +313,14 @@ static int bmdrv_pci_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	}
 
 	/* Set dma address mask */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
+	if (dma_set_mask(&pdev->dev, pci_dma_mask) ||
+            dma_set_coherent_mask(&pdev->dev, pci_dma_mask)){
+#else
 	if (pci_set_dma_mask(pdev, pci_dma_mask) ||
 			pci_set_consistent_dma_mask(pdev, pci_dma_mask)) {
-		dev_err(cinfo->device, "Error: No usable DMA configuration\n");
+#endif
+        dev_err(cinfo->device, "Error: No usable DMA configuration\n");
 		rc = -EFAULT;
 		goto err_dma;
 	}
@@ -422,6 +427,9 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 			pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
 			return -1;
 		}
+#ifndef FW_SIMPLE
+		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
+#endif
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
 			bm_vpu_init(bmdi);
@@ -484,7 +492,12 @@ retry1:
 		}
 		bmdrv_power_and_temp_i2c_init(bmdi);
 		if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
-			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
 			bmdrv_uart_init(bmdi, uart_index, baudrate);
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_early_init \n", bmdi->dev_index);
@@ -667,10 +680,25 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	value &= ~(1<<0);
 	bm_write32(bmdi, 0x50010c00, value);
 
+	// value = bm_read32(bmdi, 0x50010c00);
+	// value &= ~(1<<17);
+	// bm_write32(bmdi, 0x50010c00, value);
+
+	bm_write32(bmdi, 0x50010c04, 0x3FFFF);
+	bm_write32(bmdi, 0x50010c08, 0xFFFF83C0);
+
 	udelay(500);
 	value = bm_read32(bmdi, 0x50010c00);
 	value |= (1<<0);
 	bm_write32(bmdi, 0x50010c00, value);
+
+	// value = bm_read32(bmdi, 0x50010c00);
+	// value |= (1<<17);
+	// bm_write32(bmdi, 0x50010c00, value);
+
+	bm_write32(bmdi, 0x50010c04, 0xFFFFFFFF);
+	bm_write32(bmdi, 0x50010c08, 0xFFFFFFFF);
+
 	if (ret == 0) {
 		msleep(1000);
 		while (retry > 0) {
@@ -709,8 +737,70 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	}
 
 	bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
+	bmdi->status_reset = A53_RESET_STATUS_FALSE;
+	return ret;
+}
+
+int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
+	int                  ret = 0;
+	u32                  flag  = 0xabcdabcd;
+	int                  retry = 3;
+	u32 value = 0;
+
+	bmdrv_set_a53_boot_args(bmdi);
+
+	value = bm_read32(bmdi, 0x50010c00);
+	value &= ~(1<<0);
+	bm_write32(bmdi, 0x50010c00, value);
+
+	udelay(500);
+	value = bm_read32(bmdi, 0x50010c00);
+	value |= (1<<0);
+	bm_write32(bmdi, 0x50010c00, value);
+	if (ret == 0) {
+		msleep(1000);
+		while (retry > 0) {
+			flag = bmdrv_get_a53_boot_args(bmdi);
+			if (flag == FIP_SRC_INVALID) {
+				ret = -EFAULT;
+				break;
+			}
+			if ((flag & FIP_LOADED) == 0) {
+				break;
+			}
+
+			retry--;
+			msleep(1000);
+		}
+		if (retry == 0) {
+			pr_err("bmdrv: force reset bmcpu timeout!\n");
+			ret = -EFAULT;
+		}
+	}
 
 	return ret;
+}
+
+void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
+{
+	// u32 ctrl_word;
+	int value = 0x0;
+
+	/*send  fiq 6 to arm9, let it get ready to die*/
+	top_reg_write(bmdi, TOP_GP_REG_ARM9_IRQ_SET_OFFSET, 0x1 << 3);
+
+	udelay(50);
+
+	/*stop smbus*/
+
+	value = intc_reg_read(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_L_OFFSET);
+	value = value | (0x1 << 27);
+	intc_reg_write(bmdi, INTC0_BASE_ADDR_OFFSET + IRQ_MASK_L_OFFSET, value);
+
+	/* reset arm9 */
+	// ctrl_word = top_reg_read(bmdi, TOP_SW_RESET0);
+	// ctrl_word &= ~(1 << 1);
+	// top_reg_write(bmdi, TOP_SW_RESET0, ctrl_word);
 }
 
 int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
@@ -726,6 +816,8 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 	bm_api_reset_cpu_t api_reset_cpu;
 	u32 flag;
 	int retry = 3;
+	int board_version = 0;
+	u8 board_type = 0;
 
 	typedef enum {
 			FW_PCIE_MODE,
@@ -734,7 +826,9 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		} bm_arm9_fw_mode;
 	bm_arm9_fw_mode mode;
 
-	if (bmdi->status_bmcpu == BMCPU_IDLE) {
+	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
+
+	if (bmdi->status_bmcpu == BMCPU_IDLE && mode == FW_PCIE_MODE) {
 		if (bmdi->eth_state == true) {
 			bmdi->eth_state = false;
 			bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
@@ -742,10 +836,9 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		return 0;
 	}
 
-	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
 	if (mode == FW_MIX_MODE && bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
 		pr_info("bmsophon%d mix mode force reset bmcpu!\n", bmdi->dev_index);
-		bmdrv_fw_unload(bmdi);
+		bmdrv_fw_unload_mix(bmdi);
 		return bmdrv_force_reset_bmcpu(bmdi);
 	}
 
@@ -810,6 +903,13 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		}
 	}
 
+	board_version = bmdi->cinfo.board_version;
+	board_type = (u8)((board_version >> 8) & 0xff);
+	if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
+		pr_info("force reset bmcpu!\n");
+		ret = bmdrv_force_reset_bmcpu_pcie(bmdi);
+	}
+
 	if (ret == 0) {
 		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU, 0);
 		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_CPU, 0);
@@ -820,6 +920,7 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		mutex_unlock(&bmdi->c_attr.attr_mutex);
 	}
 
+	bmdi->status_reset = A53_RESET_STATUS_FALSE;
 	return ret;
 }
 #endif
@@ -1310,7 +1411,10 @@ static void __exit bmdrv_module_exit(void)
 
 module_init(bmdrv_module_init);
 module_exit(bmdrv_module_exit);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+MODULE_IMPORT_NS(DMA_BUF);
+#endif
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("xiao.wang@sophgo.com");
 MODULE_DESCRIPTION("Sophon Series Deep Learning Accelerator Driver");
-MODULE_VERSION("0.4.9 LTS");
+MODULE_VERSION("0.5.1 LTS");

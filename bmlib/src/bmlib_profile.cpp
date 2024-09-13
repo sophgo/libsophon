@@ -83,6 +83,7 @@ static int bm_mkdir(const char *dirname, bool must_new)
   string dname = dirname;
   struct stat st;
   dname += "/";
+  int cmd_ret;
   if (stat(dname.c_str(), &st) == -1) {
 #ifdef __linux__
     ASSERT(mkdir(dname.c_str(), 0777) == 0);
@@ -94,7 +95,11 @@ static int bm_mkdir(const char *dirname, bool must_new)
   if(must_new){
     string cmd = "rm ";
     cmd += dname + "*";
-    system(cmd.c_str());
+    cmd_ret = system(cmd.c_str());
+    if(cmd_ret == -1){
+      PROFILE_ERROR("exec %s failed!\n", cmd.c_str());
+      return -1;
+    }
   }
   return 0;
 }
