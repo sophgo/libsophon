@@ -355,16 +355,20 @@ static int spi_read_status(struct bm_device_info *bmdi)
 
 u32 bm_spi_read_id(struct bm_device_info *bmdi)
 {
-	u8 cmd_buf[4];
-	u8 data_buf[4];
+	u8 cmd_buf[4] = {0};
+	u8 data_buf[8];
 	u32 read_id = 0;
 
 	memset(cmd_buf, 0, sizeof(cmd_buf));
 	memset(data_buf, 0, sizeof(data_buf));
 
 	cmd_buf[0] = SPI_CMD_RDID;
-	spi_in_out_tran(bmdi, data_buf, cmd_buf, 1, 0, 3, 3);
+	spi_data_out_tran(bmdi, cmd_buf, cmd_buf, 1, 0, 1);
+	spi_data_in_tran(bmdi, data_buf, cmd_buf, 1, 0, 6);
+	//spi_in_out_tran(bmdi, data_buf, cmd_buf, 1, 0, 3, 3);
 	read_id = (data_buf[2] << 16) | (data_buf[1] << 8) | (data_buf[0]);
+	dev_info(bmdi->cinfo.device, "SPI ID: 0x%08x\n", read_id);
+
 	return read_id;
 }
 
@@ -475,7 +479,6 @@ static int do_page_program(struct bm_device_info *bmdi, u8 *src_buf, u32 addr, u
 		udelay(100);
 		spi_status = spi_read_status(bmdi);
 		if (((spi_status & SPI_STATUS_WIP) == 0) || (wait_cnt > 600)) { // 60ms, spec 120~2800us
-			pr_info("page prog done, get status: 0x%x\n", spi_status);
 			break;
 		}
 		wait_cnt++;
@@ -490,11 +493,17 @@ int bm_spi_flash_program(struct bm_device_info *bmdi, u8 *src_buf, u32 base, u32
 	u32 id, sector_size;
 
 	id = bm_spi_read_id(bmdi);
-	if (id == SPI_ID_M25P128)
+	switch (id) {
+	case SPI_ID_M25P128:
 		sector_size = 256 * 1024;
-	else if (id == SPI_ID_N25Q128 || id == SPI_ID_GD25LQ128)
+		break;
+	case SPI_ID_N25Q128:
+	case SPI_ID_GD25LQ128:
+	case SPI_ID_W25Q128FW:
+	case SPI_ID_GD25LB512:
 		sector_size = 64 * 1024;
-	else {
+		break;
+	default:
 		dev_err(bmdi->cinfo.device, "unrecognized flash ID 0x%x\n", id);
 		return -EINVAL;
 	}
@@ -504,7 +513,7 @@ int bm_spi_flash_program(struct bm_device_info *bmdi, u8 *src_buf, u32 base, u32
 		return -EINVAL;
 	}
 
-	erased_sectors = (size + sector_size) / sector_size;
+	erased_sectors = (size + sector_size - 1) / sector_size;
 	pr_info("Start erasing %d sectors, each %d bytes...\n", erased_sectors, sector_size);
 
 	for (i = 0; i < erased_sectors; i++)
@@ -533,8 +542,7 @@ int bm_spi_flash_program(struct bm_device_info *bmdi, u8 *src_buf, u32 base, u32
 		}
 		off += xfer_size;
 
-		pr_info(".");
-		if (++i % 32 == 0) {
+		if (++i % 256 == 0) {
 			pr_info("\n");
 			i = 0;
 		}

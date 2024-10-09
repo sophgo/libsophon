@@ -1391,6 +1391,7 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 
 static struct pci_device_id bmdrv_devices_tbl[] = {
 	{PCI_DEVICE_SUB(SOPHGO_VENDOR_ID, 0x1686, PCI_ANY_ID, 0xA200)},
+	{PCI_DEVICE_SUB(SOPHGO_VENDOR_ID, 0x1688, PCI_ANY_ID, 0xA200)},
 	{0, 0, 0, 0, 0, 0, 0}
 };
 

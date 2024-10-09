@@ -14,8 +14,8 @@ int main(int argc, char *argv[]) {
     bm_handle_t handle;
     bm_status_t ret;
 
-    if (argc < 3) {
-        printf("Usage: test_start_cpu dev_id itb_file\n");
+    if (argc < 4) {
+        printf("Usage: test_start_cpu dev_id boot_file itb_file\n");
         return -1;
     }
 
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    ret = bmcpu_start_cpu(handle, NULL,  argv[2]);
+    ret = bmcpu_start_cpu(handle, argv[2],  argv[3]);
     if (ret != BM_SUCCESS) {
         printf("ERROR!!! start cpu error!\n");
         bm_dev_free(handle);

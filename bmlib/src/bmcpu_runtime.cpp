@@ -811,18 +811,16 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
     #ifdef __linux__
     bmcpu_set_arm9_fw_mode(handle, FW_PCIE_MODE);
     #endif
-    if (misc_info.chipid != 0x1686a200) {
-        dev_mem.u.device.device_addr = 0x10100000;
-        dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
-        dev_mem.size                 = 0x2B000;
-        ret = bm_load_file(handle, boot_file, &dev_mem, NULL);
-        if (ret != BM_SUCCESS) {
-            bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                      BMLIB_LOG_ERROR,
-                      "start cpu load fip error, ret %d\n",
-                      ret);
-            return BM_ERR_FAILURE;
-        }
+    dev_mem.u.device.device_addr = 0x102000000;
+    dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
+    dev_mem.size                 = 0x80000;
+    ret = bm_load_file(handle, boot_file, &dev_mem, NULL);
+    if (ret != BM_SUCCESS) {
+        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "start cpu load fip error, ret %d\n",
+                  ret);
+        return BM_ERR_FAILURE;
     }
 
     dev_mem.u.device.device_addr = 0x104000000;

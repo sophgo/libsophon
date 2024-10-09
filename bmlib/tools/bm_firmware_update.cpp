@@ -1033,6 +1033,32 @@ int main(int argc, char *argv[])
                goto fail;
             }
             printf("BM1684X %s firmware update chip_id = %d completed.\n", FLAGS_target.c_str(), i);
+        } else if (handle->misc_info.chipid == 0x1686a200) {
+            printf("+----------------------------------------------+\n");
+            /*
+            * if there is a day to reconstruct this function,
+            * please movethe following check for filename to the begining of this function
+            * input check should stay together
+            */
+            if(FLAGS_target == "a53" && FLAGS_file != "spi_flash_bmsophon.bin"){
+	            printf("Wrong version of flash bin file, please check if it is the correct file again!\n");
+	            if(handle != NULL){
+		            bm_dev_free(handle);
+		            handle = NULL;
+	            }
+	            goto fail;
+            }
+            printf("BM1688 %s firmware update chip_id = %d started.\n", FLAGS_target.c_str(), i);
+            ret = bm1684_firmware_update(handle, &bin_buf);
+            if (ret != BM_SUCCESS) {
+                printf("BM1688 %s firmware update chip_id = %d failed!\n", FLAGS_target.c_str(), i);
+                if (handle != NULL) {
+                    bm_dev_free(handle);
+                    handle = NULL;
+                }
+               goto fail;
+            }
+            printf("BM1688 %s firmware update chip_id = %d completed.\n", FLAGS_target.c_str(), i);
         } else {
             printf("Unknown CHIP!\n");
             goto fail;
