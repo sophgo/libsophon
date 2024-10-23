@@ -43,7 +43,7 @@
 #include "bm1684/bm1684_ce.h"
 #include "bm1688/bm1688_irq.h"
 #include "bm1688/bm1688_card.h"
-#include "bm1688/ddr/ddr.h"
+//#include "bm1688/ddr/ddr.h"
 #include "bm_card.h"
 #include "bm_napi.h"
 #include "sg_comm.h"

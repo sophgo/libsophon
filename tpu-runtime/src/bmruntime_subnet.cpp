@@ -449,8 +449,9 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
 
   u64 output_shape_global_addr = 0;
   if (output_num != 0) {
+    std::string suffix = (m_flags & BM_RUNTIME_SHARE_MEM) ? "" : "_" + std::to_string(dyn_core_mask);
     uint64_t output_shape_size = output_num * sizeof(bm_shape_ex_t);
-    output_shape_global_addr = alloc_device_mem(devid, output_shape_mem, output_shape_size, "dynamic_out", 1, false);
+    output_shape_global_addr = alloc_device_mem(devid, output_shape_mem, output_shape_size, "dynamic_out"+suffix, 1, false);
     // output_shape_global_addr = must_alloc_device_mem(devid, &output_shape_mem, output_shape_size);
   }
 
@@ -662,7 +663,7 @@ void Bmruntime::fill_tpu_cmd_info(std::vector<tpu_cmd_info_t> &cmd_info,
 bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                                   const bm_tensor_t* input_tensors, int input_num,
                                   bm_tensor_t* output_tensors, int output_num,
-                                  const uint32_t dyn_core_mask)
+                                  const uint32_t dyn_core_mask, bool force_sync)
 {
   auto devid = net_ctx->device_id;
   std::vector<tpu_tensor_info_t> input_info;
@@ -734,7 +735,8 @@ bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const 
 #endif
 
     bm_status_t status = bmfunc::bmdnn_base()->_bmdnn_multi_fullnet_(m_handles[devid], net_info);
-    if (BM_SUCCESS == status) {
+    bool need_sync = m_profile->is_enabled() | force_sync;
+    if (need_sync && BM_SUCCESS == status) {
       for (auto core_id : core_list) {
         bm_status_t core_status = bm_thread_sync_from_core(m_handles[devid], core_id);
         status = core_status == BM_SUCCESS ? status : core_status;
@@ -1221,7 +1223,7 @@ bool Bmruntime::launch_multi_subnet(
                 ret = launch_tpu_subnet(net_ctx, stage, subnet,
                                         subnet_input_tensors, subnet_input_num,
                                         subnet_output_tensors, subnet_output_num,
-                                        dyn_core_mask);
+                                        dyn_core_mask, next_id >=0);
                 BMRT_ASSERT_INFO(ret == true, "launch_tpu_subnet return false");
             }
 

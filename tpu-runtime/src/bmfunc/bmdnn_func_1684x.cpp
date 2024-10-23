@@ -94,9 +94,47 @@ bmdnn_func_1684x::_bmdnn_multi_fullnet_(bm_handle_t handle,
   api_info_t api_info;
   fill_api_info(net_info, api_info);
   auto api_id = net_info.kernel_func_ids[0];
-  bm_status_t status = tpu_kernel_launch_async(handle, api_id,
-                                               api_info.api_data[0].data(),
-                                               api_info.api_data[0].size());
+  bm_status_t status = BM_SUCCESS;
+  if (api_info.api_data[0].size()<MAX_API_MSG_SIZE){
+     status = tpu_kernel_launch_async(handle, api_id,
+                                      api_info.api_data[0].data(),
+                                      api_info.api_data[0].size());
+  }
+  else{
+    bm_device_mem_t api_mem;
+    #pragma pack(1)
+    typedef struct{
+        u32 input_num = 0;
+        u64 cmd_addr;
+        u64 cmd_size;
+    }long_cmd_param_t;
+    #pragma pack()
+    u32 malloc_size = api_info.api_data[0].size();
+    bm_status_t mem_status = bm_malloc_device_byte(handle, &api_mem, malloc_size);
+    if (mem_status != BM_SUCCESS) {
+      status = (status == BM_SUCCESS) ? mem_status : status;
+      BMRT_LOG(WRONG, "bm_malloc_device_byte failed, malloc mem:%d", malloc_size);
+    }
+    long_cmd_param_t new_api;
+    auto data = api_info.api_data[0].data();
+    bm_status_t s2d_status = bm_memcpy_s2d(handle, api_mem, (void*)data);
+    new_api.cmd_addr = api_mem.u.device.device_addr;
+    new_api.cmd_size = api_info.api_data[0].size();
+    if (BM_SUCCESS != s2d_status) {
+      status = (status == BM_SUCCESS) ? s2d_status : status;
+      BMRT_LOG(WRONG, "bm_memcpy_s2d failed, ret = %d\n", s2d_status);
+    }
+    bm_status_t core_status = tpu_kernel_launch_async(
+        handle, api_id,
+        (u8 *)(&new_api),
+        sizeof(new_api));
+    if (BM_SUCCESS != core_status) {
+      status = (status == BM_SUCCESS) ? core_status : status;
+      BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
+              BM_API_ID_MULTI_FULLNET, status);
+    }
+    bm_free_device(handle, api_mem);
+    }
   if (BM_SUCCESS != status) {
     BMRT_LOG(WRONG, "tpu_kernel_launch failed, func id:%d, status:%d", api_id, status);
   }

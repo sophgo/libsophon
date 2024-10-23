@@ -6,6 +6,7 @@
 #include <linux/platform_device.h>
 #include <linux/string.h>
 #include <linux/uaccess.h>
+#include <linux/clk.h>
 #include "bm_common.h"
 #include "i2c.h"
 #include "spi.h"
@@ -2420,7 +2421,11 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 	if(count == 17) {
 		mutex_lock(&c_attr->attr_mutex);
 		if (bmdi->cinfo.chip_id == 0x1686a200)
+#ifdef SOC_MODE
+			c_attr->tpu_current_clock = (clk_get_rate(bmdi->cinfo.tpu_clk)/1000000);
+#else
 			c_attr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+#endif
 		else
 			c_attr->tpu_current_clock = bmdrv_1684_clk_get_tpu_freq(bmdi);
 		mutex_unlock(&c_attr->attr_mutex);

@@ -642,8 +642,12 @@ struct CoeffMemT : public flatbuffers::NativeTable {
   std::vector<uint8_t> check_code;
   std::unique_ptr<Binary> binary_coeff;
   std::vector<std::unique_ptr<LocationT>> location;
+  int32_t encrypt_mode;
+  uint64_t decrypt_size;
   CoeffMemT()
-      : address(0) {
+      : address(0),
+        encrypt_mode(0),
+        decrypt_size(0) {
   }
 };
 
@@ -653,7 +657,9 @@ struct CoeffMem FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_ADDRESS = 4,
     VT_CHECK_CODE = 6,
     VT_BINARY_COEFF = 8,
-    VT_LOCATION = 10
+    VT_LOCATION = 10,
+    VT_ENCRYPT_MODE = 12,
+    VT_DECRYPT_SIZE = 14
   };
   uint64_t address() const {
     return GetField<uint64_t>(VT_ADDRESS, 0);
@@ -679,6 +685,18 @@ struct CoeffMem FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   flatbuffers::Vector<flatbuffers::Offset<Location>> *mutable_location() {
     return GetPointer<flatbuffers::Vector<flatbuffers::Offset<Location>> *>(VT_LOCATION);
   }
+  int32_t encrypt_mode() const {
+    return GetField<int32_t>(VT_ENCRYPT_MODE, 0);
+  }
+  bool mutate_encrypt_mode(int32_t _encrypt_mode) {
+    return SetField<int32_t>(VT_ENCRYPT_MODE, _encrypt_mode, 0);
+  }
+  uint64_t decrypt_size() const {
+    return GetField<uint64_t>(VT_DECRYPT_SIZE, 0);
+  }
+  bool mutate_decrypt_size(uint64_t _decrypt_size) {
+    return SetField<uint64_t>(VT_DECRYPT_SIZE, _decrypt_size, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint64_t>(verifier, VT_ADDRESS) &&
@@ -688,6 +706,8 @@ struct CoeffMem FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyOffset(verifier, VT_LOCATION) &&
            verifier.VerifyVector(location()) &&
            verifier.VerifyVectorOfTables(location()) &&
+           VerifyField<int32_t>(verifier, VT_ENCRYPT_MODE) &&
+           VerifyField<uint64_t>(verifier, VT_DECRYPT_SIZE) &&
            verifier.EndTable();
   }
   CoeffMemT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -710,6 +730,12 @@ struct CoeffMemBuilder {
   void add_location(flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Location>>> location) {
     fbb_.AddOffset(CoeffMem::VT_LOCATION, location);
   }
+  void add_encrypt_mode(int32_t encrypt_mode) {
+    fbb_.AddElement<int32_t>(CoeffMem::VT_ENCRYPT_MODE, encrypt_mode, 0);
+  }
+  void add_decrypt_size(uint64_t decrypt_size) {
+    fbb_.AddElement<uint64_t>(CoeffMem::VT_DECRYPT_SIZE, decrypt_size, 0);
+  }
   explicit CoeffMemBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -727,9 +753,13 @@ inline flatbuffers::Offset<CoeffMem> CreateCoeffMem(
     uint64_t address = 0,
     flatbuffers::Offset<flatbuffers::Vector<uint8_t>> check_code = 0,
     const Binary *binary_coeff = 0,
-    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Location>>> location = 0) {
+    flatbuffers::Offset<flatbuffers::Vector<flatbuffers::Offset<Location>>> location = 0,
+    int32_t encrypt_mode = 0,
+    uint64_t decrypt_size = 0) {
   CoeffMemBuilder builder_(_fbb);
+  builder_.add_decrypt_size(decrypt_size);
   builder_.add_address(address);
+  builder_.add_encrypt_mode(encrypt_mode);
   builder_.add_location(location);
   builder_.add_binary_coeff(binary_coeff);
   builder_.add_check_code(check_code);
@@ -741,7 +771,9 @@ inline flatbuffers::Offset<CoeffMem> CreateCoeffMemDirect(
     uint64_t address = 0,
     const std::vector<uint8_t> *check_code = nullptr,
     const Binary *binary_coeff = 0,
-    const std::vector<flatbuffers::Offset<Location>> *location = nullptr) {
+    const std::vector<flatbuffers::Offset<Location>> *location = nullptr,
+    int32_t encrypt_mode = 0,
+    uint64_t decrypt_size = 0) {
   auto check_code__ = check_code ? _fbb.CreateVector<uint8_t>(*check_code) : 0;
   auto location__ = location ? _fbb.CreateVector<flatbuffers::Offset<Location>>(*location) : 0;
   return bmodel::CreateCoeffMem(
@@ -749,7 +781,9 @@ inline flatbuffers::Offset<CoeffMem> CreateCoeffMemDirect(
       address,
       check_code__,
       binary_coeff,
-      location__);
+      location__,
+      encrypt_mode,
+      decrypt_size);
 }
 
 flatbuffers::Offset<CoeffMem> CreateCoeffMem(flatbuffers::FlatBufferBuilder &_fbb, const CoeffMemT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3029,9 +3063,11 @@ struct ModelT : public flatbuffers::NativeTable {
   std::unique_ptr<KernelModuleT> kernel_module;
   uint32_t device_num;
   std::unique_ptr<CpuopModuleT> cpuop_module;
+  uint32_t bmodel_type;
   ModelT()
       : neuron_size(0),
-        device_num(0) {
+        device_num(0),
+        bmodel_type(0) {
   }
 };
 
@@ -3046,7 +3082,8 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_NEURON_SIZE = 14,
     VT_KERNEL_MODULE = 16,
     VT_DEVICE_NUM = 18,
-    VT_CPUOP_MODULE = 20
+    VT_CPUOP_MODULE = 20,
+    VT_BMODEL_TYPE = 22
   };
   const flatbuffers::String *type() const {
     return GetPointer<const flatbuffers::String *>(VT_TYPE);
@@ -3102,6 +3139,12 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   CpuopModule *mutable_cpuop_module() {
     return GetPointer<CpuopModule *>(VT_CPUOP_MODULE);
   }
+  uint32_t bmodel_type() const {
+    return GetField<uint32_t>(VT_BMODEL_TYPE, 0);
+  }
+  bool mutate_bmodel_type(uint32_t _bmodel_type) {
+    return SetField<uint32_t>(VT_BMODEL_TYPE, _bmodel_type, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_TYPE) &&
@@ -3121,6 +3164,7 @@ struct Model FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<uint32_t>(verifier, VT_DEVICE_NUM) &&
            VerifyOffset(verifier, VT_CPUOP_MODULE) &&
            verifier.VerifyTable(cpuop_module()) &&
+           VerifyField<uint32_t>(verifier, VT_BMODEL_TYPE) &&
            verifier.EndTable();
   }
   ModelT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -3158,6 +3202,9 @@ struct ModelBuilder {
   void add_cpuop_module(flatbuffers::Offset<CpuopModule> cpuop_module) {
     fbb_.AddOffset(Model::VT_CPUOP_MODULE, cpuop_module);
   }
+  void add_bmodel_type(uint32_t bmodel_type) {
+    fbb_.AddElement<uint32_t>(Model::VT_BMODEL_TYPE, bmodel_type, 0);
+  }
   explicit ModelBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -3185,9 +3232,11 @@ inline flatbuffers::Offset<Model> CreateModel(
     uint64_t neuron_size = 0,
     flatbuffers::Offset<KernelModule> kernel_module = 0,
     uint32_t device_num = 0,
-    flatbuffers::Offset<CpuopModule> cpuop_module = 0) {
+    flatbuffers::Offset<CpuopModule> cpuop_module = 0,
+    uint32_t bmodel_type = 0) {
   ModelBuilder builder_(_fbb);
   builder_.add_neuron_size(neuron_size);
+  builder_.add_bmodel_type(bmodel_type);
   builder_.add_cpuop_module(cpuop_module);
   builder_.add_device_num(device_num);
   builder_.add_kernel_module(kernel_module);
@@ -3209,7 +3258,8 @@ inline flatbuffers::Offset<Model> CreateModelDirect(
     uint64_t neuron_size = 0,
     flatbuffers::Offset<KernelModule> kernel_module = 0,
     uint32_t device_num = 0,
-    flatbuffers::Offset<CpuopModule> cpuop_module = 0) {
+    flatbuffers::Offset<CpuopModule> cpuop_module = 0,
+    uint32_t bmodel_type = 0) {
   auto type__ = type ? _fbb.CreateString(type) : 0;
   auto version__ = version ? _fbb.CreateString(version) : 0;
   auto time__ = time ? _fbb.CreateString(time) : 0;
@@ -3225,7 +3275,8 @@ inline flatbuffers::Offset<Model> CreateModelDirect(
       neuron_size,
       kernel_module,
       device_num,
-      cpuop_module);
+      cpuop_module,
+      bmodel_type);
 }
 
 flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_fbb, const ModelT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3415,6 +3466,8 @@ inline void CoeffMem::UnPackTo(CoeffMemT *_o, const flatbuffers::resolver_functi
   { auto _e = check_code(); if (_e) { _o->check_code.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->check_code[_i] = _e->Get(_i); } } };
   { auto _e = binary_coeff(); if (_e) _o->binary_coeff = std::unique_ptr<Binary>(new Binary(*_e)); };
   { auto _e = location(); if (_e) { _o->location.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->location[_i] = std::unique_ptr<LocationT>(_e->Get(_i)->UnPack(_resolver)); } } };
+  { auto _e = encrypt_mode(); _o->encrypt_mode = _e; };
+  { auto _e = decrypt_size(); _o->decrypt_size = _e; };
 }
 
 inline flatbuffers::Offset<CoeffMem> CoeffMem::Pack(flatbuffers::FlatBufferBuilder &_fbb, const CoeffMemT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3429,12 +3482,16 @@ inline flatbuffers::Offset<CoeffMem> CreateCoeffMem(flatbuffers::FlatBufferBuild
   auto _check_code = _o->check_code.size() ? _fbb.CreateVector(_o->check_code) : 0;
   auto _binary_coeff = _o->binary_coeff ? _o->binary_coeff.get() : 0;
   auto _location = _o->location.size() ? _fbb.CreateVector<flatbuffers::Offset<Location>> (_o->location.size(), [](size_t i, _VectorArgs *__va) { return CreateLocation(*__va->__fbb, __va->__o->location[i].get(), __va->__rehasher); }, &_va ) : 0;
+  auto _encrypt_mode = _o->encrypt_mode;
+  auto _decrypt_size = _o->decrypt_size;
   return bmodel::CreateCoeffMem(
       _fbb,
       _address,
       _check_code,
       _binary_coeff,
-      _location);
+      _location,
+      _encrypt_mode,
+      _decrypt_size);
 }
 
 inline TensorT *Tensor::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -4047,6 +4104,7 @@ inline void Model::UnPackTo(ModelT *_o, const flatbuffers::resolver_function_t *
   { auto _e = kernel_module(); if (_e) _o->kernel_module = std::unique_ptr<KernelModuleT>(_e->UnPack(_resolver)); };
   { auto _e = device_num(); _o->device_num = _e; };
   { auto _e = cpuop_module(); if (_e) _o->cpuop_module = std::unique_ptr<CpuopModuleT>(_e->UnPack(_resolver)); };
+  { auto _e = bmodel_type(); _o->bmodel_type = _e; };
 }
 
 inline flatbuffers::Offset<Model> Model::Pack(flatbuffers::FlatBufferBuilder &_fbb, const ModelT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -4066,6 +4124,7 @@ inline flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_f
   auto _kernel_module = _o->kernel_module ? CreateKernelModule(_fbb, _o->kernel_module.get(), _rehasher) : 0;
   auto _device_num = _o->device_num;
   auto _cpuop_module = _o->cpuop_module ? CreateCpuopModule(_fbb, _o->cpuop_module.get(), _rehasher) : 0;
+  auto _bmodel_type = _o->bmodel_type;
   return bmodel::CreateModel(
       _fbb,
       _type,
@@ -4076,7 +4135,8 @@ inline flatbuffers::Offset<Model> CreateModel(flatbuffers::FlatBufferBuilder &_f
       _neuron_size,
       _kernel_module,
       _device_num,
-      _cpuop_module);
+      _cpuop_module,
+      _bmodel_type);
 }
 
 inline const bmodel::Model *GetModel(const void *buf) {

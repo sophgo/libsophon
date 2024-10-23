@@ -338,10 +338,11 @@ u32 bmrt_arch_info::get_gdma_cmd_num()
 u64 bmrt_arch_info::addr_mask() {
   u64 mask = 0xffffffffffffffff;
   if (sta_bmtpu_ptr->target_bmtpu_arch == BM1688) {
-    // relative address, only lower 35bit is valie
+    // relative address, only lower 35bit   is valie
     mask = (1ull << 35) - 1;
   } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690 ||
-             sta_bmtpu_ptr->target_bmtpu_arch == SG2380) {
+             sta_bmtpu_ptr->target_bmtpu_arch == SG2380 ||
+             sta_bmtpu_ptr->target_bmtpu_arch == MARS3) {
     mask = (1ull << 40) - 1;
   }
   return mask;

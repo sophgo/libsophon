@@ -42,12 +42,7 @@ BM1684_OBJ := $(addprefix $(BM1684_DIR)/, $(BM1684_OBJ))
 BM1688_DIR ?= bm1688
 ifeq ($(SOC_MODE), 1)
 else
-BM1688_OBJ += bm1688_pcie.o bm1688_irq.o \
-				ddr/ddr.o \
-				ddr/ddr_sys_bring_up_pld.o \
-				ddr/ddr_sys_pld.o \
-				ddr/ddr_config/lp4_x16_4ch_pld/ddrc_init.o \
-				bm1688_smbus.o
+BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o
 endif
 BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_smmu.o bm1688_clkrst.o bm1688_card.o \
 			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
@@ -72,10 +67,7 @@ ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif
-ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684  -I$(src)/bm1688 \
-			 -I$(src)/bm1688/ddr \
-			 -I$(src)/bm1688/ddr/include \
-			 -I$(src)/bm1688/ddr/ddr_config/lp4_x16_4ch_pld
+ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684 -I$(src)/bm1688
 
 ifeq ($(SOC_MODE), 1)
   ccflags-y += -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
@@ -166,7 +158,7 @@ endif
 all: clean
 ifeq ($(SOC_MODE), 1)
 	mkdir -p $(BM_KERNEL_DRIVER_OUT_DIR)
-	make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -C $(LINUX_SRC) M=$(PWD) modules
+	make ARCH=arm64 -C $(LINUX_SRC) M=$(PWD) modules
 	cp -u $(BM_MODULE_NAME).ko $(BM_KERNEL_DRIVER_OUT_DIR)
 	@make -C $(LINUX_SRC) M=$(PWD) clean
 else

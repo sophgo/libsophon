@@ -59,16 +59,16 @@ ____________________________________________
 
   .. code-block:: shell
 
-      [BMRT][bmrt_test:981] INFO:net[vgg16_8_bmnetc] stage[0], launch total time is
-      19590 us (npu 19489 us, cpu 101 us)  (1)
-      [BMRT][bmrt_test:984] INFO:+++ The network[vgg16_8_bmnetc] stage[0] output_data +++
-      [BMRT][print_array:647] INFO:output data #0 shape: [4 32 120 68 ] < 3.49693 4.07723 4.30039 4.14311 4.11042 4.23445 4.23644 4.23897 4.23897 4.23897 4.23897 4.23897 4.23897 4.23897 4.23897 4.23897 ... > len=1044480  (2)
-      [BMRT][print_array:647] INFO:output data #1 shape: [4 32 60 34 ] < 3.523 3.94491 4.09504 4.02145 3.95682 3.96846 3.96972 3.97314 3.9728 3.9728 3.9728 3.9728 3.9728 3.9728 3.9728 3.9728 ... > len=261120
-      [BMRT][print_array:647] INFO:output data #2 shape: [4 32 30 17 ] < 4.18294 5.16457 5.26347 5.16108 5.0436 4.99669 4.99279 4.99279 4.99279 4.99279 4.99279 4.99651 5.02305 5.0925 5.23303 5.24913 ... > len=65280
-      [BMRT][bmrt_test:1029] INFO:load input time(s): 0.008511 (3)
-      [BMRT][bmrt_test:1030] INFO:calculate  time(s): 0.019594
-      [BMRT][bmrt_test:1031] INFO:get output time(s): 0.006001 (4)
-      [BMRT][bmrt_test:1032] INFO:compare    time(s): 0.002886
+        [BMRT][bmrt_test:1250] INFO:net[resnet50-v2] stage[0], launch total time is 6996 us (npu 6801 us, cpu 195 us), (launch func time 164 us, sync 6834 us)
+        [BMRT][bmrt_test:1257] INFO:+++ The network[resnet50-v2] stage[0] output_data +++
+        [BMRT][print_array:766] INFO:output data #0 shape: [1 1000 ] < -0.437744 2.16406 -3.0332 -2.36719 -1.19238 0.836426 -2.34766 -1.54004 2.42188 -0.641602 3.03516 0.797852 1.31055 1.50879 -0.870605 1.2998 ... > len=1000
+        [BMRT][bmrt_test:1271] INFO:==>comparing output in mem #0 ... 
+        [BMRT][bmrt_test:1304] INFO:+++ The network[resnet50-v2] stage[0] cmp success +++
+        [BMRT][bmrt_test:1319] INFO:load input time(s): 0.008669
+        [BMRT][bmrt_test:1320] INFO:pre alloc  time(s): 0.000974
+        [BMRT][bmrt_test:1321] INFO:calculate  time(s): 0.006998
+        [BMRT][bmrt_test:1322] INFO:get output time(s): 0.000076
+        [BMRT][bmrt_test:1323] INFO:compare    time(s): 0.000845
 
   Main focuses:
     (1) Pure inference time of the model, excluding loading the input and getting the output.
@@ -107,7 +107,7 @@ ___________________________________________________
 
 1. Upon the completion of model compilation, run with comparing the model.
 
-    When compiling the model, you must indicate \--cmp=True, which is enabled by default. input_ref_data.dat and output_ref_data.dat files will be generated in the compilation output folder.
+    When compiling the model in deploy stage, you must indicate \--test_input and \--test_reference. input_ref_data.dat and output_ref_data.dat files will be generated in the compilation output folder.
 
     Then, execute 'bmrt_test \--context_dir bmodel_dir'to verify the correctness of the model inference data.
 

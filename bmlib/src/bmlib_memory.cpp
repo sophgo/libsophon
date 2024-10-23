@@ -27,12 +27,15 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     #include <io.h>
     EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #endif
-#include "rbtree.h"
 
 #define BMLIB_MEMORY_LOG_TAG "bmlib_memory"
 #define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
 #define KERNEL_MODULE_PATH "/lib/firmware/libbm1688_kernel_module.so"
-
+typedef struct {
+  char *func_name;
+  tpu_kernel_function_t f_id_core0;
+  tpu_kernel_function_t f_id_core1;
+} bm_basic_func_t;
 bm_basic_func_t g_basic_func[] = {
   {.func_name = (char*)"sg_api_memset", 0, 0},
   {.func_name = (char*)"sg_api_memcpy", 0, 0},
@@ -71,7 +74,7 @@ static inline void guard_mem_check(bm_handle_t handle, u64 addr, u64 size) {
     fwrite(device_data, 1, sizeof(device_data), fp);
     fclose(fp);
 
-	fp = fopen("guard_data.dat", "wb");
+    fp = fopen("guard_data.dat", "wb");
     fwrite(guard_data, 1, sizeof(guard_data), fp);
     fclose(fp);
 
@@ -82,7 +85,18 @@ static inline void guard_mem_check(bm_handle_t handle, u64 addr, u64 size) {
 
 bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 {
-  tpu_kernel_module_t bm_module;
+  tpu_kernel_module_t bm_module0 = NULL;
+  tpu_kernel_module_t bm_module1 = NULL;
+
+  unsigned int core_num;
+  bm_get_tpu_scalar_num(handle, &core_num);
+  pthread_mutex_lock(&mutex);
+
+  if (g_init_basic_func_flag == 0x5a) {
+	pthread_mutex_unlock(&mutex);
+    return BM_SUCCESS;
+  }
+  g_init_basic_func_flag = 0x5a;
 
   #ifdef __linux__
   char key[64] = {0};
@@ -94,43 +108,42 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
   const char key[64] = KERNEL_MODULE_NAME;
   if (0 != find_tpufirmware_path(lib_path, key)) {
     printf("%s does not exist\n", KERNEL_MODULE_NAME);
+	pthread_mutex_unlock(&mutex);
     return BM_ERR_FAILURE;
   }
   #endif
 
   int key_size = strlen(key);
-  pthread_mutex_lock(&mutex);
 
-  if (g_init_basic_func_flag == 0x5a) {
-	pthread_mutex_unlock(&mutex);
-    return BM_SUCCESS;
-  }
-  g_init_basic_func_flag = 0x5a;
+
   if (bm_is_dynamic_loading(handle)) {
-    unsigned int core_num = 1;
-    bm_status_t ret = bm_get_tpu_core_num(handle, &core_num);
-    if(ret != BM_SUCCESS){
-      printf("cannot get core_num");
+    bm_module0 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 0);
+    if(bm_module0 == NULL) {
+        printf("bm_module0 is null!\n");
+		pthread_mutex_unlock(&mutex);
+        return BM_ERR_FAILURE;
     }
-    if (core_num>FUNC_MAX_CORE_NUM) {
-      printf("MAX_CORE_NUM=%d, real core_num=%d\n", FUNC_MAX_CORE_NUM, core_num);
-	  pthread_mutex_unlock(&mutex);
-      return BM_ERR_FAILURE;
-    }
-    for (unsigned int core_id=0; core_id<core_num; core_id++){
-      bm_module = tpu_kernel_load_module_file_to_core(handle, lib_path, core_id);
-      if(bm_module == NULL) {
+    if (core_num != 1) {
+      bm_module1 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 1);
+      if(bm_module1 == NULL) {
+          printf("bm_module1 is null!\n");
 		  pthread_mutex_unlock(&mutex);
-          printf("bm_module %d is null!\n", core_id);
           return BM_ERR_FAILURE;
       }
-      for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
-          g_basic_func[i].f_ids[core_id] = tpu_kernel_get_function_from_core(handle, bm_module, g_basic_func[i].func_name, core_id);
-      }
-      free(bm_module);
     }
+    for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
+      g_basic_func[i].f_id_core0 = tpu_kernel_get_function_from_core(handle, bm_module0, g_basic_func[i].func_name, 0);
+      if (core_num != 1)
+        g_basic_func[i].f_id_core1 = tpu_kernel_get_function_from_core(handle, bm_module1, g_basic_func[i].func_name, 1);
+    }
+    free(bm_module0);
+    bm_module0 = NULL;
+    if (core_num != 1)
+      free(bm_module1);
+    bm_module1 = NULL;
   }
   pthread_mutex_unlock(&mutex);
+
   return BM_SUCCESS;
 }
 
@@ -142,7 +155,11 @@ tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_
   }
   for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
     if (strcmp(g_basic_func[i].func_name, func_name) == 0){
-      return g_basic_func[i].f_ids[core_id];
+      if (core_id) {
+        return g_basic_func[i].f_id_core1;
+      } else {
+        return g_basic_func[i].f_id_core0;
+      }
     }
   }
   printf("not found func_name: %s\n", func_name);
@@ -403,7 +420,7 @@ bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx) {
   ret = platform_ioctl(ctx, ION_IOC_HEAP_QUERY, &query);
   if (ret != 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "io query heap failed, ioclt ret = %d:%d\n", ret, __LINE__);
+          "io query heap failed\n");
     return BM_ERR_FAILURE;
   }
 
@@ -449,13 +466,7 @@ bm_status_t bm_total_gmem(bm_handle_t ctx, u64 *total) {
   } else
 #endif
   {
-	int ret;
-	ret = platform_ioctl(ctx, BMDEV_TOTAL_GMEM, total);
-        if (0 != ret){
-    		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"get total gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-			return BM_ERR_FAILURE;
-		}
+        if (0 != platform_ioctl(ctx, BMDEV_TOTAL_GMEM, total)) return BM_ERR_FAILURE;
   }
   return BM_SUCCESS;
 }
@@ -479,13 +490,7 @@ bm_status_t bm_avail_gmem(bm_handle_t ctx, u64 *avail) {
   } else
 #endif
   {
-	int ret;
-	ret = platform_ioctl(ctx, BMDEV_AVAIL_GMEM, avail);
-    if (0 != ret){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "get avail gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(ctx, BMDEV_AVAIL_GMEM, avail)) return BM_ERR_FAILURE;
   }
   return BM_SUCCESS;
 }
@@ -513,6 +518,7 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
           pmem->flags.u.gmem_heapid = ctx->carveout_heap_id[i];
           alloc_data.heap_id_mask = (1 << ctx->carveout_heap_id[i]);
           ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
+
           if (ret == 0) {
             ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION, pmem);
             break;
@@ -524,11 +530,6 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
   {
     alloc_data.heap_id_mask = heap_id_mask;
     ret = platform_ioctl(ctx, BMDEV_ALLOC_GMEM, &alloc_data);
-    if (0 != ret){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm alloc gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
     pmem->flags.u.gmem_heapid = alloc_data.heap_id;
   }
 
@@ -578,11 +579,6 @@ static int sg_alloc_gmem(bm_handle_t ctx, sg_device_mem_t *pmem, int heap_id_mas
   {
     alloc_data.heap_id_mask = heap_id_mask;
     ret = platform_ioctl(ctx, BMDEV_ALLOC_GMEM, &alloc_data);
-    if (0 != ret){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm alloc gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
     pmem->flags.u.gmem_heapid = alloc_data.heap_id;
   }
 
@@ -603,7 +599,7 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
   bm_status_t bm_ret;
   struct ion_allocation_data alloc_data;
 
-   // When the chip is CV186AH/BM1688, map heap 3 to heap 2
+  // When the chip is CV186AH/BM1688, map heap 3 to heap 2
   if (((heap_id_mask >> 2) & 0x1)) {
 	heap_id_mask = (heap_id_mask | 0x2) & 0x3;
   }
@@ -632,11 +628,6 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
   {
     alloc_data.heap_id_mask = heap_id_mask;
     ret = platform_ioctl(ctx, BMDEV_ALLOC_GMEM, &alloc_data);
-    if (0 != ret){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm alloc gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
     pmem->flags.u.gmem_heapid = alloc_data.heap_id;
   }
 
@@ -652,55 +643,6 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 }
 
 static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem) {
-	int ret;
-    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
-        return BM_ERR_FAILURE;
-    }
-#ifdef __linux__
-    if (close(pmem->u.device.dmabuf_fd)) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-			"free gmem failed!\n");
-		return BM_ERR_FAILURE;
-	}
-#endif
-	bm_profile_record_mem_begin(ctx);
-	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem);
-	if (ret != 0) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm free gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
-	bm_profile_record_mem_end(ctx, bm_mem_op_type_t::FREE, pmem->u.device.device_addr, pmem->size);
-    return BM_SUCCESS;
-}
-
-static bm_status_t sg_free_gmem(bm_handle_t ctx, sg_device_mem_t *pmem) {
-	int ret;
-    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
-        return BM_ERR_FAILURE;
-    }
-#ifdef __linux__
-    if (close(pmem->u.device.dmabuf_fd)) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-				"free gmem failed!\n");
-		return BM_ERR_FAILURE;
-	}
-#endif
-	bm_profile_record_mem_begin(ctx);
-	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem);
-	if (ret != 0) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm free gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
-	bm_profile_record_mem_end(ctx, bm_mem_op_type_t::FREE, pmem->u.device.device_addr, pmem->size);
-	return BM_SUCCESS;
-}
-
-static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) {
-	int ret;
     if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
         bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
         return BM_ERR_FAILURE;
@@ -713,12 +655,43 @@ static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) 
   }
   #endif
   bm_profile_record_mem_begin(ctx);
-  ret = platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem);
-	if (ret != 0) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm free gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+  if (platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem)) return BM_ERR_FAILURE;
+  bm_profile_record_mem_end(ctx, bm_mem_op_type_t::FREE, pmem->u.device.device_addr, pmem->size);
+    return BM_SUCCESS;
+}
+
+static bm_status_t sg_free_gmem(bm_handle_t ctx, sg_device_mem_t *pmem) {
+    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
+        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
+        return BM_ERR_FAILURE;
+    }
+  #ifdef __linux__
+    if (close(pmem->u.device.dmabuf_fd)) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "free gmem failed!\n");
+    return BM_ERR_FAILURE;
+  }
+  #endif
+  bm_profile_record_mem_begin(ctx);
+  if (platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem)) return BM_ERR_FAILURE;
+  bm_profile_record_mem_end(ctx, bm_mem_op_type_t::FREE, pmem->u.device.device_addr, pmem->size);
+    return BM_SUCCESS;
+}
+
+static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) {
+    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
+        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
+        return BM_ERR_FAILURE;
+    }
+  #ifdef __linux__
+    if (close(pmem->u.device.dmabuf_fd)) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "free gmem failed!\n");
+    return BM_ERR_FAILURE;
+  }
+  #endif
+  bm_profile_record_mem_begin(ctx);
+  if (platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(ctx, bm_mem_op_type_t::FREE, pmem->u.device.device_addr, pmem->size);
     return BM_SUCCESS;
 }
@@ -1563,7 +1536,6 @@ bm_status_t bm_get_gmem_heap_id_u64(bm_handle_t handle, bm_device_mem_u64_t *pme
 }
 
 bm_status_t bm_get_gmem_total_heap_num(bm_handle_t handle, unsigned int *heap_num) {
-	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(heap_num);
@@ -1579,12 +1551,8 @@ bm_status_t bm_get_gmem_total_heap_num(bm_handle_t handle, unsigned int *heap_nu
   else
  #endif
   {
-	ret = platform_ioctl(handle, BMDEV_GET_HEAP_NUM, heap_num);
-    if (0 != ret) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm get heap num failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(handle, BMDEV_GET_HEAP_NUM, heap_num))
+      return BM_ERR_FAILURE;
   }
 
 #endif
@@ -1592,7 +1560,6 @@ bm_status_t bm_get_gmem_total_heap_num(bm_handle_t handle, unsigned int *heap_nu
 }
 
 bm_status_t bm_get_gmem_heap_stat_byte_by_id(bm_handle_t handle, bm_heap_stat_byte_t *pheap_byte, unsigned int heap_id) {
-	int ret;
 #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(heap_id);
@@ -1621,10 +1588,7 @@ bm_status_t bm_get_gmem_heap_stat_byte_by_id(bm_handle_t handle, bm_heap_stat_by
  #endif
   {
     pheap_byte->heap_id = heap_id;
-	ret = platform_ioctl(handle, BMDEV_GET_HEAP_STAT_BYTE, pheap_byte);
-    if (0 != ret)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm get heap num failed, ioclt ret = %d:%d\n", ret, __LINE__);
+    if (0 != platform_ioctl(handle, BMDEV_GET_HEAP_STAT_BYTE, pheap_byte))
       return BM_ERR_FAILURE;
   }
 #endif
@@ -1915,7 +1879,6 @@ return BM_SUCCESS;
 bm_status_t bm_mem_invalidate_partial_device_mem(bm_handle_t handle,
                                                  bm_device_mem_t *dmem,
                                                  u32 offset, u32 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1931,12 +1894,7 @@ bm_status_t bm_mem_invalidate_partial_device_mem(bm_handle_t handle,
   u64 para = (((device_mem_addr + offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para);
-  if (0 != ret) {
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev get invalidate gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
+  if (0 != platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::INVALIDATE, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -1950,7 +1908,6 @@ bm_status_t bm_mem_invalidate_partial_device_mem(bm_handle_t handle,
 bm_status_t sg_mem_invalidate_partial_device_mem(bm_handle_t handle,
                                                  sg_device_mem_t *dmem,
                                                  u64 offset, u64 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1966,12 +1923,7 @@ bm_status_t sg_mem_invalidate_partial_device_mem(bm_handle_t handle,
   u64 para = (((device_mem_addr + offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para);
-  if (0 != ret) {
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev get invalidate gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
+  if (0 != platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::INVALIDATE, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -1985,7 +1937,6 @@ bm_status_t sg_mem_invalidate_partial_device_mem(bm_handle_t handle,
 bm_status_t bm_mem_invalidate_partial_device_mem_u64(bm_handle_t handle,
                                                  bm_device_mem_u64_t *dmem,
                                                  u64 offset, u64 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2001,13 +1952,7 @@ bm_status_t bm_mem_invalidate_partial_device_mem_u64(bm_handle_t handle,
   u64 para = (((device_mem_addr + offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para);
-  if (0 != ret) {
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev get invalidate gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
-
+  if (0 != platform_ioctl(handle, BMDEV_INVALIDATE_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::INVALIDATE, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -2019,7 +1964,6 @@ bm_status_t bm_mem_invalidate_partial_device_mem_u64(bm_handle_t handle,
 }
 
 bm_status_t bm_mem_vir_to_phy(bm_handle_t handle, unsigned long long vir_addr, unsigned long long *phy_addr) {
-	int ret;
 #ifndef USING_CMODEL
   struct bm_gmem_addr addr;
   addr.vir_addr = vir_addr;
@@ -2030,11 +1974,11 @@ bm_status_t bm_mem_vir_to_phy(bm_handle_t handle, unsigned long long vir_addr, u
     return BM_ERR_FAILURE;
   }
 
-	ret = platform_ioctl(handle, BMDEV_GMEM_ADDR, &addr);
-  if (0 != ret) {
+  if (0 != platform_ioctl(handle, BMDEV_GMEM_ADDR, &addr)) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm_mem_vir_to_phy fail vir add = 0x%llx, ioclt ret = %d:%d\n", vir_addr, ret, __LINE__);
+          "bm_mem_vir_to_phy fail vir add = 0x%llx\n", vir_addr);
     return BM_ERR_PARAM;
+
   }
 
   *phy_addr = addr.phy_addr;
@@ -2096,7 +2040,6 @@ bm_status_t bm_mem_invalidate_device_mem_u64(bm_handle_t handle,
 bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle,
                                             bm_device_mem_t *dmem,
                                             u32 offset, u32 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2112,12 +2055,7 @@ bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle,
   u64 para = (((device_mem_addr + (u64)offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para);
-  if (0 != ret) {
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev flush gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
+  if (0 != platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::FLUSH, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -2131,7 +2069,6 @@ bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle,
 bm_status_t sg_mem_flush_partial_device_mem(bm_handle_t handle,
                                             sg_device_mem_t *dmem,
                                             u64 offset, u64 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2147,12 +2084,7 @@ bm_status_t sg_mem_flush_partial_device_mem(bm_handle_t handle,
   u64 para = (((device_mem_addr + (u64)offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para);
-  if (0 != ret){
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev flush gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
+  if (0 != platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::FLUSH, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -2166,7 +2098,6 @@ bm_status_t sg_mem_flush_partial_device_mem(bm_handle_t handle,
 bm_status_t bm_mem_flush_partial_device_mem_u64(bm_handle_t handle,
                                             bm_device_mem_u64_t *dmem,
                                             u64 offset, u64 len) {
-	int ret;
 #ifndef USING_CMODEL
   if (handle->misc_info.pcie_soc_mode == 0) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2182,12 +2113,7 @@ bm_status_t bm_mem_flush_partial_device_mem_u64(bm_handle_t handle,
   u64 para = (((device_mem_addr + (u64)offset)>>6) << 32) + len +
     ((device_mem_addr + offset)&63);
   bm_profile_record_mem_begin(handle);
-  ret = platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para);
-  if (0 != ret){
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev flush gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
-	return BM_ERR_FAILURE;
-  }
+  if (0 != platform_ioctl(handle, BMDEV_FLUSH_GMEM, &para)) return BM_ERR_FAILURE;
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::FLUSH, device_mem_addr+offset, len);
 #else
   UNUSED(handle);
@@ -2337,9 +2263,6 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
   ptr_to_u64.ptr = src;
   bm_profile_record_memcpy_begin(handle);
   auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-  if (res != 0)
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
   bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
 #endif
@@ -2386,9 +2309,6 @@ bm_status_t bm_memcpy_p2p(bm_handle_t handle_src, bm_device_mem_t src, bm_handle
   bm_mem_p2p.cdma_iommu_mode = handle_src->cdma_iommu_mode;
 
   auto res = platform_ioctl(handle_src, BMDEV_MEMCPY_P2P, &bm_mem_p2p);
-	if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy p2p failed, ioclt ret = %d:%d\n", res, __LINE__);
 
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
 #endif
@@ -2446,12 +2366,10 @@ bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
     bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
-    if (0 != res){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != res)
+      return BM_ERR_FAILURE;
   }
+
   return BM_SUCCESS;
 #endif
 }
@@ -2507,12 +2425,10 @@ bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void 
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
     bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
-    if (0 != res) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != res)
+      return BM_ERR_FAILURE;
   }
+
   return BM_SUCCESS;
 #endif
 }
@@ -2559,9 +2475,6 @@ bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
     ptr_to_u64.ptr = src;
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-	if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
     bm_profile_record_memcpy_end(handle,
                                  ptr_to_u64.val,
                                  bm_mem_s2d.device_addr,
@@ -2626,9 +2539,6 @@ bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
       ptr_to_u64.ptr = (void *)((u64)src + i * trans_size);
       bm_profile_record_memcpy_begin(handle);
       auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-	  if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
       bm_profile_record_memcpy_end(handle,
                                   ptr_to_u64.val,
                                   bm_mem_s2d.device_addr,
@@ -2695,9 +2605,6 @@ bm_status_t bm_memcpy_s2d_poll_u64(bm_handle_t     handle,
       ptr_to_u64.ptr = (void *)((u64)src + i * trans_size);
       bm_profile_record_memcpy_begin(handle);
       auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-	  if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
       bm_profile_record_memcpy_end(handle,
                                   ptr_to_u64.val,
                                   bm_mem_s2d.device_addr,
@@ -2821,9 +2728,6 @@ bm_status_t bm_memcpy_d2s_normal(bm_handle_t handle, void *dst, bm_device_mem_t 
   ptr_to_u64.ptr = dst;
   bm_profile_record_memcpy_begin(handle);
   auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-  if (res != 0)
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
   bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
   if(0 != res) return BM_ERR_FAILURE;
 #else
@@ -2874,9 +2778,6 @@ bm_status_t sg_memcpy_d2s_normal(bm_handle_t handle, void *dst, sg_device_mem_t 
     ptr_to_u64.ptr = (void *)((u64)dst + i*trans_size);
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-	if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
     bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
     if(0 != res) return BM_ERR_FAILURE;
   }
@@ -2927,9 +2828,6 @@ bm_status_t bm_memcpy_d2s_normal_u64(bm_handle_t handle, void *dst, bm_device_me
     ptr_to_u64.ptr = (void *)((u64)dst + i*trans_size);
     bm_profile_record_memcpy_begin(handle);
     auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-	if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
     bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
     if(0 != res) return BM_ERR_FAILURE;
   }
@@ -3315,9 +3213,6 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
         ptr_to_u64.ptr = dst;
         bm_profile_record_memcpy_begin(handle);
         auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-		if (res != 0)
-			bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          	"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
         bm_profile_record_memcpy_end(handle,
                                      bm_mem_d2s.device_addr,
                                      ptr_to_u64.val,
@@ -3404,9 +3299,6 @@ bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
           ptr_to_u64.ptr = (void *)((u64)dst + i*trans_size);
           bm_profile_record_memcpy_begin(handle);
           auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-		  if (res != 0)
-			bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
           bm_profile_record_memcpy_end(handle,
                                       bm_mem_d2s.device_addr,
                                       ptr_to_u64.val,
@@ -3492,9 +3384,6 @@ bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
           ptr_to_u64.ptr = (void *)((u64)dst + i*trans_size);
           bm_profile_record_memcpy_begin(handle);
           auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-		  if (res != 0)
-			bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          			"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
           bm_profile_record_memcpy_end(handle,
                                       bm_mem_d2s.device_addr,
                                       ptr_to_u64.val,
@@ -3583,7 +3472,7 @@ bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mo
     return BM_ERR_PARAM;
   }
 
-  memcpy(&tmp, value, 4);
+  memcpy(&tmp, value, mode);
 
   bm_api_memset_t api = {bm_mem_get_device_addr(mem),
                          1,
@@ -3794,15 +3683,8 @@ bm_status_t bm_calculate_cdma_addr(bm_handle_t src_handle,
                                    bool force_use_dst_cdma) {
   bm_misc_info src_info;
   bm_misc_info dst_info;
-  int ret;
-  ret = platform_ioctl(src_handle, BMDEV_GET_MISC_INFO, &src_info);
-  if (ret != 0)
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          	"scr get misc info failed, ioclt ret = %d:%d\n", ret, __LINE__);
-  ret = platform_ioctl(dst_handle, BMDEV_GET_MISC_INFO, &dst_info);
-  if (ret != 0)
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          	"dst get misc info failed, ioclt ret = %d:%d\n", ret, __LINE__);
+  platform_ioctl(src_handle, BMDEV_GET_MISC_INFO, &src_info);
+  platform_ioctl(dst_handle, BMDEV_GET_MISC_INFO, &dst_info);
 
   if (src_info.chipid == 0x1686a200) {
     if ((src_info.domain_bdf & 0x7) == 0x1)
@@ -3855,7 +3737,6 @@ bm_status_t bm_calculate_cdma_addr(bm_handle_t src_handle,
 bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
                           bm_device_mem_t src, bm_device_mem_t dst,
                           bool force_use_dst_cdma) {
-	int ret;
 #ifdef USING_CMODEL
   UNUSED(src_handle);
   UNUSED(dst_handle);
@@ -3894,19 +3775,11 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
   bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
 
   if (force_use_dst_cdma) {
-	ret = platform_ioctl(dst_handle, BMDEV_MEMCPY, &bm_mem_c2c);
-    if (ret != 0){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"dst bmdev memcopy failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(dst_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
   } else {
-	ret = platform_ioctl(src_handle, BMDEV_MEMCPY, &bm_mem_c2c);
-	if (ret != 0){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"scr bmdev memcopy failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(src_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
   }
   return BM_SUCCESS;
 #endif
@@ -3955,9 +3828,6 @@ bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *
   ptr_to_u64.ptr = src;
   bm_profile_record_memcpy_begin(handle);
   auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
-  if (res != 0)
-	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          	"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
   bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.u.size, bm_mem_s2d.dir);
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
 #endif
@@ -4011,9 +3881,6 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 	ptr_to_u64.ptr = dst;
 	bm_profile_record_memcpy_begin(handle);
 	auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_d2s);
-	if (res != 0)
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"bmdev memcopy failed, ioclt ret = %d:%d\n", res, __LINE__);
 	bm_profile_record_memcpy_end(handle, bm_mem_d2s.device_addr, ptr_to_u64.val, bm_mem_d2s.u.size, bm_mem_d2s.dir);
 	if(0 != res) return BM_ERR_FAILURE;
   } else {
@@ -4026,7 +3893,6 @@ bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t 
 bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
                           bm_device_mem_t src, bm_device_mem_t dst,
                           struct stride_cfg* stride, bool force_use_dst_cdma) {
-  int ret;
 #ifdef USING_CMODEL
   UNUSED(src_handle);
   UNUSED(dst_handle);
@@ -4070,19 +3936,11 @@ bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
   bm_mem_c2c.cdma_iommu_mode = BMLIB_NOT_USE_IOMMU;
 
   if (force_use_dst_cdma) {
-	ret = platform_ioctl(dst_handle, BMDEV_MEMCPY, &bm_mem_c2c);
-    if (ret != 0){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"dst bmdev memcopy failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(dst_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
   } else {
-	ret = platform_ioctl(src_handle, BMDEV_MEMCPY, &bm_mem_c2c);
-	if (ret != 0){
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          		"scr bmdev memcopy failed, ioclt ret = %d:%d\n", ret, __LINE__);
-		return BM_ERR_FAILURE;
-	}
+    if (0 != platform_ioctl(src_handle, BMDEV_MEMCPY, &bm_mem_c2c))
+      return BM_ERR_FAILURE;
   }
   return BM_SUCCESS;
 #endif
@@ -4210,155 +4068,4 @@ bm_status_t bm_mem_convert_system_to_device_coeff_byte(
         bm_memcpy_s2d(handle, *dev_mem, bm_mem_get_system_addr(sys_mem)));
   }
   return BM_SUCCESS;
-}
-
-/*
- *兼容1684x
- */
-static bm_status_t buffer_add(bm_handle_t handle,
-          struct bm_mem_paddr *buffer)
-{
-  struct rb_node **p = &(handle->root.rb_node);
-  struct rb_node *parent = NULL;
-  struct bm_mem_paddr *entry;
-  long long result;
-
-  while (*p) {
-    entry = container_of(*p, struct bm_mem_paddr, node);
-    result = buffer->paddr - entry->paddr;
-    parent = *p;
-    if (result < 0)
-      p = &((*p)->rb_left);
-    else if (result > 0)
-      p = &((*p)->rb_right);
-    else
-    return BM_ERR_FAILURE;
-  }
-
-  rb_link_node(&buffer->node, parent, p);
-  rb_insert_color(&buffer->node, &handle->root);
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
-                                  int heap_id, unsigned long long size) {
-  int ret;
-  bm_device_mem_u64_t *dev_buffer;
-  struct bm_mem_paddr *bm_mem;
-
-  bm_mem = (struct bm_mem_paddr *)malloc(sizeof(struct bm_mem_paddr));
-  dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
-
-  ret = bm_malloc_device_byte_heap_u64(handle, dev_buffer, heap_id, size);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  *paddr = bm_mem_get_device_addr_u64(*dev_buffer);
-  bm_mem->paddr = *paddr;
-  bm_mem->dev_buffer = dev_buffer;
-
-  pthread_mutex_lock(&handle->mem_mutex);
-  ret = buffer_add(handle, bm_mem);
-  pthread_mutex_unlock(&handle->mem_mutex);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
-                                  int heap_id_mask, unsigned long long size) {
-  int ret;
-  bm_device_mem_u64_t *dev_buffer;
-  struct bm_mem_paddr *bm_mem;
-
-  bm_mem = (struct bm_mem_paddr *)malloc(sizeof(struct bm_mem_paddr));
-  dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
-
-  ret = bm_malloc_device_byte_heap_mask_u64(handle, dev_buffer, heap_id_mask, size);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  *paddr = bm_mem_get_device_addr_u64(*dev_buffer);
-  bm_mem->paddr = *paddr;
-  bm_mem->dev_buffer = dev_buffer;
-
-  pthread_mutex_lock(&handle->mem_mutex);
-  ret = buffer_add(handle, bm_mem);
-  pthread_mutex_unlock(&handle->mem_mutex);
-  if (ret != BM_SUCCESS) {
-    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  return BM_SUCCESS;
-}
-
-bm_status_t bm_memcpy_s2d_gather(bm_handle_t handle, bm_device_mem_t dst, int argc, ...)
-{
-  bm_status_t ret;
-  va_list args;
-  void *vaddr;
-  u64 len;
-  u32 total = dst.size;
-  u64 sum = 0;
-
-  va_start(args, argc);
-  for (int i = 0; i < argc; i+=2) {
-      vaddr = va_arg(args, void *);
-      len = va_arg(args, unsigned long long);
-      sum += len;
-      if (sum > total) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s sum: %u, total: %lu\n", __func__, sum, total);
-      }
-      dst.size = len;
-      ret = bm_memcpy_s2d(handle, dst, vaddr);
-      if (ret != BM_SUCCESS) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s failed, dst address: %lu, len: %llu\n", __func__, dst.u.device.device_addr, dst.size);
-      }
-      dst.u.device.device_addr += len;
-  }
-  va_end(args);
-
-  return ret;
-}
-
-bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int argc, ...)
-{
-  bm_status_t ret;
-  va_list args;
-  void *vaddr;
-  u64 len;
-  u32 total = src.size;
-  u64 sum = 0;
-
-  va_start(args, argc);
-  for (int i = 0; i < argc; i+=2) {
-      vaddr = va_arg(args, void *);
-      len = va_arg(args, unsigned long long);
-      sum += len;
-      if (sum > total) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s sum: %u, total: %lu\n", __func__, sum, total);
-      }
-      src.size = len;
-      ret = bm_memcpy_d2s(handle, vaddr, src);
-      if (ret != BM_SUCCESS) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-                  "%s failed, src address: %lu, len: %llu\n", __func__, src.u.device.device_addr, src.size);
-      }
-      src.u.device.device_addr += len;
-  }
-  va_end(args);
-
-  return ret;
 }

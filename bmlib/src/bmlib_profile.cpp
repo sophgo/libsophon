@@ -903,7 +903,9 @@ void show_bm1688_gdma_item(const BM1688_GDMA_PROFILE_FORMAT* data, int len, floa
     PROFILE_INFO("[%d] ---> gdma record #%d,"
                  " inst_id=%d, cycle=%d, start=%.3fus,"
                  " end=%.3fus, interval=%.3fus"
-                 " bytes=%d, speed=%.3fGB/s"
+                 " bytes=%d, "
+                 "speed=%.3fGB/s, "
+                 "gif_wr=%d, gif_rd=%d, d0_wr=%d, d1_wr=%d, d0_rd=%d, d1_rd=%d"
                  "\n",
                  core_id, i, p.inst_id,
                  p.inst_end_time - p.inst_start_time,
@@ -911,7 +913,9 @@ void show_bm1688_gdma_item(const BM1688_GDMA_PROFILE_FORMAT* data, int len, floa
                  (p.inst_end_time - cycle_offset) * period + time_offset,
                  total_time,
                  total_bytes,
-                 speed/1000.0);
+                 speed/1000.0,
+                 p.gif_fmem_wr_bytes, p.gif_fmem_ar_bytes, p.axi_d0_wr_bytes, p.axi_d1_wr_bytes, p.axi_d0_ar_bytes, p.axi_d1_ar_bytes
+                 );
     if(show_raw) {
         show_raw_data((const unsigned char*) &p, sizeof(p));
     }
@@ -1092,7 +1096,7 @@ bm_status_t bm1688_gdma_deinit(bm_handle_t handle, bmlib_profile_t* profile, FIL
   int gdma_freq_MHz = 750;
   if(tiu_freq_MHz == 375) gdma_freq_MHz = 500;
   show_bm1688_gdma_item(gdma_data, valid_len, gdma_freq_MHz, core_id);
-  write_block(fp, BLOCK_MONITOR_GDMA, valid_len * sizeof(gdma_data), gdma_data);
+  write_block(fp, BLOCK_MONITOR_GDMA, valid_len * sizeof(gdma_data[0]), gdma_data);
   return BM_SUCCESS;
 }
 

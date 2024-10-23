@@ -429,7 +429,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
 #ifdef USING_CMODEL
 	return cmodel_load_module(handle, module_file, core_id);
 #else
-    int ret;
+	int ret;
     a53lite_load_lib_t api_load_lib;
     bm_device_mem_t dev_mem;
     u32 file_size;
@@ -446,8 +446,8 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
     if (ret != 0) {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "load library error, ret %d  %d\n",
-                  ret, __LINE__);
+                  "load library error, ret %d\n",
+                  ret);
         return NULL;
     }
 

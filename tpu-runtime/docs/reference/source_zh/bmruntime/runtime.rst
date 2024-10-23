@@ -411,7 +411,7 @@ Store mode
 .. code-block:: cpp
 
   /* store mode definitions */
-  typedef enum bm_stroe_mode_e {
+  typedef enum bm_store_mode_e {
     BM_STORE_1N = 0, /* default, if not sure, use 0 */
     BM_STORE_2N = 1,
     BM_STORE_4N = 2,
@@ -458,7 +458,7 @@ bmrt_shape接口可以设置bm_shape_t，如下：
   dims array to bm_shape_t,
   shape and dims should not be NULL, num_dims should not be larger than BM_MAX_DIMS_NUM
 
-  Prameters: [out] shape   - The bm_shape_t pointer.
+  Parameters: [out] shape   - The bm_shape_t pointer.
              [in] dims     - The dimension value.
                              The sequence is the same with dims[BM_MAX_DIMS_NUM].
              [in] num_dims - The number of dimension.
@@ -510,7 +510,7 @@ bmrt_tensor接口可以配置一个tensor。接口声明如下：
 .. code-block:: cpp
 
   /*
-  This API is to initialise the tensor. It will alloc device mem to tensor->device_mem,
+  This API is to initialize the tensor. It will alloc device mem to tensor->device_mem,
   so user should bm_free_device(p_bmrt, tensor->device_mem) to free it.
   After initialization, tensor->dtype = dtype, tensor->shape = shape, and tensor->st_mode = 0.
 
@@ -527,7 +527,7 @@ bmrt_tensor_with_device接口用已有的device mem配置一个tensor。接口�
 .. code-block:: cpp
 
   /*
-  The API is to initialise the tensor with a existed device_mem.
+  The API is to initialize the tensor with a existed device_mem.
   The tensor byte size should not large than device mem size.
   After initialization, tensor->dtype = dtype, tensor->shape = shape,
   tensor->device_mem = device_mem, and tensor->st_mode = 0.
@@ -762,9 +762,9 @@ bmrt_get_network_info
 
 bm_net_info_t表示一个网络的全部信息，bm_stage_info_t表示该网络支持的不同的shape情况。
 
-input_num表示输入的数量，input_names/input_dytpes/input_scales以及bm_stage_info_t中的input_shapes都是这个数量。
+input_num表示输入的数量，input_names/input_dtypes/input_scales以及bm_stage_info_t中的input_shapes都是这个数量。
 
-output_num表示输出的数量，output_names/output_dytpes/output_scales以及bm_stage_info_t中的output_shapes都是这个数量。
+output_num表示输出的数量，output_names/output_dtypes/output_scales以及bm_stage_info_t中的output_shapes都是这个数量。
 
 input_scales和output_scales只有整型时有用；浮点型时为默认值1.0。
 
@@ -835,12 +835,12 @@ bmrt_launch_tensor
                           bm_tensor_t output_tensors[], int output_num);
 
 
-用户在推理前需要初始化网路需要的input_tensors，包括input_tensors中的数据。output_tensors用于返回推理的结果。
+用户在推理前需要初始化网络需要的input_tensors，包括input_tensors中的数据。output_tensors用于返回推理的结果。
 
 **需要注意:**
 
 * 该接口会为output_tensors申请device mem，用于存储结果数据。当用户不再需要结果数据的时候，需要主动释放device mem。
-* 推理结束后，输出数据是以BM_STROE_1N存储；输出的shape存储在每个output_tensor的shape中。
+* 推理结束后，输出数据是以BM_STORE_1N存储；输出的shape存储在每个output_tensor的shape中。
 * 该接口为异步接口，用户需要调用bm_thread_sync确保推理完成。
 
 使用方法举例如下：
@@ -914,7 +914,7 @@ bmrt_luanch_tensor == bmrt_launch_tensor_ex(user_mem = false, user_stmode = fals
 
 * 当user_mem为false时，接口会为每个output_tensor申请device mem，并保存输出数据。
 * 当user_mem为true时，接口不会为output_tensor申请device mem，用户需要在外部申请，申请的大小可以通过bm_net_info_t中的max_output_bytes指定。
-* 当user_stmode为false时，输出数据以BM_STROE_1N排列。
+* 当user_stmode为false时，输出数据以BM_STORE_1N排列。
 * 当user_stmode为true时，输出数据根据各个output_tensor中的st_mode指定。
 * 当深度学习处理器硬件架构支持多核时，该接口默认使用从core0开始的N个core来做推理，如果需要指定使用具体的深度学习处理器core，需要使用 bmrt_launch_tensor_multi_cores 来完成。N由当前bmodel决定。
 
@@ -1120,6 +1120,7 @@ get_bmodel_api_info_c
                                      const bm_tensor_t *input_tensors, int input_num,
                                      bm_tensor_t *output_tensors, int output_num,
                                      bool user_mem, bool user_stmode);
+
 * 该函数使用方法类似 bmrt_launch_tensor_ex，但是它只是返回 bmodel 推理前需要下发给深度学习处理器的推理信息，并不会启动推理。该函数返回的信息可以通过 bm_send_api 发送给深度学习处理器启动推理，因此 get_bmodel_api_info + bm_send_api 和 bmrt_launc_tensor_ex 作用是等价的。
 * **在该 api_info 使用结束后需要调用 bmrt_free_api_info 来释放内存。**
 
@@ -1127,6 +1128,18 @@ bmrt_free_api_info
 >>>>>>>>>>>>>>>>>>>
 
 .. code-block:: cpp
+  /**
+  * @name    bmrt_free_api_info
+  * @brief   To release memory allocated by the get_bmodel_api_info_c function's return value.
+  * @ingroup bmruntime
+  *
+  * This function is used to release the memory block returned by the get_bmodel_api_info_c function.
+  * After calling get_bmodel_api_info_c to retrieve model API information, make sure to call this function
+  * when you no longer need the information to avoid memory leaks.
+  *
+  * @param [in]    api_info            return value of get_bmodel_api_info_c
+  *
+  */  
    void bmrt_free_api_info(api_info_c *api_info);
 
 * 释放 api_info 所申请的内存空间。
@@ -1266,7 +1279,7 @@ get_network_info
 
 通过网络名，获得某个具体网络的信息。
 
-如果net_name存在，则返回bm_net_info_t的网络信息结构指针，内容包括它的输入输出的数量、名称、类型等等，具体参见bm_net_infot_t结构体；如果net_name不存在，则返回NULL。
+如果net_name存在，则返回bm_net_info_t的网络信息结构指针，内容包括它的输入输出的数量、名称、类型等等，具体参见bm_net_info_t结构体；如果net_name不存在，则返回NULL。
 
 使用参考如下：
 
@@ -1482,7 +1495,7 @@ num_elements
 
     uint64_t num_elements() const;
 
-获得tensor的元素数量。通过dims[0] * dims[1] * ... * dims[num_dims-1]计算得到；如果num_dims为0，则返回1。
+获得tensor的元素数量。通过dims[0] * dims[1] * ... * dims[num_dims-1]计算得到；如果num_dims为0，则返回1 (说明该 Tensor 是一个标量)。
 
 tensor
 :::::::

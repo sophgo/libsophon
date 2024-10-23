@@ -14,6 +14,10 @@
 #include <vector>
 #include "model_generated.h"
 
+// encrypt definiton
+typedef uint8_t *(*encrypt_func)(const uint8_t *, uint64_t, uint64_t *);
+typedef uint8_t *(*decrypt_func)(const uint8_t *, uint64_t, uint64_t *);
+
 namespace bmodel {
 #ifdef __linux__
 typedef struct {
@@ -62,7 +66,7 @@ public:
   } CASCADE_INFO_T;
 
 public:
-  ModelGen(uint32_t reserved_size = 0x1000000);
+  ModelGen(uint32_t reserved_size = 0x1000000, const std::string &encryp_lib = "");
   virtual ~ModelGen();
   flatbuffers::FlatBufferBuilder &Builder();
   Binary WriteBinary(size_t size, uint8_t *data);
@@ -79,6 +83,7 @@ public:
   // void AddTpuModule(Binary tpu_module);
   void AddKernelModule(std::string &version, Binary &tpu_module);
   void AddCpuModule(std::string &version, Binary &lib_cpu);
+  void AddBmodelType(const uint32_t type);
 
   // finish and save to file
   void Finish(const std::string &filename);
@@ -87,12 +92,16 @@ public:
   size_t Finish();
   void Save(const std::string &filename);  // save to file
   void Save(void *buffer);                 // save to buffer
+  // save to file and encrypt header & flatbuffer
+  void SaveEncrypt(const std::string &filename);
+  uint8_t *Encrypt(uint8_t *input, uint64_t input_bytes, uint64_t *output_bytes);
   uint8_t *GetBufferPointer();
 
 private:
   bool IsTensorConflict(const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *,
                         const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *);
   bool IsShapeSame(const Shape *, const Shape *);
+  void InitEncrypt();
 
   typedef struct {
     std::string name;
@@ -122,11 +131,18 @@ private:
   // Binary tpu_module_;
   KERNEL_MODULE_T kernel_module_;
   CPUOP_MODULE_T cpuop_module_;
+  // encrypt
+  std::string encrypt_lib_; // lib path by user, such as libcipher.so to encrypt
+  void *encrypt_handle_;    // handle of encrypt lib
+  encrypt_func encrypt_func_; // encrypt func from lib
+  // coeff combine
+  uint32_t bmodel_type_; // 0: bmodel coeff do not combine; 1: bmodel coeff has been combine
 };
 
 class ModelCtx {
  public:
-  ModelCtx(const std::string &filename);
+  ModelCtx(const std::string &filename, const std::string &decrypt_lib = "",
+           decrypt_func f = nullptr);
   ModelCtx(const void *bmodel_data, size_t size);
   virtual ~ModelCtx();
   operator bool();
@@ -135,7 +151,10 @@ class ModelCtx {
   // read binary data to buffer
   void read_binary(const bmodel::Binary *binary, uint8_t *buffer);
   // read binary from offset
-  void read_binary(const bmodel::Binary *binary, uint64_t offset, uint8_t *buffer, uint64_t size);
+  void read_binary(const bmodel::Binary *binary, uint64_t offset,
+                  uint8_t *buffer, uint64_t size);
+  // read binary with decrypt, output buffer should free() outside
+  uint8_t *read_binary_with_decrypt(const Binary *binary, uint64_t *out_size);
   // write buffer to binary
   void write_binary(const bmodel::Binary *binary, uint8_t *buffer);
   // write buffer to offset of binary
@@ -157,7 +176,10 @@ class ModelCtx {
                   const flatbuffers::Vector<flatbuffers::Offset<NetStatic>> *net_static);
   void update_net(const std::string &net_name,
                   const flatbuffers::Vector<flatbuffers::Offset<NetDynamic>> *net_dynamic);
-
+  void init_decrypt();
+  void decrypt_bmodel(const std::string &filename);
+  uint8_t *decrypt_buffer_from_file(uint64_t file_start, uint64_t size,
+                                    uint64_t *out_size);
 
  private:
   MODEL_HEADER_T header_;
@@ -167,6 +189,10 @@ class ModelCtx {
   uint64_t binary_offset_;
   std::fstream file_;          // bmodel in file
   const void *bmodel_pointer_;  // bmodel in buffer
+  // decrypt
+  std::string decrypt_lib_; // lib path by user, such as libcipher.so to decrypt
+  void *decrypt_handle_;    // handle of decrypt lib
+  decrypt_func decrypt_func_; // decrypt func from lib
 };
 
 }  // namespace bmodel

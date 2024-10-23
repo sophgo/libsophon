@@ -6,7 +6,7 @@
 static long long to_long_long(const char* s){
     int base = 10;
     int offset = 0;
-    if(s[0] == '0' and s[1] == 'x') {
+    if(s[0] == '0' && s[1] == 'x') {
         base = 16;
         offset = 2;
     }

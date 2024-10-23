@@ -19,6 +19,46 @@
 #include "bmlib_runtime.h"
 #include "bmruntime_common.h"
 
+void* bmrt_load_lib(const char* libname, int flags) {
+  void* handle=nullptr;
+  #ifdef __linux__
+  handle = dlopen(libname, flags);
+  #else
+  (void)flags;
+  handle = (void*)LoadLibrary(libname);
+  #endif
+  return handle;
+}
+
+void* bmrt_find_sym(void* libhandle, const char* symname) {
+  void* sym=nullptr;
+#ifdef __linux__
+  sym = (void*)dlsym(libhandle, symname);
+#else
+  sym = (void*)GetProcAddress((HMODULE)libhandle, symname);
+#endif
+  return sym;
+}
+
+void bmrt_unload_lib(void* libhandle) {
+#ifdef __linux__
+  (void) dlclose(libhandle);
+#else
+  (void) FreeLibrary((HMODULE)libhandle);
+#endif
+}
+
+const char* bmrt_lib_error() {
+#ifdef __linux__
+  return dlerror();
+#else
+  static char buf[64];
+  auto dw = GetLastError();
+  snprintf(buf, sizeof(buf), "Error Code is %d", dw);
+  return buf;
+#endif
+}
+
 #ifdef _WIN32
 #define BILLION (1E9)
 static BOOL g_first_time = 1;
@@ -70,15 +110,15 @@ static LogLevel log_level_init;
 #include "bmrt_version.h"
 static const char* version_string = "libbmrt_version:1.0.0, branch:" BRANCH_NAME ",commit:" COMMIT_HASH " ,compiled on " COMPILE_TIME ".";
 extern "C" {
-  DLLEXPORT const char* libbmrt_version() {
+  const char* libbmrt_version() {
     return version_string;
   }
 
-  DLLEXPORT BMRT_LogLevel bmrt_get_current_log_level() {
+  BMRT_LogLevel bmrt_get_current_log_level() {
     return BMRT_LOG_LEVEL_THRESHOLD;
   }
 
-  DLLEXPORT void bmrt_set_current_log_level(BMRT_LogLevel level) {
+  void bmrt_set_current_log_level(BMRT_LogLevel level) {
     BMRT_LOG_LEVEL_THRESHOLD = level;
   }
 }
@@ -86,25 +126,31 @@ extern "C" {
 const char* _bmrt_version() {
   return version_string;
 }
-
+#ifdef _WIN32
+const char *_libsophon_version()
+{
+    return "";
+}
+#else
+#define DRIVER_PATH "/proc/bmsophon/driver_version"
 const char* _libsophon_version() {
-  FILE *fp = NULL;
   static char data[64] = {0};
-  if (access("/proc/bmsophon/driver_version", F_OK) == 0) {
-    fp = popen("cat /proc/bmsophon/driver_version", "r");
-    if (fp == NULL)
-    {
-      return NULL;
-    }
-
-    if (fgets(data, sizeof(data), fp) != NULL)
-    {
+  if (data[0] == 0 && access(DRIVER_PATH, F_OK) == 0) {
+    FILE *fp = NULL;
+    fp = popen("cat " DRIVER_PATH, "r");
+    if (fp == NULL) {
+      BMRT_LOG(WARNING, "cannot open " DRIVER_PATH);
       return data;
     }
+    auto result = fgets(data, sizeof(data), fp);
+    if(result == NULL){
+      BMRT_LOG(WARNING, "cannot read " DRIVER_PATH);
+    }
+    pclose(fp);
   }
-
-  return NULL;
+  return data;
 }
+#endif
 
 #ifndef __linux__
 #include <stdarg.h>
@@ -395,15 +441,18 @@ Bmruntime::Bmruntime(const string& arch_name, int devid)
   init();
 }
 
-Bmruntime::~Bmruntime()
-{
+/* free bmcpu_handle_ & customcpu_handle_ */
+void Bmruntime::uninit_cpu_handles() {
   if (bmcpu_uninit_ != NULL) {
     bmcpu_uninit_(bmcpu_handle_);
   }
   if (customcpu_handle_ != NULL && customcpu_uninit_ != NULL) {
     customcpu_uninit_(customcpu_handle_);
   }
+}
 
+/* free device memory */
+void Bmruntime::free_device_memory() {
   for (size_t i = 0; i < m_device_mem_vec.size(); i++) {
     auto &dev_mem = m_device_mem_vec[i];
     auto id = m_device_mem_ids[i];
@@ -417,7 +466,10 @@ Bmruntime::~Bmruntime()
     BMRT_DEBUG("Free device memory, byte size %d\n", bm_mem_get_device_size_u64(dev_mem));
     must_free_device_mem_u64(id, dev_mem);
   }
+}
 
+/* free subnet & dynamic neuron & net info & net_cascade */
+void Bmruntime::free_network_contexts_and_cascades() {
   for (auto net_ctx : m_net_ctx_v) {
     subnet_clear(net_ctx);
     free_dyn_neuron(net_ctx);
@@ -428,19 +480,22 @@ Bmruntime::~Bmruntime()
   for (auto net_cascade : m_net_cascade_v) {
     cascade_free_net_info(&net_cascade);
   }
+}
 
-  // if this is last bmruntime, free coeff mem
-  if (true) {
-    std::lock_guard<std::mutex> guard(m_global_coeff_mutex);
-    for (int i = 0; i< m_device_num; i++) {
-      m_local_coeffs[i] = NULL;
-      auto iter = m_global_coeff_map.find(m_devids[i]);
-      if (iter->second.unique()) {
-        iter->second = NULL;
-      }
+/* free coeff mem */
+void Bmruntime::free_coeff_mem() {
+  std::lock_guard<std::mutex> guard(m_global_coeff_mutex);
+  for (int i = 0; i < m_device_num; i++) {
+    m_local_coeffs[i] = NULL;
+    auto iter = m_global_coeff_map.find(m_devids[i]);
+    if (iter->second.unique()) {
+      iter->second = NULL;
     }
   }
+}
 
+/* free m_handles & cpu_handle */
+void Bmruntime::free_bm_handle_and_custom_cpu_handles() {
   if (using_internal_bm_handle) {
     bm_dev_free(m_handles[0]);
   }
@@ -453,12 +508,44 @@ Bmruntime::~Bmruntime()
 #endif
 }
 
+void Bmruntime::destory_without_coeff()
+{
+  // step1: uninit cpu handles
+  uninit_cpu_handles();
+
+  // step2: free device memory
+  free_device_memory();
+
+  // step3: free subnet & dynamic neuron & net info & net_cascade
+  free_network_contexts_and_cascades();
+
+  // step4: free coeff mem
+  // free_coeff_mem();
+
+  // step5: free bm handle & cpu handle
+  free_bm_handle_and_custom_cpu_handles();
+}
+
+Bmruntime::~Bmruntime()
+{
+  // step1: uninit cpu handles
+  uninit_cpu_handles();
+
+  // step2: free device memory
+  free_device_memory();
+
+  // step3: free subnet & dynamic neuron & net info & net_cascade
+  free_network_contexts_and_cascades();
+
+  // step4: free coeff mem
+  free_coeff_mem();
+
+  // step5: free bm handle & cpu handle
+  free_bm_handle_and_custom_cpu_handles();
+}
+
 static bool is_cmodel_mode(){
-     #ifdef __linux__
-     return dlsym(nullptr, "set_tpu_entry") != nullptr;
-     #else
-     return GetProcAddress(nullptr, "set_tpu_entry") != nullptr;
-     #endif
+     return bmrt_find_sym(nullptr, "set_tpu_entry") != nullptr;
 }
 
 typedef void (*set_tpu_entry_t)(void*, void*, void*);
@@ -472,46 +559,24 @@ void Bmruntime::bmtpu_setup()
     string firmware_path = firmware_path_c;
     if(is_cmodel_mode()){
         // load *.so for cmodel weak symbol
-        #ifdef __linux__
-        set_tpu_entry_t set_entry = (set_tpu_entry_t)dlsym(nullptr, "set_tpu_entry");
-        #else
-        set_tpu_entry_t set_entry = (set_tpu_entry_t)GetProcAddress(nullptr, "set_tpu_entry");
-        #endif
+        set_tpu_entry_t set_entry = (set_tpu_entry_t)bmrt_find_sym(nullptr, "set_tpu_entry");
         string firmware_name = firmware_path + "/firmware.so";
-        #ifdef __linux__
-        auto fw_handle = dlopen(firmware_name.c_str(), RTLD_NOW | RTLD_GLOBAL);
+        auto fw_handle = bmrt_load_lib(firmware_name.c_str(), RTLD_NOW | RTLD_GLOBAL);
         if(!fw_handle){
-            BMRT_LOG(WARNING, "fail to open %s: %s", firmware_name.c_str(), dlerror());
+            BMRT_LOG(WARNING, "fail to open %s: %s", firmware_name.c_str(), bmrt_lib_error());
         }
-        auto shape_ptr = dlsym(fw_handle, "tpu_shape_infer_entry");
-        auto local_ptr = dlsym(fw_handle, "tpu_local_calculate_entry");
-        auto global_ptr = dlsym(fw_handle, "tpu_global_calculate_entry");
-        #else
-        auto fw_handle = LoadLibrary(firmware_name.c_str());
-        if (!fw_handle) {
-          BMRT_LOG(WARNING, "fail to open %s: %s", firmware_name.c_str());
-        }
-        auto shape_ptr = GetProcAddress(fw_handle, "tpu_shape_infer_entry");
-        auto local_ptr = GetProcAddress(fw_handle, "tpu_local_calculate_entry");
-        auto global_ptr = GetProcAddress(fw_handle, "tpu_global_calculate_entry");
-        #endif
+        auto shape_ptr = bmrt_find_sym(fw_handle, "tpu_shape_infer_entry");
+        auto local_ptr = bmrt_find_sym(fw_handle, "tpu_local_calculate_entry");
+        auto global_ptr = bmrt_find_sym(fw_handle, "tpu_global_calculate_entry");
         if(!shape_ptr || !local_ptr || !global_ptr){
             BMRT_LOG(WARNING, "fail to load entry function from", firmware_name.c_str());
-            #ifdef __linux__
-            dlclose(fw_handle);
-            #else
-            FreeLibrary(fw_handle);
-            #endif
+            bmrt_unload_lib(fw_handle);
         }
         set_entry(shape_ptr, global_ptr, local_ptr);
     } else {
         string tcm_firmware = firmware_path + "/firmware_tcm.bin";
         string ddr_firmware = firmware_path + "/firmware_ddr.bin";
-        #ifdef __linux__
-        auto load_func = (firmware_load_func_t)dlsym(nullptr, "bmkernel_load_firmware");
-        #else
-        auto load_func = (firmware_load_func_t)GetProcAddress(nullptr, "bmkernel_load_firmware");
-        #endif
+        auto load_func = (firmware_load_func_t)bmrt_find_sym(nullptr, "bmkernel_load_firmware");
         if(!load_func){
             BMRT_LOG(WARNING, "cannot find bmkernel_load_firmware function");
         } else {
@@ -527,25 +592,25 @@ void Bmruntime::bmtpu_setup()
 
 void Bmruntime::bmcpu_setup()
 {
-  #ifdef __linux__
-  bmcpu_init_ = (t_bmcpu_init)dlsym(NULL, "bmcpu_init");
-  bmcpu_uninit_ = (t_bmcpu_uninit)dlsym(NULL, "bmcpu_uninit");
-  bmcpu_process_ = (t_bmcpu_process)dlsym(NULL, "bmcpu_process");
-  #else
-  bmcpu_init_ = (t_bmcpu_init)GetProcAddress(NULL, "bmcpu_init");
-  bmcpu_uninit_ = (t_bmcpu_uninit)GetProcAddress(NULL, "bmcpu_uninit");
-  bmcpu_process_ = (t_bmcpu_process)GetProcAddress(NULL, "bmcpu_process");
-  #endif
+  bmcpu_init_ = (t_bmcpu_init)bmrt_find_sym(NULL, "bmcpu_init");
+  bmcpu_uninit_ = (t_bmcpu_uninit)bmrt_find_sym(NULL, "bmcpu_uninit");
+  bmcpu_process_ = (t_bmcpu_process)bmrt_find_sym(NULL, "bmcpu_process");
 
-  #ifdef __linux__
   if (bmcpu_process_ == NULL) {
+  #ifdef __linux__
     std::vector<const char*> cpu_libs = {
       "libbmcpu.so",
       "libcpuop.so"
     };
+  #else
+    std::vector<const char*> cpu_libs = {
+      "libbmcpu.dll",
+      "libcpuop.dll"
+    };
+  #endif
     void* cpu_so_handle_ = nullptr;
     for(auto cpu_lib: cpu_libs){
-      cpu_so_handle_ = dlopen(cpu_lib, RTLD_LAZY);
+      cpu_so_handle_ = bmrt_load_lib(cpu_lib, RTLD_LAZY);
       if(cpu_so_handle_) {
         BMRT_LOG(INFO, "cpu_lib '%s' is loaded.", cpu_lib);
         break;
@@ -555,53 +620,34 @@ void Bmruntime::bmcpu_setup()
       BMRT_LOG(WARNING, "Not able to open %s", "cpu.so");
       return;
     }
-    bmcpu_init_ = (t_bmcpu_init)dlsym(cpu_so_handle_, "bmcpu_init");
-    bmcpu_uninit_ = (t_bmcpu_uninit)dlsym(cpu_so_handle_, "bmcpu_uninit");
-    bmcpu_process_ = (t_bmcpu_process)dlsym(cpu_so_handle_, "bmcpu_process");
+    bmcpu_init_ = (t_bmcpu_init)bmrt_find_sym(cpu_so_handle_, "bmcpu_init");
+    bmcpu_uninit_ = (t_bmcpu_uninit)bmrt_find_sym(cpu_so_handle_, "bmcpu_uninit");
+    bmcpu_process_ = (t_bmcpu_process)bmrt_find_sym(cpu_so_handle_, "bmcpu_process");
   } else {
-    BMRT_LOG(INFO, "cpu.so already exist, don't dlopen");
+    BMRT_LOG(INFO, "cpu lib already exist, don't load again");
   }
 
+  #ifdef __linux__
+    const char* cpu_lib = "libcustomcpuop.so";
+  #else
+    const char* cpu_lib = "libcustomcpuop.dll";
+  #endif
+
   if (customcpu_process_ == NULL) {
-    const char cpu_lib[] = "libcustomcpuop.so";
     void* customcpu_so_handle_ = nullptr;
-    customcpu_so_handle_ = dlopen(cpu_lib, RTLD_LAZY);
+    customcpu_so_handle_ = bmrt_load_lib(cpu_lib, RTLD_LAZY);
     if(customcpu_so_handle_) {
       BMRT_LOG(INFO, "customcpu_lib '%s' is loaded.", cpu_lib);
     }
     if (!customcpu_so_handle_) {
       BMRT_LOG(INFO, "Not able to open %s", "libcustomcpuop.so");
     }
-    customcpu_init_ = (t_bmcpu_init)dlsym(customcpu_so_handle_, "bmcpu_init");
-    customcpu_uninit_ = (t_bmcpu_uninit)dlsym(customcpu_so_handle_, "bmcpu_uninit");
-    customcpu_process_ = (t_bmcpu_process)dlsym(customcpu_so_handle_, "customcpu_process");
-  }
-
-  #else
-  if (bmcpu_process_ == NULL) {
-    std::vector<const char*> cpu_libs = {
-      "libbmcpu.dll",
-      "libcpuop.dll"
-    };
-    HMODULE cpu_so_handle_=NULL;
-    for (auto cpu_lib: cpu_libs) {
-      cpu_so_handle_ = LoadLibrary(cpu_lib);
-      if(cpu_so_handle_) {
-        BMRT_LOG(INFO, "cpu_lib '%s' is loaded.", cpu_lib);
-        break;
-      }
-    }
-    if (!cpu_so_handle_) {
-      BMRT_LOG(WARNING, "Not able to open %s", "libbmcpu.dll");
-      return;
-    }
-    bmcpu_init_ = (t_bmcpu_init)GetProcAddress(cpu_so_handle_, "bmcpu_init");
-    bmcpu_uninit_ = (t_bmcpu_uninit)GetProcAddress(cpu_so_handle_, "bmcpu_uninit");
-    bmcpu_process_ = (t_bmcpu_process)GetProcAddress(cpu_so_handle_, "bmcpu_process");
+    customcpu_init_ = (t_bmcpu_init)bmrt_find_sym(customcpu_so_handle_, "bmcpu_init");
+    customcpu_uninit_ = (t_bmcpu_uninit)bmrt_find_sym(customcpu_so_handle_, "bmcpu_uninit");
+    customcpu_process_ = (t_bmcpu_process)bmrt_find_sym(customcpu_so_handle_, "customcpu_process");
   } else {
-    BMRT_LOG(INFO, "libbmcpu.dll already exist, don't dlopen");
+    BMRT_LOG(INFO, "%s already exist, don't load again", cpu_lib);
   }
-  #endif
 }
 
 u64 Bmruntime::fix_gdma_addr(const net_stage_t* stage, u64 origin_addr, bool is_src)
@@ -625,7 +671,10 @@ u64 Bmruntime::fix_gdma_addr(const net_stage_t* stage, u64 origin_addr, bool is_
   if (io_alone && origin_addr < stage->ctx_start) {
     return origin_addr + stage->io_offset;
   }
-  return origin_addr + stage->ctx_offset[get_mem_index(stage->ctx_borders, stage->ctx_start, origin_addr)];
+  int mem_index  = get_mem_index(stage->ctx_borders, stage->ctx_start, origin_addr);
+  BMRT_ASSERT_INFO(mem_index < stage->ctx_offset.size(), " addr 0x%llx is overflow, valid range is [0x%llx, 0x%llx)\n",
+      origin_addr, stage->ctx_start, stage->ctx_start + stage->ctx_borders.back());
+  return origin_addr + stage->ctx_offset[mem_index];
 }
 
 void Bmruntime::convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_address,
@@ -811,7 +860,6 @@ void Bmruntime::convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_ad
         }
       }
       break;
-    case MARS3:
     case BM1688:
       if (id == ENGINE_GDMA && !last_cmd && stage->io_size > 0) {
         int cmd_type = (cmd[1] & 0x0f);
@@ -857,6 +905,8 @@ void Bmruntime::convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_ad
     case SG2380:
       break;
     case BM1690:
+      break;
+    case MARS3:
       break;
     default:
       BMRT_LOG(FATAL, "Unkown BM TPU");
@@ -1060,7 +1110,8 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
   // for multi-stage ir
   bm_device_mem_t output_shape_mem;
   // u64 output_shape_global_addr =  must_alloc_device_mem(devid, &output_shape_mem, output_num*sizeof(bm_shape_ex_t));
-  u64 output_shape_global_addr = alloc_device_mem(devid, output_shape_mem, output_num*sizeof(bm_shape_ex_t), "dynamic_out", 1, false);
+  std::string suffix = (m_flags & BM_RUNTIME_SHARE_MEM) ? "" : "_" + std::to_string(dyn_core_mask);
+  u64 output_shape_global_addr = alloc_device_mem(devid, output_shape_mem, output_num*sizeof(bm_shape_ex_t), "dynamic_out"+suffix, 1, false);
   if (alloc_mem) {
     bm_device_mem_ext_t output_shape_mem_ext(output_shape_mem, this, devid);
   }
@@ -1466,7 +1517,7 @@ bool Bmruntime::launch(int net_idx, const bm_tensor_t *input_tensors,
   std::iota(core_list.begin(), core_list.end(), 0);
 
   return launch_multi_cores(net_idx, input_tensors, input_num, output_tensors,
-                            output_num, core_list, user_mem, user_stmode);
+                            output_num, 0, core_list, user_mem, user_stmode);
 }
 
 std::vector<int32_t>
@@ -1520,9 +1571,9 @@ Bmruntime::refine_core_list(const net_stage_t *stage,
 }
 
 /*
-  dyn_core_mask record the unique core-mession, combine with stage_idx and core_list
-  for exp: stage_idx = 1, max_arch_core_num = 8, core_list = 0,1       core_mask = 100000011
-           stage_idx = 1, max_arch_core_num = 8, core_list = 1         core_mask = 100000010
+  dyn_core_mask record the unique core-mession, combine with core_list
+  for exp: max_arch_core_num = 8, core_list = 0,1       core_mask = 00000011
+           max_arch_core_num = 8, core_list = 1         core_mask = 00000010
 */
 uint32_t Bmruntime::get_dyn_core_mask(int stage_idx, const std::vector<int32_t> core_list) {
   uint32_t core_mask = 0;
@@ -1531,7 +1582,7 @@ uint32_t Bmruntime::get_dyn_core_mask(int stage_idx, const std::vector<int32_t> 
       BMRT_LOG(FATAL, "get dyn neuron code overlap");
     }
     // use core_num to get mask with size of core_num
-    core_mask = stage_idx << m_core_num;
+    // core_mask = stage_idx << m_core_num;
     for (auto &core_idx : core_list) {
       core_mask |= (1 << core_idx);
     }
@@ -1552,20 +1603,39 @@ std::vector<int> Bmruntime::get_core_list_from_core_mask(uint32_t dyn_core_mask)
   return core_list;
 }
 
-void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
-  const net_stage_t *common_stage_info, bool use_multi_subnet) {
+void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const uint64_t thread_id, const uint64_t dyn_core_mask) {
   if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) != net_ctx->dyn_neuron_stage_dict.end()) {
     return;
   }
 
+  std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
+  if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) != net_ctx->dyn_neuron_stage_dict.end()) {
+    return;
+  }
   auto devid = net_ctx->device_id;
   auto dyn_neuron_info = new dyn_neuron_stage_t();
-  dyn_neuron_info->neuron_mem.resize(common_stage_info->neuron_size.size());
-  for (size_t i = 0; i < common_stage_info->neuron_size.size(); ++i) {
+  u64 neuron_num = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem.size() : net_ctx->neuron_size.size();
+  dyn_neuron_info->neuron_mem.resize(neuron_num);
+  std::string suffix = "_" + std::to_string(thread_id);
+  for (size_t i = 0; i < neuron_num; ++i) {
     auto &mem = dyn_neuron_info->neuron_mem[i];
-    must_alloc_device_mem_u64(devid, &mem, common_stage_info->neuron_size[i], std::to_string(dyn_core_mask) + "_neuron_mem" + std::to_string(i));
-    BMRT_DEBUG("dyn alloc neuron_mem: %lu\n", dyn_neuron_info->neuron_mem[i].u.device.device_addr);
+    u64 neuron_size = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem[i].size : net_ctx->neuron_size[i];
+    alloc_device_mem_u64(devid, mem, neuron_size, "neuron_mem" + suffix, 1, false);
   }
+
+  net_ctx->dyn_neuron_stage_dict.emplace(dyn_core_mask, dyn_neuron_info);
+
+  neuron_stage_lock.unlock();
+}
+
+void Bmruntime::update_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
+  const net_stage_t *common_stage_info) {
+  if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) == net_ctx->dyn_neuron_stage_dict.end()) {
+    net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
+  }
+
+  auto devid = net_ctx->device_id;
+  auto dyn_neuron_info = net_ctx->dyn_neuron_stage_dict[dyn_core_mask];
 
   auto &ctx_sizes = common_stage_info->neuron_size;
   auto ctx_start = common_stage_info->ctx_start & bmrt_arch_info::addr_mask();
@@ -1615,13 +1685,15 @@ void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_co
     }
   }
 
-  std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
-  net_ctx->dyn_neuron_stage_dict.emplace(dyn_core_mask, dyn_neuron_info);
+  fill_subnet_dyn_neuron_tensor(net_ctx, dyn_core_mask, common_stage_info);
+}
 
-  if (use_multi_subnet) {
-    fill_subnet_dyn_neuron_tensor(net_ctx, dyn_core_mask, common_stage_info);
+void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
+    const net_stage_t *common_stage_info, bool use_multi_subnet) {
+  if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) == net_ctx->dyn_neuron_stage_dict.end()) {
+    net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
   }
-  neuron_stage_lock.unlock();
+  update_dyn_neuron(net_ctx, dyn_core_mask, common_stage_info);
 }
 
 void Bmruntime::fill_subnet_dyn_neuron_tensor(
@@ -1693,12 +1765,43 @@ void Bmruntime::pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const s
   net_ctx_alloc_dyn_neuron(net_ctx, core_mask, stage, use_multi_subnet);
 }
 
+void Bmruntime::pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info) {
+  if (m_flags & BM_RUNTIME_SHARE_MEM) {
+    return;
+  }
+  std::string suffix = "_" + std::to_string(thread_idx);
+  for (int i = 0; i < m_net_ctx_v.size(); ++i) {
+    clear_device_mem("neuron_mem" + suffix);
+    clear_device_mem("middle_buffer" + suffix);
+    clear_device_mem("dynamic_out" + suffix);
+    clear_device_mem("io_mem" + suffix);
+    auto iter = find(dmem_info.begin(), dmem_info.end(), "neuron_mem" + suffix);
+    dmem_info.erase(iter);
+    uint64_t offset = 0;
+    int64_t base_addr = mem_info->neuron_mem.addr;
+    auto dynamic_out_size = m_net_ctx_v[i]->mem_info_dict["dynamic_output_mem"];
+    BMRT_ASSERT_INFO(offset + dynamic_out_size <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(base_addr + offset, dynamic_out_size, "dynamic_out" + suffix);
+    offset += ALIGN(dynamic_out_size, 128);
+    auto neuron_mem_size = m_net_ctx_v[i]->mem_info_dict["neuron_mem"];
+    BMRT_ASSERT_INFO(offset + neuron_mem_size <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(base_addr, neuron_mem_size, "neuron_mem" + suffix);
+    offset += ALIGN(neuron_mem_size, 128);
+    auto middle_buffer_size = m_net_ctx_v[i]->mem_info_dict["middle_buffer"];
+    BMRT_ASSERT_INFO(offset + middle_buffer_size <= mem_info->neuron_mem.size, "");
+    fill_dmem_info(base_addr + offset, middle_buffer_size, "middle_buffer" + suffix);
+    fill_dmem_info(mem_info->io_mem.addr, mem_info->io_mem.size, "io_mem" + suffix);
+
+    net_ctx_alloc_dyn_neuron(m_net_ctx_v[i], thread_idx, thread_idx);
+  }
+}
+
 bool Bmruntime::launch_multi_cores(int net_idx,
                                    const bm_tensor_t *input_tensors,
                                    int input_num, bm_tensor_t *output_tensors,
-                                   int output_num,
+                                   int output_num, uint64_t thread_idx,
                                    const std::vector<int> &core_list,
-                                   bool user_mem, bool user_stmode) {
+                                   bool user_mem, bool user_stmode, bool using_thread) {
   auto net_ctx = m_net_ctx_v[net_idx];
   auto devid = net_ctx->device_id;
   bool save_io = false;
@@ -1731,7 +1834,8 @@ bool Bmruntime::launch_multi_cores(int net_idx,
 
   bool use_multi_subnet = stage->subnet_num > 1 ||
                           (stage->subnet_num == 1 && stage->subnet_v[0]->subnet_mode == SUBNET_MODE_CPU);
-  uint32_t core_mask = get_dyn_core_mask(stage_idx, final_core_list);;
+
+  uint64_t core_mask = using_thread ? thread_idx : get_dyn_core_mask(stage_idx, final_core_list);;
   if (!(m_flags & BM_RUNTIME_SHARE_MEM)) {
     net_ctx_alloc_dyn_neuron(net_ctx, core_mask, stage, use_multi_subnet);
   }
@@ -1741,6 +1845,7 @@ bool Bmruntime::launch_multi_cores(int net_idx,
 
   bool ret = true;
   m_profile->init(net_ctx->net_name, stage->net_profile, stage->net_stat, final_core_list);
+
   if (use_multi_subnet) {
         ret = launch_multi_subnet(net_ctx, stage, input_tensors, input_num, output_tensors,
                                      output_num, core_mask);
@@ -1983,177 +2088,160 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
   }
 
   for (size_t s = 0; s < net_c->step_ids.size(); s++) {
-//    #ifdef __linux__
-//    struct timeval t1, t2;
-//    gettimeofday(&t1, NULL);
-//    #else
-//    struct timespec t1, t2;
-//    bmrt_clock_gettime(0, &t1);
-//    #endif
-
-    // device_num = 4/8 support fast_allreduce for both prefill and decode
-    // device_num = 6 only supports fast_allreduce for prefill
-    // device_num = 2 does not support either
+    // TODO: device_num = 2 fast_allreduce still have bug
     if (using_fast_allreduce &&
         net_c->step_ids[0].size() == m_device_num &&
         net_c->step_ids.size() > 1 &&
-        (m_device_num == 4 || m_device_num == 8 || m_device_num == 6)) {
-    bool skip = m_device_num == 8 && (s == 1 || s == 2 || s == 3 || s == 5 || s == 6 || s == 7);
-    skip = skip || (m_device_num == 6 && (s == 1 || s == 2 || s == 3 || s == 5 || s == 6 || s == 7));
-    skip = skip || (m_device_num == 4 && (s == 1 || s == 2 || s == 4 || s == 5));
-    skip = skip || (m_device_num == 2 && (s == 1 || s == 3));
-    if (skip) {
-      if (net_c->is_dynamic) {
-        for (int devid = 0; devid < net_c->step_ids[s].size(); devid++) {
-          auto &net_ctx = m_net_ctx_v[net_c->step_ids[s][devid]];
-          for (int idx = 0; idx < net_ctx->output_name_v.size(); idx++) {
-            auto out_name = net_ctx->output_name_v[idx];
-            for (auto &t : dst) {
-              if (t.name == out_name && t.device_id == devid) {
-                t.tensor.shape.dims[1] = input_tensors[0].shape.dims[1];
+        (m_device_num == 4 || m_device_num == 6 || m_device_num == 8)) {
+      bool skip = (m_device_num == 8 && (s == 1 || s == 2 || s == 3 || s == 5 || s == 6 || s == 7)) ||
+                  (m_device_num == 6 && (s == 1 || s == 2 || s == 3 || s == 5 || s == 6 || s == 7)) ||
+                  (m_device_num == 4 && (s == 1 || s == 2 || s == 4 || s == 5)) ||
+                  (m_device_num == 2 && (s == 1 || s == 3));
+      if (skip) {
+        if (net_c->is_dynamic) {
+          for (int devid = 0; devid < net_c->step_ids[s].size(); devid++) {
+            auto &net_ctx = m_net_ctx_v[net_c->step_ids[s][devid]];
+            for (int idx = 0; idx < net_ctx->output_name_v.size(); idx++) {
+              auto out_name = net_ctx->output_name_v[idx];
+              for (auto &t : dst) {
+                if (t.name == out_name && t.device_id == devid) {
+                  t.tensor.shape.dims[1] = input_tensors[0].shape.dims[1];
+                }
               }
             }
           }
         }
+        continue;
       }
-      continue;
-    }
 
-    if ((m_device_num == 8 && (s == 0 || s == 4)) ||
-        (m_device_num == 6 && (s == 0 || s == 4)) ||
-        (m_device_num == 4 && (s == 0 || s == 3))) {
-      int pre_s = s;
-      int ss = s + 1;
-      int next_s = s + std::log2(net_c->step_ids.size());
-      std::vector<int> core_list{0};
-      std::vector<tpu_kernel_allreduce_1684x_t> params(net_c->step_ids[ss].size());
-      std::vector<bm_tensor_t> inputs, outputs;
-      for (int devid = 0; devid < net_c->step_ids[ss].size(); devid++) {
-        bm_tensor_t in_tensor;
-        auto pre_net_idx = net_c->step_ids[pre_s];
-        auto pre_ctx = m_net_ctx_v[pre_net_idx[devid]];
-        std::string in_name = "";
-        int32_t in_idx = 0;
-        bm_data_type_t bm_dtype = BM_FLOAT32;
-        auto cur_net_idx = net_c->step_ids[ss];
-        auto &cur_ctx = m_net_ctx_v[cur_net_idx[devid]];
-        auto &cur_in_name_v = cur_ctx->input_name_v;
-        for (int idx = 0; idx < pre_ctx->output_name_v.size(); idx++) {
-          auto name = pre_ctx->output_name_v[idx];
-          if (std::find(cur_in_name_v.begin(), cur_in_name_v.end(), name) != cur_in_name_v.end()) {
-            in_name = name;
-            in_idx = idx;
-            bm_dtype = pre_ctx->output_type_v[idx];
-            break;
-          }
-        }
-        assert(in_name != "");
-        in_tensor = get_tensor(&dst, in_name, devid)->tensor;
-        inputs.push_back(in_tensor);
+      // set all-reduce param
+      if ((m_device_num == 8 && (s == 0 || s == 4)) ||
+          (m_device_num == 6 && (s == 0 || s == 4)) ||
+          (m_device_num == 4 && (s == 0 || s == 3)) ||
+          (m_device_num == 2 && (s == 0 || s == 2))) {
+        // use step 0 output addr as all-reduce input addr
+        // use step 1 input addr as all-reduce buffer addr
+        // use step 3 output addr as all-reduce output addr
+        // if do all-reduce twice, use second all-reduce input addr as first all-reduce output addr
+        int cur_s = s;
+        int next_s = s + 1;
+        int last_s = s + 3;
+        if (m_device_num == 4) last_s = s + 2;
+        if (m_device_num == 2) last_s = s + 1;
 
-        auto net_idx_v = net_c->step_ids[ss];
-        auto net_ctx = m_net_ctx_v[net_idx_v[devid]];
-        auto in1_tensor = get_tensor(&src, net_ctx->input_name_v[1], devid)->tensor;
+        std::vector<tpu_kernel_allreduce_1684x_t> params(net_c->step_ids[next_s].size());
 
-        bm_tensor_t out_tensor;
-        if (ss == 1) {
-          auto net_idx = net_c->step_ids[next_s];
-          auto &ctx = m_net_ctx_v[net_idx[devid]];
-          auto &out_name_v = ctx->output_name_v;
-
-          auto next_net_idx = net_c->step_ids[next_s+1];
-          auto next_ctx = m_net_ctx_v[next_net_idx[devid]];
-          std::string out_name = "";
-          int32_t out_idx = 0;
-          for (int idx = 0; idx < next_ctx->input_name_v.size(); idx++) {
-            auto name = next_ctx->input_name_v[idx];
-            if (std::find(out_name_v.begin(), out_name_v.end(), name) != out_name_v.end()) {
-              out_name = name;
-              out_idx = idx;
-              break;
-            }
-          }
-          assert(out_name != "");
-          out_tensor = get_tensor(&dst, out_name, devid)->tensor;
-          outputs.push_back(out_tensor);
-        } else {
-          auto &out_name_v = net_c->output_names;
-
+        for (int devid = 0; devid < net_c->step_ids[next_s].size(); devid++) {
+          bm_tensor_t in_tensor, in1_tensor, out_tensor;
+          auto cur_net_idx = net_c->step_ids[cur_s];
+          auto cur_ctx = m_net_ctx_v[cur_net_idx[devid]];
           auto next_net_idx = net_c->step_ids[next_s];
           auto next_ctx = m_net_ctx_v[next_net_idx[devid]];
-          std::string out_name = "";
-          int32_t out_idx = 0;
-          for (int idx = 0; idx < next_ctx->output_name_v.size(); idx++) {
-            auto name = next_ctx->output_name_v[idx];
-            if (std::find(out_name_v.begin(), out_name_v.end(), name) != out_name_v.end()) {
-              out_name = name;
-              out_idx = idx;
+          auto next_in_name_v = next_ctx->input_name_v;
+
+          // find input and buffer tensor by step 1 input names
+          std::string in_name = "";
+          std::string in1_name = next_in_name_v[1];
+          for (int idx = 0; idx < cur_ctx->output_name_v.size(); idx++) {
+            auto name = cur_ctx->output_name_v[idx];
+            if (std::find(next_in_name_v.begin(), next_in_name_v.end(), name) != next_in_name_v.end()) {
+              in_name = name;
               break;
+            }
+          }
+          assert(in_name != "");
+          in_tensor = get_tensor(&dst, in_name, devid)->tensor;
+          in1_tensor = get_tensor(&src, in1_name, devid)->tensor;
+
+          auto last_net_idx = net_c->step_ids[last_s];
+          auto last_ctx = m_net_ctx_v[last_net_idx[devid]];
+          auto last_out_name_v = last_ctx->output_name_v;
+          std::string out_name = "";
+          // if do second all-reduce, use second all-reduce step 0 input addr
+          if ((m_device_num == 8 && net_c->step_ids.size() == 8 && cur_s == 0) ||
+              (m_device_num == 6 && net_c->step_ids.size() == 8 && cur_s == 0) ||
+              (m_device_num == 4 && net_c->step_ids.size() == 6 && cur_s == 0) ||
+              (m_device_num == 2 && net_c->step_ids.size() == 4 && cur_s == 0)) {
+            auto new_net_idx = net_c->step_ids[last_s+1];
+            auto new_ctx = m_net_ctx_v[new_net_idx[devid]];
+            for (int idx = 0; idx < new_ctx->input_name_v.size(); idx++) {
+              auto name = new_ctx->input_name_v[idx];
+              if (std::find(last_out_name_v.begin(), last_out_name_v.end(), name) != last_out_name_v.end()) {
+                out_name = name;
+                break;
+              }
+            }
+          } else {
+            auto out_name_v = net_c->output_names;
+            for (int idx = 0; idx < last_out_name_v.size(); idx++) {
+              auto name = last_out_name_v[idx];
+              if (std::find(out_name_v.begin(), out_name_v.end(), name) != out_name_v.end()) {
+                out_name = name;
+                break;
+              }
             }
           }
           assert(out_name != "");
           out_tensor = get_tensor(&dst, out_name, devid)->tensor;
-          outputs.push_back(out_tensor);
+
+          // size should be aligned to 4096 for allreduce
+          bm_data_type_t bm_dtype = in_tensor.dtype;
+          size_t type_size = bmrt_data_type_size(bm_dtype);
+          uint64_t real_count = bmrt_shape_count(&in_tensor.shape);
+          uint64_t aligned_count = ALIGN(type_size * real_count, 4096) / type_size;
+
+          int dtype = 0;
+          if (bm_dtype == BM_FLOAT32) {
+            dtype = (2 << 1) | 1;
+          } else if (bm_dtype == BM_FLOAT16) {
+            dtype = (1 << 1) | 1;
+          } else if (bm_dtype == BM_BFLOAT16) {
+            dtype = (5 << 1) | 1;
+          } else {
+            BMRT_LOG(WRONG, "Allreduce only support float32/float16/bfloat16 now");
+          }
+
+          tpu_kernel_allreduce_1684x_t param;
+          memset(&param, 0, sizeof(param));
+          param.count = aligned_count;
+          param.dtype = dtype;
+          param.reduce_method = 1;
+          for(int i=0; i<sizeof(param.group)/sizeof(param.group[0]); i++) {
+              param.group[i] = i;
+          }
+          param.rank = devid;
+          param.chip_num = 8; // card_chip_num,
+          param.group_size = m_device_num;
+
+          // clear addr high 6 bits because tpu-train use those bits as device id
+          // TODO: move the logic to tpu-train
+          param.i_global_addr[devid] = (in_tensor.device_mem.u.device.device_addr << 6) >> 6;
+          param.i_global_addr_1[devid] = (in1_tensor.device_mem.u.device.device_addr << 6) >> 6;
+          param.o_global_addr[devid] = (out_tensor.device_mem.u.device.device_addr << 6) >> 6;
+          params[devid] = param;
         }
 
-        int dtype = 0;
-        if (bm_dtype == BM_FLOAT32) {
-          dtype = (2 << 1) | 1;
-        } else if (bm_dtype == BM_FLOAT16) {
-          dtype = (1 << 1) | 1;
-        } else if (bm_dtype == BM_BFLOAT16) {
-          dtype = (5 << 1) | 1;
-        } else {
-          BMRT_LOG(WRONG, "Allreduce only support float32/float16/bfloat16 now");
+        for (int i = 0; i < net_c->step_ids[next_s].size(); i++) {
+          for (int j = 0; j < net_c->step_ids[next_s].size(); j++) {
+            params[i].i_global_addr[j] = params[j].i_global_addr[j];
+            params[i].i_global_addr_1[j] = params[j].i_global_addr_1[j];
+            params[i].o_global_addr[j] = params[j].o_global_addr[j];
+          }
         }
-        // size should be aligned to 4096 for allreduce
-        size_t type_size = bmrt_data_type_size(bm_dtype);
-        u32 aligned_count = ALIGN(type_size * bmrt_shape_count(&in_tensor.shape), 4096) / type_size;
 
-        tpu_kernel_allreduce_1684x_t param = {
-          .i_global_addr = {},
-          .i_global_addr_1 = {},
-          .o_global_addr = {},
-          .count = aligned_count,
-          .dtype = dtype,
-          .reduce_method = 1, // sum
-          // .group = {m_devids[0], m_devids[1], m_devids[2], m_devids[3],
-          //           m_devids[4], m_devids[5], m_devids[6], m_devids[7]},
-          // .rank = m_devids[devid],
-          .group = {0, 1, 2, 3, 4, 5, 6, 7},
-          .rank = devid,
-          .chip_num = 8, // card_chip_num,
-          .group_size = m_device_num
-        };
-
-        // clear addr high 6 bits because tpu-train use those bits as device id
-        // TODO: move the logic to tpu-train
-        param.i_global_addr[devid] = (in_tensor.device_mem.u.device.device_addr << 6) >> 6;
-        param.i_global_addr_1[devid] = (in1_tensor.device_mem.u.device.device_addr << 6) >> 6;
-        param.o_global_addr[devid] = (out_tensor.device_mem.u.device.device_addr << 6) >> 6;
-        params[devid] = param;
-      }
-
-      for (int i = 0; i < net_c->step_ids[ss].size(); i++) {
-        for (int j = 0; j < net_c->step_ids[ss].size(); j++) {
-          params[i].i_global_addr[j] = params[j].i_global_addr[j];
-          params[i].i_global_addr_1[j] = params[j].i_global_addr_1[j];
-          params[i].o_global_addr[j] = params[j].o_global_addr[j];
+        for (int devid = 0; devid < net_c->step_ids[cur_s].size(); devid++) {
+          auto net_idx = net_c->step_ids[cur_s];
+          auto net_ctx = m_net_ctx_v[net_idx[devid]];
+          net_ctx->do_allreduce = 1;
+          net_ctx->allreduce_param = params[devid];
         }
-      }
 
-      for (int devid = 0; devid < net_c->step_ids[s].size(); devid++) {
-        auto net_idx = net_c->step_ids[s];
-        auto net_ctx = m_net_ctx_v[net_idx[devid]];
-        net_ctx->do_allreduce = 1;
-        net_ctx->allreduce_param = params[devid];
       }
-
-    }
     }
 
     std::set<int> devices;
-    if (net_c->step_ids[s].size() > 1 && net_c->num_device > 1 &&
+    if (net_c->step_ids[s].size() > 1 &&
+        net_c->num_device > 1 &&
         m_device_num > 1) {
       for (auto net_idx : net_c->step_ids[s]) {
         auto devid = m_net_ctx_v[net_idx]->device_id;
@@ -2181,21 +2269,7 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
         bm_handle_sync(m_handles[d]);
       }
     }
-
-//    #ifdef __linux__
-//    gettimeofday(&t2, NULL);
-//    long use1 = (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec;
-//    #else
-//    bmrt_clock_gettime(0, &t2);
-//    long use1 = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_nsec - t1.tv_nsec)/1000;
-//    #endif
-
-    // BMRT_LOG(INFO, "step %d calc time(ms): %f", s, (float)use1 / 1000);
   }
-  // BMRT_LOG(INFO, "all-reduce comm time(ms): %f", (float)comm_time.load() / 1000);
-  // BMRT_LOG(INFO, "communication count: %d", comm_count.load());
-  // comm_time = 0;
-  // comm_count = 0;
 
   if (net_c->is_dynamic) {
     for (int i = 0; i < output_num; i++) {
@@ -2406,7 +2480,7 @@ static bool check_launch_params(net_ctx_t* net_ctx, void* const input_datas[],
 
 bool Bmruntime::launch_multi_cores(int net_idx, void* const input_datas[], const bm_shape_t input_shapes[],
                        int input_num, void* output_datas[], bm_shape_t output_shapes[], int output_num,
-                       bool user_mem, const std::vector<int>& core_list)
+                       uint64_t thread_idx, bool user_mem, const std::vector<int>& core_list, bool using_thread)
 {
   auto net_ctx = m_net_ctx_v[net_idx];
   auto devid = net_ctx->device_id;
@@ -2425,7 +2499,7 @@ bool Bmruntime::launch_multi_cores(int net_idx, void* const input_datas[], const
   }
 
   // launch may not call sync internally
-  bool ret = launch_multi_cores(net_idx, input_tensors.data(), input_num, output_tensors.data(), output_num, core_list, false, false);
+  bool ret = launch_multi_cores(net_idx, input_tensors.data(), input_num, output_tensors.data(), output_num, thread_idx, core_list, false, false, using_thread);
 
   // sync is needed for the following d2s to fetch output data
   if (ret){
@@ -2718,6 +2792,12 @@ int Bmruntime::get_output_gmem_stmode(const string& tensor_name, int net_idx) {
     return m_net_ctx_v[net_idx]->stage_v[0]->output_v[it - v.begin()].st_mode;
 }
 
+int Bmruntime::get_stage_idx(const char* net_name, const bm_tensor_t* input_tensors)
+{
+  int net_idx = get_net_idx(net_name);
+  return get_stage_idx(m_net_ctx_v[net_idx], input_tensors);
+}
+
 int Bmruntime::get_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors)
 {
   return net_ctx->is_dynamic ? get_dynamic_stage_idx(net_ctx, input_tensors)
@@ -2990,6 +3070,13 @@ void Bmruntime::reset_device_mem(const std::string &desc) {
   auto iter = find(dmem_info.begin(), dmem_info.end(), desc);
   if (iter != dmem_info.end()) {
     iter->offset = 0;
+  }
+}
+
+void Bmruntime::clear_device_mem(const std::string &desc) {
+  auto iter = find(dmem_info.begin(), dmem_info.end(), desc);
+  if (iter != dmem_info.end()) {
+    dmem_info.erase(iter);
   }
 }
 

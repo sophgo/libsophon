@@ -73,7 +73,8 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "sed -i '/SC3 with BM1682/d' /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "sed -i '/BM1684/d' /usr/share/$used_dir/pci.ids" >> postinst
     COMMAND echo "echo \"1f1c  Sophgo Technologies Inc.\" >> /usr/share/$used_dir/pci.ids" >> postinst
-    COMMAND echo "echo \"	1686	BM1688, Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
+    COMMAND echo "echo \"	1686	Sophon Series Deep Learning Accelerator\" >> /usr/share/$used_dir/pci.ids" >> postinst
+    COMMAND echo "echo \"		1f1c a200	BM1688\" >> /usr/share/$used_dir/pci.ids" >> postinst
 
     COMMAND echo "cp -r /opt/sophon/driver-${CPACK_PACKAGE_VERSION} /usr/src/${DKMS_NAME}-${PROJECT_VERSION}" >> postinst
     COMMAND echo "dkms add -m ${DKMS_NAME} -v ${PROJECT_VERSION}" >> postinst
@@ -81,11 +82,11 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "modprobe -r ${DKMS_NAME}" >> postinst
     COMMAND echo "modprobe ${DKMS_NAME}" >> postinst
 
-    COMMAND echo "pcinum=`lspci | grep BM1688 -c`" >> postinst
+    COMMAND echo "pcinum=`lspci | grep Sophon -c`" >> postinst
     COMMAND echo "devicenum=`ls /dev/ | grep bm-sophon -c`" >> postinst
     COMMAND echo "if [ \"$pcinum\" -ne \"$devicenum\" ]" >> postinst
     COMMAND echo "then" >> postinst
-    COMMAND echo "    echo \"sophon driver install error happened, please see dmesg for more infomation\"" >> postinst
+    COMMAND echo "    echo \" $devicenum/$pcinum device(s) found, see dmesg for more infomation\"" >> postinst
     COMMAND echo "fi" >> postinst
     # pre-remove
     COMMAND echo "modprobe -r ${DKMS_NAME}" > prerm
@@ -110,6 +111,7 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "fi" >> prerm
     COMMAND echo "dir_name=$(dirname $used_path)" >> prerm
     COMMAND echo "used_dir=\${dir_name##*/}" >> prerm
+    COMMAND echo "sed -i '/BM1688/d' /usr/share/$used_dir/pci.ids" >> prerm
     COMMAND echo "sed -i '/Sophgo/d' /usr/share/$used_dir/pci.ids" >> prerm
     COMMAND echo "sed -i '/Sophon/d' /usr/share/$used_dir/pci.ids" >> prerm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/debian

@@ -415,7 +415,7 @@ Store mode
 .. code-block:: cpp
 
   /* store mode definitions */
-  typedef enum bm_stroe_mode_e {
+  typedef enum bm_store_mode_e {
     BM_STORE_1N = 0, /* default, if not sure, use 0 */
     BM_STORE_2N = 1,
     BM_STORE_4N = 2,
@@ -462,7 +462,7 @@ The bmrt_shape interface is used to set bm_shape_t as follows:
   dims array to bm_shape_t,
   shape and dims should not be NULL, num_dims should not be larger than BM_MAX_DIMS_NUM
 
-  Prameters: [out] shape   - The bm_shape_t pointer.
+  Parameters: [out] shape   - The bm_shape_t pointer.
              [in] dims     - The dimension value.
                              The sequence is the same with dims[BM_MAX_DIMS_NUM].
              [in] num_dims - The number of dimension.
@@ -514,8 +514,8 @@ The bmrt_tensor can be configured with a tensor. The interface is declared as fo
 .. code-block:: cpp
 
   /*
-  This API is to initialise the tensor. It will alloc device mem to tensor->device_mem,
-  so user should bm_free_device(p_bmrt, tensor->device_mem) to free it.
+  This API is to initialize the tensor. It will alloc device mem to tensor->device_mem,
+  so user should use bm_free_device(p_bmrt, tensor->device_mem) to free it.
   After initialization, tensor->dtype = dtype, tensor->shape = shape, and tensor->st_mode = 0.
 
   Parameters: [out] tensor - The pointer of bm_tensor_t. It should not be NULL.
@@ -532,8 +532,8 @@ The bmrt_tensor_with_device interface is used to configure a tensor with the exi
 .. code-block:: cpp
 
   /*
-  The API is to initialise the tensor with a existed device_mem.
-  The tensor byte size should not larger than device mem size.
+  The API is to initialize the tensor with a existed device_mem.
+  The tensor byte size should not be larger than device mem size.
   After initialization, tensor->dtype = dtype, tensor->shape = shape,
   tensor->device_mem = device_mem, and tensor->st_mode = 0.
 
@@ -767,9 +767,9 @@ Network information is expressed as follows:
 
 bm_net_info_t represents all information of a network and bm_stage_info_t represents the conditions of different shapes supported by the network.
 
-input_num represents the number of inputs, input_names/input_dytpes/input_scales and  input_shapes in bm_stage_info_t indicates this number.
+input_num represents the number of inputs, input_names/input_dtypes/input_scales and  input_shapes in bm_stage_info_t indicates this number.
 
-output_num represents the number of outputs,output_names/output_dytpes/output_scales and output_shapes  in  bm_stage_info_t indicates this number.
+output_num represents the number of outputs,output_names/output_dtypes/output_scales and output_shapes  in  bm_stage_info_t indicates this number.
 
 input_scales and output_scales are only useful when they are integers and are 1.0 by default when they are of float type.
 
@@ -845,7 +845,7 @@ The user needs to initialize the input_tensors required by the network before in
 **Special note:**
 
 * This interface will request device mem for output_tensors to store result data. You should actively release device mem when you do not need any result data.
-* Upon the completion of inference, output data is stored in the form of BM_STROE_1N and the output shape is stored in the shape of each output_tensor .
+* Upon the completion of inference, output data is stored in the form of BM_STORE_1N and the output shape is stored in the shape of each output_tensor .
 * This interface is asynchronous. You need to call bm_thread_sync to ensure the inference is completed.
 
 The example of the use method is shown as follows:
@@ -919,7 +919,7 @@ The specific description is as follows:
 
 * When user_mem is false, the interface will request device mem for each output_tensor and save output data.
 * When user_mem is true, the interface will not request device mem for output_tensor. You need to make a request from the outside. The size requested can be specified by  max_output_bytes in bm_net_info_t.
-* When user_stmode is false, the output data is arranged in the form of BM_STROE_1N.
+* When user_stmode is false, the output data is arranged in the form of BM_STORE_1N.
 * When user_stmode is true, the output data will be specified according to  st_mode in each output_tensor.
 
 **Special note:** This interface is asynchronous. You need to call bm_thread_sync to ensure the inference is completed.
@@ -1155,7 +1155,7 @@ get_network_info
 
 Get the information of a specific network through the network name.
 
-If net_name is available, return the network information structure pointer of bm_net_info_t, including the number, names and types of its inputs and outputs. For details, refer to the  bm_net_infot_t structure. If net_name is not available, return Null.
+If net_name is available, return the network information structure pointer of bm_net_info_t, including the number, names and types of its inputs and outputs. For details, refer to the  bm_net_info_t structure. If net_name is not available, return Null.
 
 The use reference is shown as follows:
 
@@ -1371,7 +1371,7 @@ num_elements
 
     uint64_t num_elements() const;
 
-Get the number of tensor elements. It is calculated by using the formula dims[0] * dims[1] * ⋯* dims[num_dims-1]. Return 1 when num_dims is 0.
+Get the number of tensor elements. It is calculated by using the formula dims[0] * dims[1] * ⋯* dims[num_dims-1]. Return 1 when num_dims is 0 (scalar element).
 
 tensor
 :::::::

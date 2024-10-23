@@ -56,6 +56,7 @@ bool b_enable_mmap = true;
 bool b_print_subnet_time = false;
 bool b_bmodel_dir = true;
 bool memory_prealloc = false;
+string DECRYPT_LIB;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -722,11 +723,31 @@ void save_data(const char* filename, const void* data, size_t byte_size){
 
 /* --------------------------------------------------------------------------*/
 /* code for inference by new nntoolchain runtime interface */
+static bool load_bmodel_with_decrypt(const string &dir, void *p_bmrt) {
+  // return bmrt_load_bmodel_with_decrypt_lib(p_bmrt, bmodel_path.c_str(),
+  // DECRYPT_LIB.c_str());
+  auto handle = bmrt_load_lib(DECRYPT_LIB.c_str(), RTLD_LAZY);
+  if (!handle) {
+    return false;
+  }
+  auto f = (decrypt_func)bmrt_find_sym(handle, "decrypt");
+  if (!f) {
+    return false;
+  }
+  auto ret = bmrt_load_bmodel_with_decrypt(p_bmrt, dir.c_str(), f);
+  bmrt_unload_lib(handle);
+  return ret;
+}
 
 static void load_bmodel(const string &dir, void *p_bmrt)
 {
   string bmodel_path = fix_bmodel_path(dir);
-  bool flag = bmrt_load_bmodel(p_bmrt, bmodel_path.c_str());
+  bool flag = true;
+  if (DECRYPT_LIB.empty()) {
+    flag = bmrt_load_bmodel(p_bmrt, bmodel_path.c_str());
+  } else {
+    flag = load_bmodel_with_decrypt(bmodel_path, p_bmrt);
+  }
   if (!flag) {
     BMRT_LOG(FATAL, "Load bmodel[%s] failed", bmodel_path.c_str());
   }
@@ -781,12 +802,19 @@ void bmrt_launch_tensor_thread_func(
   int output_num, bool user_mem,
   bool user_stmode, const int *core_list,
   int core_num, int net_idx, int stage_idx,
-  int chipid, bmrt_time_t &launch_time, bm_profile_t &start, bm_profile_t &end) {
+  int chipid, bmrt_time_t &launch_time, bm_profile_t &start, bm_profile_t &end,
+  bool using_thread, uint64_t thread_idx) {
   if (chipid != 0x1682) {
     bm_get_profile(handle, &start);
   }
-  bool ret = bmrt_launch_tensor_multi_cores(p_bmrt, net_name, input_tensors, input_num,
+  bool ret;
+  if (using_thread) {
+    ret = bmrt_launch_tensor_multi_thread(p_bmrt, net_name, input_tensors, input_num,
+            output_tensors, output_num, thread_idx, user_mem, user_stmode, core_list, core_num);
+  } else {
+    ret = bmrt_launch_tensor_multi_cores(p_bmrt, net_name, input_tensors, input_num,
             output_tensors, output_num, user_mem, user_stmode, core_list, core_num);
+  }
   if (ret == false) {
     print_array_ex(core_list, core_num, BM_INT32,  "cores=");
     BMRT_LOG(FATAL, "The %d-th neuron network '%s' stage '%d' launch failed", net_idx,
@@ -863,6 +891,8 @@ void bmrt_test()
   }
 
   mem_info_t mem_info;
+  std::vector<mem_info_t> mem_info_v;
+  bool using_multi_thread = false;
   if (memory_prealloc) {
     if (bmrt_get_bmodel_info(fix_bmodel_path(CONTEXT_DIR_V[0]).c_str(), &mem_info) == false) {
       BMRT_LOG(FATAL, "Load bmodel Failed");
@@ -874,6 +904,13 @@ void bmrt_test()
     malloc_device_mem(bm_handle, mem_info.neuron_mem, prealloc_mem_v);
     malloc_device_mem(bm_handle, mem_info.coeff_mem, prealloc_mem_v);
     malloc_device_mem(bm_handle, mem_info.io_mem, prealloc_mem_v);
+    mem_info_v.resize(core_lists.size());
+    for (int i = 0; i < core_lists.size(); ++i) {
+      mem_info_v[i].neuron_mem.size = mem_info.neuron_mem.size;
+      mem_info_v[i].io_mem.size = mem_info.io_mem.size;
+      malloc_device_mem(bm_handle, mem_info_v[i].neuron_mem, prealloc_mem_v);
+      malloc_device_mem(bm_handle, mem_info_v[i].io_mem, prealloc_mem_v);
+    }
   }
 
   MEM_NUM = MEM_NUM == 1 ? 1 : CAL_TIMES;
@@ -1088,7 +1125,12 @@ void bmrt_test()
         bmrt_gettime(t2);
         for(size_t group_idx = 0; group_idx<core_lists.size(); group_idx++) {
           auto& core_list = core_lists[group_idx];
-          bool pre_alloc_neuron_ret =  bmrt_pre_alloc_neuron_multi_cores(p_bmrt, net_info->name, stage_idx, core_list.data(), core_list.size());
+          bool pre_alloc_neuron_ret;
+          if (memory_prealloc) {
+            pre_alloc_neuron_ret =  bmrt_pre_alloc_mem_multi_thread(p_bmrt, group_idx, &mem_info_v[group_idx]);
+          } else {
+            pre_alloc_neuron_ret =  bmrt_pre_alloc_neuron_multi_cores(p_bmrt, net_info->name, stage_idx, core_list.data(), core_list.size());
+          }
           if (!pre_alloc_neuron_ret) {
             std::string core_list_str = "";
             for (auto &core_id_ : core_list) { core_list_str += std::to_string(core_id_) + ","; }
@@ -1114,7 +1156,8 @@ void bmrt_test()
                                                 std::ref(bm_handle), p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
                                                 output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                                 core_list.data(), core_list.size(), net_idx, stage_idx,
-                                                chipid, std::ref(launch_times[group_idx]), std::ref(starts[group_idx]), std::ref(ends[group_idx])));
+                                                chipid, std::ref(launch_times[group_idx]), std::ref(starts[group_idx]), std::ref(ends[group_idx]),
+                                                memory_prealloc, group_idx));
             }
             for (auto& thread: threads) {
               thread.join();
@@ -1125,7 +1168,7 @@ void bmrt_test()
               bmrt_launch_tensor_thread_func(bm_handle, p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
                                             output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                             core_list.data(), core_list.size(), net_idx, stage_idx,
-                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx]);
+                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx], memory_prealloc, group_idx);
             }
           }
 
@@ -1428,6 +1471,7 @@ void Usage()
       "                         e.g. 0,1 means using 0,1 core together to infer the multi-core compiled bmodel.\n"
       "                              0:1 means using 0,1 core to infer the single-core compiled bmodel with parallelly mession.\n"
       "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
+      "  --decrypt_lib      : Set decrypt_lib path for decrypt bmodel.\n"
 #ifdef DEBUG
       "  --test_case        : Test api case, \n"
       "                       Option:\n"
@@ -1469,6 +1513,7 @@ DEFINE_string(output_ref, "", "Output_ref");
 DEFINE_bool(only_cmp_last, false, "only cmp last");
 DEFINE_string(core_list, "", "");
 DEFINE_bool(memory_prealloc, false, "Memory alloc before load bmodel.");
+DEFINE_string(decrypt_lib, "", "Set decrypt_lib path for decrypt bmodel.");
 DECLARE_bool(help);
 #ifdef DEBUG
 DEFINE_string(test_case, "", "Test api case");
@@ -1640,6 +1685,7 @@ static void deal_with_options(int argc, char **argv)
                                          {"cascade_device", required_argument, &lopt, 17},
                                          {"core_list", required_argument, &lopt, 18},
                                          {"memory_prealloc", no_argument, &lopt, 19},
+                                         {"decrypt_lib", required_argument, &lopt, 20},
                                          {0, 0, 0, 0}};
 
   if (argc < 2) {
@@ -1748,6 +1794,9 @@ static void deal_with_options(int argc, char **argv)
           case 19:
             memory_prealloc = true;
             break;
+          case 20:
+            DECRYPT_LIB = optarg;
+            break;
         }
         break;
       case '?':
@@ -1788,6 +1837,7 @@ static void deal_with_options(int argc, char **argv)
       "                         e.g. 0,1,2,3 means using 0,1,2,3 core to infer the bmodel.\n"
       "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
       "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
+      "  --decrypt_lib      : Set decrypt_lib path for decrypt bmodel.\n"
     );
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 

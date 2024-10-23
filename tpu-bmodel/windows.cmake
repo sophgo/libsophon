@@ -45,7 +45,7 @@ target_compile_features(libbmodel-static PUBLIC cxx_std_11)
 include(git-utils)
 get_version_from_tag(version soversion revision)
 
-add_executable(tpu_model tools/tpu_model.cpp)
+add_executable(tpu_model tools/tpu_model.cpp tools/model_tool.cpp)
 target_link_libraries(tpu_model libbmodel-static)
 target_compile_definitions(tpu_model PRIVATE VER="${revision}")
 target_compile_features(tpu_model PUBLIC cxx_std_11)

@@ -67,12 +67,6 @@ struct bm_gmem_addr {
 	u64 phy_addr;
 };
 
-struct bm_mem_paddr {
-  struct rb_node node;
-  unsigned long long paddr;
-  bm_device_mem_u64_t *dev_buffer;
-};
-
 bm_status_t bm_init_basic_func_id(bm_handle_t handle);
 bm_status_t bm_total_gmem(bm_handle_t ctx, u64* total);
 bm_status_t bm_avail_gmem(bm_handle_t ctx, u64* avail);

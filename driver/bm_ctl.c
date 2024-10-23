@@ -285,14 +285,14 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_min_clock = bmdi->boot_info.tpu_min_clk;
 			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
 		} else {
-			pattr->tpu_min_clock = 450;
-			pattr->tpu_max_clock = 900;
+			pattr->tpu_min_clock = 25;
+			pattr->tpu_max_clock = 1000;
 		}
 		pattr->tpu_current_clock = c_attr->tpu_current_clock;
-		if (pattr->tpu_current_clock < pattr->tpu_min_clock
-                           || (pattr->tpu_current_clock > pattr->tpu_max_clock)) {
-			pattr->tpu_current_clock = (int)0xFFFFFC00;
-		}
+		//if (pattr->tpu_current_clock < pattr->tpu_min_clock
+		//						|| (pattr->tpu_current_clock > pattr->tpu_max_clock)) {
+		//	pattr->tpu_current_clock = (int)0xFFFFFC00;
+		//}
 		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
 	default:

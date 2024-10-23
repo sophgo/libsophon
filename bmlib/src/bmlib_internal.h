@@ -15,7 +15,6 @@
 //#include "..\..\common\bm1684\include_win\common_win.h"
 #else
 #include "linux/bmlib_ioctl.h"
-#include "rbtree.h"
 #endif
 #ifdef USING_CMODEL
 #include "bmlib_device.h"
@@ -124,8 +123,6 @@ typedef struct bm_context {
 #endif
     bmlib_profile_t *profile;
     int enable_mem_guard;
-	struct rb_root root;
-	pthread_mutex_t mem_mutex;
 } bm_context_t, *bm_handle_t;
 
 DECL_EXPORT bm_status_t bm_send_api(
@@ -395,13 +392,6 @@ struct bm_i2c_smbus_ioctl_info
   unsigned char data[32]; /*buf of read or write*/
   int op; /*0:write or 1:read*/
 };
-
-#define FUNC_MAX_CORE_NUM 2
-typedef struct {
-  char *func_name;
-  tpu_kernel_function_t f_ids[FUNC_MAX_CORE_NUM];
-} bm_basic_func_t;
-
 
 /**
  * @name    bm_trace_enable

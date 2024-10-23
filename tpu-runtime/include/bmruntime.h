@@ -30,8 +30,12 @@ using flatbuffers::Offset;
 using flatbuffers::Vector;
 
 #ifdef _WIN32
+#ifndef DECL_EXPORT
 #define DECL_EXPORT _declspec(dllexport)
+#endif
+#ifndef DECL_IMPORT
 #define DECL_IMPORT _declspec(dllimport)
+#endif
 #else
 #define DECL_EXPORT
 #define DECL_IMPORT
@@ -254,10 +258,12 @@ struct net_ctx_t {
   vector<float> output_scale_v;
   vector<int> output_zero_point_v;
   vector<net_stage_t *> stage_v;              // each net has multi stages
-  std::unordered_map<size_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
+  std::unordered_map<uint64_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
 
   // Bulk neuron memories.
   vector<bm_device_mem_u64_t> neuron_mem;
+  vector<u64> neuron_size;
+  std::unordered_map<string, uint64_t> mem_info_dict;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
   bool is_dynamic = 0;
@@ -330,6 +336,14 @@ class Bmruntime {
   Bmruntime(const string& arch_name, int devid);
   Bmruntime(bm_handle_t* bm_handles, int num_handles,
             bool using_internal_hiddens, const string& arch_name);
+
+   /* free memory */
+  void uninit_cpu_handles();
+  void free_device_memory();
+  void free_network_contexts_and_cascades();
+  void free_coeff_mem();
+  void free_bm_handle_and_custom_cpu_handles();
+  void destory_without_coeff();
   ~Bmruntime();
 
   friend class BMProfile;
@@ -342,6 +356,8 @@ class Bmruntime {
   bool load_bmodel(const void* bmodel_data, size_t size);
   bool load_bmodel_with_mem(const string& filepath, mem_info_t* mem_info);
   bool load_bmodel_with_mem(const void* bmodel_data, size_t size, mem_info_t* mem_info);
+  bool load_bmodel_with_decrypt(const string &filepath, const std::string &decrypt_lib);
+  bool load_bmodel_with_decrypt(const string &filepath, decrypt_func f);
   void set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info);
 
   /* C++ style Interface */
@@ -365,14 +381,16 @@ class Bmruntime {
               bool user_stmode = false);
   bool launch_multi_cores(int net_idx, const bm_tensor_t *input_tensors,
                           int input_num, bm_tensor_t *output_tensors,
-                          int output_num, const std::vector<int> &core_list,
-                          bool user_mem, bool user_stmode);
+                          int output_num, uint64_t thread_idx,
+                          const std::vector<int> &core_list,
+                          bool user_mem, bool user_stmode, bool using_thread=false);
   bool launch_multi_cores(int net_idx, void* const input_datas[], const bm_shape_t input_shapes[],
               int input_num, void* output_tensors[], bm_shape_t output_shapes[], int output_num,
-              bool user_mem = false, const std::vector<int>& core_list={});
+              uint64_t thread_idx, bool user_mem = false, const std::vector<int>& core_list={}, bool using_thread=false);
   bool launch(const net_cascade_t * net_c, const bm_tensor_t* input_tensors, int input_num,
               bm_tensor_t* output_tensors, int output_num);
   void pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const std::vector<int> &core_list);
+  void pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info);
   bool memcpy_s2d_parallel(bm_tensor_t tensors[], void * datas[],
                            int tensor_num[], int device_num);
   bool memcpy_d2s_parallel(void * datas[], bm_tensor_t tensors[],
@@ -477,7 +495,9 @@ class Bmruntime {
   bm_device_mem_t alloc_device_mem(uint32_t devid, u64 size, const std::string &desc = "", int type_len=1, bool auto_free_mem=true);
   bm_device_mem_u64_t alloc_device_mem_u64(uint32_t devid, u64 size, const std::string &desc = "", int type_len=1, bool auto_free_mem=true);
   void reset_device_mem(const std::string &desc);
+  void clear_device_mem(const std::string &desc);
   void fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc);
+  int get_stage_idx(const char* net_name, const bm_tensor_t* input_tensors);
 
 protected:
   bool alloc_mem;
@@ -525,6 +545,8 @@ protected:
       const net_stage_t *common_stage_info);
   void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
       const net_stage_t *common_stage_info, bool use_multi_subnet);
+  void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask);
+  void update_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const net_stage_t *common_stage_info);
   void fill_net_info(net_ctx_t* net_ctx);
   void free_net_info(net_ctx_t* net_ctx);
   void free_dyn_neuron(net_ctx_t* net_ctx);
@@ -645,6 +667,7 @@ protected:                                                    // one bmruntime c
   // For neuron memory share
   u32 m_neuron_heap_mask;
   vector<bm_device_mem_u64_t> max_neuron_mem[MAX_DEVICE_NUM];
+  vector<u64> max_neuron_mem_size[MAX_DEVICE_NUM];
   std::shared_ptr<KernelModule> kernel_modules[MAX_DEVICE_NUM];
 
  protected:
@@ -656,7 +679,7 @@ protected:                                                    // one bmruntime c
   bool launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                          const bm_tensor_t* input_tensors, int input_num,
                          bm_tensor_t* output_tensors, int output_num,
-                         const uint32_t dyn_core_mask);
+                         const uint32_t dyn_core_mask, bool force_sync);
   bool launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                             const bm_tensor_t* input_tensors, const int* input_elem_num, int input_num,
                             bm_tensor_t* output_tensors, int* output_elem_num, int output_num,
@@ -750,6 +773,7 @@ private:
   map<int, tpu_kernel_function_t> _get_profile_func_id;
   map<int, tpu_kernel_function_t> _set_engine_profile_param_func_id;
   map<int, tpu_kernel_function_t> _global_move_1684x_func_id;
+  vector<tpu_kernel_function_t> __get_vector_funcs(const vector<int>& core_list, map<int, tpu_kernel_function_t>& func_map, const char* name);
 };
 
 class CascadeThread {

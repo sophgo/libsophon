@@ -164,12 +164,10 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	}
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	if (handle_num == 1) {
-		if (h_info->open_pid != current->pid)
-			pr_warn("Going to clear lib,current pid is different from open pid, it may cause the library unloaded abnormally.\n");
-
+	if (handle_num == 1 && h_info->open_pid == current->pid)
 		bmdrv_api_clear_lib(bmdi, file);
-	}
+	else if (h_info->open_pid != current->pid)
+		pr_debug("current pid is different from open pid, can not clear lib,\n");
 
 	/* invalidate pending APIs in msgfifo */
 	//for (core = 0; core < core_num; core++)

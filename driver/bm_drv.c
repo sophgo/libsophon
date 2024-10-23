@@ -45,6 +45,63 @@ static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 #endif
 }
 
+void print_api_log(u32 api_id, u32 api_result)
+{
+	switch (api_id) {
+	case 0x90000001:
+		switch (api_result) {
+		case -1:
+			pr_err("\tMalloc memory for library node fail.\n");
+			break;
+
+		case -2:
+			pr_err("\tDlopen file fail.\n");
+			break;
+
+		default:
+			break;
+		}
+
+		break;
+
+	case 0x90000002:
+		switch (api_result) {
+		case -1:
+			pr_err("\tdlsym fail.\n");
+			break;
+
+		case -2:
+			pr_err("\tFunction not found.\n");
+			break;
+
+		case -3:
+			pr_err("\tThe library containing the function was not found.\n");
+			break;
+
+		default:
+			break;
+		}
+
+		break;
+
+	case 0x90000003:
+		switch (api_result) {
+		case 0x12345:
+			pr_err("\tFunction did not execute.\n");
+			break;
+
+		default:
+			break;
+		}
+
+		break;
+
+	default:
+		pr_err("unknown api id: 0x%x\n", api_id);
+		break;
+	}
+}
+
 void bmdrv_post_api_process(struct bm_device_info *bmdi,
 		struct api_fifo_entry api_entry, u32 channel, int core_id)
 {
@@ -75,6 +132,7 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	if (api_result != 0) {
 		pr_err("[%s: %d] error: bm-sophon%d, api_id=0x%x, core_id=0x%x, api_result=0x%x\n",
 			 __func__, __LINE__, bmdi->dev_index, api_id, core_id, api_result);
+		print_api_log(api_id, api_result);
 	}
 	if (ti) {
 		if (core_id == 0) {
@@ -125,7 +183,7 @@ static void bmdrv_sw_register_init(struct bm_device_info *bmdi)
 {
 	int channel = 0;
 	int core = 0;
-	int core_num = bmdi->cinfo.tpu_core_num;	
+	int core_num = bmdi->cinfo.tpu_core_num;
 
 	for (core = 0; core < core_num; core++) {
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {

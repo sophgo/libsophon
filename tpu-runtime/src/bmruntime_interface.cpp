@@ -163,7 +163,7 @@ static std::string chip_name_by_id(unsigned int chipid) {
     chip_name = "BM1684";
   } else if (chipid == 0x1686) {
     chip_name = "BM1684X";
-  } else if (chipid == 0x1686a200) {
+  } else if (chipid == 0x1686a200 || chipid == 0x1688) {
     chip_name = "BM1688";
   } else if (chipid == 0x1682) {
     chip_name = "BM1682";
@@ -254,6 +254,13 @@ void bmrt_destroy(void* p_bmrt)
   }
 }
 
+void bmrt_destroy_without_coeff(void* p_bmrt)
+{
+  if (p_bmrt != NULL) {
+    ((Bmruntime*)p_bmrt)->destory_without_coeff();
+  }
+}
+
 bool bmrt_load_bmodel(void* p_bmrt, const char* bmodel_path)
 {
   if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
@@ -308,18 +315,55 @@ bool bmrt_load_bmodel_data_with_mem(void* p_bmrt, const void* bmodel_data, size_
   }
 }
 
+bool bmrt_load_bmodel_with_decrypt_lib(void *p_bmrt, const char *bmodel_path,
+                                   const char *decrypt_lib) {
+  if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel path is wrong.");
+    return false;
+  }
+  if (decrypt_lib == NULL || decrypt_lib[0] == '\0') {
+    BMRT_LOG(WRONG, "decrypt lib path is wrong.");
+    return false;
+  }
+  const std::string bmodel_dir = bmodel_path;
+  const std::string lib_dir = decrypt_lib;
+  try {
+    return ((Bmruntime *)p_bmrt)->load_bmodel_with_decrypt(bmodel_dir, lib_dir);
+  } catch (const std::runtime_error &e) {
+    return false;
+  }
+}
+
+bool bmrt_load_bmodel_with_decrypt(void* p_bmrt, const char* bmodel_path, decrypt_func f) {
+  if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel path is wrong.");
+    return false;
+  }
+  if (f == nullptr) {
+    BMRT_LOG(WRONG, "decrypt funciton is null");
+    return false;
+  }
+  const std::string bmodel_dir = bmodel_path;
+  try {
+    return ((Bmruntime *)p_bmrt)->load_bmodel_with_decrypt(bmodel_dir, f);
+  } catch (const std::runtime_error &e) {
+    return false;
+  }
+}
+
 static inline void memory_init(memory_t &mem, uint64_t size, int type) {
   mem.addr = -1;
   mem.size = ALIGN(size, 128);
   mem.type = type;
+  mem.number = 1;
 }
 
 bool bmrt_get_bmodel_info(ModelCtx* model_ctx, mem_info_t *mem_info) {
   bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
   // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
-  uint64_t instruction_size = bmem_info.bd_cmd_mem_size;
-  instruction_size = ALIGN(instruction_size, 128) + bmem_info.hau_cmd_mem_size;
-  instruction_size = ALIGN(instruction_size, 128) + bmem_info.dynamic_ir_mem_size;
+  uint64_t instruction_size = ALIGN(bmem_info.bd_cmd_mem_size, 128);
+  instruction_size += ALIGN(bmem_info.hau_cmd_mem_size, 128);
+  instruction_size += ALIGN(bmem_info.dynamic_ir_mem_size, 128);
   memory_init(mem_info->instruction_mem, instruction_size, 0);
   // variable_instruction_mem: gdma_cmd + sdma_cmd
   uint64_t v_instruction_size = bmem_info.gdma_cmd_mem_size;
@@ -329,31 +373,24 @@ bool bmrt_get_bmodel_info(ModelCtx* model_ctx, mem_info_t *mem_info) {
   // coeff_mem: coeff
   memory_init(mem_info->coeff_mem, bmem_info.coeff_mem_size, 0);
   // neuron_mem: neuron + middle_buffer_size + dynamic_output
-  uint64_t neuron_size = bmem_info.neuron_mem_size;
-  neuron_size = ALIGN(neuron_size, 128) + bmem_info.middle_buffer_size;
-  neuron_size = ALIGN(neuron_size, 128) + bmem_info.dynamic_output_number * sizeof(bm_shape_ex_t);
+  uint64_t neuron_size = ALIGN(bmem_info.neuron_mem_size, 128);
+  neuron_size += ALIGN(bmem_info.middle_buffer_size, 128);
+  neuron_size += ALIGN(bmem_info.dynamic_output_number * sizeof(bm_shape_ex_t), 128);
   //  neuron + middle_buffe + max_subnet_output_member
   memory_init(mem_info->neuron_mem, neuron_size, 0);
-
-  // input & output size
-  uint64_t input_mem_size = 0, output_mem_size = 0;
+  // io mem size
+  uint64_t io_mem_size = 0;
   for (int net_idx = 0; net_idx < model_ctx->model()->net()->size(); ++net_idx) {
     auto net = model_ctx->model()->net()->Get(net_idx);
     auto net_params = net->parameter();
-    for (int stage_idx = 0; stage_idx < net_params->size(); ++stage_idx) {
-      auto param = net_params->Get(stage_idx);
-      for (int tensor_idx = 0; tensor_idx < param->input_tensor()->size(); ++tensor_idx) {
-        auto tensor = param->input_tensor()->Get(tensor_idx);
-        input_mem_size += tensor->size();
-      }
-      for (int tensor_idx = 0; tensor_idx < param->output_tensor()->size(); ++tensor_idx) {
-        auto tensor = param->output_tensor()->Get(tensor_idx);
-        output_mem_size += tensor->size();
+    if (net->addr_mode() == ADDR_MODE_IO_ALONE) {
+      for (int stage_idx = 0; stage_idx < net_params->size(); ++stage_idx) {
+        auto param = net_params->Get(stage_idx);
+        io_mem_size += ALIGN(param->io_size(), 128);
       }
     }
   }
-  memory_init(mem_info->io_mem, input_mem_size + output_mem_size, 0);
-  // memory_init(mem_info->output_mem, 0, 0);
+  memory_init(mem_info->io_mem, io_mem_size, 0);
   return true;
 }
 
@@ -439,7 +476,7 @@ bool bmrt_launch_tensor_multi_cores(void *p_bmrt, const char *net_name,
   std::vector<int32_t> core_vector{core_list, core_list + core_num};
   return ((Bmruntime *)p_bmrt)
       ->launch_multi_cores(net_idx, input_tensors, input_num, output_tensors,
-                           output_num, core_vector, user_mem, user_stmode);
+                           output_num, 0, core_vector, user_mem, user_stmode);
 }
 
 bool bmrt_pre_alloc_neuron_multi_cores(
@@ -487,9 +524,70 @@ bool bmrt_launch_data_multi_cores(void* p_bmrt, const char* net_name, void* cons
   std::vector<int> core_vector(core_list, core_list + core_num);
   return ((Bmruntime*)p_bmrt)
       ->launch_multi_cores(net_idx, input_datas, input_shapes, input_num, output_datas, output_shapes,
-               output_num, user_mem, core_vector);
+               output_num, 0, user_mem, core_vector);
 
 }
+
+bool bmrt_launch_tensor_multi_thread(void *p_bmrt, const char *net_name,
+                                    const bm_tensor_t input_tensors[],
+                                    int input_num, bm_tensor_t output_tensors[],
+                                    int output_num, uint64_t thread_idx, bool user_mem,
+                                    bool user_stmode, const int *core_list,
+                                    int core_num) {
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return false;
+  }
+
+  if (auto net_c = ((Bmruntime*)p_bmrt)->get_net_cascade(net_name)) {
+    return ((Bmruntime*)p_bmrt)
+      ->launch(net_c, input_tensors, input_num, output_tensors, output_num);
+  }
+
+  int net_idx = ((Bmruntime *)p_bmrt)->get_net_idx(net_name);
+  if (net_idx < 0) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return false;
+  }
+  std::vector<int32_t> core_vector{core_list, core_list + core_num};
+  return ((Bmruntime *)p_bmrt)
+      ->launch_multi_cores(net_idx, input_tensors, input_num, output_tensors,
+                           output_num, thread_idx, core_vector, user_mem, user_stmode, true);
+}
+
+bool bmrt_launch_data_multi_thread(void* p_bmrt, const char* net_name, void* const input_datas[],
+                      const bm_shape_t input_shapes[], int input_num, void* output_datas[],
+                      bm_shape_t output_shapes[], int output_num, uint64_t thread_idx, bool user_mem,
+                      const int* core_list, int core_num) {
+
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return false;
+  }
+  int net_idx = ((Bmruntime*)p_bmrt)->get_net_idx(net_name);
+  if (net_idx < 0) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return false;
+  }
+  std::vector<int> core_vector(core_list, core_list + core_num);
+  return ((Bmruntime*)p_bmrt)
+      ->launch_multi_cores(net_idx, input_datas, input_shapes, input_num, output_datas, output_shapes,
+               output_num, thread_idx, user_mem, core_vector, true);
+}
+
+bool bmrt_pre_alloc_mem_multi_thread(
+    void *p_bmrt,
+    uint64_t thread_idx,
+    const mem_info_t* mem_info) {
+    if (p_bmrt == NULL) {
+      BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL");
+      return false;
+    }
+
+    ((Bmruntime *)p_bmrt)->pre_alloc_neuron_multi_thread(thread_idx, mem_info);
+    return true;
+}
+
 
 bool bmrt_launch_data(void* p_bmrt, const char* net_name, void* const input_datas[],
                       const bm_shape_t input_shapes[], int input_num, void* output_datas[],
@@ -561,6 +659,14 @@ int bmrt_get_network_index(void* p_bmrt, const char* net_name)
     return -1;
   }
   return ((Bmruntime*)p_bmrt)->get_net_idx(net_name);
+}
+
+int bmrt_get_stage_index(void* p_bmrt, const char* net_name, bm_tensor_t *input_tensors) {
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return -1;
+  }
+  return ((Bmruntime*)p_bmrt)->get_stage_idx(net_name, input_tensors);
 }
 
 const bm_net_info_t* bmrt_get_network_info(void* p_bmrt, const char* net_name)

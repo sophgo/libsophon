@@ -161,7 +161,6 @@ bm_status_t bm_enable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_m
   UNUSED(perf_monitor);
   return BM_SUCCESS;
 #else
-  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n",
@@ -173,12 +172,9 @@ bm_status_t bm_enable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_m
           "bm_enable_perf_monitor param err\n");
     return BM_ERR_PARAM;
   }
-  ret = platform_ioctl(handle, BMDEV_ENABLE_PERF_MONITOR, perf_monitor);
-  if (0 == ret)
+  if (0 == platform_ioctl(handle, BMDEV_ENABLE_PERF_MONITOR, perf_monitor))
     return BM_SUCCESS;
   else
-    bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm_enable_perf_monitor ioclt err, ret = %d:%d\n", ret, __LINE__);
     return BM_ERR_FAILURE;
 #endif
 }
@@ -189,7 +185,6 @@ bm_status_t bm_disable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_
   UNUSED(perf_monitor);
   return BM_SUCCESS;
 #else
-  int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n",
@@ -201,12 +196,9 @@ bm_status_t bm_disable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_
           "bm_disable_perf_monitor param err\n");
     return BM_ERR_PARAM;
   }
-  ret = platform_ioctl(handle, BMDEV_DISABLE_PERF_MONITOR, perf_monitor);
-  if (0 == ret)
+  if (0 == platform_ioctl(handle, BMDEV_DISABLE_PERF_MONITOR, perf_monitor))
     return BM_SUCCESS;
   else
-    bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm_disable_perf_monitor ioclt err, ret = %d:%d\n", ret, __LINE__);
     return BM_ERR_FAILURE;
 #endif
 }

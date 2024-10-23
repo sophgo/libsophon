@@ -295,7 +295,6 @@ static inline const char* dtype_to_string(bm_data_type_t t){
   #undef DTYPE_CASE
 }
 
-
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -306,6 +305,19 @@ extern bm_status_t bm_send_api(bm_handle_t handle, bm_api_id_t api_id, u8* api, 
 extern bm_status_t bm_sync_api(bm_handle_t handle);
 
 extern int bm_get_devid(bm_handle_t handle);
+
+
+#ifndef __linux__
+#define RTLD_LAZY	0x00001	/* Lazy function call binding.  */
+#define RTLD_NOW	0x00002	/* Immediate function call binding.  */
+#define RTLD_GLOBAL	0x00100
+#define RTLD_LOCAL	0
+#endif
+
+void* bmrt_load_lib(const char* libname, int flags);
+void* bmrt_find_sym(void* libhandle, const char* symname);
+void bmrt_unload_lib(void* libhandle);
+const char* bmrt_lib_error();
 
 #if defined(__cplusplus)
 }

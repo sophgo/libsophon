@@ -210,7 +210,8 @@ int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 		pr_err("bm-sophon%d: TPU%d SYS hang. TPU%d C906 current status: polling engine done\n", bmdi->dev_index, core_id, core_id);
 		return 1;
 	} else {
-		pr_err("bm-sophon%d: TPU%d C906 hang. TPU%d C906 current status: 0x%x\n", bmdi->dev_index, current_status, core_id, core_id);
+		pr_err("bm-sophon%d: TPU%d C906 hang. TPU%d C906 current status: 0x%x\n",
+				bmdi->dev_index, core_id, core_id, current_status);
 		return 1;
 	}
 }
@@ -534,15 +535,6 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 				mutex_unlock(&lib_info->bmcpu_lib_mutex);
 				return -1;
 			}
-			lib_node = kzalloc(sizeof(struct bmcpu_lib), GFP_KERNEL);
-			strncpy(lib_node->lib_name, api_cpu_load_library_internal.lib_name, LIB_MAX_NAME_LEN);
-			lib_node->core_id = p_bm_api->core_id;
-			lib_node->refcount = 1;
-			memcpy(lib_node->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN);
-			lib_node->cur_pid = current->pid;
-			list_add_tail(&(lib_node->lib_list), &(lib_info->lib_list));
-			mutex_unlock(&lib_info->bmcpu_lib_mutex);
-			return -1;
 		}
 	}
 	mutex_unlock(&lib_info->bmcpu_lib_mutex);
