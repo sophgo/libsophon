@@ -1,4 +1,5 @@
 #include "bm_common.h"
+#include "pwm.h"
 
 /*pwm register*/
 

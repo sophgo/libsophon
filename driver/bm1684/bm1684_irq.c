@@ -19,7 +19,7 @@ void bm1684_pcie_msi_irq_disable(struct bm_device_info *bmdi)
 	gp_reg_write_enh(bmdi, GP_REG_MSI_DATA, 0x0);
 }
 
-void bm1684_pcie_remap_msi_init(struct pci_dev *pdev, struct bm_device_info *bmdi)
+static void bm1684_pcie_remap_msi_init(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	void __iomem *pcie_top_base_addr = NULL;
 	void __iomem *pcie_iatu_addr = NULL;

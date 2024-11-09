@@ -2342,7 +2342,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 
 #undef MAX_NAMELEN
 
-bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi)
+static bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi)
 {
 	int read_index = 0;
 	int write_index = 0;
@@ -2354,7 +2354,7 @@ bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi)
 
 }
 
-int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
+static int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 {
 	int read_p = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_RP);
 	int write_p = gp_reg_read_enh(bmdi, GP_REG_ARM9FW_LOG_WP);
@@ -2413,7 +2413,7 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi)
 #define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 4)
 #define ARM9FW_LOG_LINE_SIZE 512
 
-void bm_print_arm9fw_log(struct bm_device_info *bmdi, int size)
+static void bm_print_arm9fw_log(struct bm_device_info *bmdi, int size)
 {
 	char str[ARM9FW_LOG_LINE_SIZE] = "";
 	int i = 0;
@@ -2457,7 +2457,7 @@ int bm_arm9fw_log_init(struct bm_device_info *bmdi)
 }
 
 #ifndef SOC_MODE
-void bm_i2c2_reset(struct bm_device_info *bmdi)
+static void bm_i2c2_reset(struct bm_device_info *bmdi)
 {
 	u32 value = 0;
         struct bm_chip_attr *c_attr = &bmdi->c_attr;
@@ -2474,7 +2474,7 @@ void bm_i2c2_reset(struct bm_device_info *bmdi)
 	mutex_unlock(&c_attr->attr_mutex);
 }
 
-void bm_i2c2_recovey(struct bm_device_info *bmdi) {
+static void bm_i2c2_recovey(struct bm_device_info *bmdi) {
 	u32 i2c_index = 0x2;
 	u32 addr = i2c_reg_read(bmdi, i2c_index, 0x8);
 	u32 intc_mask = i2c_reg_read(bmdi, i2c_index, 0x30);
@@ -2497,7 +2497,7 @@ void bm_i2c2_recovey(struct bm_device_info *bmdi) {
 	i2c_reg_write(bmdi, i2c_index, 0x6c, 1);
 }
 
-int is_i2c2_idle(struct bm_device_info *bmdi) {
+static int is_i2c2_idle(struct bm_device_info *bmdi) {
 	int i = 0x0;
 	u32 i2c2_status = 0;
 	u32 i2c_index = 0x2;
@@ -2512,7 +2512,7 @@ int is_i2c2_idle(struct bm_device_info *bmdi) {
 	return 0;
 }
 
-int i2c2_disable(struct bm_device_info *bmdi) {
+static int i2c2_disable(struct bm_device_info *bmdi) {
 	int i2c_index = 0x2;
 	bm_i2c2_reset(bmdi);
 	i2c_reg_write(bmdi, i2c_index, 0x6c, 0);
@@ -2528,7 +2528,7 @@ int i2c2_deinit(struct bm_device_info *bmdi) {
 	return 0;
 }
 
-int bm_i2c2_need_recovery(struct bm_device_info *bmdi) {
+static int bm_i2c2_need_recovery(struct bm_device_info *bmdi) {
 	u32 i2c2_status = 0;
 	u32 i2c2_count_old = 0;
 	u32 i2c2_count_new = 0;

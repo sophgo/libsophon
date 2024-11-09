@@ -3,6 +3,7 @@
 #include "bm_pcie.h"
 #include "bm1684_reg.h"
 #include "bm_gmem.h"
+#include "bm1684_gmem.h"
 
 #ifndef SOC_MODE
 int bmdrv_bm1684_parse_reserved_mem_info(struct bm_device_info *bmdi)

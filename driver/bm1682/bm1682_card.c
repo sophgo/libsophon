@@ -1,6 +1,7 @@
 #include <linux/delay.h>
 #include "bm_common.h"
 #include "bm1682_reg.h"
+#include "bm1682_card.h"
 
 void bm1682_stop_arm9(struct bm_device_info *bmdi)
 {

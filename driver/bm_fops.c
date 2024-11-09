@@ -1144,7 +1144,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
 		mutex_lock(&c_attr->attr_mutex);
-		if (copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int)));
+		if (copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int))){}
 		mutex_unlock(&c_attr->attr_mutex);
 		break;
 		}

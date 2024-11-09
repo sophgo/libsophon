@@ -94,7 +94,7 @@ static void dwc_decode_major_msg(struct bm_device_info *bmdi, int msg)
 	}
 }
 
-void mask_train_result(struct bm_device_info *bmdi, u32 index, u32 phase, u32 result)
+static void mask_train_result(struct bm_device_info *bmdi, u32 index, u32 phase, u32 result)
 {
 	bmdi->cinfo.ddr_failmap &= ~(1UL << ((index << 1) + phase));
 	bmdi->cinfo.ddr_failmap |= ((result & 0x1) << ((index << 1) + phase));
@@ -114,7 +114,7 @@ static void dwc_train_status(struct bm_device_info *bmdi, u32 cfg_base,
 	mask_train_result(bmdi, index, train_2d, pass_or_fail);
 }
 
-void dwc_read_msgblock_msg(struct bm_device_info *bmdi, u32 cfg_base, u32 train_2d)
+static void dwc_read_msgblock_msg(struct bm_device_info *bmdi, u32 cfg_base, u32 train_2d)
 {
 	int mail;
 
@@ -438,7 +438,7 @@ static int ddr_phy_init(struct bm_device_info *bmdi, u32 cfg_base, u32 ddr_index
 	return 0;
 }
 
-void dwc_phy_enter_mission(struct bm_device_info *bmdi)
+static void dwc_phy_enter_mission(struct bm_device_info *bmdi)
 {
 	ddr_phy_enter_mission(bmdi, DDR_CTRL0_A, 0);
 	ddr_phy_enter_mission(bmdi, DDR_CTRL0_B, 1);

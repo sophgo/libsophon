@@ -482,7 +482,7 @@ void bmdrv_sw_reset_cdma(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET1, val);
 }
 
-void bmdrv_clk_set_module_reset(struct bm_device_info* bmdi, BM_MODULE_ID module)
+static void bmdrv_clk_set_module_reset(struct bm_device_info* bmdi, BM_MODULE_ID module)
 {
 	switch (module) {
 	case BM_MODULE_CDMA:

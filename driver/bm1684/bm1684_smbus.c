@@ -2,6 +2,7 @@
 #include "bm_common.h"
 #include "bm1684_reg.h"
 #include "bm1684_card.h"
+#include "bm1684_smbus.h"
 
 void bmdrv_smbus_set_default_value(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {

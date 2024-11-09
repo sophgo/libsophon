@@ -201,7 +201,7 @@ u64 bm_write64(struct bm_device_info *bmdi, u32 address, u64 data)
 	return 0;
 }
 
-void bm_reg_init_vaddr(struct bm_device_info *bmdi, u32 address, void __iomem **reg_base_vaddr)
+static void bm_reg_init_vaddr(struct bm_device_info *bmdi, u32 address, void __iomem **reg_base_vaddr)
 {
 	u32 offset = 0;
 	struct bm_bar_info *pbar_info = &bmdi->cinfo.bar_info;

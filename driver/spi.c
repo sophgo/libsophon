@@ -353,7 +353,7 @@ static int spi_read_status(struct bm_device_info *bmdi)
 	return data_buf[0];
 }
 
-u32 bm_spi_read_id(struct bm_device_info *bmdi)
+static u32 bm_spi_read_id(struct bm_device_info *bmdi)
 {
 	u8 cmd_buf[4];
 	u8 data_buf[4];
