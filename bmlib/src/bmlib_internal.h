@@ -15,6 +15,7 @@
 //#include "..\..\common\bm1684\include_win\common_win.h"
 #else
 #include "linux/bmlib_ioctl.h"
+#include "rbtree.h"
 #endif
 #ifdef USING_CMODEL
 #include "bmlib_device.h"
@@ -26,12 +27,12 @@ extern "C" {
 
 #ifdef _WIN32
 struct ion_allocation_data {
-    unsigned long long len;
-    unsigned int       heap_id_mask;
-    unsigned int       flags;
-    unsigned int       fd;
-    unsigned int       heap_id;
-    unsigned long long paddr;
+	unsigned long long len;
+	unsigned int       heap_id_mask;
+	unsigned int       flags;
+	unsigned int       fd;
+	unsigned int       heap_id;
+	unsigned long long paddr;
 };
 #endif
 
@@ -39,27 +40,27 @@ struct ion_allocation_data {
 
 #define RDBUF_SIZE 672
 struct product_config {
-  char sn[32];
-  char mac0[32];
-  char mac1[32];
-  char product_type[32];
-  char aging_flag[32];
-  char reserve_string_2[32];
-  char reserve_string_3[32];
-  char reserve_string_4[32];
-  char ddr_type[32];
-  char board_type[32];
-  char bom[32];
-  char module_type[32];
-  char ex_module_type[32];
-  char product[32];
-  char vender[32];
-  char algorithm[32];
-  char manufacture[32];
-  char date_production[32];
-  char passw_ssh[32];
-  char user_name[32];
-  char passw[32];
+	char sn[32];
+	char mac0[32];
+	char mac1[32];
+	char product_type[32];
+	char aging_flag[32];
+	char reserve_string_2[32];
+	char reserve_string_3[32];
+	char reserve_string_4[32];
+	char ddr_type[32];
+	char board_type[32];
+	char bom[32];
+	char module_type[32];
+	char ex_module_type[32];
+	char product[32];
+	char vender[32];
+	char algorithm[32];
+	char manufacture[32];
+	char date_production[32];
+	char passw_ssh[32];
+	char user_name[32];
+	char passw[32];
 };
 
 typedef enum {
@@ -123,6 +124,8 @@ typedef struct bm_context {
 #endif
     bmlib_profile_t *profile;
     int enable_mem_guard;
+	struct rb_root root;
+	pthread_mutex_t mem_mutex;
 } bm_context_t, *bm_handle_t;
 
 DECL_EXPORT bm_status_t bm_send_api(

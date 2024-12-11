@@ -30,5 +30,6 @@ void bm_msg_free_irq(struct bm_device_info *bmdi);
 #include <linux/irqreturn.h>
 irqreturn_t bmdrv_irq_handler_msg0(int irq, void *data);
 irqreturn_t bmdrv_irq_handler_msg1(int irq, void *data);
+int bmdev_get_idle_coreid(struct bm_device_info *bmdi);
 #endif
 #endif

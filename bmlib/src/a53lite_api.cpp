@@ -446,8 +446,8 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
     if (ret != 0) {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "load library error, ret %d\n",
-                  ret);
+                  "load library error, ret %d  %d\n",
+                  ret, __LINE__);
         return NULL;
     }
 

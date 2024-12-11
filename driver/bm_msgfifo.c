@@ -665,6 +665,38 @@ int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32
 	return -EBUSY;
 }
 
+#ifdef SOC_MODE
+int bmdev_get_api_num_in_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
+{
+	int num = 0;
+	struct bm_api_info *api_info;
+
+	api_info = &bmdi->api_info[core_id][channel];
+	mutex_lock(&api_info->api_fifo_mutex);
+	num = kfifo_len(&api_info->api_fifo);
+	mutex_unlock(&api_info->api_fifo_mutex);
+	num = num / API_ENTRY_SIZE;
+
+	return num;
+}
+
+int bmdev_get_idle_coreid(struct bm_device_info *bmdi)
+{
+	int core0_api_num = 0;
+	int core1_api_num = 0;
+	int core_to_send = 0;
+
+	core0_api_num = bmdev_get_api_num_in_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, 0);
+	core1_api_num = bmdev_get_api_num_in_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, 1);
+	pr_debug("core0 api num = %d,core1 api num = %d\n", core0_api_num, core1_api_num);
+	if (core0_api_num > core1_api_num) {
+		core_to_send = 1;
+	}
+
+	return core_to_send;
+}
+#endif
+
 #ifndef SOC_MODE
 void bm_msg_request_irq(struct bm_device_info *bmdi)
 {

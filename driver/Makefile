@@ -63,7 +63,8 @@ else
 endif
 
 ccflags-y += -O3
-ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function
+ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function -fdata-sections -Wl,-gc-sections
+#ccflags-y += -mno-outline-atomics
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif

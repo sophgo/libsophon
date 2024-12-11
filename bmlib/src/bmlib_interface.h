@@ -4,11 +4,11 @@
 #include "bmlib_runtime.h"
 
 #if defined(_WIN32) && !defined(__MINGW32__)
-    #define DECL_EXPORT __declspec(dllexport)
-    #define DECL_IMPORT __declspec(dllimport)
+	#define DECL_EXPORT __declspec(dllexport)
+	#define DECL_IMPORT __declspec(dllimport)
 #else
-    #define DECL_EXPORT
-    #define DECL_IMPORT
+	#define DECL_EXPORT
+	#define DECL_IMPORT
 #endif
 
 
@@ -17,11 +17,11 @@ extern "C" {
 #endif
 
 typedef enum {
-  DEV_FD = 0,
-  ION_FD = 1,
-  SPACC_FD = 2,
-  VPP_FD = 3,
-  END_FD = 4
+	DEV_FD = 0,
+	ION_FD = 1,
+	SPACC_FD = 2,
+	VPP_FD = 3,
+	END_FD = 4
 } FD_ID;
 
 /**

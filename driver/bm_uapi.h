@@ -226,7 +226,7 @@ struct bm_reg {
 #define BMDEV_COMM_WRITE_MSG            _IOWR('p', 0xA8, unsigned long)
 #define BMDEV_COMM_CONNECT_STATE        _IOWR('p', 0xA9, unsigned long)
 #define BMDEV_COMM_SET_CARDID           _IOWR('p', 0xAA, unsigned long)
-#define BMDEV_SET_IP			_IOWR('p', 0xAC, unsigned long)
+#define BMDEV_SET_IP			        _IOWR('p', 0xAC, unsigned long)
 #define BMDEV_SET_GATE                  _IOWR('p', 0xAD, unsigned long)
 #define BMDEV_FORCE_RESET_TPU           _IOWR('p', 0xAE, unsigned long)
 
@@ -250,9 +250,11 @@ struct bm_reg {
 #define BMDEV_GET_DYNFREQ_STATUS        _IOR('p', 0x92, unsigned long)
 #define BMDEV_CHANGE_DYNFREQ_STATUS     _IOR('p', 0x93, unsigned long)
 #define BMDEV_GET_VERSION           	_IOR('p', 0x94, unsigned long)
-#define BMDEV_LOADED_LIB		_IOR('p', 0x95, unsigned long)
+#define BMDEV_LOADED_LIB		        _IOR('p', 0x95, unsigned long)
 #define BMDEV_GET_SMI_ATTR              _IOR('p', 0x96, unsigned long)
-#define BMDEV_PWR_CTRL              _IOR('p', 0x97, unsigned long)
+#define BMDEV_PWR_CTRL                  _IOR('p', 0x97, unsigned long)
+
+#define BMDEV_GET_IDLE_COREID          _IOR('p', 0xB0, unsigned long)
 
 #define BMCTL_GET_DEV_CNT               _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR              _IOWR('q', 0x01, unsigned long)

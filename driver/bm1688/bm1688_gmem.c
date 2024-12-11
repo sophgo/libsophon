@@ -82,12 +82,10 @@ int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 		resmem_info->vpp_size = 0;
 	}
 #else
-	resmem_info->npureserved_addr[0] = 0x200000000;
-	resmem_info->npureserved_size[0] = 0x100000000;
-	resmem_info->npureserved_size[1] = 0x320000000;
-	resmem_info->npureserved_size[1] = 0x60000000;
-	resmem_info->npureserved_size[2] = 0x380000000;
-	resmem_info->npureserved_size[2] = 0x80000000;
+	resmem_info->npureserved_addr[0] = 0x124000000;
+	resmem_info->npureserved_size[0] = 0xDC000000;
+	resmem_info->npureserved_addr[1] = 0x200000000;
+	resmem_info->npureserved_size[1] = 0x100000000;
 	resmem_info->vpu_vmem_addr = 0;
 	resmem_info->vpu_vmem_size = 0;
 	resmem_info->vpp_addr = 0;

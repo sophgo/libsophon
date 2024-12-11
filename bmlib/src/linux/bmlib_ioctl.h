@@ -119,6 +119,8 @@
 #define BMDEV_GET_SMI_ATTR            _IOR('p', 0x96, unsigned long)
 #define BMDEV_PWR_CTRL                _IOR('p', 0x97, unsigned long)
 
+#define BMDEV_GET_IDLE_COREID        _IOR('p', 0xB0, unsigned long)
+
 #define BMCTL_GET_DEV_CNT             _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR            _IOWR('q', 0x01, unsigned long)
 #define BMCTL_SET_LED                 _IOWR('q', 0x02, unsigned long)
@@ -131,12 +133,12 @@
 
 #ifdef SOC_MODE
 struct ce_base {
-    unsigned int alg;
-    unsigned int enc;
-    unsigned long long src;
-    unsigned long long dst;
-    unsigned long long len;
-    unsigned long long dstlen;
+	unsigned int alg;
+	unsigned int enc;
+	unsigned long long src;
+	unsigned long long dst;
+	unsigned long long len;
+	unsigned long long dstlen;
 };
 
 #define CE_BASE_IOC_TYPE                ('C')
@@ -145,8 +147,8 @@ struct ce_base {
 #define CE_BASE_IOC_OP_PHY      \
         CE_BASE_IOC_IOR(0, struct ce_base)
 enum {
-        CE_BASE_IOC_ALG_BASE64,
-        CE_BASE_IOC_ALG_MAX,
+	CE_BASE_IOC_ALG_BASE64,
+	CE_BASE_IOC_ALG_MAX,
 };
 #endif
 #endif  // BMLIB_SRC_BMLIB_IOCTL_H_

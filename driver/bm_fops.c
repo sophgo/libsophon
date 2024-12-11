@@ -973,7 +973,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	}
 
-        case BMDEV_GET_BOARD_TYPE:
+	case BMDEV_GET_BOARD_TYPE:
 	{
 		char board_name[25];
 #ifdef SOC_MODE
@@ -1006,6 +1006,20 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));
 #endif
 		break;
+	}
+
+	case BMDEV_GET_IDLE_COREID:
+	{
+#ifdef SOC_MODE
+		int core_id;
+#endif
+		ret = 0;
+#ifdef SOC_MODE
+		core_id = bmdev_get_idle_coreid(bmdi);
+		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
+#endif
+		break;
+
 	}
 
 	case BMDEV_GET_BOARDT:
