@@ -4460,6 +4460,7 @@ bm_status_t bm_mem_convert_system_to_device_coeff_byte(bm_handle_t handle,
 /*
  *兼容1684x
  */
+#ifdef __linux__
 static bm_status_t buffer_add(bm_handle_t handle,
           struct bm_mem_paddr *buffer)
 {
@@ -4485,6 +4486,28 @@ static bm_status_t buffer_add(bm_handle_t handle,
 
   return BM_SUCCESS;
 }
+
+static struct bm_mem_paddr *buffer_search(bm_handle_t handle,
+                  unsigned long long paddr)
+{
+  struct rb_node *node = handle->root.rb_node;
+  long long result;
+
+  while (node) {
+    struct bm_mem_paddr *data = container_of(node, struct bm_mem_paddr, node);
+
+    result = paddr - data->paddr;
+    if (result < 0)
+      node = node->rb_left;
+    else if (result > 0)
+      node = node->rb_right;
+    else
+      return data;
+  }
+
+  return NULL;
+}
+#endif
 
 bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
                                   int heap_id, unsigned long long size) {
@@ -4606,4 +4629,36 @@ bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int a
   va_end(args);
 
   return ret;
+}
+
+void bm_free_device_mem(bm_handle_t ctx, unsigned long long paddr) {
+
+  struct bm_mem_paddr *bm_mem = NULL;
+  bm_device_mem_u64_t mem;
+
+#ifdef __linux__
+  pthread_mutex_lock(&ctx->mem_mutex);
+  bm_mem = buffer_search(ctx, paddr);
+  mem = *(bm_mem->dev_buffer);
+  rb_erase(&bm_mem->node, &ctx->root);
+  pthread_mutex_unlock(&ctx->mem_mutex);
+#else
+  DWORD dwWaitResult = WaitForSingleObject(&ctx->mem_mutex, INFINITE);
+  if (dwWaitResult == WAIT_OBJECT_0) {
+    for (auto it = ctx->root.begin(); it != ctx->root.end(); ) {
+        if (paddr == ((bm_mem_paddr *)(*it))->paddr) {
+            bm_mem = (bm_mem_paddr *)(*it);
+            mem = *(bm_mem->dev_buffer);
+            it = ctx->root.erase(it);
+            break;
+        } else {
+            ++it;
+        }
+    }
+  }
+  ReleaseMutex(&ctx->mem_mutex);
+#endif
+  free(bm_mem->dev_buffer);
+  free(bm_mem);
+  bm_free_device_u64(ctx, mem);
 }

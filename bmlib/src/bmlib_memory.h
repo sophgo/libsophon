@@ -93,6 +93,8 @@ bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle, bm_device_mem_t 
 bm_status_t bm_mem_flush_device_mem(bm_handle_t handle, bm_device_mem_t *dmem);
 bm_status_t bm_mem_unmap_device_mem(bm_handle_t handle, void *vmem, int size);
 bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx);
+extern void rb_insert_color(struct rb_node *node, struct rb_root *root);
+extern void rb_erase(struct rb_node *nood, struct rb_root *root);
 #ifdef __cplusplus
 }
 #endif
