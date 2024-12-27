@@ -486,6 +486,8 @@ static int bmdrv_probe(struct platform_device *pdev)
 
 	bm_monitor_thread_init(bmdi);
 
+	bm_pm_thread_init(bmdi);
+
 	rc = bmdrv_ctrl_add_dev(bmci, bmdi);
 	if (rc)
 		goto err_ctrl_add_dev;
@@ -535,6 +537,7 @@ static int bmdrv_remove(struct platform_device *pdev)
 
 	bmdrv_free_boot_loader_version(bmdi);
 	bmdev_unregister_device(bmdi);
+	bm_pm_thread_deinit(bmdi);
 	bm_monitor_thread_deinit(bmdi);
 	bmdrv_ctrl_del_dev(bmci, bmdi);
 	bmdrv_disable_attr(bmdi);

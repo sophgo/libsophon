@@ -210,6 +210,10 @@ struct net_stage_t {
   vector<u64> ctx_borders;
   std::vector<bm_device_mem_u64_t> neuron_mem;
   std::vector<u64> neuron_size;
+  // for dynamic if bmodel combined
+  u64 dynamic_coeff_offset;
+  u64 dynamic_ctx_start;
+  vector<u64> dynamic_ctx_offset;
 
   std::vector<single_core_command_t> core_commands;
 
@@ -241,10 +245,16 @@ struct dyn_neuron_stage_t {
   vector<tensor_attr_t> input_v;
   vector<tensor_attr_t> output_v;
   vector<u64> ctx_offset;
+  vector<u64> dynamic_ctx_offset;
   std::vector<bm_device_mem_u64_t> neuron_mem;
 
   map<string, tensor_ext_t> subnet_tensor_v;
   float* cpu_addr;
+};
+
+struct neuron_mem_block {
+  uint64_t key;
+  bool used;
 };
 
 struct net_ctx_t {
@@ -259,6 +269,7 @@ struct net_ctx_t {
   vector<int> output_zero_point_v;
   vector<net_stage_t *> stage_v;              // each net has multi stages
   std::unordered_map<uint64_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
+  vector<neuron_mem_block> mem_block;
 
   // Bulk neuron memories.
   vector<bm_device_mem_u64_t> neuron_mem;
@@ -359,6 +370,12 @@ class Bmruntime {
   bool load_bmodel_with_decrypt(const string &filepath, const std::string &decrypt_lib);
   bool load_bmodel_with_decrypt(const string &filepath, decrypt_func f);
   void set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info);
+  bool update_bmodel_weight_with_decrypt(
+    const string& filepath, const string& update_path, const string& net_idx,
+    const string& mem_idx, const std::vector<std::string>& weight_idx, decrypt_func f);
+  bool empty_bmodel_weight_with_decrypt(
+    const string& filepath, const string& net_idx,
+    const string& mem_idx, const std::vector<std::string>& weight_idx, decrypt_func f);
 
   /* C++ style Interface */
   const vector<string>* get_input_tensor(int net_idx) const;
@@ -391,6 +408,7 @@ class Bmruntime {
               bm_tensor_t* output_tensors, int output_num);
   void pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const std::vector<int> &core_list);
   void pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info);
+  void pre_alloc_neuron(int net_idx);
   bool memcpy_s2d_parallel(bm_tensor_t tensors[], void * datas[],
                            int tensor_num[], int device_num);
   bool memcpy_d2s_parallel(void * datas[], bm_tensor_t tensors[],
@@ -473,6 +491,7 @@ class Bmruntime {
     int devid, bm_handle_t handle,
     std::vector<tpu_kernel_global_move_1684x_t> *param);
   int get_net_idx(const string& net_name);
+  int get_stage_size(const string& net_name);
   const bm_net_info_t* get_net_info(int net_idx);
   const bm_net_info_t* get_net_info(const string& net_name);
 
@@ -494,6 +513,8 @@ class Bmruntime {
   u64 alloc_device_mem_u64(uint32_t devid, bm_device_mem_u64_t &mem, u64 size, const std::string &desc = "", int type_len=1, bool auto_free_mem=true);
   bm_device_mem_t alloc_device_mem(uint32_t devid, u64 size, const std::string &desc = "", int type_len=1, bool auto_free_mem=true);
   bm_device_mem_u64_t alloc_device_mem_u64(uint32_t devid, u64 size, const std::string &desc = "", int type_len=1, bool auto_free_mem=true);
+  void free_device_mem(uint32_t devid, bm_device_mem_t& mem);
+  void free_device_mem_u64(uint32_t devid, bm_device_mem_u64_t& mem);
   void reset_device_mem(const std::string &desc);
   void clear_device_mem(const std::string &desc);
   void fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc);
@@ -502,6 +523,7 @@ class Bmruntime {
 protected:
   bool alloc_mem;
   std::vector<device_mem_info_t> dmem_info;
+  bool using_map;
 
  protected:
   void init();
@@ -512,7 +534,7 @@ protected:
                      const std::vector<int32_t> &core_list, const size_t dyn_core_mask);
   bool launch_ir(net_ctx_t* net_ctx, net_stage_t* stage, const bm_tensor_t* input_tensors,
                  int input_num, bm_tensor_t* output_tensors, int output_num,
-                 const size_t dyn_core_mask);
+                 const std::vector<int32_t> &core_list, const size_t dyn_core_mask);
 
   int get_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
   int get_static_stage_idx(const net_ctx_t* net_ctx, const bm_tensor_t* input_tensors);
@@ -558,6 +580,15 @@ protected:
                              const bmodel::Binary* net_stat);
 
   void set_profile_enabled(bool enable);
+  bool update_net_coeff(
+    ModelCtx* model_ctx, int net_idx, int mem_idx,
+    const std::vector<int> &weight_idx, const std::vector<uint8_t> &file_data, long long &start_position);
+  bool update_bmodel_coeff(
+    ModelCtx* model_ctx, const std::string &update_path, const std::vector<int> &net_idx,
+    const std::vector<int> &mem_idx, const std::vector<std::vector<int>> &weight_idx);
+  bool update_bmodel_coeff(
+    ModelCtx* model_ctx, const std::vector<int> &net_idx, const std::vector<int> &mem_idx,
+    const std::vector<std::vector<int>> &weight_idx, const std::vector<uint8_t> &file_data, long long &start_position);
 
   // functions for fill static bmdnn net info
   void fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
@@ -679,14 +710,14 @@ protected:                                                    // one bmruntime c
   bool launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                          const bm_tensor_t* input_tensors, int input_num,
                          bm_tensor_t* output_tensors, int output_num,
-                         const uint32_t dyn_core_mask, bool force_sync);
+                         const std::vector<int32_t> &core_list, const uint32_t dyn_core_mask, bool force_sync);
   bool launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                             const bm_tensor_t* input_tensors, const int* input_elem_num, int input_num,
                             bm_tensor_t* output_tensors, int* output_elem_num, int output_num,
-                            const uint32_t dyn_core_mask);
+                            const std::vector<int32_t> &core_list, const uint32_t dyn_core_mask);
   bool launch_multi_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const bm_tensor_t* input_tensors,
                            int input_num, bm_tensor_t* output_tensors, int output_num,
-                           const uint32_t dyn_core_mask);
+                           const std::vector<int32_t> &core_list, const uint32_t dyn_core_mask);
   void fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::SubNet>>* subnet_set_v,
                     net_ctx_t* net_ctx, net_stage_t* net_stage);
   void fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stage, SUBNET_INFO_T* subnet,
@@ -733,6 +764,9 @@ class BmCoeff {
 
   u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem);
   u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr);
+  u64 Update(
+    ModelCtx* model_ctx, const CoeffMem* coeff_mem, int mem_idx,
+    const std::vector<int> &weight_idx, const std::vector<uint8_t> &file_data, long long &start_position);
   int64_t GetCoeffAddr(const CoeffMem* coeff_mem);
   int Check();
   bm_device_mem_u64_t GetCoeffDeviceMem() {

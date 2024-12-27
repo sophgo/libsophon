@@ -470,6 +470,10 @@ void ModelGen::Save(void *buffer)
   memcpy(p_binary, binary_.data(), p_header->binary_size);
 }
 
+uint64_t ModelGen::BufferSize() {
+  return sizeof(MODEL_HEADER_T) + builder_.GetSize() + binary_.size();
+}
+
 //===------------------------------------------------------------===//
 // ModelCtx
 //===------------------------------------------------------------===//
@@ -483,6 +487,9 @@ ModelCtx::ModelCtx(const string &filename, const string &decrypt_lib, decrypt_fu
     file_.open(filename, std::ios::binary | std::ios::in);
   } else {
     file_.open(filename, std::ios::binary | std::ios::in | std::ios::out);
+    if (!file_) {
+      file_.open(filename, std::ios::binary | std::ios::in);
+    }
   }
 
   if (!file_) {
@@ -538,17 +545,61 @@ ModelCtx::ModelCtx(const string &filename, const string &decrypt_lib, decrypt_fu
   update_bmodel();
 }
 
+uint8_t *ModelCtx::decrypt_file(const std::string &filename, uint64_t *out_size) {
+    std::ifstream file(filename, std::ios::binary);
+    if (!file) {
+        std::cerr << "Failed to open file: " << filename << std::endl;
+        return nullptr;
+    }
+
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    if (size == 0) {
+      std::cerr << "Failed as file empty: " << filename << std::endl;
+      return nullptr;
+    }
+    file.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> buffer(size);
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+        std::cerr << "Failed to read file: " << filename << std::endl;
+        return nullptr;
+    }
+
+    file.close();
+
+    uint8_t *out_buffer = decrypt_func_(buffer.data(), size, out_size);
+    if (!out_buffer) {
+        std::cerr << "Decryption failed for file: " << filename << std::endl;
+        return nullptr;
+    }
+
+    return out_buffer;
+}
+
 uint8_t *ModelCtx::decrypt_buffer_from_file(uint64_t file_start, uint64_t size,
                                             uint64_t *out_size) {
   if (out_size == nullptr) {
     BMODEL_LOG(FATAL) << "out_size is null" << std::endl;
     return nullptr;
   }
+  file_.seekg(file_start, std::ios::beg);
+  if (file_.fail()) {
+    BMODEL_LOG(FATAL) << "Failed to seek to the specified position." << std::endl;
+    return nullptr;
+  }
   // read to buffer
   uint8_t *buffer = (uint8_t *)malloc(size);
-  file_.seekg(file_start, std::ios::beg);
+  if (buffer == nullptr) {
+    BMODEL_LOG(FATAL) << "Memory allocation failed" << std::endl;
+    return nullptr;
+  }
   file_.read(reinterpret_cast<char *>(buffer), size);
-
+  if (file_.fail()) {
+    BMODEL_LOG(FATAL) << "Failed to read from the file." << std::endl;
+    free(buffer);
+    return nullptr;
+  }
   // encrypt or decrypt
   uint8_t *out_buffer = decrypt_func_(buffer, size, out_size);
   free(buffer);
@@ -557,6 +608,8 @@ uint8_t *ModelCtx::decrypt_buffer_from_file(uint64_t file_start, uint64_t size,
 
 void ModelCtx::decrypt_bmodel(const std::string &filename) {
   // decrypt header
+  file_.seekg(0, std::ios::end);
+  size_t length = file_.tellg();
   file_.seekg(0, std::ios::beg);
   file_.read((char *)&header_, sizeof(header_));
   if (header_.magic != BMODEL_MAGIC) {
@@ -568,8 +621,11 @@ void ModelCtx::decrypt_bmodel(const std::string &filename) {
   uint64_t decrypted_header_size = 0;
   uint8_t *decrypted_header_data = decrypt_buffer_from_file(
       header_start, to_decrypt_header_size, &decrypted_header_size);
-  if (decrypted_header_size + header_start != sizeof(header_)) {
+  if (decrypted_header_data == nullptr || (decrypted_header_size + header_start != sizeof(header_))) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken .." << std::endl;
+    if (decrypted_header_data != nullptr) {
+      free(decrypted_header_data);
+    }
     throw std::runtime_error("failed to decrypt");
   }
   memcpy((char *)&header_ + header_start, decrypted_header_data,
@@ -596,6 +652,10 @@ void ModelCtx::decrypt_bmodel(const std::string &filename) {
   }
 
   binary_offset_ = header_.header_size + header_.flatbuffers_size;
+  if ((binary_offset_ + header_.binary_size) > length) {
+    BMODEL_LOG(FATAL) << "Bmodel data is broken ." << std::endl;
+    throw std::runtime_error("failed to construct");
+  }
   model_buffer_ = (void *)malloc(decrypted_flat_size);
   if (model_buffer_ == nullptr) {
     BMODEL_LOG(FATAL) << "Memory alloc failed" << std::endl;
@@ -763,7 +823,15 @@ void ModelCtx::read_binary(const Binary *binary, uint64_t offset, uint8_t *buffe
   ASSERT(size + offset <= binary->size());
   if (bmodel_pointer_ == NULL) {  // from file
     file_.seekg(binary_offset_ + binary->start() + offset, std::ios::beg);
+    if (file_.fail()) {
+      BMODEL_LOG(FATAL) << "Failed to read in read_binary" << std::endl;
+      throw std::runtime_error("Failed to seek in read_binary");
+    }
     file_.read((char *)buffer, size);
+    if (file_.fail()) {
+      BMODEL_LOG(FATAL) << "Failed to read in read_binary" << std::endl;
+      throw std::runtime_error("Failed to read in read_binary");
+    }
   } else {  // from buffer
     memcpy(buffer, (uint8_t *)bmodel_pointer_ + binary_offset_ + binary->start() + offset, size);
   }
@@ -782,7 +850,15 @@ void ModelCtx::write_binary(const Binary *binary, uint64_t offset,
   auto offset_file = binary_offset_ + binary->start() + offset;
   if (bmodel_pointer_ == NULL) { // from file
     file_.seekg(offset_file, std::ios::beg);
+    if (file_.fail()) {
+      BMODEL_LOG(FATAL) << "Failed to seek in write_binary" << std::endl;
+      throw std::runtime_error("Failed to seek in write_binary");
+    }
     file_.write((char *)buffer, size);
+    if (file_.fail()) {
+      BMODEL_LOG(FATAL) << "Failed to read in write_binary" << std::endl;
+      throw std::runtime_error("Failed to read in write_binary");
+    }
   } else { // from buffer
     memcpy((uint8_t *)bmodel_pointer_ + offset_file, buffer, size);
   }

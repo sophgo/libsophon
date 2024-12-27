@@ -57,6 +57,7 @@ bool b_print_subnet_time = false;
 bool b_bmodel_dir = true;
 bool memory_prealloc = false;
 string DECRYPT_LIB;
+bool use_runtime_share_mem = false;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -883,6 +884,10 @@ void bmrt_test()
   }
   bm_handle_t bm_handle = bm_handles[0];
   auto p_bmrt = bmrt_create_ex(bm_handles.data(), device_num);
+  if (use_runtime_share_mem) {
+    bmrt_set_flags(p_bmrt, BM_RUNTIME_SHARE_MEM);
+    BMRT_LOG(INFO, "Use runtime share mem");
+  }
 
   if (PREALLOC_SIZE != 0) {
     bmrt_must_alloc_device_mem(p_bmrt, &prealloc_mem, PREALLOC_SIZE);
@@ -1686,6 +1691,7 @@ static void deal_with_options(int argc, char **argv)
                                          {"core_list", required_argument, &lopt, 18},
                                          {"memory_prealloc", no_argument, &lopt, 19},
                                          {"decrypt_lib", required_argument, &lopt, 20},
+                                         {"use_runtime_share_mem", no_argument, &lopt, 21},
                                          {0, 0, 0, 0}};
 
   if (argc < 2) {
@@ -1797,6 +1803,9 @@ static void deal_with_options(int argc, char **argv)
           case 20:
             DECRYPT_LIB = optarg;
             break;
+          case 21:
+            use_runtime_share_mem = true;
+            break;
         }
         break;
       case '?':
@@ -1838,6 +1847,7 @@ static void deal_with_options(int argc, char **argv)
       "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
       "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
       "  --decrypt_lib      : Set decrypt_lib path for decrypt bmodel.\n"
+      "  --use_runtime_share_mem      : Use runtime share mem for multi core cases.\n"
     );
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 

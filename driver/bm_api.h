@@ -43,7 +43,8 @@ struct bmcpu_lib{
 	int cur_rec;
 	int rec[LIB_MAX_REC_CNT];
 	u8 md5[16];
-	pid_t cur_pid;
+	// pid_t cur_pid;
+	struct file *file;
 	int core_id;
 
 	struct mutex bmcpu_lib_mutex;
@@ -154,4 +155,6 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdrv_device_sync_api(struct bm_device_info *bmdi);
 void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file);
+void bmdrv_clear_lib_list(struct bm_device_info *bmdi);
+void bmdrv_clear_func_list(struct bm_device_info *bmdi);
 #endif

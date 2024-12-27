@@ -55,7 +55,7 @@ Docker 测试环境搭建
 
     # 替换以下 path/to/libsophon 为实际 libsophon 路径
     cd path/to/libsophon
-    sudo docker build -t image_name:image_version -f libsophon_dockerfile .
+    sudo docker build --platform linux/arm64/v8 -t image_name:image_version -f libsophon_dockerfile .
 
 以上 ``image_name`` 和 ``image_version`` 可自定义。
 

@@ -1,0 +1,2 @@
+#ccflags-y += -save-temps=obj
+CVIARCH_L := soph

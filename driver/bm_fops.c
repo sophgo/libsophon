@@ -15,6 +15,7 @@
 #include "bm_pcie.h"
 #include "bm1684_card.h"
 #include "bm1684_clkrst.h"
+#include "bm1688_clkrst.h"
 #include "bm1684_base64.h"
 #include "bm1688_base64.h"
 #include "bm1688_card.h"
@@ -167,7 +168,7 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	if (handle_num == 1 && h_info->open_pid == current->pid)
 		bmdrv_api_clear_lib(bmdi, file);
 	else if (h_info->open_pid != current->pid)
-		pr_debug("current pid is different from open pid, can not clear lib,\n");
+		pr_debug("current pid is different from open pid, can not clear lib\n");
 
 	/* invalidate pending APIs in msgfifo */
 	//for (core = 0; core < core_num; core++)
@@ -632,9 +633,15 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 
 	case BMDEV_FORCE_RESET_TPU:
+#ifndef SOC_MODE
 		ret = bm1688_reset_tpu(bmdi);
 		if (!ret)
 			bmdi->status_sync_api = 0;
+#else
+		bm1688_modules_tpu_system_reset(bmdi);
+		bmdi->status_sync_api = 0;
+		ret = 0;
+#endif
 		break;
 
 	case BMDEV_SEND_API:
@@ -1010,13 +1017,13 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_GET_IDLE_COREID:
 	{
+
 #ifdef SOC_MODE
-		int core_id;
-#endif
-		ret = 0;
-#ifdef SOC_MODE
-		core_id = bmdev_get_idle_coreid(bmdi);
+		int core_id = bmdev_get_idle_coreid(bmdi);
+
 		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
+#else
+		ret = 0;
 #endif
 		break;
 
@@ -1180,8 +1187,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			mutex_lock(&lib_info->bmcpu_lib_mutex);
 			list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
 				if(!memcmp(lib_temp->md5, loaded_lib.md5, 16) && loaded_lib.core_id == lib_temp->core_id) {
-					loaded_lib.loaded = 1;
-					break;
+					if (file == lib_temp->file) {
+						loaded_lib.loaded = 1;
+						lib_temp->refcount++;
+						break;
+					}
 				}
 			}
 			mutex_unlock(&lib_info->bmcpu_lib_mutex);

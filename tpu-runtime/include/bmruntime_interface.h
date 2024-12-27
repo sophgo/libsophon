@@ -91,6 +91,9 @@ DECL_EXPORT bool bmrt_get_bmodel_data_info(const void* bmodel_data, size_t size,
 /* get net index*/
 DECL_EXPORT int bmrt_get_network_index(void* p_bmrt, const char* net_name);
 
+/* get num stage */
+DECL_EXPORT int bmrt_get_stage_size(void* p_bmrt, const char* net_name);
+
 /* --------------------------------------------------------------------------*/
 /**
  * @name    bmrt_create
@@ -288,6 +291,49 @@ DECL_EXPORT bool bmrt_load_bmodel_with_decrypt(void* p_bmrt, const char* bmodel_
  * @retval false   Load context failed.
  */
 DECL_EXPORT bool bmrt_load_bmodel_data_with_mem(void* p_bmrt, const void * bmodel_data, size_t size, mem_info_t* mem_info);
+
+/**
+ * @name    bmrt_update_bmodel_weight_with_decrypt
+ * @brief   To update the weight of bmodel with binary date from update_path
+ * @ingroup bmruntime
+ *
+ * This API is to update the weight of bmodel.
+ * After loading bmodel, we can update the weight of bmodel.
+ *
+ * @param   [in]   p_bmrt        Bmruntime that had been created
+ * @param   [in]   bmodel_path   Bmodel file directory
+ * @param   [in]   update_path   Update bmodel by the binary file directory
+ * @param   [in]   net_idx       Update specified net by idx
+ * @param   [in]   mem_idx       Update specified mem by idx
+ * @param   [in]   weight_idx    Update specified weight by loc idx
+ * @param   [in]   weight_count  weight count
+ * @param   [in]   f             Function pointer to decrypt func
+ *
+ * @retval true    Update bmodel weight sucess.
+ * @retval false   Update bmodel weight failed.
+ */
+DECL_EXPORT bool bmrt_update_bmodel_weight_with_decrypt(void *p_bmrt, const char *bmodel_path, const char *update_path, const char *net_idx, const char *mem_idx, const char **weight_idx, int weight_count, decrypt_func f);
+
+/**
+ * @name    bmrt_empty_bmodel_weight_with_decrypt
+ * @brief   To empty the weight of bmodel
+ * @ingroup bmruntime
+ *
+ * This API is to empty the weight of bmodel.
+ * After loading bmodel, we can empty the weight of bmodel.
+ *
+ * @param   [in]   p_bmrt        Bmruntime that had been created
+ * @param   [in]   bmodel_path   Bmodel file directory
+ * @param   [in]   net_idx       Empty specified net by idx
+ * @param   [in]   mem_idx       Empty specified mem by idx
+ * @param   [in]   weight_idx    Empty specified weight by loc idx
+ * @param   [in]   weight_count  weight count
+ * @param   [in]   f             Function pointer to decrypt func
+ *
+ * @retval true    Empty bmodel weight sucess.
+ * @retval false   Empty bmodel weight failed.
+ */
+DECL_EXPORT bool bmrt_empty_bmodel_weight_with_decrypt(void *p_bmrt, const char *bmodel_path, const char *net_idx, const char *mem_idx, const char **weight_idx, int weight_count, decrypt_func f);
 
 /**
  * @name    bmrt_show_neuron_network
@@ -624,7 +670,8 @@ DECL_EXPORT bool bmrt_launch_data_multi_thread(void* p_bmrt, const char* net_nam
  *
  * This API only used for multi-cores arch runtime, need call before bmrt_launch_tensor_multi_cores API.
  * After calling this API, the memory during neuron network inference is pre-allocated, can reduce first bmrt_launch_tensor_multi_cores API time cost.
- * If no use this API, is also OK, bmrt will auto alloc compute memory during first launch tensor.
+ * If no use this API or bmrt_pre_alloc_mem, is also OK, bmrt will auto alloc compute memory during first launch tensor.
+ * If using bmrt_pre_alloc_neuron_multi_cores, do not use bmrt_pre_alloc_mem any more.
  *
  * @param [in]    p_bmrt            Bmruntime that had been created
  * @param [in]    net_name          The name of the neuron network
@@ -641,6 +688,27 @@ DECL_EXPORT bool bmrt_pre_alloc_neuron_multi_cores(
     int stage_idx,
     const int *core_list,
     int core_num);
+
+/**
+ * @name    bmrt_pre_alloc_mem
+ * @brief   To pre-allocate the neuron network compute memory during multi-cores arch inference.
+ * @ingroup bmruntime
+ *
+ * This API only used for multi-cores arch runtime, need call before bmrt_launch_tensor_multi_cores API.
+ * After calling this API, the memory during neuron network inference is pre-allocated, can reduce first bmrt_launch_tensor_multi_cores API time cost.
+ * If no use this API or bmrt_pre_alloc_neuron_multi_cores, is also OK, bmrt will auto alloc compute memory during first launch tensor.
+ * If using bmrt_pre_alloc_mem, do not use bmrt_pre_alloc_neuron_multi_cores any more.
+ * Instant of bmrt_pre_alloc_neuron_multi_cores, pre-allocated neuron memory do not bound with core list any more.
+ *
+ * @param [in]    p_bmrt            Bmruntime that had been created
+ * @param [in]    net_name          The name of the neuron network
+ *
+ * @retval true    Pre-allocate success.
+ * @retval false   Pre-allocate failed.
+ */
+DECL_EXPORT bool bmrt_pre_alloc_mem(
+    void *p_bmrt,
+    const char* net_name);
 
 /**
  * @name    bmrt_pre_alloc_mem_multi_thread

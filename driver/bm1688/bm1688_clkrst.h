@@ -64,6 +64,7 @@ void bm1688_bmdrv_sw_reset_hau(struct bm_device_info *bmdi);
 #ifdef SOC_MODE
 void bm1688_modules_reset(struct bm_device_info* bmdi);
 int bm1688_modules_reset_init(struct bm_device_info* bmdi);
+void bm1688_modules_tpu_system_reset(struct bm_device_info *bmdi);
 int bm1688_modules_clk_init(struct bm_device_info* bmdi);
 void bm1688_modules_clk_deinit(struct bm_device_info* bmdi);
 void bm1688_modules_clk_enable(struct bm_device_info* bmdi);

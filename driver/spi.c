@@ -363,7 +363,6 @@ u32 bm_spi_read_id(struct bm_device_info *bmdi)
 	memset(data_buf, 0, sizeof(data_buf));
 
 	cmd_buf[0] = SPI_CMD_RDID;
-	spi_data_out_tran(bmdi, cmd_buf, cmd_buf, 1, 0, 1);
 	spi_data_in_tran(bmdi, data_buf, cmd_buf, 1, 0, 6);
 	//spi_in_out_tran(bmdi, data_buf, cmd_buf, 1, 0, 3, 3);
 	read_id = (data_buf[2] << 16) | (data_buf[1] << 8) | (data_buf[0]);

@@ -24,8 +24,8 @@ typedef struct {
   uint32_t magic;
   uint32_t header_size;
   uint32_t flatbuffers_size;
-  uint32_t binary_size;
-  uint32_t reserved[12];
+  uint64_t binary_size;
+  uint32_t reserved[11];
 } __attribute__((packed)) MODEL_HEADER_T;
 #else
 #pragma pack(push, 1)
@@ -33,8 +33,8 @@ typedef struct {
   uint32_t magic;
   uint32_t header_size;
   uint32_t flatbuffers_size;
-  uint32_t binary_size;
-  uint32_t reserved[12];
+  uint64_t binary_size;
+  uint32_t reserved[11];
 } MODEL_HEADER_T;
 #pragma pack(pop)
 #endif
@@ -92,6 +92,7 @@ public:
   size_t Finish();
   void Save(const std::string &filename);  // save to file
   void Save(void *buffer);                 // save to buffer
+  uint64_t BufferSize();        // buffer_size
   // save to file and encrypt header & flatbuffer
   void SaveEncrypt(const std::string &filename);
   uint8_t *Encrypt(uint8_t *input, uint64_t input_bytes, uint64_t *output_bytes);
@@ -160,6 +161,7 @@ class ModelCtx {
   // write buffer to offset of binary
   void write_binary(const bmodel::Binary *binary, uint64_t offset,
                     uint8_t *buffer, uint64_t size);
+  uint8_t *decrypt_file(const std::string &filename, uint64_t *out_size);
 
   // model buffer data for parse
   const void *data() const;

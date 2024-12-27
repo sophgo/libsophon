@@ -28,6 +28,7 @@
 #include "bm_msgfifo.h"
 #include "bm_debug.h"
 #include "bm_monitor.h"
+#include "bm_pm.h"
 #include "version.h"
 
 #ifndef __maybe_unused
@@ -309,6 +310,8 @@ struct bm_device_info {
 	struct bm_profile profile;
 
 	struct bm_monitor_thread_info monitor_thread_info;
+
+	struct bm_pm_thread_info pm_thread_info;
 
 	struct proc_dir_entry *card_proc_dir;
 

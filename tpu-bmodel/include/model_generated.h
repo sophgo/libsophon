@@ -2251,6 +2251,9 @@ struct NetParameterT : public flatbuffers::NativeTable {
   uint64_t io_addr;
   uint64_t io_size;
   std::unique_ptr<Binary> tensor_loc;
+  uint64_t dynamic_ctx_addr;
+  uint64_t dynamic_coeff_offset;
+  uint64_t dynamic_combined_coeff_offset;
   NetParameterT()
       : ctx_addr(0),
         ctx_size(0),
@@ -2260,7 +2263,10 @@ struct NetParameterT : public flatbuffers::NativeTable {
         cpu_mem_size(0),
         core_num(0),
         io_addr(0),
-        io_size(0) {
+        io_size(0),
+        dynamic_ctx_addr(0),
+        dynamic_coeff_offset(0),
+        dynamic_combined_coeff_offset(0) {
   }
 };
 
@@ -2286,7 +2292,10 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_CORE_NUM = 36,
     VT_IO_ADDR = 38,
     VT_IO_SIZE = 40,
-    VT_TENSOR_LOC = 42
+    VT_TENSOR_LOC = 42,
+    VT_DYNAMIC_CTX_ADDR = 44,
+    VT_DYNAMIC_COEFF_OFFSET = 46,
+    VT_DYNAMIC_COMBINED_COEFF_OFFSET = 48
   };
   const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *input_tensor() const {
     return GetPointer<const flatbuffers::Vector<flatbuffers::Offset<Tensor>> *>(VT_INPUT_TENSOR);
@@ -2408,6 +2417,24 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   Binary *mutable_tensor_loc() {
     return GetStruct<Binary *>(VT_TENSOR_LOC);
   }
+  uint64_t dynamic_ctx_addr() const {
+    return GetField<uint64_t>(VT_DYNAMIC_CTX_ADDR, 0);
+  }
+  bool mutate_dynamic_ctx_addr(uint64_t _dynamic_ctx_addr) {
+    return SetField<uint64_t>(VT_DYNAMIC_CTX_ADDR, _dynamic_ctx_addr, 0);
+  }
+  uint64_t dynamic_coeff_offset() const {
+    return GetField<uint64_t>(VT_DYNAMIC_COEFF_OFFSET, 0);
+  }
+  bool mutate_dynamic_coeff_offset(uint64_t _dynamic_coeff_offset) {
+    return SetField<uint64_t>(VT_DYNAMIC_COEFF_OFFSET, _dynamic_coeff_offset, 0);
+  }
+  uint64_t dynamic_combined_coeff_offset() const {
+    return GetField<uint64_t>(VT_DYNAMIC_COMBINED_COEFF_OFFSET, 0);
+  }
+  bool mutate_dynamic_combined_coeff_offset(uint64_t _dynamic_combined_coeff_offset) {
+    return SetField<uint64_t>(VT_DYNAMIC_COMBINED_COEFF_OFFSET, _dynamic_combined_coeff_offset, 0);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_INPUT_TENSOR) &&
@@ -2442,6 +2469,9 @@ struct NetParameter FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<uint64_t>(verifier, VT_IO_ADDR) &&
            VerifyField<uint64_t>(verifier, VT_IO_SIZE) &&
            VerifyField<Binary>(verifier, VT_TENSOR_LOC) &&
+           VerifyField<uint64_t>(verifier, VT_DYNAMIC_CTX_ADDR) &&
+           VerifyField<uint64_t>(verifier, VT_DYNAMIC_COEFF_OFFSET) &&
+           VerifyField<uint64_t>(verifier, VT_DYNAMIC_COMBINED_COEFF_OFFSET) &&
            verifier.EndTable();
   }
   NetParameterT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -2512,6 +2542,15 @@ struct NetParameterBuilder {
   void add_tensor_loc(const Binary *tensor_loc) {
     fbb_.AddStruct(NetParameter::VT_TENSOR_LOC, tensor_loc);
   }
+  void add_dynamic_ctx_addr(uint64_t dynamic_ctx_addr) {
+    fbb_.AddElement<uint64_t>(NetParameter::VT_DYNAMIC_CTX_ADDR, dynamic_ctx_addr, 0);
+  }
+  void add_dynamic_coeff_offset(uint64_t dynamic_coeff_offset) {
+    fbb_.AddElement<uint64_t>(NetParameter::VT_DYNAMIC_COEFF_OFFSET, dynamic_coeff_offset, 0);
+  }
+  void add_dynamic_combined_coeff_offset(uint64_t dynamic_combined_coeff_offset) {
+    fbb_.AddElement<uint64_t>(NetParameter::VT_DYNAMIC_COMBINED_COEFF_OFFSET, dynamic_combined_coeff_offset, 0);
+  }
   explicit NetParameterBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -2547,8 +2586,14 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(
     uint32_t core_num = 0,
     uint64_t io_addr = 0,
     uint64_t io_size = 0,
-    const Binary *tensor_loc = 0) {
+    const Binary *tensor_loc = 0,
+    uint64_t dynamic_ctx_addr = 0,
+    uint64_t dynamic_coeff_offset = 0,
+    uint64_t dynamic_combined_coeff_offset = 0) {
   NetParameterBuilder builder_(_fbb);
+  builder_.add_dynamic_combined_coeff_offset(dynamic_combined_coeff_offset);
+  builder_.add_dynamic_coeff_offset(dynamic_coeff_offset);
+  builder_.add_dynamic_ctx_addr(dynamic_ctx_addr);
   builder_.add_io_size(io_size);
   builder_.add_io_addr(io_addr);
   builder_.add_ctx_size(ctx_size);
@@ -2593,7 +2638,10 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameterDirect(
     uint32_t core_num = 0,
     uint64_t io_addr = 0,
     uint64_t io_size = 0,
-    const Binary *tensor_loc = 0) {
+    const Binary *tensor_loc = 0,
+    uint64_t dynamic_ctx_addr = 0,
+    uint64_t dynamic_coeff_offset = 0,
+    uint64_t dynamic_combined_coeff_offset = 0) {
   auto input_tensor__ = input_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*input_tensor) : 0;
   auto output_tensor__ = output_tensor ? _fbb.CreateVector<flatbuffers::Offset<Tensor>>(*output_tensor) : 0;
   auto cmd_group__ = cmd_group ? _fbb.CreateVector<flatbuffers::Offset<CmdGroup>>(*cmd_group) : 0;
@@ -2621,7 +2669,10 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameterDirect(
       core_num,
       io_addr,
       io_size,
-      tensor_loc);
+      tensor_loc,
+      dynamic_ctx_addr,
+      dynamic_coeff_offset,
+      dynamic_combined_coeff_offset);
 }
 
 flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBufferBuilder &_fbb, const NetParameterT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3901,6 +3952,9 @@ inline void NetParameter::UnPackTo(NetParameterT *_o, const flatbuffers::resolve
   { auto _e = io_addr(); _o->io_addr = _e; };
   { auto _e = io_size(); _o->io_size = _e; };
   { auto _e = tensor_loc(); if (_e) _o->tensor_loc = std::unique_ptr<Binary>(new Binary(*_e)); };
+  { auto _e = dynamic_ctx_addr(); _o->dynamic_ctx_addr = _e; };
+  { auto _e = dynamic_coeff_offset(); _o->dynamic_coeff_offset = _e; };
+  { auto _e = dynamic_combined_coeff_offset(); _o->dynamic_combined_coeff_offset = _e; };
 }
 
 inline flatbuffers::Offset<NetParameter> NetParameter::Pack(flatbuffers::FlatBufferBuilder &_fbb, const NetParameterT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3931,6 +3985,9 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBuf
   auto _io_addr = _o->io_addr;
   auto _io_size = _o->io_size;
   auto _tensor_loc = _o->tensor_loc ? _o->tensor_loc.get() : 0;
+  auto _dynamic_ctx_addr = _o->dynamic_ctx_addr;
+  auto _dynamic_coeff_offset = _o->dynamic_coeff_offset;
+  auto _dynamic_combined_coeff_offset = _o->dynamic_combined_coeff_offset;
   return bmodel::CreateNetParameter(
       _fbb,
       _input_tensor,
@@ -3952,7 +4009,10 @@ inline flatbuffers::Offset<NetParameter> CreateNetParameter(flatbuffers::FlatBuf
       _core_num,
       _io_addr,
       _io_size,
-      _tensor_loc);
+      _tensor_loc,
+      _dynamic_ctx_addr,
+      _dynamic_coeff_offset,
+      _dynamic_combined_coeff_offset);
 }
 
 inline CascadeT *Cascade::UnPack(const flatbuffers::resolver_function_t *_resolver) const {

@@ -54,7 +54,7 @@ Using dockerfile to build the docker image with testing environment. The dockerf
 
     # convert the following path to the path where the actual libsophon is
     cd path/to/libsophon
-    sudo docker build -t image_name:image_version -f libsophon_dockerfile .
+    sudo docker build --platform linux/arm64/v8 -t image_name:image_version -f libsophon_dockerfile .
 
 You can named ``image_name`` and ``image_version`` as you wish.
 

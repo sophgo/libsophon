@@ -51,9 +51,21 @@ BM1688_OBJ := $(addprefix $(BM1688_DIR)/, $(BM1688_OBJ))
 VPP_DIR ?= vpp
 ifeq ($(SOC_MODE), 1)
 else
-VPP_OBJ += vpp_platform.o bm1684_vpp.o bm1686_vpp.o
+VPP_OBJ += vpp_platform.o bm1688_vpp.o
 endif
 VPP_OBJ := $(addprefix $(VPP_DIR)/, $(VPP_OBJ))
+
+VPSS_DIR ?= bm1688/media/vpss
+ccflags-y += -I$(src)/bm1688/media/vpss/common -I$(src)/bm1688/media/vpss/chip/soph
+ccflags-y += -I$(src)/bm1688/media/include/common/uapi -I$(src)/bm1688/media/include/common/kapi
+ifeq ($(SOC_MODE), 1)
+else
+ccflags-y += -I$(src)/vpp
+VPSS_OBJ += common/vpss_proc.o common/vpss.o common/vpss_ioctl.o
+VPSS_OBJ += chip/soph/vpss_platform.o chip/soph/vpss_core.o chip/soph/vpss_hal.o chip/soph/scaler.o
+VPSS_OBJ := $(addprefix $(VPSS_DIR)/, $(VPSS_OBJ))
+VPP_OBJ += $(VPSS_OBJ)
+endif
 
 BM_KERNEL_DRIVER_OUT_DIR ?= $(PWD)/../build/driver/$(TARGET_PROJECT)
 ifeq ($(SOC_MODE), 1)
@@ -99,7 +111,8 @@ $(BM_MODULE_NAME)-y += bm_drv.o bm_fops.o bm_irq.o i2c.o pwm.o  \
 	bm_memcpy.o bm_ctl.o bm_fw.o bm_cdma.o \
 	bm_msgfifo.o bm_thread.o bm_api.o \
 	bm_timer.o bm_io.o bm_trace.o bm_attr.o bm_gmem.o \
-	bm_bgm.o bm_genalloc.o gpio.o uart.o bm_debug.o bm_card.o bm_monitor.o
+	bm_bgm.o bm_genalloc.o gpio.o uart.o bm_debug.o bm_card.o bm_monitor.o \
+	bm_pm.o
 
 $(BM_MODULE_NAME)-y += $(BM1682_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1684_OBJ)

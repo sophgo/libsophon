@@ -469,7 +469,6 @@ class bmdnn_func_2380 : public bmdnn_func {
 
     bm_status_t _bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
-        const std::vector<tpu_kernel_function_t> & func_id_list,
         const unsigned long long compiled_ir_global_addr,
         const unsigned int compiled_ir_length, //unit dword
         const unsigned int input_num,
@@ -483,6 +482,7 @@ class bmdnn_func_2380 : public bmdnn_func {
         const std::vector<unsigned long long> apd_ctx_mem_borders,
         const std::vector<unsigned long long> apd_ctx_mem_offset,
         const unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
         const unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         const unsigned long long output_shape_global_addr,

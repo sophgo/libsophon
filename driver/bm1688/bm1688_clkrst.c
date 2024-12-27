@@ -10,6 +10,8 @@
 #include "bm1688_card.h"
 #include "bm1688_cdma.h"
 #include "bm1688_smmu.h"
+#include "bm_fw.h"
+#include "bm_api.h"
 
 #ifdef SOC_MODE
 #include <linux/reset.h>
@@ -567,6 +569,21 @@ void bm1688_modules_reset(struct bm_device_info* bmdi)
 	bm1688_tpu_reset(bmdi);
 	bm1688_gdma_reset(bmdi);
 	bm1688_hau_reset(bmdi);
+}
+
+void bm1688_modules_tpu_system_reset(struct bm_device_info *bmdi)
+{
+	int ret;
+
+	bm1688_modules_reset(bmdi);
+
+	ret = bmdrv_fw_load(bmdi, NULL, NULL);
+	if (ret) {
+		pr_err("load firmware fail\n");
+	}
+
+	bmdrv_clear_lib_list(bmdi);
+	bmdrv_clear_func_list(bmdi);
 }
 
 int bm1688_modules_clk_init(struct bm_device_info* bmdi)

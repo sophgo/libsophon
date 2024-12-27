@@ -5,7 +5,9 @@
 #include <linux/semaphore.h>
 #include <linux/wait.h>
 
-#define VPP_CORE_MAX (2)
+#include "vpss_core.h"
+
+#define VPP_CORE_MAX (10)
 #define MAX_VPP_STAT_WIN_SIZE  100
 
 struct bm_device_info;
@@ -25,6 +27,7 @@ typedef struct vpp_drv_context {
   wait_queue_head_t  wq_vpp[VPP_CORE_MAX];
   int got_event_vpp[VPP_CORE_MAX];
   vpp_statistic_info_t s_vpp_usage_info;
+  struct vpss_device vpss_dev;
 
   int  (*trigger_vpp)(struct bm_device_info *bmdi, unsigned long arg);
   void (*bm_vpp_request_irq)(struct bm_device_info *bmdi);
@@ -42,17 +45,11 @@ void vpp_exit(struct bm_device_info *bmdi);
 int  bm_vpp_check_usage_info(struct bm_device_info *bmdi);
 void vpp_usage_info_init(struct bm_device_info *bmdi);
 
-int  bm1684_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg);
-void bm1684_vpp_request_irq(struct bm_device_info *bmdi);
-void bm1684_vpp_free_irq(struct bm_device_info *bmdi);
-int  bm1684_vpp_init(struct bm_device_info *bmdi);
-void bm1684_vpp_exit(struct bm_device_info *bmdi);
-
-int  bm1686_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg);
-void bm1686_vpp_request_irq(struct bm_device_info *bmdi);
-void bm1686_vpp_free_irq(struct bm_device_info *bmdi);
-int  bm1686_vpp_init(struct bm_device_info *bmdi);
-void bm1686_vpp_exit(struct bm_device_info *bmdi);
+int  bm1688_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg);
+void bm1688_vpp_request_irq(struct bm_device_info *bmdi);
+void bm1688_vpp_free_irq(struct bm_device_info *bmdi);
+int  bm1688_vpp_init(struct bm_device_info *bmdi);
+void bm1688_vpp_exit(struct bm_device_info *bmdi);
 
 #endif
 

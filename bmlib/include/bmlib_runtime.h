@@ -3302,7 +3302,7 @@ bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
 bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src,
                           struct stride_cfg *stride);
 bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src,
-                          struct stride_cfg *stride);
+							struct stride_cfg *stride);
 
 /**
  * @name    bm_malloc_device_mem

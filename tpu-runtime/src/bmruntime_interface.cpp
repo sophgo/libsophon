@@ -86,7 +86,7 @@ bool bmrt_tensor_ex(bm_tensor_t* tensor, void* p_bmrt, int devid, bm_data_type_t
   tensor->shape = shape;
   tensor->st_mode = BM_STORE_1N;
   try {
-    ((Bmruntime*)p_bmrt)->must_alloc_device_mem(devid, &tensor->device_mem, bmrt_tensor_bytesize(tensor), "tensor");
+    ((Bmruntime*)p_bmrt)->must_alloc_device_mem(devid, &(tensor->device_mem), bmrt_tensor_bytesize(tensor), "io_mem");
     return true;
   } catch (const std::runtime_error &e) {
       return false;
@@ -351,6 +351,83 @@ bool bmrt_load_bmodel_with_decrypt(void* p_bmrt, const char* bmodel_path, decryp
   }
 }
 
+bool bmrt_update_bmodel_weight_with_decrypt(void* p_bmrt, const char* bmodel_path, const char* update_path, const char* net_idx, const char* mem_idx, const char** weight_idx, int weight_count, decrypt_func f) {
+  if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel path is wrong.");
+    return false;
+  }
+  if (update_path == NULL || update_path[0] == '\0') {
+    BMRT_LOG(WRONG, "update path is wrong.");
+    return false;
+  }
+  if (net_idx == NULL || net_idx[0] == '\0') {
+    BMRT_LOG(WRONG, "net_idx is wrong.");
+    return false;
+  }
+  for (int i = 0; i < weight_count; ++i) {
+    if (weight_idx[i] == NULL || weight_idx[i][0] == '\0') {
+      BMRT_LOG(WRONG, "weight_idx is wrong.");
+      return false;
+    }
+  }
+  if (f == nullptr) {
+    BMRT_LOG(WRONG, "decrypt funciton is null");
+    return false;
+  }
+  const std::string bmodel_dir = bmodel_path;
+  const std::string update_dir = update_path;
+  const std::string net_idx_str = net_idx;
+  const std::string mem_idx_str = mem_idx;
+  std::vector<std::string> weight_idx_vec;
+  for (int i = 0; i < weight_count; ++i) {
+    weight_idx_vec.push_back(std::string(weight_idx[i]));
+  }
+
+  try {
+    return ((Bmruntime *)p_bmrt)->update_bmodel_weight_with_decrypt(bmodel_dir, update_dir, net_idx_str, mem_idx_str, weight_idx_vec, f);
+  } catch (const std::exception &e) {
+    BMRT_LOG(WRONG, "An unexpected error occurred: %s", e.what());
+    return false;
+  }
+  return false;
+}
+
+bool bmrt_empty_bmodel_weight_with_decrypt(void* p_bmrt, const char* bmodel_path, const char* net_idx, const char* mem_idx, const char** weight_idx, int weight_count, decrypt_func f) {
+  if (p_bmrt == NULL || bmodel_path == NULL || bmodel_path[0] == '\0') {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or bmodel path is wrong.");
+    return false;
+  }
+  if (net_idx == NULL || net_idx[0] == '\0') {
+    BMRT_LOG(WRONG, "net_idx is wrong.");
+    return false;
+  }
+  for (int i = 0; i < weight_count; ++i) {
+    if (weight_idx[i] == NULL || weight_idx[i][0] == '\0') {
+      BMRT_LOG(WRONG, "weight_idx is wrong.");
+      return false;
+    }
+  }
+  if (f == nullptr) {
+    BMRT_LOG(WRONG, "decrypt funciton is null");
+    return false;
+  }
+  const std::string bmodel_dir = bmodel_path;
+  const std::string net_idx_str = net_idx;
+  const std::string mem_idx_str = mem_idx;
+  std::vector<std::string> weight_idx_vec;
+  for (int i = 0; i < weight_count; ++i) {
+    weight_idx_vec.push_back(std::string(weight_idx[i]));
+  }
+
+  try {
+    return ((Bmruntime *)p_bmrt)->empty_bmodel_weight_with_decrypt(bmodel_dir, net_idx_str, mem_idx_str, weight_idx_vec, f);
+  } catch (const std::exception &e) {
+    BMRT_LOG(WRONG, "An unexpected error occurred: %s", e.what());
+    return false;
+  }
+  return false;
+}
+
 static inline void memory_init(memory_t &mem, uint64_t size, int type) {
   mem.addr = -1;
   mem.size = ALIGN(size, 128);
@@ -383,12 +460,12 @@ bool bmrt_get_bmodel_info(ModelCtx* model_ctx, mem_info_t *mem_info) {
   for (int net_idx = 0; net_idx < model_ctx->model()->net()->size(); ++net_idx) {
     auto net = model_ctx->model()->net()->Get(net_idx);
     auto net_params = net->parameter();
-    if (net->addr_mode() == ADDR_MODE_IO_ALONE) {
+    // if (net->addr_mode() == ADDR_MODE_IO_ALONE) {
       for (int stage_idx = 0; stage_idx < net_params->size(); ++stage_idx) {
         auto param = net_params->Get(stage_idx);
         io_mem_size += ALIGN(param->io_size(), 128);
       }
-    }
+    // }
   }
   memory_init(mem_info->io_mem, io_mem_size, 0);
   return true;
@@ -588,6 +665,22 @@ bool bmrt_pre_alloc_mem_multi_thread(
     return true;
 }
 
+bool bmrt_pre_alloc_mem(
+    void *p_bmrt,
+    const char* net_name) {
+    if (p_bmrt == NULL) {
+      BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL");
+      return false;
+    }
+    int net_idx = ((Bmruntime*)p_bmrt)->get_net_idx(net_name);
+    if (net_idx < 0) {
+      BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+      return false;
+    }
+
+    ((Bmruntime *)p_bmrt)->pre_alloc_neuron(net_idx);
+    return true;
+}
 
 bool bmrt_launch_data(void* p_bmrt, const char* net_name, void* const input_datas[],
                       const bm_shape_t input_shapes[], int input_num, void* output_datas[],
@@ -659,6 +752,14 @@ int bmrt_get_network_index(void* p_bmrt, const char* net_name)
     return -1;
   }
   return ((Bmruntime*)p_bmrt)->get_net_idx(net_name);
+}
+
+int bmrt_get_stage_size(void* p_bmrt, const char* net_name) {
+  if (p_bmrt == NULL || net_name == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return -1;
+  }
+  return ((Bmruntime*)p_bmrt)->get_stage_size(net_name);
 }
 
 int bmrt_get_stage_index(void* p_bmrt, const char* net_name, bm_tensor_t *input_tensors) {

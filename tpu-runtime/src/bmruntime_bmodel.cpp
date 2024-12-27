@@ -9,6 +9,7 @@
 #include <numeric>
 #include <string>
 #include <map>
+#include <sstream>
 #include "bmodel.hpp"
 #include "bmruntime.h"
 #include "bmlib_runtime.h"
@@ -207,6 +208,41 @@ static void upload_coeff_data(ModelCtx *model_ctx,
     CHECK_status(status);
   }
 #endif
+}
+
+static void update_coeff_data(ModelCtx *model_ctx,
+                              const bmodel::CoeffMem *coeff_mem,
+                              bm_device_mem_u64_t &dev_mem,
+                              const std::vector<int> &weight_idx,
+                              const std::vector<uint8_t> &file_data,
+                              long long &start_position,
+                              bm_handle_t handle) {
+  bm_status_t status = BM_SUCCESS;
+  auto location = coeff_mem->location();
+  u64 address = bm_mem_get_device_addr_u64(dev_mem);
+  auto dev_size = bm_mem_get_device_size_u64(dev_mem);
+
+  for (int k = 0; k < location->size(); k++) {
+    auto info = location->Get(k);
+    auto loc_size = info->size();
+    auto loc_offset = info->offset();
+    std::vector<uint8_t> buffer(loc_size, 0);
+
+    if (std::find(weight_idx.begin(), weight_idx.end(), k) != weight_idx.end() || weight_idx.size() == 0) {
+      // file_data.size() != 0 -> update
+      // file_data.size() == 0 -> empty
+      if (file_data.size() != 0) {
+        if (start_position + loc_size > file_data.size()) {
+          throw std::runtime_error("File data does not contain enough data for the requested operation.");
+        }
+        buffer.assign(file_data.begin() + start_position, file_data.begin() + start_position + loc_size);
+        start_position += loc_size;
+      }
+      bm_device_mem_t pmem = bm_mem_from_device(address + loc_offset, loc_size);
+      status = bm_memcpy_s2d(handle, pmem, ((void *)buffer.data()));
+      CHECK_status(status);
+    }
+  }
 }
 
 static uint32_t get_bdc_cmd_len(const u8 *bdc_buffer, u64 start_offset,
@@ -966,6 +1002,10 @@ bool Bmruntime::fill_net_ctx(
     } else {
       stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem());
     }
+    stages[stage_idx].dynamic_coeff_offset = stages[stage_idx].coeff_offset;
+    if (param->dynamic_combined_coeff_offset()) {
+        stages[stage_idx].dynamic_coeff_offset += param->dynamic_combined_coeff_offset() - param->dynamic_coeff_offset();
+    }
     if (!(m_flags & BM_RUNTIME_SHARE_MEM)) {
       stages[stage_idx].neuron_size.resize(stage_sizes.size());
       stages[stage_idx].neuron_size = stage_sizes;
@@ -1028,8 +1068,15 @@ bool Bmruntime::fill_net_ctx(
     // addr alone allocate io mem
     for (u32 stage_idx = 0; stage_idx < params->size(); stage_idx++) {
       auto &s = stages[stage_idx];
-      s.io_mem = alloc_device_mem(devid, s.io_size, "io_mem");
-      s.io_offset = bm_mem_get_device_addr(s.io_mem) - s.io_start;
+      // only alloc device mem for stage_idx = 0
+      // not to alloc device mem for stage_idx > 0
+      if (stage_idx == 0) {
+        s.io_mem = alloc_device_mem(devid, s.io_size, "io_mem");
+        s.io_offset = bm_mem_get_device_addr(s.io_mem) - s.io_start;
+      } else {
+        s.io_mem = stages[0].io_mem;
+        s.io_offset = stages[0].io_offset;
+      }
     }
   }
 
@@ -1419,13 +1466,16 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
 
     // fill ctx and coeff
     net_stage->ctx_start = param->ctx_addr();
+    net_stage->dynamic_ctx_start = param->dynamic_ctx_addr() ? param->dynamic_ctx_addr() : param->ctx_addr();
 
     // Use relative address since 1688.
     auto ctx_start = net_stage->ctx_start & bmrt_arch_info::addr_mask();
+    auto dynamic_ctx_start = net_stage->dynamic_ctx_start & bmrt_arch_info::addr_mask();
     auto &ctx_sizes = stage_ctx_sizes[stage_idx];
     if (!ctx_sizes.empty())
     {
       net_stage->ctx_offset.resize(ctx_sizes.size());
+      net_stage->dynamic_ctx_offset.resize(ctx_sizes.size());
       net_stage->ctx_borders.resize(ctx_sizes.size());
       net_stage->ctx_borders[0] = ctx_sizes[0];
       for (size_t i = 1; i < ctx_sizes.size(); ++i)
@@ -1442,11 +1492,14 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
           if (net_stage->neuron_mem[i].size > 0) {
             u64 ctx_addr = bm_mem_get_device_addr_u64(net_stage->neuron_mem[i]);
             net_stage->ctx_offset[i] = ctx_addr - ctx_start;
+            net_stage->dynamic_ctx_offset[i] = ctx_addr - dynamic_ctx_start;
           } else {
             net_stage->ctx_offset[i] = 0;
+            net_stage->dynamic_ctx_offset[i] = 0;
           }
           if (i > 0)  {
             net_stage->ctx_offset[i] -= net_stage->ctx_borders[i - 1];
+            net_stage->dynamic_ctx_offset[i] -= net_stage->ctx_borders[i - 1];
           }
         }
       }
@@ -1455,6 +1508,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
       // No relocation required
       net_stage->ctx_borders.push_back(-1); // Max unsigned
       net_stage->ctx_offset.push_back(0);
+      net_stage->dynamic_ctx_offset.push_back(0);
     }
 
     net_stage->cpu_mem_size = param->cpu_mem_size();
@@ -1681,8 +1735,10 @@ void Bmruntime::fill_net_info(net_ctx_t* net_ctx)
   net_info.output_scales = net_ctx->output_scale_v.data();
   net_info.output_zero_point = net_ctx->output_zero_point_v.data();
   net_info.output_names = (const char**)malloc(net_info.output_num * sizeof(char*));
+  net_info.output_loc_devices = (int*)malloc(net_info.output_num * sizeof(int));
   for (int i = 0; i < net_info.output_num; i++) {
     net_info.output_names[i] = net_ctx->output_name_v[i].c_str();
+    net_info.output_loc_devices[i] = 0;
   }
   net_info.max_input_bytes = (size_t*)malloc(net_info.input_num * sizeof(size_t));
   net_info.max_output_bytes = (size_t*)malloc(net_info.output_num * sizeof(size_t));
@@ -1705,9 +1761,7 @@ void Bmruntime::fill_net_info(net_ctx_t* net_ctx)
     net_info.stages[i].output_shapes =
         (bm_shape_t*)malloc(sizeof(bm_shape_t) * net_info.output_num);
     net_info.stages[i].output_mems = (bm_device_mem_t*)malloc(sizeof(bm_device_mem_t) * net_info.output_num);
-    net_info.output_loc_devices = (int*)malloc(net_info.output_num * sizeof(int));
     for (int j = 0; j < net_info.output_num; j++) {
-      net_info.output_loc_devices[j] = 0;
       net_info.stages[i].output_shapes[j] = net_ctx->stage_v[i]->output_v[j].shape;
       net_info.stages[i].output_mems[j] = net_ctx->stage_v[i]->output_v[j].dev_mem;
       size_t temp_size =
@@ -1747,7 +1801,7 @@ void Bmruntime::free_dyn_neuron(net_ctx_t* net_ctx) {
     auto dyn_neuron_stage = dyn_mem_pair.second;
     for (size_t i = 0; i < dyn_neuron_stage->neuron_mem.size(); ++i) {
       BMRT_DEBUG("Free device memory, byte size %d\n", bm_mem_get_device_size_u64(dyn_neuron_stage->neuron_mem[i]));
-      must_free_device_mem_u64(dev_id, dyn_neuron_stage->neuron_mem[i]);
+      free_device_mem_u64(dev_id, dyn_neuron_stage->neuron_mem[i]);
     }
     delete dyn_mem_pair.second;
   }
@@ -1883,6 +1937,161 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
       update_net_middlebuf(m_net_ctx_v[net_idx]);
     }
   }
+  return ret;
+}
+
+bool Bmruntime::update_net_coeff(
+    ModelCtx *model_ctx,
+    int net_idx,
+    int mem_idx,
+    const std::vector<int> &weight_idx,
+    const std::vector<uint8_t> &file_data,
+    long long &start_position)
+{
+  auto net = model_ctx->model()->net()->Get(net_idx);
+  auto param = net->parameter()->Get(0); // only update stage 0
+  m_local_coeffs[0]->Update( //default for soc device, only device 0
+      model_ctx, param->coeff_mem(), mem_idx, weight_idx, file_data, start_position);
+  return true;
+}
+
+bool Bmruntime::update_bmodel_coeff (
+  ModelCtx* model_ctx,
+  const std::string &update_path,
+  const std::vector<int> &net_idx,
+  const std::vector<int> &mem_idx,
+  const std::vector<std::vector<int>> &weight_idx)
+{
+  bool ret = true;
+  int load_net_num = (int)model_ctx->model()->net()->size();
+
+  uint64_t decrypted_size = 0;
+
+  uint8_t *decrypted_data = model_ctx->decrypt_file(update_path, &decrypted_size);
+  if (decrypted_data == nullptr || decrypted_size == 0) {
+    BMRT_LOG(WRONG, "Error: decrypt data failed");
+    return false;
+  }
+  uint64_t header_size = 64;
+  if (decrypted_size <= header_size) {
+    free(decrypted_data);
+    BMRT_LOG(WRONG, "Error: decrypt data too small");
+    return false;
+  }
+  // 64 zeros to check
+  for (uint64_t i = 0; i < header_size; ++i) {
+    if (decrypted_data[i] != 0) {
+      free(decrypted_data);
+      BMRT_LOG(WRONG, "Error: decrypt data format error");
+      return false;
+    }
+  }
+  std::vector<uint8_t> file_data(decrypted_data + header_size, decrypted_data + decrypted_size);
+  free(decrypted_data);
+
+  long long start_position = 0;
+  int cur_idx = 0;
+
+  for (int cur_net_idx = 0; cur_net_idx < load_net_num && cur_idx <= (int)mem_idx.size(); cur_net_idx++) {
+    if (std::find(net_idx.begin(), net_idx.end(), cur_net_idx) != net_idx.end() || net_idx.size() == 0) {
+      ret = update_net_coeff(model_ctx, cur_net_idx, mem_idx[cur_idx], weight_idx[cur_idx], file_data, start_position);
+      cur_idx++;
+      if (!ret) {
+        break;
+      }
+    }
+  }
+
+  if (start_position != decrypted_size - header_size) {
+    BMRT_LOG(WRONG, "Error: start_position is not equal to decrypted_size");
+    return false;
+  }
+  return ret;
+}
+
+bool Bmruntime::update_bmodel_coeff(
+  ModelCtx* model_ctx,
+  const std::vector<int> &net_idx,
+  const std::vector<int> &mem_idx,
+  const std::vector<std::vector<int>> &weight_idx,
+  const std::vector<uint8_t> &file_data,
+  long long &start_position)
+{
+  bool ret = true;
+  u32 load_net_num = model_ctx->model()->net()->size();
+
+  int cur_idx = 0;
+  for (u32 cur_net_idx = 0; cur_net_idx < load_net_num; cur_net_idx++) {
+    if (std::find(net_idx.begin(), net_idx.end(), cur_net_idx) != net_idx.end() || net_idx.size() == 0) {
+      ret = update_net_coeff(model_ctx, cur_net_idx, mem_idx[cur_idx], weight_idx[cur_idx], file_data, start_position);
+      cur_idx += 1;
+      if (!ret) {
+        break;
+      }
+    }
+  }
+  return ret;
+}
+
+static inline std::vector<int> parse_number(const std::string& input) {
+  std::vector<int> result;
+  std::stringstream ss(input);
+  std::string item;
+  while (std::getline(ss, item, ',')) {
+      result.push_back(std::stoi(item));
+  }
+  return result;
+}
+
+bool Bmruntime::update_bmodel_weight_with_decrypt(
+  const string& filepath, const string& update_path,
+  const std::string& net_idx, const std::string& mem_idx,
+  const std::vector<std::string>& weight_idx, decrypt_func f)
+{
+  BMRT_LOG(INFO, "Loading encrypted bmodel from [%s]. Thanks for your patience...", filepath.c_str());
+  ModelCtx model_ctx(filepath, "", f);
+  if (!model_ctx) {
+    BMRT_LOG(WRONG, "Load encrypted model failed.");
+    return false;
+  }
+  std::lock_guard<std::mutex> guard(m_load_mutex);
+
+  auto net_idx_vec = parse_number(net_idx);
+  auto mem_idx_vec = parse_number(mem_idx);
+
+  std::vector<std::vector<int>> weight_idx_vec;
+  for (size_t i = 0; i < weight_idx.size(); ++i) {
+    weight_idx_vec.push_back(parse_number(weight_idx[i]));
+  }
+  return update_bmodel_coeff(&model_ctx, update_path, net_idx_vec, mem_idx_vec, weight_idx_vec);
+}
+
+bool Bmruntime::empty_bmodel_weight_with_decrypt(
+  const string& filepath,
+  const std::string& net_idx, const std::string& mem_idx,
+  const std::vector<std::string>& weight_idx, decrypt_func f)
+{
+  BMRT_LOG(INFO, "Loading encrypted bmodel from [%s]. Thanks for your patience...", filepath.c_str());
+  ModelCtx model_ctx(filepath, "", f);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load encrypted model failed.");
+      return false;
+  }
+  std::lock_guard<std::mutex> guard(m_load_mutex);
+
+  auto net_idx_vec = parse_number(net_idx);
+  auto mem_idx_vec = parse_number(mem_idx);
+
+  // read binary and decrypt
+  long long start_position = 0;
+  std::vector<uint8_t> file_data;
+
+  std::vector<std::vector<int>> weight_idx_vec;
+  for (size_t i = 0; i < weight_idx.size(); ++i) {
+    weight_idx_vec.push_back(parse_number(weight_idx[i]));
+  }
+
+  auto ret = update_bmodel_coeff(&model_ctx, net_idx_vec, mem_idx_vec, weight_idx_vec, file_data, start_position);
   return ret;
 }
 
@@ -2330,7 +2539,7 @@ u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t ad
   BMRT_LOG_RUN(DEBUG, {
     u64 mem_addr = bm_mem_get_device_addr_u64(pmem);
     u64 mem_size = bm_mem_get_device_size_u64(pmem);
-    if (addr == -1) {
+    if (addr != -1) {
       BMRT_LOG(DEBUG, "using prealloc coeff mem: [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
     } else {
       BMRT_LOG(DEBUG, "alloc mem : [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
@@ -2341,6 +2550,30 @@ u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t ad
   upload_coeff_data(model_ctx, coeff_mem, m_handle, pmem);
   m_coeff_map.insert(std::pair<vector<u8>, bm_device_mem_u64_t>(check_code, pmem));
   return bm_mem_get_device_addr_u64(pmem) - coeff_start;
+}
+
+u64 BmCoeff::Update(ModelCtx* model_ctx,
+                    const CoeffMem* coeff_mem,
+                    int mem_idx,
+                    const std::vector<int> &weight_idx,
+                    const std::vector<uint8_t> &file_data,
+                    long long &start_position) {
+  if (coeff_mem == NULL || model_ctx == NULL) {
+    return 0;
+  }
+  // u64 coeff_start = coeff_mem->address();
+  // // Use relative address since 1688.
+  // coeff_start &= bmrt_arch_info::addr_mask();
+  // u64 coeff_size = coeff_mem->encrypt_mode() == 0
+  //                      ? coeff_mem->binary_coeff()->size()
+  //                      : coeff_mem->decrypt_size();
+
+  // check whether the same
+  std::lock_guard<std::mutex> guard(m_coeff_mutex);
+
+  auto dev_mem = m_mem_need_free[mem_idx];
+  update_coeff_data(model_ctx, coeff_mem, dev_mem, weight_idx, file_data, start_position, m_handle);
+  return 0;
 }
 
 int BmCoeff::Check()

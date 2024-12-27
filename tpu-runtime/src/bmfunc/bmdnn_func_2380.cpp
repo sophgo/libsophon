@@ -159,7 +159,6 @@ bm_status_t bmdnn_func_2380::_bmdnn_multi_fullnet_(
 
 bm_status_t bmdnn_func_2380::_bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
-        const std::vector<int32_t> & func_id_list,
         const unsigned long long compiled_ir_global_addr,
         const unsigned int compiled_ir_length, //unit dword
         const unsigned int input_num,
@@ -173,169 +172,123 @@ bm_status_t bmdnn_func_2380::_bmdnn_dynamic_fullnet_(
         const std::vector<unsigned long long> apd_ctx_mem_borders,
         const std::vector<unsigned long long> apd_ctx_mem_offset,
         const unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
         const unsigned long long apd_io_mem_offset,
         bool get_output_shape,
         const unsigned long long output_shape_global_addr,
-        const std::vector<int32_t>& core_list) {
+        const std::vector<int32_t>& core_list
+        ) {
+    BMRT_ASSERT_INFO(core_list.size() == 1, "Dynamic compile do not support tensor parallel\n");
+    BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
+    BMRT_ASSERT_INFO(
+        apd_ctx_mem_borders.size() == apd_ctx_mem_offset.size(),
+        "ctx borders and offset should have same size");
 
-  BMRT_ASSERT_INFO(core_list.size() == 1, "dynamic compile do not support tensor parallel\n");
-  BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
-  BMRT_ASSERT_INFO(
-      apd_ctx_mem_borders.size() == apd_ctx_mem_offset.size(),
-      "ctx borders and offset should have same size");
-  BMRT_ASSERT_INFO(
-      core_list.size() == func_id_list.size(),
-      "core_num=%d, func_list_size=%d",
-      core_list.size(), func_id_list.size());
+     size_t ctx_num = apd_ctx_mem_borders.size();
+     u32 api_buffer_size = sizeof(u64) +sizeof(u32) +  // compiled_ir addr, length
+                           // input num
+                           sizeof(u32) +
+                           //           input_addr    dtype_dims        dim_shape                    elem_num
+                           input_num * (sizeof(u64) + sizeof(int) + sizeof(int) * BM_MAX_DIMS_NUM + sizeof(int)) +
+                           // output num
+                           sizeof(u32) +
+                           //           output_addr
+                           output_num * sizeof(u64) +
+                           //get_output_shape, global_shape_mem_addr, apd_ctx_start, (ctx_num, apd_ctx_mem_borders, apd_ctx_mem_offset),
+                           sizeof(u32) + sizeof(u64) + sizeof(u64) + ( sizeof(u32)+sizeof(u64)*ctx_num*2 ) +
+                           //apd_coeff_mem_offset, apd_io_start, apd_io_mem_offset
+                           sizeof(u64) + sizeof(u64) + sizeof(u64);
 
-  size_t ctx_num = apd_ctx_mem_borders.size();
-  u32 api_buffer_size = sizeof(u64) +sizeof(u32) +  // compiled_ir addr, length
-                        // input num
-                        sizeof(u32) +
-                        //           input_addr    dtype_dims        dim_shape                    elem_num
-                        input_num * (sizeof(u64) + sizeof(int) + sizeof(int) * BM_MAX_DIMS_NUM + sizeof(int)) +
-                        // output num
-                        sizeof(u32) +
-                        //           output_addr
-                        output_num * sizeof(u64) +
-                        //get_output_shape, global_shape_mem_addr, apd_ctx_start, (ctx_num, apd_ctx_mem_borders, apd_ctx_mem_offset),
-                        sizeof(u32) + sizeof(u64) + sizeof(u64) + ( sizeof(u32)+sizeof(u64)*ctx_num*2 ) +
-                        //apd_coeff_mem_offset
-                        sizeof(u64) +
-                        // core_idx + core_num + group_msg_id
-                        3 * sizeof(u32) +
-                        //apd_io_mem_offset
-                        sizeof(u64);
+     if (api_buffer_size > MAX_API_MSG_SIZE) {
+       //decrease the api buffer size
+       for (u32 i = 0; i < input_num; ++i) {
+         u32 cur_dim = (u32)(input_dtype_and_dims[i] & 0xFFFF);
+         api_buffer_size -= (BM_MAX_DIMS_NUM - cur_dim) * sizeof(int);
+       }
+     }
 
-  if (api_buffer_size > MAX_API_MSG_SIZE) {
-    //decrease the api buffer size
-    for (u32 i = 0; i < input_num; ++i) {
-      u32 cur_dim = (u32)(input_dtype_and_dims[i] & 0xFFFF);
-      api_buffer_size -= (BM_MAX_DIMS_NUM - cur_dim) * sizeof(int);
-    }
-  }
-  size_t group_msg_id = 0;
-  for (size_t i = 0; i < core_list.size(); i++) {
-    group_msg_id |= 1<<core_list[i];
-  }
+     u8* api_buffer = new u8 [api_buffer_size];
 
-  std::vector<std::vector<u8>> api_buffers(core_list.size());
-  std::vector<tpu_launch_param_t> launch_params(core_list.size());
+     void* p_api = api_buffer;
+     //compiled ir information
+     *(u64*)p_api = compiled_ir_global_addr;
+     p_api = (u64*)p_api + 1;
+     *(u32*)p_api = compiled_ir_length;
+     p_api = (u32*)p_api + 1;
 
-  for (size_t core_idx = 0; core_idx < core_list.size(); core_idx++) {
-    api_buffers[core_idx].assign(api_buffer_size, 0);
-    void* p_api = api_buffers[core_idx].data();
-    launch_params[core_idx].core_id = core_list[core_idx];
-    launch_params[core_idx].func_id = func_id_list[core_idx];
-    launch_params[core_idx].param_data = api_buffers[core_idx].data();
-    launch_params[core_idx].param_size = api_buffers[core_idx].size();
+     //input information
+     *(u32*)p_api = input_num;
+     p_api = (u32*)p_api + 1;
 
-    //compiled ir information
-    *(u64*)p_api = compiled_ir_global_addr;
-    p_api = (u64*)p_api + 1;
-    *(u32*)p_api = compiled_ir_length;
-    p_api = (u32*)p_api + 1;
+     for(u32 i = 0; i < input_num; ++i){
+       *(u64*)p_api = input_addrs[i];
+       p_api = (u64*)p_api + 1;
 
-    //input information
-    *(u32*)p_api = input_num;
-    p_api = (u32*)p_api + 1;
+       *(u32*)p_api = input_dtype_and_dims[i];
+       p_api = (u32*)p_api + 1;
+       u32 cur_dim = (u32)(input_dtype_and_dims[i] & 0xFFFF);
+       for(u32 j = 0; j < cur_dim; j++){
+         *(u32 *)p_api = (u32)input_shapes[i][j];
+         p_api = (u32 *)p_api + 1;
+       }
+       *(u32*)p_api = input_elem_nums[i];
+       p_api = (u32*)p_api + 1;
+     }
+     //output information
+     *(u32*)p_api = output_num;
+     p_api = (u32*)p_api + 1;
 
-    for(u32 i = 0; i < input_num; ++i){
-      *(u64*)p_api = input_addrs[i];
-      p_api = (u64*)p_api + 1;
+     for(u32 i = 0; i < output_num; ++i){
+       *(u64*)p_api = output_addrs[i];
+       p_api = (u64*)p_api + 1;
+     }
+     //output shape info related
+     *(u32*)p_api = (u32)get_output_shape;
+     p_api = (u32*)p_api + 1;
+     *(u64*)p_api = output_shape_global_addr;
+     p_api = (u64*)p_api + 1;
 
-      *(u32*)p_api = input_dtype_and_dims[i];
-      p_api = (u32*)p_api + 1;
-      u32 cur_dim = (u32)(input_dtype_and_dims[i] & 0xFFFF);
-      for(u32 j = 0; j < cur_dim; j++){
-        *(u32 *)p_api = (u32)input_shapes[i][j];
-        p_api = (u32 *)p_api + 1;
-      }
-      *(u32*)p_api = input_elem_nums[i];
-      p_api = (u32*)p_api + 1;
-    }
-    //output information
-    *(u32*)p_api = output_num;
-    p_api = (u32*)p_api + 1;
+     //The memory address in cmd gdma need to be offset when append context,here is the offset value.
+     *(u64*)p_api = apd_ctx_start;
+     p_api = (u64*)p_api + 1;
 
-    for(u32 i = 0; i < output_num; ++i){
-      *(u64*)p_api = output_addrs[i];
-      p_api = (u64*)p_api + 1;
-    }
-    //output shape info related
-    *(u32*)p_api = (u32)get_output_shape;
-    p_api = (u32*)p_api + 1;
-    *(u64*)p_api = output_shape_global_addr;
-    p_api = (u64*)p_api + 1;
+     *(u32*)p_api = ctx_num;
+     p_api = (u32*)p_api + 1;
 
-    //The memory address in cmd gdma need to be offset when append context,here is the offset value.
-    *(u64*)p_api = apd_ctx_start;
-    p_api = (u64*)p_api + 1;
+     for (size_t i = 0; i < ctx_num; ++i)
+     {
+       *(u64*)p_api = apd_ctx_mem_borders[i];
+       p_api = (u64*)p_api + 1;
+     }
+     for (size_t i = 0; i < ctx_num; ++i)
+     {
+       *(u64*)p_api = apd_ctx_mem_offset[i];
+       p_api = (u64*)p_api + 1;
+     }
 
-    *(u32*)p_api = ctx_num;
-    p_api = (u32*)p_api + 1;
+     *(u64*)p_api = apd_coeff_mem_offset;
+     p_api = (u64*)p_api + 1;
 
-    for (size_t i = 0; i < ctx_num; ++i) {
-      *(u64*)p_api = apd_ctx_mem_borders[i];
-      p_api = (u64*)p_api + 1;
-    }
+     *(u64*)p_api = apd_io_start;
+     p_api = (u64*)p_api + 1;
+     *(u64*)p_api = apd_io_mem_offset;
+     p_api = (u64*)p_api + 1;
 
-    for (size_t i = 0; i < ctx_num; ++i) {
-      *(u64*)p_api = apd_ctx_mem_offset[i];
-      p_api = (u64*)p_api + 1;
-    }
+     bm_status_t status =
+         bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);
+     if (BM_SUCCESS != status) {
+       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_DYNAMIC_FULLNET, status);
+     } else {
+       status = bm_sync_api(handle);
+       if (BM_SUCCESS != status) {
+         BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", BM_API_ID_DYNAMIC_FULLNET, status);
+       }
+     }
 
-    *(u64*)p_api = apd_coeff_mem_offset;
-    p_api = (u64*)p_api + 1;
+     bm_gmem_arm_reserved_release(handle);
 
-    *(u32*)p_api = core_idx;
-    p_api = (u32*)p_api + 1;
-    *(u32*)p_api = core_list.size();
-    p_api = (u32*)p_api + 1;
-    *(u32*)p_api = group_msg_id;
-    p_api = (u32*)p_api + 1;
-
-    *(u64*)p_api = apd_io_mem_offset;
-    p_api = (u64*)p_api + 1;
-
-  BMRT_LOG_RUN(DEBUG, {
-    for (size_t core_idx = 0; core_idx < core_list.size(); core_idx++) {
-      BMRT_LOG(DEBUG, "ir_addr=0x%llx, ir_length=%d[0x%x]", compiled_ir_global_addr, compiled_ir_length, compiled_ir_length);
-      for(u32 i = 0; i < input_num; ++i){
-        auto dims = input_dtype_and_dims[i]&0xFFFF;
-        auto dtype = (input_dtype_and_dims[i]>>16)&0xFFFF;
-        std::string shape_str = std::to_string(input_shapes[i][0]);
-        for(u32 j = 1; j < dims; j++){
-          shape_str += "," + std::to_string(input_shapes[i][j]);
-        }
-        BMRT_LOG(DEBUG, "in[%d] addr=0x%llx, shape=[%s], dtype=%s, elem_num=%d",
-            i, input_addrs[i], shape_str.c_str(), dtype_to_string((bm_data_type_t)dtype), input_elem_nums[i]);
-      }
-      //output information
-      for(u32 i = 0; i < output_num; ++i){
-        BMRT_LOG(DEBUG, "out[%d] addr=0x%llx", i, output_addrs[i]);
-      }
-      //output shape info related
-      BMRT_LOG(DEBUG, "out_shape_addr=0x%llx", output_shape_global_addr);
-      BMRT_LOG(DEBUG, "ctx_start=0x%llx, coeff_mem_offset=0x%llx", apd_ctx_start, apd_coeff_mem_offset);
-
-      *(u32*)p_api = ctx_num;
-      p_api = (u32*)p_api + 1;
-
-      for (size_t i = 0; i < ctx_num; ++i) {
-        BMRT_LOG(DEBUG, "ctx[%d]: border=0x%llx, offset=0x%llx",i , apd_ctx_mem_borders[i], apd_ctx_mem_offset[i]);
-      }
-      BMRT_LOG(DEBUG, "core_index=%d, core_num=%d, base_msg_id=%d", core_idx, core_list.size(), group_msg_id);
-    }
-  });
-  }
-
-  bm_status_t status = tpu_kernel_launch_async_multicores(handle, launch_params.data(), launch_params.size());
-  if (BM_SUCCESS != status) {
-    BMRT_LOG(WRONG, "tpu_kernel_launch_async_multicores failed, status:%d", status);
-  }
-
-  return status;
+     delete[] api_buffer;
+     return status;
 }
 
 bm_status_t  bmdnn_func_2380::_bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable_bits){

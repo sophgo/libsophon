@@ -547,13 +547,13 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		//	pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
 		//	return -1;
 		//}
-		// if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
-		// 	vpp_init(bmdi);
+		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+			vpp_init(bmdi);
 		// 	bm_vpu_init(bmdi);
 		// 	bmdrv_jpu_init(bmdi);
 		// 	spacc_init(bmdi);
 		// 	mutex_init(&bmdi->efuse_mutex);
-		// }
+		}
 		//gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
 		break;
 	default:
@@ -655,6 +655,9 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
 	case 0x1686a200:
+		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+			vpp_exit(bmdi);
+		}
 		pr_info("bm-sophon%d bm1688 bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
 	default:

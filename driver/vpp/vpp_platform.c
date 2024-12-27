@@ -3,22 +3,13 @@
 
 int vpp_init(struct bm_device_info *bmdi)
 {
-  if (bmdi->cinfo.chip_id == 0x1684) {
-    bm1684_vpp_init(bmdi);
-    bmdi->vppdrvctx.vpp_init           = bm1684_vpp_init;
-    bmdi->vppdrvctx.vpp_exit           = bm1684_vpp_exit;
-    bmdi->vppdrvctx.trigger_vpp        = bm1684_trigger_vpp;
-    bmdi->vppdrvctx.bm_vpp_request_irq = bm1684_vpp_request_irq;
-    bmdi->vppdrvctx.bm_vpp_free_irq    = bm1684_vpp_free_irq;
-  }
-
-  if (bmdi->cinfo.chip_id == 0x1686) {
-    bm1686_vpp_init(bmdi);
-    bmdi->vppdrvctx.vpp_init           = bm1686_vpp_init;
-    bmdi->vppdrvctx.vpp_exit           = bm1686_vpp_exit;
-    bmdi->vppdrvctx.trigger_vpp        = bm1686_trigger_vpp;
-    bmdi->vppdrvctx.bm_vpp_request_irq = bm1686_vpp_request_irq;
-    bmdi->vppdrvctx.bm_vpp_free_irq    = bm1686_vpp_free_irq;
+  if (bmdi->cinfo.chip_id == 0x1686a200) {
+    bm1688_vpp_init(bmdi);
+    bmdi->vppdrvctx.vpp_init           = bm1688_vpp_init;
+    bmdi->vppdrvctx.vpp_exit           = bm1688_vpp_exit;
+    bmdi->vppdrvctx.trigger_vpp        = bm1688_trigger_vpp;
+    bmdi->vppdrvctx.bm_vpp_request_irq = bm1688_vpp_request_irq;
+    bmdi->vppdrvctx.bm_vpp_free_irq    = bm1688_vpp_free_irq;
   }
 
   if(NULL == bmdi->vppdrvctx.vpp_init) {

@@ -22,6 +22,7 @@ file(GLOB_RECURSE srcs src/*.cpp src/*.c)
 
 add_library(bmrt SHARED ${srcs})
 add_library(bmrt_static STATIC ${srcs})
+target_compile_options(bmrt_static PRIVATE -fPIC)
 add_dependencies(bmrt kernel_header)
 add_dependencies(bmrt_static kernel_header)
 
@@ -44,11 +45,14 @@ target_include_directories(bmrt_static PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR})
 
-include(git-utils)
-get_version_from_tag(version soversion revision)
+#include(git-utils)
+#get_version_from_tag(version soversion revision)
+#set_target_properties(bmrt PROPERTIES SOVERSION ${soversion})
+#set_target_properties(bmrt_static PROPERTIES SOVERSION ${soversion})
 
-set_target_properties(bmrt PROPERTIES SOVERSION ${soversion})
-set_target_properties(bmrt_static PROPERTIES SOVERSION ${soversion})
+# fix the soversion to be compatible with old application
+set_target_properties(bmrt PROPERTIES SOVERSION "1.0")
+set_target_properties(bmrt_static PROPERTIES SOVERSION "1.0")
 set(app_srcs
     app/bmrt_test.cpp
     app/bmrt_test_case.cpp)

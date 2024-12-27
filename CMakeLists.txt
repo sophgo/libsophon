@@ -153,11 +153,11 @@ else()
         else()
             message(FATAL_ERROR "The tpu-runtime directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
         endif()
-        if(EXISTS "${CMAKE_SOURCE_DIR}/libsophav/CMakeLists.txt")
-            add_subdirectory(libsophav)
-        else()
-            message(FATAL_ERROR "The libsophav directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
-        endif()
+    endif()
+    if(EXISTS "${CMAKE_SOURCE_DIR}/libsophav/CMakeLists.txt")
+        add_subdirectory(libsophav)
+    else()
+        message(FATAL_ERROR "The libsophav directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
     endif()
     if (NOT "${PLATFORM}" STREQUAL "cmodel")
         add_subdirectory(doc)
@@ -172,5 +172,5 @@ else()
 
     # run cpack after subdirectories, so it would pack by component
     include(CPack)
-    
+
 endif()
