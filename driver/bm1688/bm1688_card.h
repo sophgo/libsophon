@@ -16,6 +16,8 @@ void bm1688_tc906b_clk_enable(struct bm_device_info *bmdi);
 void bm1688_tc906b_clk_disable(struct bm_device_info *bmdi);
 void bm1688_timer_clk_enable(struct bm_device_info *bmdi);
 void bm1688_timer_clk_disable(struct bm_device_info *bmdi);
+void bm1688_resume_tpu(struct bm_device_info *bmdi, u32 c906_park_0_l,
+						u32 c906_park_0_h, u32 c906_park_1_l, u32 c906_park_1_h);
 #endif
 void bm1688_tpu_clk_enable(struct bm_device_info *bmdi);
 void bm1688_tpu_clk_disable(struct bm_device_info *bmdi);

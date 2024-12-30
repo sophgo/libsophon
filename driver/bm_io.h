@@ -44,13 +44,18 @@ typedef enum {
 #define GP_REG_TEMPSMI                         4
 
 // bm1688 GP registers
-// C906_0 -> GP[0,1,9,11,12]; C906_1 -> GP[14,15,23,25,26]
-#define GP_REG_C906_FW_MODE              	10
+// C906_0 -> GP[0,1,9,11,12,16]; C906_1 -> GP[14,15,23,25,26,27]
+#define GP_REG_C906_FW_MODE         10
 #define GP_REG_TPU1_OFFSET			14
-#define GP_REG_PM_OFFSET			27
-#define BD_ENGINE_TPU1_OFFSET		       	0x10000UL
-#define GDMA_ENGINE_TPU1_OFFSET		       	0x10000UL
-#define SHMEM_TPU1_OFFSET		       	0x10000UL
+#define GP_REG_PM_0_OFFSET			16
+#define GP_REG_PM_1_OFFSET			27
+#define GP_REG_C906_0_ADDR_L        28
+#define GP_REG_C906_0_ADDR_H        29
+#define GP_REG_C906_1_ADDR_L        17
+#define GP_REG_C906_1_ADDR_H        18
+#define BD_ENGINE_TPU1_OFFSET		0x10000UL
+#define GDMA_ENGINE_TPU1_OFFSET		0x10000UL
+#define SHMEM_TPU1_OFFSET		    0x10000UL
 
 struct bm_io_bar_vaddr {
 	void __iomem *mcu_info_bar_vaddr;

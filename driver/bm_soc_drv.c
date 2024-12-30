@@ -27,11 +27,13 @@
 #include "bm1684_clkrst.h"
 #include "bm1688_cdma.h"
 #include "bm1684_cdma.h"
+#include "bm1688_base64.h"
 
 // TODO:
 // extern uint32_t sophon_get_chip_id(void);
 extern int dev_count;
 extern struct bm_ctrl_info *bmci;
+u32 c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h;
 
 static struct kobj_type bmdrv_ktype = {
 	NULL
@@ -486,7 +488,7 @@ static int bmdrv_probe(struct platform_device *pdev)
 
 	bm_monitor_thread_init(bmdi);
 
-	bm_pm_thread_init(bmdi);
+	//bm_pm_thread_init(bmdi);
 
 	rc = bmdrv_ctrl_add_dev(bmci, bmdi);
 	if (rc)
@@ -537,7 +539,7 @@ static int bmdrv_remove(struct platform_device *pdev)
 
 	bmdrv_free_boot_loader_version(bmdi);
 	bmdev_unregister_device(bmdi);
-	bm_pm_thread_deinit(bmdi);
+	//bm_pm_thread_deinit(bmdi);
 	bm_monitor_thread_deinit(bmdi);
 	bmdrv_ctrl_del_dev(bmci, bmdi);
 	bmdrv_disable_attr(bmdi);
@@ -570,31 +572,57 @@ MODULE_DEVICE_TABLE(of, bmdrv_match_table);
 static int bmdrv_tpu_suspend(struct device *dev)
 {
 	struct bm_device_info *bmdi = dev_get_drvdata(dev);
-	u32 pm_status = 0;
+	u32 pm_status0 = 0x1;
+	u32 pm_status1 = 0x1;
 	u32 timeout_cnt = 0;
+	char *name;
 
-	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, 1);
-	while(!(pm_status & 0x2) && (timeout_cnt < 100)) {
-		usleep_range(10000,20000);
-		pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET);
-		timeout_cnt++;
+	name = base_get_chip_id(bmdi);
+	if (!strcmp(name, "BM1688-SOC")) {
+		gp_reg_write_enh(bmdi, GP_REG_PM_0_OFFSET, 0x1);
+		gp_reg_write_enh(bmdi, GP_REG_PM_1_OFFSET, 0x1);
+	} else if (!strcmp(name, "CV186AH-SOC")) {
+		gp_reg_write_enh(bmdi, GP_REG_PM_0_OFFSET, 0x1);
+	} else {
+		pr_err("illeage chip name: %s\n", name);
 	}
+
+	while ((pm_status0 != 0 || pm_status1 != 0) && (timeout_cnt < 100)) {
+		usleep_range(10000,20000);
+		pm_status0 = gp_reg_read_enh(bmdi, GP_REG_PM_0_OFFSET);
+		pm_status1 = gp_reg_read_enh(bmdi, GP_REG_PM_1_OFFSET);
+		timeout_cnt += 1;
+	}
+
+	if (timeout_cnt >= 100) {
+		pr_err("bmdrv_tpu_suspend timeout  %d.\n", timeout_cnt);
+		return -1;
+	}
+
+	c906_park_0_l = gp_reg_read_enh(bmdi, GP_REG_C906_0_ADDR_L);
+	c906_park_0_h = gp_reg_read_enh(bmdi, GP_REG_C906_0_ADDR_H);
+	c906_park_1_l = gp_reg_read_enh(bmdi, GP_REG_C906_1_ADDR_L);
+	c906_park_1_h = gp_reg_read_enh(bmdi, GP_REG_C906_1_ADDR_H);
+
+	//bm1688_tpu_clk_disable(bmdi);
+	bm1688_tc906b_clk_disable(bmdi);
+	//bm1688_gdma_clk_disable(bmdi);
 	pr_err("bmdrv_tpu_suspend(%d)sus.\n", timeout_cnt);
+
 	return 0;
 }
 
 static int bmdrv_tpu_resume(struct device *dev)
 {
 	struct bm_device_info *bmdi = dev_get_drvdata(dev);
-	u32 pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) & (~0x01);
-	u32 timeout_cnt = 0;
 
-	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, pm_status); //set bit0 to 0
-	while(!gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) && (timeout_cnt < 100)) {
-		usleep_range(10000,20000);
-		timeout_cnt++;
-	}
-	pr_err("bmdrv_tpu_resume(%d) sus.\n", timeout_cnt);
+	//bm1688_tpu_clk_enable(bmdi);
+	bm1688_tc906b_clk_enable(bmdi);
+	//bm1688_gdma_clk_enable(bmdi);
+
+	bm1688_resume_tpu(bmdi, c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h);
+
+	pr_err("bmdrv_tpu_resume done\n");
 	return 0;
 }
 #endif

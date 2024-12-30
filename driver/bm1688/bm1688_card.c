@@ -334,6 +334,39 @@ void bm1688_start_c906(struct bm_device_info *bmdi)
 	pr_info("C906 firmware start\n");
 }
 
+void bm1688_resume_tpu(struct bm_device_info *bmdi, u32 c906_park_0_l,
+						u32 c906_park_0_h, u32 c906_park_1_l, u32 c906_park_1_h)
+{
+	u32 c906_clk;
+	u32 ctrl_word;
+
+	// clear irq 183 in C906_0/1
+	top_reg_write(bmdi, TOP_GP_REG_C906_IRQ_CLEAR_OFFSET, 0x1 << 6);
+	top_reg_write(bmdi, TOP_GP_REG_C906_IRQ_CLEAR_OFFSET, 0x1 << 10);
+
+	bdc_reg_write(bmdi, 0x218, c906_park_0_l);
+	bdc_reg_write(bmdi, 0x21c, c906_park_0_h);
+	bdc_reg_write(bmdi, 0x220, c906_park_1_l);
+	bdc_reg_write(bmdi, 0x224, c906_park_1_h);
+
+	ctrl_word = top_reg_read(bmdi, TOP_SW_RESET0);
+	ctrl_word &= ~(0x3 << 27);
+	top_reg_write(bmdi, TOP_SW_RESET0, ctrl_word);
+	udelay(100);
+
+	c906_clk = bdc_reg_read(bmdi, 0);
+	// tc906 clk default 0, need to open
+	if ((c906_clk & (0x3 << 5)) != (0x3 << 5))
+		bdc_reg_write(bmdi, 0, c906_clk | (0x3 << 5));
+
+	ctrl_word |= 0x3 << 27;
+	top_reg_write(bmdi, TOP_SW_RESET0, ctrl_word);
+	udelay(100);
+
+	pr_info("C906 firmware resume\n");
+
+}
+
 int bm1688_reset_tpu(struct bm_device_info *bmdi)
 {
 	u32 timeout_ms = bmdi->cinfo.delay_ms;
