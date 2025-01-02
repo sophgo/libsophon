@@ -3,14 +3,12 @@ PLATFORM ?= asic
 PCIE_MODE_ENABLE_CPU ?= 1
 CLEAN_BUILD ?= 0
 
-ifeq ($(PLATFORM), asic)
-ccflags-y += -DPLATFORM_ASIC
-endif
 ifeq ($(PLATFORM), palladium)
 ccflags-y += -DPLATFORM_PALLADIUM
-endif
-ifeq ($(PLATFORM), fpga)
+else ifeq ($(PLATFORM), fpga)
 ccflags-y += -DPLATFORM_FPGA
+else
+ccflags-y += -DPLATFORM_ASIC
 endif
 
 ifneq ($(SOC_MODE), 1)
@@ -172,7 +170,9 @@ endif
 
 ccflags-y += -O3
 ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function -fdata-sections -Wl,-gc-sections
-#ccflags-y += -mno-outline-atomics
+ifeq ($(PLATFORM), pcie_arm64)
+ccflags-y += -mno-outline-atomics
+endif
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif

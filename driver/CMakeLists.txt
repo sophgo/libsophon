@@ -17,7 +17,7 @@ if(${SOC_MODE} EQUAL 1)
     set(DRIVER_BIN_TARGET "${TARGET_PROJECT}/${DKMS_NAME}.ko")
     add_custom_command(OUTPUT ${DRIVER_BIN_TARGET}
                     COMMAND make SOC_MODE=${SOC_MODE}
-                            PLATFORM=asic
+                            PLATFORM=${PLATFORM}
                             SYNC_API_INT_MODE=${SYNC_API_INT_MODE}
                             TARGET_PROJECT=${TARGET_PROJECT}
                             FW_SIMPLE=${FW_SIMPLE}
@@ -39,7 +39,7 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "PACKAGE_VERSION=${PROJECT_VERSION}" >> dkms.conf
     COMMAND echo "BUILT_MODULE_NAME[0]=\"${DKMS_NAME}\"" >> dkms.conf VERBATIM
     COMMAND echo "MAKE[0]=\"make SOC_MODE=${SOC_MODE}"
-                 "PLATFORM=asic"
+                 "PLATFORM=${PLATFORM}"
                  "SYNC_API_INT_MODE=${SYNC_API_INT_MODE}"
                  "TARGET_PROJECT=${TARGET_PROJECT}"
                  "FW_SIMPLE=${FW_SIMPLE}"
