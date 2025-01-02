@@ -81,6 +81,7 @@ SM5MA	13
 #define BOARD_TYPE_SC7_FP150  0x23
 #define BOARD_TYPE_SM7_V0_0	 0x30
 #define BOARD_TYPE_SM7_MP1_1	 0x36
+#define BOARD_TYPE_SM7_CUST_V2	 0x3b
 #define BOARD_TYPE_CP24		 0x40
 #define BOARD_TYPE_AIV01X	 0x50
 #define BOARD_TYPE_AIV02X	 0x51
@@ -109,6 +110,7 @@ SM5MA	13
 #define SC7FP150 "SC7-FP150"
 #define CP24 "CP24"
 #define SM7M_V1_0 "SM7"
+#define SM7_CUST_V2 "SM7"
 
 // EMA product NAME
 #define AIV02X "AIV02X"
@@ -151,6 +153,7 @@ struct {
     {"SC7+", {34, -1}, {SC7PLUS, "Error"}},
     {"SC7-FP150", {35, -1}, {SC7FP150, "Error"}},
     {"SM7_MP1_1",{54,-1},{SM7M_V1_0, "Error"}},
+    {"SM7_CUST_V2",{59,-1},{SM7_CUST_V2, "Error"}},
 
     // EMA product
     {"AIV02X", {81,-1}, {AIV02X, "Error"}},

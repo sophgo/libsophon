@@ -438,6 +438,7 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 			break;
 		case BOARD_TYPE_SM7_V0_0:
 		case BOARD_TYPE_SM7_MP1_1:
+		case BOARD_TYPE_SM7_CUST_V2:
 			bmdi->boot_info.board_power_sensor_exist = 1;
 			bmdi->boot_info.max_board_power = 45;
 		default:

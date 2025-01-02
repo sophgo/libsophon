@@ -85,8 +85,8 @@ bm_status_t test_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
 	bm_status_t ret = BM_SUCCESS;
 	tpu_kernel_module_t bm_module;
 	tpu_kernel_function_t f_id;
-	const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-	const char key[64] = "libbm1684x_kernel_module.so";
+	const char lib_path[80] = "/opt/sophon/libsophon-current/lib/dyn_load/memory_op.so";
+	const char key[64] = "memory_op.so";
 	int key_size = strlen(key);
 	bm_profile_t profile_start, profile_end;
 	unsigned long long time = 0;

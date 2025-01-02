@@ -55,6 +55,8 @@
 #define VDI_IOCTL_GET_MAX_CORE_NUM               _IO(VDI_IOCTL_MAGIC, 33)
 #define VDI_IOCTL_CTRL_KERNEL_RESET              _IO(VDI_IOCTL_MAGIC, 34)
 #define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
+#define VDI_IOCTL_SET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 36)
+#define VDI_IOCTL_GET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 37)
 typedef struct vpudrv_syscxt_info_s {
 	unsigned int core_idx;
 	unsigned int inst_idx;
@@ -238,6 +240,7 @@ typedef struct vpu_drv_context {
 	vpu_crst_context_t crst_cxt[MAX_NUM_VPU_CORE];
 	struct list_head s_core_idx_head;
 	int reset_vpu_core_disable[MAX_NUM_VPU_CORE];
+	int reset_core_flag[MAX_NUM_VPU_CORE];
 } vpu_drv_context_t;
 
 //#define DUMP_FLAG_MEM_SIZE_VPU (MAX_NUM_VPU_CORE*MAX_NUM_INSTANCE_VPU*sizeof(unsigned int)*5 + MAX_NUM_VPU_CORE*2*sizeof(unsigned int)_)

@@ -20,14 +20,19 @@
 struct bm_ctrl_info *bmci;
 int dev_count;
 
+#define MAX_BM_SMI_VPU_INFO 128
 #ifdef SOC_MODE
 typedef struct {
 	struct  list_head list;
 	pid_t   vpu_pid;
 	int64_t vpu_gmem_used;
-} bm_smi_vpu_proc_gmem;
-
-static struct list_head vpu_gmem_info = LIST_HEAD_INIT(vpu_gmem_info);
+} bm_smi_vpu_proc_gmem_list;
+typedef struct {
+	pid_t   vpu_pid;
+	int64_t vpu_gmem_used;
+} bm_smi_vpu_proc_gmem_arry;
+static bm_smi_vpu_proc_gmem_arry s_vpu_gmem_info[MAX_BM_SMI_VPU_INFO] = {0};
+DEFINE_MUTEX(vpu_gmem_info_mutex);
 #endif
 
 int bmdrv_init_bmci(struct chip_info *cinfo)
@@ -281,10 +286,10 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_max_clock = 950;
 		}
 		pattr->tpu_current_clock = c_attr->tpu_current_clock;
-		if (pattr->tpu_current_clock < pattr->tpu_min_clock
-                           || (pattr->tpu_current_clock > pattr->tpu_max_clock)) {
-			pattr->tpu_current_clock = (int)0xFFFFFC00;
-		}
+		// if (pattr->tpu_current_clock < pattr->tpu_min_clock
+        //                    || (pattr->tpu_current_clock > pattr->tpu_max_clock)) {
+		// 	pattr->tpu_current_clock = (int)0xFFFFFC00;
+		// }
 		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
 	default:
@@ -326,14 +331,14 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		pattr->vpu_mem_total_size[0] = vpu_usage_info->vpu_mem_total_size[0];
         pattr->vpu_mem_used_size[0] = vpu_usage_info->vpu_mem_used_size[0];
         pattr->vpu_mem_free_size[0] = vpu_usage_info->vpu_mem_free_size[0];
-		pattr->mem_total += pattr->vpu_mem_total_size[0]/1000/1000;
-		pattr->mem_used += pattr->vpu_mem_used_size[0]/1000/1000;
+		pattr->mem_total += pattr->vpu_mem_total_size[0] >> 20;
+		pattr->mem_used += pattr->vpu_mem_used_size[0] >> 20;
 	} else if (bmdi->cinfo.chip_id == 0x1686) {
 		pattr->vpu_mem_total_size[0] = vpu_usage_info->vpu_mem_total_size[0];
         pattr->vpu_mem_used_size[0] = vpu_usage_info->vpu_mem_used_size[0];
         pattr->vpu_mem_free_size[0] = vpu_usage_info->vpu_mem_free_size[0];
-		pattr->mem_total += pattr->vpu_mem_total_size[0]/1000/1000;
-		pattr->mem_used += pattr->vpu_mem_used_size[0]/1000/1000;
+		pattr->mem_total += pattr->vpu_mem_total_size[0] >> 20;
+		pattr->mem_used += pattr->vpu_mem_used_size[0] >> 20;
 		if(P_SHOW)pr_err("pattr->vpu_mem_total_size[0] = 0x%llx\n", pattr->vpu_mem_total_size[0]);
 		if(P_SHOW)pr_err("pattr->vpu_mem_used_size[0] = 0x%llx\n", pattr->vpu_mem_used_size[0]);
 		if(P_SHOW)pr_err("pattr->vpu_mem_free_size[0] = 0x%llx\n", pattr->vpu_mem_free_size[0]);
@@ -420,9 +425,8 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 	struct bm_handle_info *h_info;
 	int proc_cnt = 0;
 #ifdef SOC_MODE
-	bm_smi_vpu_proc_gmem *vpu_mem_info, *tmp;
+	int i = 0;
 #endif
-
 	bmdi = bmctl_get_bmdi(bmci, smi_proc_gmem->dev_id);
 	if (!bmdi)
 		return -1;
@@ -432,21 +436,21 @@ static int bmctl_get_smi_proc_gmem(struct bm_ctrl_info *bmci,
 		smi_proc_gmem->pid[proc_cnt] = h_info->open_pid;
 		smi_proc_gmem->gmem_used[proc_cnt] = h_info->gmem_used / 1024 / 1024;
 		proc_cnt++;
-		if (proc_cnt == 128)
+		if (proc_cnt == MAX_BM_SMI_VPU_INFO)
 			break;
 	}
 
 #ifdef SOC_MODE
-	if (proc_cnt < 128) {
-		list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
-			if (vpu_mem_info->vpu_gmem_used > 0) {
-				smi_proc_gmem->pid[proc_cnt] = vpu_mem_info->vpu_pid;
-				smi_proc_gmem->gmem_used[proc_cnt] = vpu_mem_info->vpu_gmem_used / 1024 / 1024;
+	if (proc_cnt < MAX_BM_SMI_VPU_INFO) {
+		mutex_lock(&vpu_gmem_info_mutex);
+		for (i = 0; i<MAX_BM_SMI_VPU_INFO; i++) {
+			if ((s_vpu_gmem_info[i].vpu_gmem_used > 0) && (s_vpu_gmem_info[i].vpu_pid > 0)) {
+				smi_proc_gmem->pid[proc_cnt] = s_vpu_gmem_info[i].vpu_pid;
+				smi_proc_gmem->gmem_used[proc_cnt] = s_vpu_gmem_info[i].vpu_gmem_used / 1024 / 1024;
 				proc_cnt++;
-				if (proc_cnt == 128)
-					break;
 			}
 		}
+		mutex_unlock(&vpu_gmem_info_mutex);
 	}
 #endif
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
@@ -539,38 +543,20 @@ int bmctl_ioctl_set_ecc(struct bm_ctrl_info *bmci, unsigned long arg)
 }
 
 #ifdef SOC_MODE
-int bmctl_update_vpu_gmem(int pid, int mem_used, int is_free, int is_del)
+int bmctl_update_vpu_gmem(struct list_head *in_vpu_gmem_info)
 {
 	int proc_cnt = 0;
-	int update_success = 0;
-	bm_smi_vpu_proc_gmem *vpu_mem_info, *tmp;
-	if (is_del == 0) {
-		list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
-			if (vpu_mem_info->vpu_pid == pid) {
-				if (is_free)
-					vpu_mem_info->vpu_gmem_used -= BGM_4K_ALIGN(mem_used);
-				else
-					vpu_mem_info->vpu_gmem_used += BGM_4K_ALIGN(mem_used);
-				update_success = 1;
-				proc_cnt++;
-				if (proc_cnt == 128)
-					break;
-			}
-		}
-		if (update_success == 0 && is_free == 0 && proc_cnt < 128) {
-			vpu_mem_info = kzalloc(sizeof(*vpu_mem_info), GFP_KERNEL);
-			vpu_mem_info->vpu_pid  = pid;
-    	    vpu_mem_info->vpu_gmem_used = BGM_4K_ALIGN(mem_used);
-    	    list_add(&vpu_mem_info->list, &vpu_gmem_info);
-		}
-	} else {
-    	list_for_each_entry_safe(vpu_mem_info, tmp, &vpu_gmem_info, list) {
-        	if (pid == vpu_mem_info->vpu_pid) {
-            	list_del(&vpu_mem_info->list);
-            	kfree(vpu_mem_info);
-        	}
-    	}
+	bm_smi_vpu_proc_gmem_list *vpu_mem_info, *tmp;
+	mutex_lock(&vpu_gmem_info_mutex);
+	memset(s_vpu_gmem_info, 0, sizeof(bm_smi_vpu_proc_gmem_arry)*MAX_BM_SMI_VPU_INFO);
+	list_for_each_entry_safe(vpu_mem_info, tmp, in_vpu_gmem_info, list) {
+		if (proc_cnt >= MAX_BM_SMI_VPU_INFO)
+			break;
+		s_vpu_gmem_info[proc_cnt].vpu_pid = vpu_mem_info->vpu_pid;
+		s_vpu_gmem_info[proc_cnt].vpu_gmem_used = vpu_mem_info->vpu_gmem_used;
+		proc_cnt++;
 	}
+	mutex_unlock(&vpu_gmem_info_mutex);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(bmctl_update_vpu_gmem);

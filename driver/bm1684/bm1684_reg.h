@@ -60,6 +60,7 @@
 
 #define VPP_RESERVED_SIZE        (0x100000)
 #define JPU_RESERVED_SIZE        (0x10000000)
+#define VPU_RESERVED_SIZE	 (0x100000)
 
 #define SPI_BASE_ADDR                  0x06000000
 #define TOP_REG_CTRL_BASE_ADDR         (0x50010000)

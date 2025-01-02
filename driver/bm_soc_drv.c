@@ -159,6 +159,12 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct platform_device 
 static int bmdrv_init_misc_info(struct platform_device *pdev, struct bm_device_info *bmdi)
 {
 	struct bm_misc_info *misc_info = &bmdi->misc_info;
+	typedef enum {
+		FW_PCIE_MODE,
+		FW_SOC_MODE,
+		FW_MIX_MODE
+	} bm_arm9_fw_mode;
+	bm_arm9_fw_mode mode;
 
 	switch (bmdi->cinfo.chip_id) {
 	case 0x1682:
@@ -176,7 +182,11 @@ static int bmdrv_init_misc_info(struct platform_device *pdev, struct bm_device_i
 	}
 
 	misc_info->chipid = bmdi->cinfo.chip_id;
-	misc_info->pcie_soc_mode = BM_DRV_SOC_MODE;
+	mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
+	if (mode == FW_MIX_MODE)
+		misc_info->pcie_soc_mode = BM_DRV_MIX_MODE;
+	else
+		misc_info->pcie_soc_mode = BM_DRV_SOC_MODE;
 	misc_info->ddr_ecc_enable = 0;
 	misc_info->driver_version = BM_DRIVER_VERSION;
 	return 0;

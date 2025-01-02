@@ -103,6 +103,9 @@
 #define BMDEV_SET_IP                  _IOWR('p', 0xAC, unsigned long)
 #define BMDEV_SET_GATE                _IOWR('p', 0xAD, unsigned long)
 #define BMDEV_SYNC_TIME_MIX           _IOWR('p', 0xAE, unsigned long)
+#define BMDEV_GET_MIX_LOCK            _IOWR('p', 0xB1, unsigned long)
+#define BMDEV_FREE_MIX_LOCK           _IOWR('p', 0xB2, unsigned long)
+#define BMDEV_BAR_TRANS               _IOWR('p', 0xAF, unsigned long)
 
 #define BMDEV_GET_TPUC                _IOWR('p', 0x81, unsigned long)
 #define BMDEV_GET_MAXP                _IOWR('p', 0x82, unsigned long)

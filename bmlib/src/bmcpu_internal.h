@@ -142,6 +142,8 @@ bm_status_t bmcpu_sync_time_mix(bm_handle_t handle);
 bm_status_t bm_remove_veth(bm_handle_t handle);
 bm_status_t bm_force_reset_bmcpu(bm_handle_t handle);
 bm_status_t bm_set_ip(bm_handle_t handle, struct bm_veth_ip ip_mask);
+bm_status_t bm_get_mix_lock(bm_handle_t handle);
+bm_status_t bm_free_mix_lock(bm_handle_t handle);
 bm_status_t bm_set_gate(bm_handle_t handle, unsigned int gate);
 bm_status_t bmcpu_set_arm9_fw_mode(bm_handle_t handle, bm_arm9_fw_mode mode);
 bm_status_t bmcpu_load_boot(bm_handle_t handle, char *boot_file);

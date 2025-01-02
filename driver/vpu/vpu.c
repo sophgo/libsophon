@@ -1654,6 +1654,10 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 #ifdef VPU_IRQ_CONTROL
 				enable_irq(bmdi->vpudrvctx.s_vpu_irq[core_idx]);
 #endif
+				if(dev->reset_core_flag[core_idx] == 1)
+				{
+					info.intr_reason |= (1 << 31); // core hung
+				}
 				ret = copy_to_user((void __user *)arg, &info, sizeof(vpudrv_intr_info_t));
 				DPRINTK("[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT\n");
 				if (ret != 0)
@@ -1791,6 +1795,7 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 					} else {
 						memcpy(&bmdi->vpudrvctx.s_common_memory[vdb.core_idx], &vdb, sizeof(vpudrv_buffer_t));
 						if (bm_vpu_alloc_dma_buffer(bmdi, filp, &bmdi->vpudrvctx.s_common_memory[vdb.core_idx]) != -1) {
+							DPRINTK("core: %d get common memory: %lx, %d\n", vdb.core_idx, bmdi->vpudrvctx.s_common_memory[vdb.core_idx].phys_addr, bmdi->vpudrvctx.s_common_memory[vdb.core_idx].size);
 							ret = copy_to_user((void __user *)arg, &bmdi->vpudrvctx.s_common_memory[vdb.core_idx], sizeof(vpudrv_buffer_t));
 						}
 						else {
@@ -2121,6 +2126,43 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				DPRINTK("[VPUDRV][-]VDI_IOCTL_GET_KERNEL_RESET_STATUS\n");
 			}
 			break;
+			case VDI_IOCTL_SET_RESET_FLAG:
+			{
+				int core_idx;
+				ret = copy_from_user(&core_idx, (int *)arg, sizeof(int));
+				if (ret != 0)
+					return -EFAULT;
+
+				if (core_idx < 0 || core_idx >= get_max_num_vpu_core(bmdi))
+					return -EFAULT;
+
+				if ((ret =  mutex_lock_interruptible(&dev->s_vpu_lock)) == 0) {
+					dev->reset_core_flag[core_idx] = 1;
+
+					mutex_unlock(&dev->s_vpu_lock);
+				}
+				else {
+					return -ERESTARTSYS;
+				}
+			}
+			break;
+			case VDI_IOCTL_GET_RESET_FLAG:
+			{
+				int core_idx;
+				int reset_flag;
+				ret = copy_from_user(&core_idx, (int *)arg, sizeof(int));
+				if (ret != 0)
+					return -EFAULT;
+
+				if (core_idx < 0 || core_idx >= get_max_num_vpu_core(bmdi))
+					return -EFAULT;
+
+				reset_flag = bmdi->vpudrvctx.reset_core_flag[core_idx];
+				ret = copy_to_user((void __user *)arg, &reset_flag, sizeof(int));
+				if (ret != 0)
+					return -EFAULT;
+			}
+			break;
 
 		default: DPRINTK(KERN_ERR "[VPUDRV] No such IOCTL, cmd is %d\n", cmd);
 			break;
@@ -2342,6 +2384,8 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 	struct bm_device_info *bmdi = (struct bm_device_info *)filp->private_data;
 	vpu_drv_context_t *dev = &bmdi->vpudrvctx;
 	int core_idx, release_lock_flag;
+	int current_core_open_count = 0;
+	int current_core_reset_flag = 0;
 	int vpu_open_ref_count_sum = 0;
 	vpudrv_reset_flag_node_t *vrf, *n;
 
@@ -2377,17 +2421,37 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 
 	mutex_lock(&dev->s_vpu_lock);
 	bmdi->vpudrvctx.open_count--;
-	for (j = 0;  j < get_max_num_vpu_core(bmdi); j++){
-		vpu_open_ref_count_sum += bmdi->vpudrvctx.s_vpu_usage_info.vpu_open_ref_count[j];
+
+	if(core_idx < 0 || core_idx > get_max_num_vpu_core(bmdi))
+	{
+		mutex_unlock(&dev->s_vpu_lock);
+		return 0;
 	}
+
+	current_core_open_count = bmdi->vpudrvctx.s_vpu_usage_info.vpu_open_ref_count[core_idx];
 
 	list_for_each_entry_safe(vrf, n, &bmdi->vpudrvctx.s_reset_flag_head, list)
 	{
-		if((vrf->reset_flag.core_idx == core_idx) && ((vrf->reset_flag.pid == current->tgid) || (vrf->reset_flag.pid == current->pid)))
+		if((vrf->reset_flag.core_idx == core_idx))
 		{
+			if((vrf->reset_flag.pid == current->tgid) || (vrf->reset_flag.pid == current->pid))
+			{
 				list_del(&vrf->list);
 				kfree(vrf);
+			} else {
+				current_core_reset_flag++;
+			}
 		}
+	}
+
+	DPRINTK("core: %d, current_core_open_count: %d, current_core_reset_flag: %d\n", core_idx, current_core_open_count, current_core_reset_flag);
+	if (!current_core_open_count && !current_core_reset_flag) {
+		bmdi->vpudrvctx.s_bit_firmware_info[core_idx].size = 0;
+		bmdi->vpudrvctx.reset_core_flag[core_idx] = 0;
+	}
+
+	for (i = 0;  i < get_max_num_vpu_core(bmdi); i++) {
+		vpu_open_ref_count_sum += bmdi->vpudrvctx.s_vpu_usage_info.vpu_open_ref_count[i];
 	}
 
 	if (vpu_open_ref_count_sum == 0 && list_empty(&bmdi->vpudrvctx.s_reset_flag_head)) {
@@ -2397,7 +2461,6 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 				bmdi->vpudrvctx.interrupt_flag[j][i] = 0;
 			}
 		}
-
 		for (i = 0; i < get_max_num_vpu_core(bmdi); i++) {
 			if (bmdi->vpudrvctx.instance_pool[i].base) {
 				DPRINTK("[VPUDRV] free instance pool\n");
@@ -2407,24 +2470,9 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 				bm_vpu_reset_core(bmdi, i, 0);
 				bm_vpu_clk_unprepare(bmdi, i);
 			}
-			/*
-			if (bmdi->vpudrvctx.s_common_memory[i].base) {
-				DPRINTK("[VPUDRV] free common memory\n");
-                if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686)) {
-					bm_vpu_free_dma_buffer(&bmdi->vpudrvctx.s_common_memory[i], &bmdi->vpudrvctx.s_vmem);
-				} else {
-					if (bmdi->vpudrvctx.s_common_memory[i].core_idx < 2)
-						bm_vpu_free_dma_buffer(&bmdi->vpudrvctx.s_common_memory[i], &bmdi->vpudrvctx.s_vmemboda);
-					else
-						bm_vpu_free_dma_buffer(&bmdi->vpudrvctx.s_common_memory[i], &bmdi->vpudrvctx.s_vmemboda);
-				}
-				bmdi->vpudrvctx.s_common_memory[i].base = 0;
-			}
-			*/
-			bmdi->vpudrvctx.s_bit_firmware_info[i].size = 0;
 		}
+		memset(&dev->crst_cxt[0], 0, sizeof(vpu_crst_context_t) * get_max_num_vpu_core(bmdi));
 	}
-	memset(&dev->crst_cxt[0], 0, sizeof(vpu_crst_context_t) * get_max_num_vpu_core(bmdi));
 
 	mutex_unlock(&dev->s_vpu_lock);
 

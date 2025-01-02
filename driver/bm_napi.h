@@ -73,4 +73,5 @@ void bm_eth_free_irq(struct bm_device_info *bmdi);
 int bmdrv_veth_init(struct bm_device_info *bmdi, struct pci_dev *pdev);
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev);
 void bmdrv_veth_early_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev);
+void bmdrv_clear_veth(struct bm_device_info *bmdi);
 #endif

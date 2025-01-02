@@ -42,6 +42,10 @@ typedef enum {
 #define GP_REG_MESSAGE_RP_CHANNEL_CPU          7
 #define GP_REG_I2C2_IRQ_COUNT                  2
 #define GP_REG_TEMPSMI                         4
+
+#define GP_REG_DEV_STA			       96
+#define PROBE_DONE			       1
+#define NOT_PROBE			       0
 struct bm_io_bar_vaddr {
 	void __iomem *mcu_info_bar_vaddr;
 	void __iomem *dev_info_bar_vaddr;

@@ -137,6 +137,9 @@ struct bootloader_version{
 	char *bl2_version;
 	char *bl31_version;
 	char *uboot_version;
+	u32 bl2_major_version;
+	u32 bl2_minor_version;
+	u32 need_update;
 };
 
 struct chip_info {
@@ -241,6 +244,13 @@ struct bm_rw
 	void *vaddr;
 };
 
+struct mixmode_lock_t
+{
+	int used;
+	struct file *mix_file;
+	struct mutex mix_mutex;
+};
+
 struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
@@ -259,10 +269,12 @@ struct bm_device_info {
 	int dump_reg_type;
 	int fixed_fan_speed;
 	int status; /* active or fault */
+	int api_process_status;
 	int status_pcie;
 	int status_over_temp;
 	int status_sync_api;
 	u64 dev_refcount;
+	struct mixmode_lock_t mixmode_lock;
 
 	struct bmcpu_lib *lib_info;
 
