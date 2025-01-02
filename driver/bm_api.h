@@ -35,16 +35,17 @@ struct bm_api_info {
 	void (*bm_api_deinit)(struct bm_device_info *, u32 channel);
 };
 
-struct bmcpu_lib{
-    char lib_name[64];
-    int refcount;
-    int cur_rec;
-    int rec[50];
-    u8 md5[16];
-	pid_t cur_pid;
+struct bmcpu_lib {
+	char lib_name[64];
+	int refcount;
+	int cur_rec;
+	int rec[50];
+	u8 md5[16];
+	// pid_t cur_pid;
+	struct file *file;
 
-    struct mutex bmcpu_lib_mutex;
-    struct list_head lib_list;
+	struct mutex bmcpu_lib_mutex;
+	struct list_head lib_list;
 };
 
 typedef struct loaded_lib

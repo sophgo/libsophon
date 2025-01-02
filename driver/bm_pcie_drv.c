@@ -732,8 +732,9 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	}
 
 	if (bmdi->eth_state == true) {
-		bmdi->eth_state = false;
-		bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
+		// bmdi->eth_state = false;
+		// bmdrv_veth_deinit(bmdi, bmdi->cinfo.pcidev);
+		bmdrv_clear_veth(bmdi);
 	}
 
 	bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
@@ -1019,6 +1020,57 @@ int bmdrv_alloc_dev_index(struct pci_dev *pdev)
 	return -1;
 }
 
+/*
+ * @param bmdi chip information structure
+ * @param bl2 major version
+ * @param bl2 minor version
+ * @return 1 means version is behind, 0 means version is equal or forward
+ */
+static int bmdrv_check_bl2_version(struct bm_device_info* bmdi, u32 major, u32 minor)
+{
+	u32 tmp_major = bmdi->cinfo.version.bl2_major_version;
+	u32 tmp_minor = bmdi->cinfo.version.bl2_minor_version;
+
+	if (tmp_major > major) {
+		return 0;
+	} else {
+		if (tmp_major == major && tmp_minor >= minor) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static int bmdrv_convert_and_check_bl2_version(struct bm_device_info *bmdi, u32 major, u32 minor)
+{
+	int ret = 0;
+	char tmp_string[4];
+	char *versionStart;
+
+	if (bmdi->cinfo.chip_id == 0x1684){
+		return 1;
+	}
+
+	strncpy(tmp_string, bmdi->cinfo.version.bl2_version,4);
+	versionStart = strstr(tmp_string, "v");
+
+	if (tmp_string != NULL){
+		versionStart++;
+		if (sscanf(versionStart, "%u.%u",
+			  &bmdi->cinfo.version.bl2_major_version, &bmdi->cinfo.version.bl2_minor_version) != 2) {
+			pr_err("failed to get bl2 version\n");
+			return -1;
+		}
+	} else {
+		pr_err("Failed to get version string\n");
+		return -1;
+	}
+
+	ret = bmdrv_check_bl2_version(bmdi, major, minor);
+
+	return ret;
+}
+
 static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 {
 	int ret;
@@ -1033,6 +1085,12 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 	if(ret)
 		return -EBUSY;
 
+	bmdi->cinfo.version.need_update = bmdrv_convert_and_check_bl2_version(bmdi,2,8);
+	if (bmdi->cinfo.chip_id == 0x1686) {
+		pr_info("bl2_version = %s, need_update = %d\n",
+			bmdi->cinfo.version.bl2_version, bmdi->cinfo.version.need_update);
+	}
+
 	return ret;
 }
 
@@ -1045,6 +1103,20 @@ static void bmdrv_record_boot_loader_version(struct bm_device_info *bmdi)
 
 	kfree(bmdi->cinfo.version.bl1_version);
 	kfree(bmdi->cinfo.version.bl2_version);
+}
+
+static void bmdrv_driver_status_update(struct bm_device_info *bmdi, int status)
+{
+	int ret = -1;
+	ret = gp_reg_read_enh(bmdi, GP_REG_DEV_STA);
+	if (ret != status){
+		gp_reg_write_enh(bmdi, GP_REG_DEV_STA, status);
+	}
+
+	ret = gp_reg_read_enh(bmdi, GP_REG_DEV_STA);
+	if(ret != status){
+		pr_err("Card %d Current driver status is not %d, but %d\n", bmdi->dev_index, status, ret);
+	}
 }
 
 extern int sg_comm_init(struct pci_dev *pdev, struct bm_device_info *bmdi);
@@ -1177,6 +1249,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		goto err_card_init;
 
+	if (bmdi->cinfo.version.need_update == 0){
+		/* set 1 to gp24 as driver probe done, bl2 stop update data */
+		bmdrv_driver_status_update(bmdi,PROBE_DONE);
+	}
+
 	dev_info(cinfo->device, "Card %d(type:%s) probe done\n", bmdi->dev_index,
 			cinfo->chip_type);
 
@@ -1217,6 +1294,10 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	dev_info(cinfo->device, "remove\n");
 	i2c2_deinit(bmdi);
 	bm_monitor_thread_deinit(bmdi);
+	if (bmdi->cinfo.version.need_update == 0){
+		/* set 0 to gp24 as driver not probe, bl2 start update data */
+		bmdrv_driver_status_update(bmdi,NOT_PROBE);
+	}
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686) {
 		if ((bmdi->misc_info.a53_enable == 1)
@@ -1331,6 +1412,8 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 	struct bm_device_info *bmdi = pci_get_drvdata(pdev);
 
 	dev_info(bmdi->cinfo.device, "shutdown\n");
+	/* set 0 to gp24 as driver not probe, bl2 start update data */
+	bmdrv_driver_status_update(bmdi,NOT_PROBE);
 	///TODO:
 
 }
@@ -1414,6 +1497,9 @@ module_exit(bmdrv_module_exit);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
 MODULE_IMPORT_NS(DMA_BUF);
 #endif
+MODULE_FIRMWARE("bm1684x_firmware.bin");
+MODULE_FIRMWARE("bm1684_ddr_firmware.bin");
+MODULE_FIRMWARE("bm1684_tcm_firmware.bin");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("xiao.wang@sophgo.com");
 MODULE_DESCRIPTION("Sophon Series Deep Learning Accelerator Driver");

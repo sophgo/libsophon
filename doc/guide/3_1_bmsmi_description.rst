@@ -202,11 +202,11 @@ bm-smi介绍
 
 
 .. image:: ./images/bmsmid002.png
-   :width: 5.76806in
+   :width: 6.22806in
    :height: 6.22083in
    :alt: "图1"
 
-图1为SC5+(三芯)/SC5H/SC5P(八芯)的显示状态，每张卡之间用=======隔开，最左边显示的板卡级别的属性，右边和中间显示的是单个npu的状态。
+图1为SC7HP75(三芯)的显示状态，每张卡之间用=======隔开，最左边显示的板卡级别的属性，右边和中间显示的是单个npu的状态。
 
 bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/libsophon-current/bin目录下，上图为一个执行bm-smi的示意图。
 

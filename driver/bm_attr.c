@@ -614,8 +614,9 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 					console.uart.uart_index = 0x2;
 					console_cmd_sc7p_set_mon_mode(&console, mode);
 				}
-			} else if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_MP1_1) ||
-				   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0)) {
+			} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_MP1_1 ||
+				   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0 ||
+				   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2) {
 				c_attr->bm_get_board_power = bm_read_1684x_evb_power;
 			} else {
 				c_attr->bm_get_board_power = NULL;
@@ -638,7 +639,8 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
-					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
+					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+					(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2)) {
 			c_attr->bm_get_chip_temp = bm_read_tmp451_remote_temp;
 			c_attr->bm_get_board_temp = bm_read_tmp451_local_temp;
 			ret = bm_set_tmp451_range_mode(bmdi);
@@ -1039,8 +1041,9 @@ int bm_read_tmp451_local_temp(struct bm_device_info *bmdi, int *temp)
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x4c);
 	ret = bm_i2c_read_byte(bmdi, i2c_index, 0, &local_high);
 	temps = (local_high & 0xf) + ((local_high & 0xff) >> 4) * 16;
-
-	temps -= 64;
+	if (bmdi->cinfo.version.need_update == 1){
+		temps -= 64;
+	}
 
 	*temp = temps;
 
@@ -1069,8 +1072,9 @@ int bm_read_tmp451_remote_temp(struct bm_device_info *bmdi, int *temp)
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x4c);
 	ret = bm_i2c_read_byte(bmdi, i2c_index, 0x1, &local_high);
 	temps = (local_high & 0xf) + ((local_high & 0xff) >> 4) * 16;
-
-	temps -= 64;
+	if (bmdi->cinfo.version.need_update == 1){
+		temps -= 64;
+	}
 
 	if (ret)
 		return ret;
@@ -1091,14 +1095,17 @@ int bm_read_tmp451_local_temp_by_mcu(struct bm_device_info *bmdi, int *temp)
 	u32 i2c_index = 1;
 #ifndef SOC_MODE
 	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_BM1684X_EVB &&
-	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_MP1_1) &&
-	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_V0_0))
+	    BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_MP1_1 &&
+	    BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_V0_0 &&
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_CUST_V2)
 		return -1;
 #endif
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x6B);
 	ret = bm_i2c_read_byte(bmdi, i2c_index, 0, &local_high);
 	temps = (local_high & 0xf) + ((local_high & 0xff) >> 4) * 16;
-	temps -= 64;
+	if (bmdi->cinfo.version.need_update == 1){
+		temps -= 64;
+	}
 	*temp = temps;
 
 	return ret;
@@ -1113,14 +1120,17 @@ int bm_read_tmp451_remote_temp_by_mcu(struct bm_device_info *bmdi, int *temp)
 	u32 i2c_index = 1;
 #ifndef SOC_MODE
 	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_BM1684X_EVB &&
-	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_MP1_1) &&
-	    (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_V0_0))
+	    BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_MP1_1 &&
+	    BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_V0_0 &&
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SM7_CUST_V2)
 		return -1;
 #endif
 	bm_i2c_set_target_addr(bmdi, i2c_index, 0x6B);
 	ret = bm_i2c_read_byte(bmdi, i2c_index, 0x1, &local_high);
 	temps = (local_high & 0xf) + ((local_high & 0xff) >> 4) * 16;
-	temps -= 64;
+	if (bmdi->cinfo.version.need_update == 1){
+		temps -= 64;
+	}
 	if (ret)
 		return ret;
 
@@ -1549,7 +1559,8 @@ int bm_read_vdd_tpu_current(struct bm_device_info *bmdi, u32 *cur)
 		 (BM1684_HW_VERSION(bmdi) == 0x30 || BM1684_HW_VERSION(bmdi) == 0x31)) {
 		*cur = ATTR_NOTSUPPORTED_VALUE;
 		return 0;
-	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB) {
+	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB ||
+		BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2) {
 		return bm_read_68224_current_out(bmdi, 0x0, cur);
 	} else {
 		return bm_read_68127_current_out(bmdi, 0x0, cur);
@@ -1642,7 +1653,8 @@ int bm_read_vddc_current(struct bm_device_info *bmdi, u32 *cur)
 		*cur = ATTR_NOTSUPPORTED_VALUE;
 		return 0;
 	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB ||
-		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0) {
+		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0 ||
+		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2) {
 		return bm_read_68224_current_out(bmdi, 0x1, cur);
 	} else {
 		return bm_read_68127_current_out(bmdi, 0x1, cur);
@@ -1669,7 +1681,8 @@ int bm_read_vdd_tpu_power(struct bm_device_info *bmdi, u32 *tpu_power)
 		*tpu_power = ATTR_NOTSUPPORTED_VALUE;
 		return 0;
 	} else if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB ||
-		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0) {
+		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0 ||
+		   BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2) {
 		return bm_read_68224_power(bmdi, 0x0, tpu_power);
 	} else {
 		return  bm_read_68127_power(bmdi, 0x0, tpu_power);

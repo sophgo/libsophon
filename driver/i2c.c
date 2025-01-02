@@ -165,7 +165,8 @@ void bmdrv_power_and_temp_i2c_init(struct bm_device_info  *bmdi)
 
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_BM1684X_EVB) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_V0_0) ||
-		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_MP1_1)) {
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_MP1_1) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SM7_CUST_V2)) {
 		i2c_addr = I2C_68224_ADDR;
 	}
 

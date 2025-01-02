@@ -75,8 +75,10 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32) + api_size);
 	bmdi->api_info[channel].sw_rp = next_rp;
 	//todo, print a log for tmp;
-	if (api_result != 0)
-		pr_err("bm-sophon%d api process fail, error id is 0x%x", bmdi->dev_index, api_id);
+	if (api_result != 0){
+		bmdi->api_process_status = api_result;
+		// pr_err("bm-sophon%d api process fail, error id is 0x%x\n", bmdi->dev_index, api_id);
+	}
 
 	if (ti) {
 		ti->profile.tpu_process_time += api_duration;
@@ -144,6 +146,7 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	bmdrv_sw_register_init(bmdi);
 	mutex_init(&bmdi->clk_reset_mutex);
 	mutex_init(&bmdi->device_mutex);
+	mutex_init(&bmdi->mixmode_lock.mix_mutex);
 
 	if (bmdi->gmem_info.bm_gmem_init &&
 		bmdi->gmem_info.bm_gmem_init(bmdi))

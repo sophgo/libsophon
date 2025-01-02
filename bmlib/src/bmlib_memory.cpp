@@ -511,18 +511,11 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 #ifdef __linux__
   if (ctx->ion_fd) {
     // try all heaps as heap_id_mask set
-    for (int i = 0; i < ctx->heap_cnt; i++) {
-      if (((heap_id_mask >> i) & 0x1) == 0x1) {
-          pmem->flags.u.gmem_heapid = ctx->carveout_heap_id[i];
-          alloc_data.heap_id_mask = (1 << ctx->carveout_heap_id[i]);
-          ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
+    alloc_data.heap_id_mask = heap_id_mask;
+    ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
 
-          if (ret == 0) {
-            ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION_U64, pmem);
-            break;
-          }
-        }
-      }
+    if (ret == 0)
+      ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION_U64, pmem);
   } else
 #endif
   {
@@ -901,6 +894,36 @@ bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
   dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
 
   ret = bm_malloc_device_byte_heap_u64(handle, dev_buffer, heap_id, size);
+  if (ret != BM_SUCCESS) {
+    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  *paddr = bm_mem_get_device_addr_u64(*dev_buffer);
+  bm_mem->paddr = *paddr;
+  bm_mem->dev_buffer = dev_buffer;
+
+  pthread_mutex_lock(&handle->mem_mutex);
+  ret = buffer_add(handle, bm_mem);
+  pthread_mutex_unlock(&handle->mem_mutex);
+  if (ret != BM_SUCCESS) {
+    printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
+                                  int heap_id_mask, unsigned long long size) {
+  int ret;
+  bm_device_mem_u64_t *dev_buffer;
+  struct bm_mem_paddr *bm_mem;
+
+  bm_mem = (struct bm_mem_paddr *)malloc(sizeof(struct bm_mem_paddr));
+  dev_buffer = (bm_device_mem_u64_t *)malloc(sizeof(bm_device_mem_u64_t));
+
+  ret = bm_malloc_device_byte_heap_mask_u64(handle, dev_buffer, heap_id_mask, size);
   if (ret != BM_SUCCESS) {
     printf("malloc device memory size = %llu failed, ret = %d\n", size, ret);
     return BM_ERR_DEVNOTREADY;
@@ -2130,7 +2153,7 @@ bm_status_t bm_mem_unmap_device_mem_u64(bm_handle_t handle, void *vmem, u64 size
   return BM_SUCCESS;
 }
 
-bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
+bm_status_t bm_memcpy_s2d_normal(bm_handle_t handle, bm_device_mem_t dst, void *src) {
 #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_memcpy_s2d(dst, src);
 #else
@@ -2168,6 +2191,332 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
   auto res = platform_ioctl(handle, BMDEV_MEMCPY, &bm_mem_s2d);
   bm_profile_record_memcpy_end(handle, ptr_to_u64.val, bm_mem_s2d.device_addr, bm_mem_s2d.size, bm_mem_s2d.dir);
   return (0 != res)? BM_ERR_FAILURE: BM_SUCCESS;
+#endif
+}
+
+bm_status_t bm_mem_mmap_device_mem_mix(bm_handle_t handle, bm_device_mem_t *dmem,
+                                   u64 *vmem) {
+#ifndef USING_CMODEL
+  void *ret = 0;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "bmlib not support mmap in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+
+  if (!bm_device_mem_range_valid(handle, *dmem)) {
+    return BM_ERR_PARAM;
+  }
+
+  size = bm_mem_get_device_size(*dmem);
+  addr = bm_mem_get_device_addr(*dmem);
+  addr_end = addr + size;
+
+  aligned_addr = bm_mem_get_device_addr(*dmem) & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  ret = mmap(0, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+             handle->dev_fd, aligned_addr);
+
+  if (MAP_FAILED != ret) {
+    //ret = (((u64)ret) + (addr - aligned_addr))
+    *vmem = (u64)ret + addr - aligned_addr;
+    return BM_SUCCESS;
+  } else {
+    return BM_ERR_FAILURE;
+  }
+#else
+   #define GLOBAL_MEM_START_ADDR 0x100000000
+   //handle->bm_dev->get_global_memaddr_(handle->dev_id);
+  *vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
+    bm_mem_get_device_addr(*dmem) - GLOBAL_MEM_START_ADDR);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_mem_mmap_device_mem_mix_u64(bm_handle_t handle, bm_device_mem_u64_t *dmem,
+                                   u64 *vmem) {
+#ifndef USING_CMODEL
+  void *ret = 0;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "bmlib not support mmap in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+
+  if (!bm_device_mem_range_valid_u64(handle, *dmem)) {
+    return BM_ERR_PARAM;
+  }
+
+  size = bm_mem_get_device_size_u64(*dmem);
+  addr = bm_mem_get_device_addr_u64(*dmem);
+  addr_end = addr + size;
+
+  aligned_addr = bm_mem_get_device_addr_u64(*dmem) & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  ret = mmap(0, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+             handle->dev_fd, aligned_addr);
+
+  if (MAP_FAILED != ret) {
+    //ret = (((u64)ret) + (addr - aligned_addr))
+    *vmem = (u64)ret + addr - aligned_addr;
+    return BM_SUCCESS;
+  } else {
+    return BM_ERR_FAILURE;
+  }
+#else
+   #define GLOBAL_MEM_START_ADDR 0x100000000
+   //handle->bm_dev->get_global_memaddr_(handle->dev_id);
+  *vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
+    bm_mem_get_device_addr_u64(*dmem) - GLOBAL_MEM_START_ADDR);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_mem_unmap_device_mem_mix(bm_handle_t handle, void *vmem, int size) {
+#ifndef USING_CMODEL
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "bmlib not support unmap in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+
+  (void)munmap(vmem, size);
+#else
+  UNUSED(handle);
+  UNUSED(vmem);
+  UNUSED(size);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_mem_unmap_device_mem_mix_u64(bm_handle_t handle, void *vmem, u64 size) {
+#ifndef USING_CMODEL
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+          "bmlib not support unmap in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+
+  (void)munmap(vmem, size);
+#else
+  UNUSED(handle);
+  UNUSED(vmem);
+  UNUSED(size);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_memcpy_s2d_mix(bm_handle_t handle, bm_device_mem_t dst, void *src) {
+#ifndef USING_CMODEL
+  u64 dst_vaddr = 0;
+  bm_status_t ret;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib not support s2d fast in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+  ret = bm_mem_mmap_device_mem_mix(handle, &dst, &dst_vaddr);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib mmap in s2d fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  memcpy((void *)dst_vaddr, src, bm_mem_get_device_size(dst));
+
+  ret = bm_mem_flush_device_mem(handle, &dst);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib invalidate device mem in s2d fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  size = bm_mem_get_device_size(dst);
+  addr = bm_mem_get_device_addr(dst);
+  addr_end = addr + size;
+
+  aligned_addr = addr & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  dst_vaddr = dst_vaddr - (addr - aligned_addr);
+  bm_mem_unmap_device_mem_mix(handle, (void *)dst_vaddr, aligned_size);
+#else
+  UNUSED(handle);
+  UNUSED(dst);
+  UNUSED(src);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_memcpy_s2d_mix_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void *src) {
+#ifndef USING_CMODEL
+  u64 dst_vaddr = 0;
+  bm_status_t ret;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib not support s2d fast in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+
+  ret = bm_mem_mmap_device_mem_mix_u64(handle, &dst, &dst_vaddr);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib mmap in s2d fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  memcpy((void *)dst_vaddr, src, bm_mem_get_device_size_u64(dst));
+
+  ret = bm_mem_flush_device_mem_u64(handle, &dst);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib invalidate device mem in s2d fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  size = bm_mem_get_device_size_u64(dst);
+  addr = bm_mem_get_device_addr_u64(dst);
+  addr_end = addr + size;
+
+  aligned_addr = addr & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  dst_vaddr = dst_vaddr - (addr - aligned_addr);
+  bm_mem_unmap_device_mem_mix_u64(handle, (void *)dst_vaddr, aligned_size);
+#else
+  UNUSED(handle);
+  UNUSED(dst);
+  UNUSED(src);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_memcpy_d2s_mix(bm_handle_t handle, void *dst, bm_device_mem_t src) {
+#ifndef USING_CMODEL
+  u64 src_vaddr = 0;
+  bm_status_t ret;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib not support d2s fast in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+  ret = bm_mem_mmap_device_mem_mix(handle, &src, &src_vaddr);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib mmap in d2s fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  ret = bm_mem_invalidate_device_mem(handle, &src);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib invalidate device mem in d2s fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  memcpy(dst, (void *)src_vaddr, bm_mem_get_device_size(src));
+
+  size = bm_mem_get_device_size(src);
+  addr = bm_mem_get_device_addr(src);
+  addr_end = addr + size;
+
+  aligned_addr = addr & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  src_vaddr = src_vaddr - (addr - aligned_addr);
+
+  bm_mem_unmap_device_mem_mix(handle, (void *)src_vaddr, aligned_size);
+#else
+  UNUSED(handle);
+  UNUSED(dst);
+  UNUSED(src);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_memcpy_d2s_mix_u64(bm_handle_t handle, void *dst, bm_device_mem_u64_t src) {
+#ifndef USING_CMODEL
+  u64 src_vaddr = 0;
+  bm_status_t ret;
+  u64 addr, size, addr_end;
+  u64 aligned_size, aligned_addr;
+
+  if (handle->misc_info.pcie_soc_mode == 0) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib not support d2s fast in pcie mode\n");
+    return BM_ERR_FAILURE;
+  }
+  ret = bm_mem_mmap_device_mem_mix_u64(handle, &src, &src_vaddr);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib mmap in d2s fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  ret = bm_mem_invalidate_device_mem_u64(handle, &src);
+  if (ret != BM_SUCCESS) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bmlib invalidate device mem in d2s fast failed\n");
+    return BM_ERR_FAILURE;
+  }
+
+  memcpy(dst, (void *)src_vaddr, bm_mem_get_device_size_u64(src));
+
+  size = bm_mem_get_device_size_u64(src);
+  addr = bm_mem_get_device_addr_u64(src);
+  addr_end = addr + size;
+
+  aligned_addr = addr & (~(PAGE_SIZE - 1));
+  aligned_size = ((addr_end + (PAGE_SIZE - 1)) & (~(PAGE_SIZE - 1))) - aligned_addr;
+
+  src_vaddr = src_vaddr - (addr - aligned_addr);
+
+  bm_mem_unmap_device_mem_mix_u64(handle, (void *)src_vaddr, aligned_size);
+#else
+  UNUSED(handle);
+  UNUSED(dst);
+  UNUSED(src);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src) {
+#ifdef USING_CMODEL
+  return handle->bm_dev->bm_device_memcpy_s2d(dst, src);
+#else
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  if (!bm_device_mem_range_valid(handle, dst)) {
+    return BM_ERR_PARAM;
+  }
+
+  if (handle->misc_info.pcie_soc_mode == 0 ||
+      handle->misc_info.pcie_soc_mode == 1) {
+    return bm_memcpy_s2d_normal(handle, dst, src);
+  } else {
+    return bm_memcpy_s2d_mix(handle, dst, src);
+  }
 #endif
 }
 
@@ -2276,7 +2625,7 @@ bm_status_t sg_memcpy_s2d(bm_handle_t handle, sg_device_mem_t dst, void *src) {
 #endif
 }
 
-bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void *src) {
+bm_status_t bm_memcpy_s2d_normal_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void *src) {
 #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_memcpy_s2d_u64(dst, src);
 #else
@@ -2332,6 +2681,33 @@ bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void 
   }
 
   return BM_SUCCESS;
+#endif
+}
+
+bm_status_t bm_memcpy_s2d_u64(bm_handle_t handle, bm_device_mem_u64_t dst, void *src) {
+#ifdef USING_CMODEL
+  return handle->bm_dev->bm_device_memcpy_s2d_u64(dst, src);
+#else
+  u64 size;
+  int trans_size = 0x10000000;//256MB
+  int tran_over = 0;
+
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_DEVNOTREADY;
+  }
+
+  if (!bm_device_mem_range_valid_u64(handle, dst)) {
+    return BM_ERR_PARAM;
+  }
+
+  if (handle->misc_info.pcie_soc_mode == 0 ||
+      handle->misc_info.pcie_soc_mode == 1) {
+    return bm_memcpy_s2d_normal_u64(handle, dst, src);
+  } else {
+    return bm_memcpy_s2d_mix_u64(handle, dst, src);
+  }
 #endif
 }
 
@@ -2927,6 +3303,9 @@ bm_status_t bm_memcpy_d2s(bm_handle_t handle, void *dst, bm_device_mem_t src) {
   if (handle->misc_info.pcie_soc_mode == 0) {
     // PCIE mode
     return bm_memcpy_d2s_normal(handle, dst, src);
+  } else if (handle->misc_info.pcie_soc_mode == 2) {
+    // MIX mode
+    return bm_memcpy_d2s_mix(handle, dst, src);
   } else {
     // SoC mode
     if (bm_device_mem_page_aligned(src)) {
@@ -3015,6 +3394,8 @@ bm_status_t bm_memcpy_d2s_u64(bm_handle_t handle, void *dst, bm_device_mem_u64_t
   if (handle->misc_info.pcie_soc_mode == 0) {
     // PCIE mode
     return bm_memcpy_d2s_normal_u64(handle, dst, src);
+  } else if (handle->misc_info.pcie_soc_mode == 2) {
+    return bm_memcpy_d2s_mix_u64(handle, dst, src);
   } else {
     // SoC mode
     if (bm_device_mem_page_aligned_u64(src)) {
@@ -3452,8 +3833,8 @@ bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
   int tmp = 0;
   tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
+  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/dyn_load/memory_op.so";
+  const char key[64] = "memory_op.so";
   int key_size = strlen(key);
 
   if(!value) {
@@ -3512,6 +3893,31 @@ bm_status_t bm_memset_device_ext(bm_handle_t handle, void* value, int mode,
   return ret;
 }
 
+bm_status_t bm_memset_device_ext_u64(bm_handle_t handle, void* value, int mode,
+                                 bm_device_mem_u64_t mem) {
+  unsigned long long memset_size = 0x40000000; // 1G
+  u64 size = bm_mem_get_device_size_u64(mem);
+  u64 addr = bm_mem_get_device_addr_u64(mem);
+  bm_status_t ret = BM_SUCCESS;
+  bm_device_mem_t tmp_mem;
+  bool memset_over = false;
+
+  for(int i = 0; memset_over == false; i++) {
+    if(size > memset_size) {
+        size -= memset_size;
+        tmp_mem = bm_mem_from_device(addr + i * memset_size, memset_size);
+    } else {
+        tmp_mem = bm_mem_from_device(addr + i * memset_size, size);
+        memset_over = true;
+    }
+    ret = ret = bm_memset_device_ext(handle, value, mode, tmp_mem);
+    if (ret != BM_SUCCESS){
+      break;
+    }
+  }
+  return ret;
+}
+
 bm_status_t bm_memset_device(bm_handle_t     handle,
                              const int       value,
                              bm_device_mem_t mem) {
@@ -3527,8 +3933,8 @@ bm_status_t bm_memcpy_d2d(bm_handle_t handle, bm_device_mem_t dst,
   bm_status_t ret = BM_SUCCESS;
   tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
+  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/dyn_load/memory_op.so";
+  const char key[64] = "memory_op.so";
   int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
@@ -3580,8 +3986,8 @@ bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
   bm_status_t ret = BM_SUCCESS;
   tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
+  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/dyn_load/memory_op.so";
+  const char key[64] = "memory_op.so";
   int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
@@ -3673,8 +4079,8 @@ bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
   bm_status_t ret = BM_SUCCESS;
   tpu_kernel_module_t bm_module;
   tpu_kernel_function_t f_id;
-  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so";
-  const char key[64] = "libbm1684x_kernel_module.so";
+  const char lib_path[80] = "/opt/sophon/libsophon-current/lib/dyn_load/memory_op.so";
+  const char key[64] = "memory_op.so";
   int key_size = strlen(key);
 
   if (!bm_device_mem_range_valid(handle, src)) {
@@ -3709,6 +4115,138 @@ bm_status_t bm_memcpy_d2d_byte(bm_handle_t handle, bm_device_mem_t dst,
     }
   }
 #endif
+  return ret;
+}
+
+bm_status_t bm_memcpy_d2d_u64(bm_handle_t             handle,
+                                 bm_device_mem_u64_t  dst,
+                                 unsigned long long   dst_offset,
+                                 bm_device_mem_u64_t  src,
+                                 unsigned long long   src_offset,
+                                 unsigned long long   len) {
+  unsigned long long trans_size = 0x10000000; // 256MB * DWORD
+  u64 tmp_len = trans_size;
+  u64 src_device_addr = 0;
+  u64 dst_device_addr = 0;
+  bm_status_t ret = BM_SUCCESS;
+  bm_device_mem_t tmp_src;
+  bm_device_mem_t tmp_dst;
+  bool trans_over = false;
+
+  for(int i = 0; trans_over == false; i++) {
+    if(len > trans_size) {
+        len -= trans_size;
+    } else {
+        tmp_len = len;
+        trans_over = true;
+    }
+    src_device_addr = bm_mem_get_device_addr_u64(src) + trans_size * 4 * i + (src_offset & 0xffffffff80000000);
+    dst_device_addr = bm_mem_get_device_addr_u64(dst) + trans_size * 4 * i + (dst_offset & 0xffffffff80000000);
+    tmp_src = bm_mem_from_device(src_device_addr, 4 * tmp_len);
+    tmp_dst = bm_mem_from_device(dst_device_addr, 4 * tmp_len);
+    ret = bm_memcpy_d2d(handle, tmp_dst, (dst_offset & 0x7fffffff), tmp_src, (src_offset & 0x7fffffff), tmp_len);
+    if (ret != BM_SUCCESS){
+      break;
+    }
+  }
+  return ret;
+}
+
+bm_status_t bm_memcpy_d2d_stride_u64(bm_handle_t          handle,
+                                      bm_device_mem_u64_t dst,
+                                      unsigned long long  dst_stride,
+                                      bm_device_mem_u64_t src,
+                                      unsigned long long  src_stride,
+                                      unsigned long long  count,
+                                      int                 format_size) {
+  unsigned long long trans_size = 0x40000000;
+  u64 src_device_addr = bm_mem_get_device_addr_u64(src);
+  u64 dst_device_addr = bm_mem_get_device_addr_u64(dst);
+  u64 src_device_size = bm_mem_get_device_size_u64(src);
+  u64 dst_device_size = bm_mem_get_device_size_u64(dst);
+  u64 tmp_count = dst_stride > src_stride ? dst_stride:src_stride;
+  tmp_count = trans_size/tmp_count/format_size;
+  u64 tmp_size = 0;
+  bm_device_mem_t tmp_src;
+  bm_device_mem_t tmp_dst;
+  bool trans_over = false;
+  bm_status_t ret = BM_SUCCESS;
+
+  if ((count * dst_stride * format_size) > dst_device_size) {
+      bmlib_log(
+          BMLIB_MEMORY_LOG_TAG,
+          BMLIB_LOG_ERROR,
+          "dst mem size is not enough. dst size:%lld, dst_stride:%lld, count:%lld, format_size:%d\n",
+          dst_device_size,
+          dst_stride,
+          count,
+          format_size);
+      return BM_ERR_PARAM;
+  }
+  if ((count * src_stride * format_size) > src_device_size) {
+      bmlib_log(
+          BMLIB_MEMORY_LOG_TAG,
+          BMLIB_LOG_ERROR,
+          "src mem size is not enough. src size:%lld, src_stride:%lld, count:%lld, format_size:%d\n",
+          src_device_size,
+          src_stride,
+          count,
+          format_size);
+      return BM_ERR_PARAM;
+  }
+
+  for(int i = 0; trans_over == false; i++) {
+    if (count > tmp_count) {
+        count -= tmp_count;
+    } else {
+        tmp_count = count;
+        trans_over = true;
+    }
+    tmp_size = format_size * src_stride * tmp_count;
+    tmp_src = bm_mem_from_device(src_device_addr, tmp_size);
+    src_device_addr += tmp_size;
+    tmp_size = format_size * dst_stride * tmp_count;
+    tmp_dst = bm_mem_from_device(dst_device_addr, tmp_size);
+    dst_device_addr += tmp_size;
+    ret = bm_memcpy_d2d_stride(handle, tmp_dst, dst_stride, tmp_src, src_stride, tmp_count, format_size);
+    if (ret != BM_SUCCESS){
+      break;
+    }
+  }
+  return ret;
+}
+
+bm_status_t bm_memcpy_d2d_byte_u64(bm_handle_t handle,
+                                    bm_device_mem_u64_t dst,
+                                    unsigned long long  dst_offset,
+                                    bm_device_mem_u64_t src,
+                                    unsigned long long  src_offset,
+                                    unsigned long long  size) {
+  unsigned long long trans_size = 0x40000000;
+  u64 tmp_size = trans_size;
+  u64 src_device_addr = 0;
+  u64 dst_device_addr = 0;
+  bm_status_t ret = BM_SUCCESS;
+  bm_device_mem_t tmp_src;
+  bm_device_mem_t tmp_dst;
+  bool trans_over = false;
+
+  for(int i = 0; trans_over == false; i++) {
+    if(size > trans_size) {
+        size -= trans_size;
+    } else {
+        tmp_size = size;
+        trans_over = true;
+    }
+    src_device_addr = bm_mem_get_device_addr_u64(src) + trans_size * i + (src_offset & 0xffffffff80000000);
+    dst_device_addr = bm_mem_get_device_addr_u64(dst) + trans_size * i + (dst_offset & 0xffffffff80000000);
+    tmp_src = bm_mem_from_device(src_device_addr, tmp_size);
+    tmp_dst = bm_mem_from_device(dst_device_addr, tmp_size);
+    ret = bm_memcpy_d2d_byte(handle, tmp_dst, (dst_offset & 0x7fffffff), tmp_src, (src_offset & 0x7fffffff), tmp_size);
+    if (ret != BM_SUCCESS){
+      break;
+    }
+  }
   return ret;
 }
 

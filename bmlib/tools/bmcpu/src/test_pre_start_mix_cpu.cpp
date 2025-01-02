@@ -12,6 +12,13 @@
 #ifdef __linux__
 #define MAX_CHIP_NUM 256
 
+void test_msleep(int n_ms)
+{
+    int i = 0;
+    for (i = 0; i < n_ms; i++)
+        usleep(1000);
+}
+
 unsigned  int ipstr2num(char* str)
 {
 	int i = 0;
@@ -81,6 +88,15 @@ void *single_start_mixmode(int dev_id) {
         return (void *)BM_ERR_FAILURE;
     }
 
+    ret = bm_get_mix_lock(handle);
+    if (ret != BM_SUCCESS)
+        printf("chip%d wait other thread enable mixmode\n", dev_id);
+
+    while (ret != BM_SUCCESS) {
+        test_msleep(10);
+        ret = bm_get_mix_lock(handle);
+    }
+
     if (handle->misc_info.chipid == 0x1686) {
         int cmd_ret;
         status = bmcpu_get_cpu_status(handle);
@@ -88,6 +104,7 @@ void *single_start_mixmode(int dev_id) {
             ret = bmcpu_reset_cpu(handle);
             if (ret != BM_SUCCESS) {
                 printf("reset cpu failed!\r\n");
+                bm_free_mix_lock(handle);
                 return (void *)BM_ERR_FAILURE;
             }
         }
@@ -99,6 +116,7 @@ void *single_start_mixmode(int dev_id) {
                     BMLIB_LOG_ERROR,
                     "setup virtual ethernet error, ret %d\n",
                     ret);
+            bm_free_mix_lock(handle);
             return (void *)BM_ERR_FAILURE;
         } else {
             printf("Setup veth%d success!\n", dev_id);
@@ -107,6 +125,7 @@ void *single_start_mixmode(int dev_id) {
         ret = bmcpu_start_mix_cpu(handle, fip_path, ramdisk_path);
         if ((ret != BM_SUCCESS) && (ret != BM_NOT_SUPPORTED)) {
             printf("start cpu %d failed!\r\n", dev_id);
+            bm_free_mix_lock(handle);
             bm_dev_free(handle);
             return (void *)BM_ERR_FAILURE;
         }
@@ -121,6 +140,7 @@ void *single_start_mixmode(int dev_id) {
                     BMLIB_LOG_ERROR,
                     "set ip error, ret %d\n",
                     ret);
+            bm_free_mix_lock(handle);
             return (void *)BM_ERR_FAILURE;
         } else {
             printf("set chip%d ip: %s\n", dev_id, cmd);
@@ -130,6 +150,10 @@ void *single_start_mixmode(int dev_id) {
         cmd_ret = system(cmd);
         if (cmd_ret == -1)
             printf("exec %s failed\n", cmd);
+
+        sleep(20);
+
+        bm_free_mix_lock(handle);
     }
 
     bm_dev_free(handle);

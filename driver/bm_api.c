@@ -24,6 +24,8 @@ void bmdev_dump_reg(struct bm_device_info *bmdi, u32 channel)
             printk("DEV %d BDC_CTL_REG %d: addr= 0x%08x, value = 0x%08x\n", bmdi-> dev_index, i, bmdi->cinfo.bm_reg->tpu_base_addr + 0x100 + i*4, bm_read32(bmdi, bmdi->cinfo.bm_reg->tpu_base_addr + 0x100 + i*4));
         for(i=0; i<32; i++)
             printk("DEV %d GDMA_ALL_REG %d: addr= 0x%08x, value = 0x%08x\n", bmdi-> dev_index, i, bmdi->cinfo.bm_reg->gdma_base_addr + i*4, bm_read32(bmdi, bmdi->cinfo.bm_reg->gdma_base_addr + i*4));
+        for(i=0; i<64; i++)
+            printk("DEV %d GDMA_CTL_REG %d: addr= 0x%08x, value = 0x%08x\n", bmdi-> dev_index, i, bmdi->cinfo.bm_reg->gdma_base_addr + 0x100 + i*4, bm_read32(bmdi, bmdi->cinfo.bm_reg->gdma_base_addr + 0x100 + i*4));
        }
     else {
     }
@@ -310,7 +312,7 @@ int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	return ret;
 }
 
-int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
+int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -332,7 +334,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 			lib_node->cur_rec = lib_temp->cur_rec;
 			lib_node->rec[lib_node->cur_rec] = 1;
 			memcpy(lib_node->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN);
-			lib_node->cur_pid = current->pid;
+			lib_node->file = file;
 			list_add_tail(&(lib_node->lib_list), &(lib_info->lib_list));
 			mutex_unlock(&lib_info->bmcpu_lib_mutex);
 			return -1;
@@ -355,7 +357,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	lib_node->cur_rec = api_cpu_load_library_internal.cur_rec;
 	lib_node->rec[lib_node->cur_rec] = 1;
 	memcpy(lib_node->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN);
-	lib_node->cur_pid = current->pid;
+	lib_node->file = file;
 	list_add_tail(&(lib_node->lib_list), &(lib_info->lib_list));
 	mutex_unlock(&lib_info->bmcpu_lib_mutex);
 
@@ -368,7 +370,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	return 0;
 }
 
-int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
+int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -385,7 +387,7 @@ int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *
 
 	mutex_lock(&lib_info->bmcpu_lib_mutex);
 	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-		if(!memcmp(lib_temp->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN) && current->pid == lib_temp->cur_pid) {
+		if(!memcmp(lib_temp->md5, api_cpu_load_library_internal.md5, MD5SUM_LEN) && (file == lib_temp->file)) {
 			api_cpu_load_library_internal.cur_rec = lib_temp->cur_rec;
 			list_del(&(lib_temp->lib_list));
 			kfree(lib_temp);
@@ -673,7 +675,7 @@ void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file)
 
 	mutex_lock(&lib_info->bmcpu_lib_mutex);
 	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-		if (current->pid == lib_temp->cur_pid) {
+		if (file == lib_temp->file) {
 			memcpy(api_cpu_load_library_internal.md5, lib_temp->md5, MD5SUM_LEN);
 			memcpy(api_cpu_load_library_internal.lib_name, lib_temp->lib_name, LIB_MAX_NAME_LEN);
 			api_cpu_load_library_internal.cur_rec = lib_temp->cur_rec;
@@ -759,7 +761,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	}
 
 	if (bm_api.api_id == 0x90000001) {
-		ret = bmdrv_api_dyn_load_lib_process(bmdi, &bm_api);
+		ret = bmdrv_api_dyn_load_lib_process(bmdi, &bm_api, file);
 		if(ret == -1) {
 			PR_TRACE("bm-sophon%d lib already exist\n", bmdi->dev_index);
 			return 0;
@@ -775,7 +777,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	}
 
 	if (bm_api.api_id == 0x90000004) {
-		ret = bmdrv_api_dyn_unload_lib_process(bmdi, &bm_api);
+		ret = bmdrv_api_dyn_unload_lib_process(bmdi, &bm_api, file);
 		if(ret == -1) {
 			PR_TRACE("bm-sophon%d lib is using by other\n", bmdi->dev_index);
 			return 0;

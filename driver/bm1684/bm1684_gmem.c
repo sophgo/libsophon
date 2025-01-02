@@ -50,7 +50,7 @@ int bmdrv_bm1684_parse_reserved_mem_info(struct bm_device_info *bmdi)
 	if (cinfo->chip_id == 0x1684)
 		heap2_size = ddr2_size - 0xAB00000;
 	else if (cinfo->chip_id == 0x1686)
-		heap2_size = ddr2_size - 0x6700000;
+		heap2_size = ddr2_size - 0x6700000 - VPU_RESERVED_SIZE;
 
 	resmem_info->npureserved_addr[0] = GLOBAL_MEM_START_ADDR + EFECTIVE_GMEM_START;
 	if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS && BM1684_HW_VERSION(bmdi) == 0x3)
@@ -69,7 +69,7 @@ int bmdrv_bm1684_parse_reserved_mem_info(struct bm_device_info *bmdi)
 			resmem_info->npureserved_size[1] = ddr1_size - a53_os_reserved_size - resmem_info->vpp_size;
 
 		resmem_info->vpu_vmem_addr = 0x400000000;
-		resmem_info->vpu_vmem_size = ddr2_size - heap2_size;
+		resmem_info->vpu_vmem_size = ddr2_size - heap2_size - VPU_RESERVED_SIZE;
 
 		resmem_info->npureserved_addr[2] = resmem_info->vpu_vmem_addr + resmem_info->vpu_vmem_size;
 		if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS && BM1684_HW_VERSION(bmdi) == 0x3)

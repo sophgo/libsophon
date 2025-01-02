@@ -187,8 +187,8 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                     snprintf(
                         line_str,
                         BUFFER_LEN,
-                        "| Lib Version:%9s LTS         Driver Version:  "
-                        "%1d.%1d.%1d LTS                                     |\n",
+                        "| Lib Version:%9s LTS SP4     Driver Version:  "
+                        "%1d.%1d.%1d LTS SP4                                 |\n",
                         bm_smi_version,
                         (g_driver_version >> 16) & 0xff,
                         (g_driver_version >> 8) & 0xff,
@@ -197,7 +197,7 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                     snprintf(
                         line_str,
                         BUFFER_LEN,
-                        "| Lib Version:%9s LTS         Driver Version:  "
+                        "| Lib Version:%9s LTS SP4     Driver Version:  "
                         "%1d.%1d.%1d                                         |\n",
                         bm_smi_version,
                         (g_driver_version >> 16) & 0xff,

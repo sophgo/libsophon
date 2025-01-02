@@ -186,6 +186,95 @@ bm_status_t bm_load_file(bm_handle_t      handle,
     return BM_SUCCESS;
 }
 
+bm_status_t bm_load_file_mix(bm_handle_t      handle,
+                         char *           file_path,
+                         u64 dev_paddr) {
+    u32         u32FileSize;
+    struct stat fileStat;
+    u8 *        file_buffer;
+    int         fd;
+    int         ret;
+    u32         copy_size;
+    u32         transfer_count;
+    u8 *        pFileName         = (u8 *)file_path;
+    int         malloc_device_mem = 0;
+    struct bar_transfor_t
+    {
+        void *user_vaddr;
+        int size;
+        u64 dev_paddr;
+        // unsigned char md5[16];
+    } bar_transfor;
+
+    if (NULL == pFileName) {
+        bmlib_log(
+            BMCPU_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "file path is NULL!!\n");
+        return BM_ERR_PARAM;
+    }
+
+#ifdef WIN32
+    fd = open((const char *)file_path, _O_RDONLY | _O_BINARY);
+#else
+    fd = open((const char *)file_path, O_RDONLY);
+#endif
+    if (fd == -1) {
+        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "open file %s error!!\n",
+                  pFileName);
+        return BM_ERR_PARAM;
+    }
+    if (-1 == fstat(fd, &fileStat)) {
+        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "stat file %s error!!\n",
+                  pFileName);
+        close(fd);
+        return BM_ERR_PARAM;
+    }
+    u32FileSize = fileStat.st_size;
+    if (u32FileSize % sizeof(float))
+        transfer_count = u32FileSize / sizeof(float) + 1;
+    else
+        transfer_count = u32FileSize / sizeof(float);
+    copy_size   = sizeof(float) * transfer_count;
+    file_buffer = (unsigned char *)malloc(copy_size);
+    if (!file_buffer) {
+        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "malloc host mem for file %s error!!\n",
+                  pFileName);
+
+        close(fd);
+        return BM_ERR_NOMEM;
+    }
+
+    if (read(fd, file_buffer, u32FileSize) != u32FileSize) {
+        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR,
+                  "read file %s error\n",
+                  pFileName);
+        free(file_buffer);
+        close(fd);
+        return BM_ERR_FAILURE;
+    }
+    close(fd);
+    bar_transfor.user_vaddr = file_buffer;
+    bar_transfor.size = copy_size;
+    bar_transfor.dev_paddr = dev_paddr;
+    // read_md5(pFileName, bar_transfor.md5);
+
+    if(0 == platform_ioctl(handle, BMDEV_BAR_TRANS, &bar_transfor)){
+        return BM_SUCCESS;
+    } else {
+        return BM_ERR_FAILURE;
+    }
+
+    free(file_buffer);
+
+    return BM_SUCCESS;
+}
+
 bm_status_t bmcpu_reset_cpu(bm_handle_t handle){
     if (handle == nullptr){
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
@@ -245,6 +334,26 @@ bm_status_t bm_remove_veth(bm_handle_t handle){
     }
 
     if(0 == platform_ioctl(handle, BMDEV_RMDRV_VETH, NULL)){
+        return BM_SUCCESS;
+    } else {
+        return BM_ERR_FAILURE;
+    }
+}
+
+bm_status_t bm_get_mix_lock(bm_handle_t handle) {
+    int res;
+
+    platform_ioctl(handle, BMDEV_GET_MIX_LOCK, &res);
+
+    if (res == 1)
+        return BM_SUCCESS;
+    else if (res == 0)
+        return BM_ERR_FAILURE;
+}
+
+bm_status_t bm_free_mix_lock(bm_handle_t handle) {
+
+    if(0 == platform_ioctl(handle, BMDEV_FREE_MIX_LOCK, NULL)){
         return BM_SUCCESS;
     } else {
         return BM_ERR_FAILURE;
@@ -850,29 +959,13 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
     u64                 data;
     int                 ret;
     bm_device_mem_t     dev_mem;
-    struct bm_misc_info misc_info;
     int delay = 3000;
-
-    ret = bm_get_misc_info(handle, &misc_info);
-    if (ret != BM_SUCCESS) {
-        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "get misc info error, ret %d\n",
-                  ret);
-        return BM_ERR_FAILURE;
-    }
-    if (misc_info.a53_enable != 1) {
-        bmlib_log(BMCPU_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "bmcpu is not enable in misc info, %d\n", misc_info.a53_enable);
-        return BM_ERR_FAILURE;
-    }
 
     bmcpu_set_arm9_fw_mode(handle, FW_MIX_MODE);
     dev_mem.u.device.device_addr = 0x10100000;
     dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
     dev_mem.size                 = 0x2B000;
-    ret = bm_load_file(handle, boot_file, &dev_mem, NULL);
+    ret = bm_load_file_mix(handle, boot_file, dev_mem.u.device.device_addr);
     if (ret != BM_SUCCESS) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
@@ -883,7 +976,7 @@ bm_status_t bmcpu_start_mix_cpu(bm_handle_t handle,
     dev_mem.u.device.device_addr = 0x310000000;
     dev_mem.flags.u.mem_type     = BM_MEM_TYPE_DEVICE;
     dev_mem.size                 = 0x18000000;
-    ret = bm_load_file(handle, core_file, &dev_mem, NULL);
+    ret = bm_load_file_mix(handle, core_file, dev_mem.u.device.device_addr);
     if (ret != BM_SUCCESS) {
         bmlib_log(BMCPU_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,

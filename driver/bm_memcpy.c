@@ -527,6 +527,12 @@ int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long a
 		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
 		return ret;
 	}
+
+	if (bmdi->misc_info.pcie_soc_mode == BM_DRV_MIX_MODE) {
+		pr_info("bm-sophon%d is mixmode, not support CDMA\n", bmdi->dev_index);
+		return -EINVAL;
+	}
+
 	if (memcpy_param.dir == HOST2CHIP)
 		ret = bmdev_memcpy_s2d(bmdi, file, memcpy_param.device_addr, memcpy_param.host_addr,
 				memcpy_param.size, memcpy_param.intr, memcpy_param.cdma_iommu_mode);

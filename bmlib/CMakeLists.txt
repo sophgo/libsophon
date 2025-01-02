@@ -83,6 +83,9 @@ endif()
 install(TARGETS ${TARGET_NAME}
         LIBRARY DESTINATION lib
         COMPONENT libsophon)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/memory_op.so
+        DESTINATION lib/dyn_load
+        COMPONENT libsophon)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/debian-lib/libsophon.conf
         DESTINATION ./data
         COMPONENT libsophon)

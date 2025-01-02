@@ -150,6 +150,13 @@ static int bmdev_close(struct inode *inode, struct file *file)
 		return -EINVAL;
 	}
 
+	mutex_lock(&bmdi->mixmode_lock.mix_mutex);
+	if (bmdi->mixmode_lock.mix_file == file) {
+		bmdi->mixmode_lock.mix_file = NULL;
+		bmdi->mixmode_lock.used = 0;
+	}
+	mutex_unlock(&bmdi->mixmode_lock.mix_mutex);
+
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	list_for_each_entry(h_node, &bmdi->handle_list, list) {
 		if (h_node->open_pid == h_info->open_pid) {
@@ -343,9 +350,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_SETUP_VETH:
 		if (bmdi->eth_state == true) {
-			ret = -EEXIST;
+			ret = 0;
 			pr_info("bmsophon%d veth has been started!\n", bmdi->dev_index);
-			pr_info("no need to reinit the veth%d\n", bmdi->dev_index);
 			break;
 		}
 		ret = bmdrv_veth_init(bmdi, bmdi->cinfo.pcidev);
@@ -354,6 +360,45 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		else
 			bmdi->eth_state = false;
 		break;
+
+	case BMDEV_BAR_TRANS:
+	{
+		struct bar_transfor_t
+		{
+			void *user_vaddr;
+			int size;
+			u64 dev_paddr;
+			// unsigned char md5[16];
+		} bar_transfor;
+		void *bar4_addr;
+		int i;
+		int trans_size, bar4_size = 0x100000;
+		int trans_over = 0;
+
+		ret = copy_from_user(&bar_transfor, (void *)arg, sizeof(struct bar_transfor_t));
+
+		// pr_info("bar_transfor: dev_paddr: 0x%llx, size: 0x%x, user_vaddr: 0x%llx\n",
+		// 			bar_transfor.dev_paddr, bar_transfor.size, (u64)(bar_transfor.user_vaddr));
+
+		bar4_addr = bmdi->cinfo.bar_info.bar4_vaddr;
+
+		// pr_info("chip %d, bar start\n", bmdi->dev_index);
+		for(i = 0; trans_over == 0; i++) {
+			if (bar_transfor.size > bar4_size) {
+				trans_size = bar4_size;
+				bar_transfor.size -= bar4_size;
+			} else {
+				trans_size = bar_transfor.size;
+				trans_over = 1;
+			}
+
+			bm1684_map_bar_p2p(bmdi, bar_transfor.dev_paddr + i*bar4_size);
+			ret = copy_from_user(bar4_addr, (void *)((u64)(bar_transfor.user_vaddr) + i*bar4_size), trans_size);
+			schedule();
+		}
+		// pr_info("chip %d, bar over\n", bmdi->dev_index);
+		break;
+	}
 
 	case BMDEV_RMDRV_VETH:
 	{
@@ -373,6 +418,33 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	};
 
+	case BMDEV_GET_MIX_LOCK:
+	{
+		int res = 0;
+
+		mutex_lock(&bmdi->mixmode_lock.mix_mutex);
+		if (bmdi->mixmode_lock.used == 0) {
+			bmdi->mixmode_lock.used = 1;
+			bmdi->mixmode_lock.mix_file = file;
+			res = 1;
+		} else if (bmdi->mixmode_lock.used == 1)
+			res = 0;
+		mutex_unlock(&bmdi->mixmode_lock.mix_mutex);
+
+		ret = copy_to_user((int __user *)arg, &res, sizeof(int));
+
+		break;
+	};
+
+	case BMDEV_FREE_MIX_LOCK:
+	{
+		mutex_lock(&bmdi->mixmode_lock.mix_mutex);
+		bmdi->mixmode_lock.mix_file = NULL;
+		bmdi->mixmode_lock.used = 0;
+		mutex_unlock(&bmdi->mixmode_lock.mix_mutex);
+		break;
+	};
+
 	case BMDEV_SYNC_TIME_MIX:
 	{
 		struct bm_api_set_time {
@@ -388,6 +460,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_TZ_MINUTESWEST, set_time.tz_minuteswest);
 		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_TZ_DSTTIME, set_time.tz_dsttime);
 		bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + CHANGE_VETH_TIME, 0x1);
+
+		break;
 	}
 
 	case BMDEV_SET_GATE:
@@ -675,6 +749,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_thread_sync_api(bmdi, file);
 			bmdi->status_sync_api = ret;
+			if(bmdi->api_process_status != 0){
+				ret = -EBUSY;
+				bmdi->api_process_status = 0;
+			}
 		} else {
 			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
 			ret = -EBUSY;

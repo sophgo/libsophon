@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <map>
+#include <errno.h>
 
 #ifdef WIN32
 #include <io.h>
@@ -64,6 +65,10 @@ bm_status_t a53lite_load_file(bm_handle_t handle,
                   BMLIB_LOG_ERROR,
                   "open file %s error!!\n",
                   pFileName);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR, "Failed to open file: %s\n", strerror(errno));
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                  BMLIB_LOG_ERROR, "Error code: %d\n", errno);
         return BM_ERR_PARAM;
     }
     if (-1 == fstat(fd, &fileStat))
@@ -339,7 +344,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
     {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "%s %d: laod file failed!\n", __FILE__, __LINE__);
+                  "%s %d: load file failed!\n", __FILE__, __LINE__);
         free(p_module);
         return nullptr;
     }
@@ -560,7 +565,7 @@ tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data,
     {
         bmlib_log(A53LITE_RUNTIME_LOG_TAG,
                   BMLIB_LOG_ERROR,
-                  "%s %d: laod file failed!\n", __FILE__, __LINE__);
+                  "%s %d: load file failed!\n", __FILE__, __LINE__);
         free(p_module);
         return nullptr;
     }
@@ -650,13 +655,7 @@ tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_mod
     }
     ret = bm_sync_api(handle);
     if (ret != 0)
-    {
-        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-                  BMLIB_LOG_ERROR,
-                  "get function sync api error, ret %d\n",
-                  ret);
         return -1;
-    }
 
     return api_get_func.f_id;
 #endif
