@@ -14,9 +14,6 @@ extern "C" {
 #endif
 #endif /* __cplusplus */
 
-#ifndef USE_KERNEL_MODE
-#include <pthread.h>
-#endif
 #include <linux/comm_video.h>
 #include <linux/comm_rc.h>
 #include <linux/common.h>

@@ -30,10 +30,6 @@
 
 #define VPU_BIT_REG_SIZE                    (0x4000*MAX_NUM_VPU_CORE)
 
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-#define VPU_CORE_BASE_OFFSET 0x4000
-#endif
-
 typedef struct vpudrv_buffer_pool_t
 {
     vpudrv_buffer_t vdb;
@@ -72,6 +68,10 @@ static vdi_info_t s_vdi_info[MAX_NUM_VPU_CORE];
 
 extern int chip_id;
 extern vpudrv_buffer_t s_vpu_register[MAX_NUM_VPU_CORE];
+extern unsigned int vc_read_reg(unsigned int addr);
+extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
+extern int vc_memcpy_s2d(void *src, uint64_t dst, uint32_t size);
+extern int vc_memcpy_d2s(void *dst, uint64_t src, uint32_t size);
 
 int swap_endian(unsigned long core_idx, unsigned char *data, int len, int endian);
 
@@ -182,9 +182,8 @@ int vdi_init(unsigned long core_idx)
     vdi->core_idx = core_idx;
     vdi->task_num++;
     vdi_set_clock_gate(core_idx, 0);
-    atomic_set(&vdi->instance_count, 0);
+    atomic_set(&vdi->instance_count, 1);
     vdi_unlock(core_idx);
-
     VLOG(INFO, "[VDI] success to init driver \n");
     return 0;
 
@@ -196,7 +195,7 @@ ERR_VDI_INIT:
 int vdi_set_bit_firmware_to_pm(unsigned long core_idx, const unsigned short *code)
 {
     int i;
-    vpu_bit_firmware_info_t bit_firmware_info;
+    vpu_bit_firmware_info_t *bit_firmware_info;
     vdi_info_t *vdi;
 
     if (core_idx >= MAX_NUM_VPU_CORE)
@@ -207,27 +206,28 @@ int vdi_set_bit_firmware_to_pm(unsigned long core_idx, const unsigned short *cod
     if (!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return 0;
 
-    osal_memset(&bit_firmware_info, 0x00, sizeof(bit_firmware_info));
-
-    bit_firmware_info.size = sizeof(vpu_bit_firmware_info_t);
-    bit_firmware_info.core_idx = core_idx;
+    bit_firmware_info = vzalloc(sizeof(bit_firmware_info));
+    bit_firmware_info->size = sizeof(vpu_bit_firmware_info_t);
+    bit_firmware_info->core_idx = core_idx;
 #if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
     bit_firmware_info.reg_base_offset = (core_idx*VPU_CORE_BASE_OFFSET);
 #else
-    bit_firmware_info.reg_base_offset = 0;
+    bit_firmware_info->reg_base_offset = 0;
 #endif
     if (PRODUCT_CODE_CODA_SERIES(vdi->product_code)) {
         for (i=0; i<512; i++) {
-            bit_firmware_info.bit_code[i] = code[i];
+            bit_firmware_info->bit_code[i] = code[i];
         }
     }
 
-    if (vpu_op_write((const char *)(&bit_firmware_info), bit_firmware_info.size) < 0)
+    if (vpu_op_write((const char *)(bit_firmware_info), bit_firmware_info->size) < 0)
     {
-        VLOG(ERR, "[VDI] fail to vdi_set_bit_firmware core=%d\n", bit_firmware_info.core_idx);
+        VLOG(ERR, "[VDI] fail to vdi_set_bit_firmware core=%d\n", bit_firmware_info->core_idx);
+        vfree(bit_firmware_info);
         return -1;
     }
 
+    vfree(bit_firmware_info);
     return 0;
 }
 
@@ -355,17 +355,10 @@ int vdi_allocate_common_memory(unsigned long core_idx)
 
     VLOG(INFO, "[VDI] vdi_allocate_common_memory, physaddr=0x%x, virtaddr=0x%x\n", (int)vdb.phys_addr, (int)vdb.virt_addr);
     // convert os driver buffer type to vpu buffer type
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    vdi->pvip->vpu_common_buffer.size = SIZE_COMMON;
-    vdi->pvip->vpu_common_buffer.phys_addr = (unsigned long)(vdb.phys_addr + (core_idx*SIZE_COMMON));
-    vdi->pvip->vpu_common_buffer.base = (unsigned long)(vdb.base + (core_idx*SIZE_COMMON));
-    vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr + (core_idx*SIZE_COMMON));
-#else
     vdi->pvip->vpu_common_buffer.size = SIZE_COMMON;
     vdi->pvip->vpu_common_buffer.phys_addr = (unsigned long)(vdb.phys_addr);
     vdi->pvip->vpu_common_buffer.base = (unsigned long)(vdb.base);
     vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr);
-#endif
 
     osal_memcpy(&vdi->vpu_common_memory, &vdi->pvip->vpu_common_buffer, sizeof(vpu_buffer_t));
 
@@ -406,9 +399,6 @@ vpu_instance_pool_t *vdi_get_instance_pool(unsigned long core_idx)
     {
         vdb.core_idx = core_idx;
         vdb.size = sizeof(vpu_instance_pool_t) + sizeof(MUTEX_HANDLE)*VDI_NUM_LOCK_HANDLES;
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-        vdb.size  *= MAX_NUM_VPU_CORE;
-#endif
 
         if (vpu_get_instance_pool(&vdb) < 0)
         {
@@ -425,11 +415,7 @@ vpu_instance_pool_t *vdi_get_instance_pool(unsigned long core_idx)
             return NULL;
         }
 
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-        vdi->pvip = (vpu_instance_pool_t *)(vdb.virt_addr + (core_idx*(sizeof(vpu_instance_pool_t) + sizeof(MUTEX_HANDLE)*VDI_NUM_LOCK_HANDLES)));
-#else
         vdi->pvip = (vpu_instance_pool_t *)(vdb.virt_addr);
-#endif
         vdi->vpu_mutex      = (void *)((unsigned long)vdi->mutex); //change the pointer of vpu_mutex to at end pointer of vpu_instance_pool_t to assign at allocated position.
         vdi->vpu_disp_mutex = (void *)((unsigned long)vdi->mutex + sizeof(MUTEX_HANDLE));
         vdi->vmem_mutex     = (void *)((unsigned long)vdi->mutex + 2*sizeof(MUTEX_HANDLE));
@@ -688,8 +674,7 @@ static void vmem_unlock(unsigned long core_idx)
 void vdi_write_register(unsigned long core_idx, unsigned int addr, unsigned int data)
 {
     vdi_info_t *vdi;
-    unsigned int offset_addr = 0;
-    unsigned int *reg_addr;
+    unsigned int reg_addr;
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return;
@@ -699,22 +684,15 @@ void vdi_write_register(unsigned long core_idx, unsigned int addr, unsigned int 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return;
 
-
-
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    offset_addr = core_idx * VPU_CORE_BASE_OFFSET;
-#endif
-
-    reg_addr = (unsigned int *)(addr + (unsigned long)vdi->vdb_register.virt_addr + offset_addr);
-    writel(data, reg_addr);
+    reg_addr = (addr + (unsigned long)vdi->vdb_register.phys_addr);
+    vc_write_reg(reg_addr, data);
 }
 
 unsigned int vdi_read_register(unsigned long core_idx, unsigned int addr)
 {
     vdi_info_t *vdi;
-    unsigned int offset_addr = 0;
     unsigned int ret = 0;
-    unsigned int *reg_addr;
+    unsigned int reg_addr;
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return (unsigned int)-1;
@@ -724,13 +702,8 @@ unsigned int vdi_read_register(unsigned long core_idx, unsigned int addr)
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return (unsigned int)-1;
 
-
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    offset_addr = core_idx * VPU_CORE_BASE_OFFSET;
-#endif
-
-    reg_addr = (unsigned int *)(addr + (unsigned long)vdi->vdb_register.virt_addr + offset_addr);
-    ret = readl(reg_addr);
+    reg_addr = (addr + vdi->vdb_register.phys_addr);
+    ret = vc_read_reg(reg_addr);
     return ret;
 }
 
@@ -784,14 +757,9 @@ int vdi_clear_memory(unsigned long core_idx, PhysicalAddress addr, int len, int 
     int i;
     Uint8*  zero;
 
-    unsigned long offset;
-
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -816,9 +784,7 @@ int vdi_clear_memory(unsigned long core_idx, PhysicalAddress addr, int len, int 
 
     zero = (Uint8*)osal_malloc(len);
     osal_memset((void*)zero, 0x00, len);
-
-    offset = addr - (unsigned long)vdb.phys_addr;
-    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), zero, len);
+    vc_memcpy_s2d(zero, addr, len);
 
     if (vpu_flush_dcache(&vdb) < 0) {
         VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
@@ -835,14 +801,10 @@ int vdi_set_memory(unsigned long core_idx, PhysicalAddress addr, int len, int en
     vpudrv_buffer_t vdb;
     int i;
     Uint8*  zero;
-    unsigned long offset;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -867,9 +829,7 @@ int vdi_set_memory(unsigned long core_idx, PhysicalAddress addr, int len, int en
 
     zero = (Uint8*)osal_malloc(len);
     osal_memset((void*)zero, data, len);
-
-    offset = addr - (unsigned long)vdb.phys_addr;
-    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), zero, len);
+    vc_memcpy_s2d(zero, addr, len);
     if (vpu_flush_dcache(&vdb) < 0) {
         VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
     }
@@ -886,12 +846,9 @@ int vdi_write_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char
     int i;
     unsigned long offset;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     if (!data)
         return -1;
 
@@ -920,7 +877,7 @@ int vdi_write_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char
 
     offset = addr - (unsigned long)vdb.phys_addr;
     swap_endian(core_idx, data, len, endian);
-    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), data, len);
+    vc_memcpy_s2d(data, addr, len);
 
     if (vdb.is_cached) {
         if (vpu_flush_dcache(&vdb) < 0) {
@@ -939,12 +896,9 @@ int vdi_read_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char 
     int i;
     unsigned long offset;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->vpu_fd== (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -971,7 +925,7 @@ int vdi_read_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char 
         return -1;
     }
 
-    osal_memcpy(data, (const void *)((unsigned long)vdb.virt_addr+offset), len);
+    vc_memcpy_d2s(data, addr, len);
     swap_endian(core_idx, data, len,  endian);
 
     return len;
@@ -983,12 +937,9 @@ int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTyp
     int i;
     vpudrv_buffer_t vdb;
 
-#if 1//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#else
-    core_idx = 0;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -1108,12 +1059,9 @@ int vdi_attach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb)
     int i;
     vpudrv_buffer_t vdb;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -1157,12 +1105,9 @@ int vdi_dettach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb)
     vdi_info_t *vdi;
     int i;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vb || !vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -1192,12 +1137,9 @@ void vdi_free_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTypes,
     int i;
     vpudrv_buffer_t vdb;
 
-#if 0//ndef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    core_idx = 0;
-#else
     if (core_idx >= MAX_NUM_VPU_CORE)
         return;
-#endif
+
     vdi = &s_vdi_info[core_idx];
 
     if(!vb || !vdi || vdi->vpu_fd== (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
@@ -1513,8 +1455,6 @@ int vdi_wait_vcpu_bus_busy(unsigned long core_idx, int timeout, unsigned int gdi
     return 0;
 }
 
-#ifdef SUPPORT_INTERRUPT
-
 int vdi_wait_interrupt(unsigned long core_idx, unsigned int instIdx, int timeout)
 {
     vdi_info_t *vdi = &s_vdi_info[core_idx];
@@ -1549,76 +1489,6 @@ int vdi_wait_interrupt(unsigned long core_idx, unsigned int instIdx, int timeout
 
     return intr_reason;
 }
-
-#else /* SUPPORT_INTERRUPT */
-
-int vdi_wait_interrupt(unsigned long core_idx, unsigned int instIdx, int timeout)
-{
-    vdi_info_t *vdi = &s_vdi_info[core_idx];
-    int intr_reason = -1;
-    Uint64 startTime = 0, endTime = 0;
-    IrqPollContext *irqPollContext = &s_irqPollContext[core_idx];
-    unsigned int *ptr_intr_reason;
-
-    if (core_idx >= MAX_NUM_VPU_CORE)
-        return -1;
-
-    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
-        return -1;
-
-    if (!(vdi->support_cq)) {
-        instIdx = 0;
-    }
-
-#if defined(SUPPORT_MULTI_INST_INTR_WITH_THREAD)
-    startTime = osal_gettime();
-    while (TRUE)
-    {
-        ptr_intr_reason = (unsigned int *)Queue_Dequeue(irqPollContext->intrQ[instIdx]);
-        if (ptr_intr_reason) {
-            intr_reason = *ptr_intr_reason;
-            break;
-        }
-        endTime = osal_gettime();
-        if (timeout > 0 && (endTime-startTime) >= timeout) {
-            return -1;
-        }
-    }
-    return intr_reason;
-#else /* SUPPORT_MULTI_INST_INTR_WITH_THREAD */
-    // this case is for testing when there is no way to have thread and isr_handler in customer's system.
-    // basically. the best is that vpu_irq_handler is called at irq_handler in interrupt service routine of customers's system.
-
-    if (!(vdi->support_cq)) {
-        startTime=osal_gettime();
-        endTime=osal_gettime();
-        while(vpu_irq_handler((void *)irqPollContext, vdi->support_cq) < 0) {
-            if(abs(endTime-startTime) >= (Uint64)timeout) {
-                VLOG(ERR, "%s:%d ineterrupt time out in no cq model \n", __FUNCTION__, __LINE__);
-                return -1;
-            } else {
-                usleep(0);
-                endTime=osal_gettime();
-            }
-        }
-    } else {
-        if (vpu_irq_handler((void *)irqPollContext, vdi->support_cq) < 0){
-        }
-    }
-
-    ptr_intr_reason = (unsigned int *)Queue_Dequeue(irqPollContext->intrQ[instIdx]);
-    if (ptr_intr_reason) {
-        intr_reason = *ptr_intr_reason;
-        //VLOG(INFO, "intr_reason=%d inst=%d\n", intr_reason, instIdx);
-    }
-    return intr_reason;
-#endif /* SUPPORT_MULTI_INST_INTR_WITH_THREAD */
-
-}
-#endif
-
-
-
 
 //------------------------------------------------------------------------------
 // LOG & ENDIAN functions

@@ -49,6 +49,8 @@
 #include "sg_comm.h"
 
 #define IOMMU_ADDR_BIT_NUM (40)
+extern int vc_drv_init(struct bm_device_info *bmdi);
+extern int vc_drv_deinit(struct bm_device_info *bmdi);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
 #define PCI_DMA_TODEVICE DMA_TO_DEVICE
@@ -531,8 +533,7 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
-			bm_vpu_init(bmdi);
-			bmdrv_jpu_init(bmdi);
+			vc_drv_init(bmdi);
 			spacc_init(bmdi);
 			mutex_init(&bmdi->efuse_mutex);
 		}
@@ -549,8 +550,7 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		//}
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
-		// 	bm_vpu_init(bmdi);
-		// 	bmdrv_jpu_init(bmdi);
+			vc_drv_init(bmdi);
 		// 	spacc_init(bmdi);
 		// 	mutex_init(&bmdi->efuse_mutex);
 		}
@@ -649,14 +649,14 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 	case 0x1686:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_exit(bmdi);
-			bm_vpu_exit(bmdi);
-			bmdrv_jpu_exit(bmdi);
+			vc_drv_deinit(bmdi);
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
 	case 0x1686a200:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_exit(bmdi);
+			vc_drv_deinit(bmdi);
 		}
 		pr_info("bm-sophon%d bm1688 bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
@@ -1205,11 +1205,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	// 	goto err_ctrl_add_dev;
 	// }
 
-	//rc = bm_monitor_thread_init(bmdi);
-	//if (rc) {
-	//	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
-	//	goto err_monitor_thread_init;
-	//}
+	rc = bm_monitor_thread_init(bmdi);
+	if (rc) {
+		dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
+		goto err_monitor_thread_init;
+	}
 
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
@@ -1240,8 +1240,8 @@ err_card_init:
 	bmdrv_proc_file_deinit(bmdi);
 err_proc_file_init:
 //	bm_monitor_thread_deinit(bmdi);
-//err_monitor_thread_init:
-	// bmdrv_ctrl_del_dev(bmci, bmdi);
+err_monitor_thread_init:
+	bmdrv_ctrl_del_dev(bmci, bmdi);
 // err_ctrl_add_dev:
 	if (dev_count == 0)
 		bmdrv_remove_bmci();

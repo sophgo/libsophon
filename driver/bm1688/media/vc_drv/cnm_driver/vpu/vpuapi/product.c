@@ -19,11 +19,8 @@ VpuAttr g_VpuCoreAttributes[MAX_NUM_VPU_CORE];
 
 static Int32 s_ProductIds[MAX_NUM_VPU_CORE] = {
     PRODUCT_ID_NONE,
-#if 1//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
     PRODUCT_ID_NONE,
     PRODUCT_ID_NONE,
-#endif
-
 };
 
 typedef struct FrameBufInfoStruct {

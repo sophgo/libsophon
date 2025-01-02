@@ -113,10 +113,8 @@ typedef struct {
     struct vb_jobs_t    jobs;
 } JPEG_DEC_HANDLE;
 
-extern int irq_status[MAX_NUM_JPU_CORE];
-extern int jpu_core_irq_count[MAX_NUM_JPU_CORE];
 extern int jpu_enable_irq(int coreidx);
-
+extern int vc_memcpy_c2c(uint64_t dst, uint64_t src, uint32_t size);
 static int jpeg_calc_start_qfactor(int target_bit, int total_mb)
 {
     static int mb_num[9] = {
@@ -994,21 +992,13 @@ static int _process_stream_buffer_full(drv_jpg_handle handle)
     JPU_EncGetBitstreamBuffer(pst_handle->handle, &rd_ptr, &wr_ptr, &stream_size);
 
     if(pst_handle->stream_buffer_ex.stream_len) {
-        jdi_read_memory(pst_handle->stream_buffer_ex.buffer.phys_addr,
-                        (unsigned char *)stream_buffer.virt_addr,
-                        pst_handle->stream_buffer_ex.stream_len,
-                        pst_handle->open_param.streamEndian);
-
+        vc_memcpy_c2c(stream_buffer.phys_addr, pst_handle->stream_buffer_ex.buffer.phys_addr, pst_handle->stream_buffer_ex.stream_len);
         jdi_free_dma_memory(&pst_handle->stream_buffer_ex.buffer);
     }
 
     JPU_GetExtAddr(pst_handle->core_idx, &ex_addr);
     rd_ptr |= (PhysicalAddress)(ex_addr) << 32;
-    jdi_read_memory(rd_ptr,
-                    (unsigned char *)(stream_buffer.virt_addr + pst_handle->stream_buffer_ex.stream_len),
-                    stream_size,
-                    pst_handle->open_param.streamEndian);
-
+    vc_memcpy_c2c(stream_buffer.phys_addr + pst_handle->stream_buffer_ex.stream_len, rd_ptr, stream_size);
     pst_handle->stream_buffer_ex.stream_len += stream_size;
     memcpy(&pst_handle->stream_buffer_ex.buffer, &stream_buffer, sizeof(jpu_buffer_t));
 
@@ -1075,7 +1065,10 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
         pst_handle->header_param.disableAPPMarker = 0;
         pst_handle->header_param.enableSofStuffing = TRUE;
         if (pst_handle->header_param.headerMode == ENC_HEADER_MODE_NORMAL) {
+            pst_handle->header_param.pParaSet = vmalloc(pst_handle->header_param.size);
             JPU_EncGiveCommand(pst_handle->handle, ENC_JPG_GET_HEADER, &pst_handle->header_param);
+            jdi_write_memory(pst_handle->header_buffer.phys_addr, pst_handle->header_param.pParaSet, pst_handle->header_param.size, pst_handle->open_param.streamEndian);
+            vfree(pst_handle->header_param.pParaSet);
             JLOG(INFO, "JPU_EncGiveCommand[ENC_JPG_GET_HEADER] header size=%d\n", pst_handle->header_param.size);
         }
     }
@@ -1104,9 +1097,8 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
     while(1) {
         int_reason = JPU_WaitInterrupt(pst_handle->handle, enc_timeout);
         if (int_reason == -1) {
-            JLOG(ERR, "Error enc: timeout happened,core:%d inst %d, reason:%d, irq_status:%d, irq_cnt:%d\n",
-            pst_handle->core_idx, pst_handle->handle->instIndex, int_reason,
-            irq_status[pst_handle->core_idx],jpu_core_irq_count[pst_handle->core_idx]);
+            JLOG(ERR, "Error enc: timeout happened,core:%d inst %d, reason:%d\n",
+            pst_handle->core_idx, pst_handle->handle->instIndex, int_reason);
             _jpeg_dump_register(pst_handle->core_idx, pst_handle->handle->instIndex);
             JPU_SetJpgPendingInstEx(pst_handle->handle, NULL);
             JpgLeaveLock();
@@ -1150,10 +1142,8 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
     }
 
     if(pst_handle->stream_buffer_ex.stream_len) {
-        jdi_read_memory(pst_handle->stream_buffer.phys_addr,
-                    (unsigned char *)(pst_handle->stream_buffer_ex.buffer.virt_addr + pst_handle->stream_buffer_ex.stream_len),
-                    pst_handle->output_info.bitstreamSize,
-                    pst_handle->open_param.streamEndian);
+        vc_memcpy_c2c(pst_handle->stream_buffer_ex.buffer.phys_addr + pst_handle->stream_buffer_ex.stream_len,
+                        pst_handle->stream_buffer.phys_addr, pst_handle->output_info.bitstreamSize);
         pst_handle->stream_buffer_ex.stream_len += pst_handle->output_info.bitstreamSize;
     }
 
@@ -1474,9 +1464,8 @@ int jpeg_dec_send_stream(drv_jpg_handle handle, void *data, int length, int time
 
     while(1) {
         if ((int_reason=JPU_WaitInterrupt(pst_handle->handle, dec_timeout)) == -1) {
-            JLOG(ERR, "Error dec: timeout happened,core:%d inst %d, reason:%d, irq_status:%d, irq_cnt:%d\n",
-            pst_handle->core_idx, pst_handle->handle->instIndex, int_reason,
-            irq_status[pst_handle->core_idx],jpu_core_irq_count[pst_handle->core_idx]);
+            JLOG(ERR, "Error dec: timeout happened,core:%d inst %d, reason:%d\n",
+            pst_handle->core_idx, pst_handle->handle->instIndex, int_reason);
             _jpeg_dump_register(pst_handle->core_idx, pst_handle->handle->instIndex);
             JPU_SetJpgPendingInstEx(pst_handle->handle, NULL);
             JpgLeaveLock();

@@ -14,7 +14,8 @@
 #include "wave/wave5_regdefine.h"
 #include <linux/dma-mapping.h>
 #include "vdi_debug.h"
-
+extern unsigned int vc_read_reg(unsigned int addr);
+extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
 Uint32 Wave5VpuIsInit(Uint32 coreIdx)
 {
     Uint32 pc;
@@ -222,10 +223,8 @@ RetCode Wave5VpuInit(Uint32 coreIdx, void* firmware, Uint32 size)
     }
 
     if (coreIdx == 0) {
-        //*(volatile unsigned int *)(VE_TOP_EXT_ADDR) = codeBase>>32;
-        unsigned int *reg_addr = ioremap(VE_TOP_EXT_ADDR, 4);
-        originValue = readl(reg_addr);
-        writel((codeBase>>32) | originValue, reg_addr);
+        originValue = vc_read_reg(VE_TOP_EXT_ADDR);
+        vc_write_reg(VE_TOP_EXT_ADDR, (codeBase>>32) | originValue);
     } else {
         vdi_fio_write_register(coreIdx, 0xFEC0, codeBase>>32);
         vdi_fio_write_register(coreIdx, 0x8EC0, codeBase>>32);
@@ -316,6 +315,7 @@ RetCode Wave5VpuInit(Uint32 coreIdx, void* firmware, Uint32 size)
     VpuWriteReg(coreIdx, W5_COMMAND,              W5_INIT_VPU);
     VpuWriteReg(coreIdx, W5_VPU_REMAP_CORE_START, 1);
     if (vdi_wait_vpu_busy(coreIdx, __VPU_BUSY_TIMEOUT, W5_VPU_BUSY_STATUS) == -1) {
+        vdi_hw_reset(coreIdx);
         VLOG(INFO, "VPU init(W5_VPU_REMAP_CORE_START) timeout\n");
         return RETCODE_VPU_RESPONSE_TIMEOUT;
     }
@@ -1518,6 +1518,7 @@ RetCode Wave5VpuReInit(Uint32 coreIdx, void* firmware, Uint32 size)
         VpuWriteReg(coreIdx, W5_VPU_REMAP_CORE_START, 1);
 
         if (vdi_wait_vpu_busy(coreIdx, __VPU_BUSY_TIMEOUT, W5_VPU_BUSY_STATUS) == -1) {
+            vdi_hw_reset(coreIdx);
             VLOG(INFO, "VPU reinit(W5_VPU_REMAP_CORE_START) timeout\n");
             return RETCODE_VPU_RESPONSE_TIMEOUT;
         }

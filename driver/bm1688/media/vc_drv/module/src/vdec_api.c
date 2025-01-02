@@ -286,7 +286,7 @@ static int alloc_framebuffer(void *pHandle)
         }
 
         if (pst_handle->open_param->wtlEnable)
-            pst_handle->numOfDecwtl = pst_handle->seq_info->frameBufDelay + pst_handle->frame_buffer_count + pst_handle->cmd_queue_depth;
+            pst_handle->numOfDecwtl = pst_handle->numOfDecFbc;
         else
             pst_handle->numOfDecwtl = 0;
     }
@@ -666,7 +666,6 @@ static int fill_command_queue(DECODER_HANDLE *pst_handle)
 static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
 {
     int ret;
-    int report_queue_cnt = 0;
     SecAxiUse  sec_axi_info = {0};
     int cycle_per_tick = 256;
     int height_from_user, width_from_user;
@@ -683,18 +682,14 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
     if (ret & (1<<INT_WAVE5_INIT_SEQ)){
         height_from_user = pst_handle->seq_info->picHeight;
         width_from_user = pst_handle->seq_info->picWidth;
-        report_queue_cnt = 0;
 
-        do {
-            ret = VPU_DecCompleteSeqInit(pst_handle->handle, pst_handle->seq_info);
-            if (ret == RETCODE_REPORT_NOT_READY) {
-                msleep(1);
-                report_queue_cnt++;
-            }
-        } while ((ret == RETCODE_REPORT_NOT_READY) && (report_queue_cnt<3));
+        ret = VPU_DecCompleteSeqInit(pst_handle->handle, pst_handle->seq_info);
+        if (ret == RETCODE_REPORT_NOT_READY)
+            return RETCODE_SUCCESS;
 
         if (ret != RETCODE_SUCCESS) {
             VLOG(ERR, "VPU_DecCompleteSeqInit failed! ret = %08x\n", ret);
+
             pst_handle->decode_one_frame = 0;
             pst_handle->seq_status = SEQ_INIT_NON;
 
@@ -731,15 +726,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
 
         pst_handle->seq_status = SEQ_DECODE_START;
     } else if (ret & (1<<INT_WAVE5_DEC_PIC)) {
-        report_queue_cnt = 0;
-        do {
-            ret = VPU_DecGetOutputInfo(pst_handle->handle, pst_handle->output_info);
-            if (ret == RETCODE_REPORT_NOT_READY) {
-                msleep(1);
-                report_queue_cnt++;
-            }
-        } while ((ret == RETCODE_REPORT_NOT_READY) && (report_queue_cnt<3));
-
+        ret = VPU_DecGetOutputInfo(pst_handle->handle, pst_handle->output_info);
         if (ret != RETCODE_SUCCESS)
             return ret;
 
@@ -877,7 +864,6 @@ reinit:
     ret = VPU_InitWithBitcode(core_idx, pus_bitCode, fw_size);
     if ((ret == RETCODE_VPU_RESPONSE_TIMEOUT) && (reinit_count < 3)) {
         reinit_count++;
-        VPU_HWReset(core_idx);
         goto reinit;
     } else if ((ret != RETCODE_SUCCESS) && (ret != RETCODE_CALLED_BEFORE)) {
         VLOG(ERR, "VPU_InitWithBitcode failed! ret = %08x\n", ret);

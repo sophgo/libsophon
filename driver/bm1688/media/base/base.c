@@ -20,9 +20,6 @@
 #include "vb.h"
 #include "bind.h"
 #include "ion.h"
-#include "vb_proc.h"
-#include "log_proc.h"
-#include "sys_proc.h"
 #include "base_debug.h"
 
 #ifndef UNUSED
@@ -44,31 +41,19 @@ struct base_device {
 	//u16 use_count;
 };
 
-
-static struct proc_dir_entry *proc_dir;
-static struct class *pbase_class;
-
 module_param(base_log_lv, int, 0644);
 
 static int base_open(struct inode *inode, struct file *filp)
 {
-	struct base_device *ndev = container_of(filp->private_data, struct base_device, miscdev);
 	int ret = 0;
 	int i;
 	UNUSED(inode);
 
-	if (!ndev) {
-		TRACE_BASE(DBG_ERR, "cannot find base private data\n");
-		return -ENODEV;
-	}
 	i = atomic_inc_return(&open_count);
 	if (i > 1) {
 		TRACE_BASE(DBG_INFO, "base_open: open %d times\n", i);
 		return 0;
 	}
-
-	filp->private_data = ndev;
-	TRACE_BASE(DBG_DEBUG, "base open ok\n");
 
 	return ret;
 }
@@ -92,23 +77,6 @@ static int base_release(struct inode *inode, struct file *filp)
 
 static int base_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct base_device *ndev = filp->private_data;
-	unsigned long vm_start = vma->vm_start;
-	unsigned int vm_size = vma->vm_end - vma->vm_start;
-	unsigned int offset = vma->vm_pgoff << PAGE_SHIFT;
-	void *pos = ndev->shared_mem;
-
-	if ((vm_size + offset) > BASE_SHARE_MEM_SIZE)
-		return -EINVAL;
-
-	while (vm_size > 0) {
-		if (remap_pfn_range(vma, vm_start, page_to_pfn(virt_to_page(pos)), PAGE_SIZE, vma->vm_page_prot))
-			return -EAGAIN;
-		TRACE_BASE(DBG_DEBUG, "mmap vir(%p) phys(%#llx)\n", pos, (u64)virt_to_phys((void *) pos));
-		vm_start += PAGE_SIZE;
-		pos += PAGE_SIZE;
-		vm_size -= PAGE_SIZE;
-	}
 
 	return 0;
 }
@@ -225,57 +193,15 @@ static long base_compat_ptr_ioctl(struct file *file, unsigned int cmd, unsigned 
 }
 #endif
 
-static const struct file_operations base_fops = {
-	.owner = THIS_MODULE,
-	.open = base_open,
-	.release = base_release,
-	.mmap = base_mmap,
-	.unlocked_ioctl = base_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl = base_compat_ptr_ioctl,
-#endif
-};
-
 static int base_probe(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
-	struct base_device *ndev;
-	int ret;
-
-	ndev = devm_kzalloc(&pdev->dev, sizeof(*ndev), GFP_KERNEL);
-	if (!ndev)
-		return -ENOMEM;
-
-	ndev->shared_mem = kzalloc(BASE_SHARE_MEM_SIZE, GFP_KERNEL);
-	if (!ndev->shared_mem)
-		return -ENOMEM;
-
-	proc_dir = proc_mkdir("soph", NULL);
-	if (vb_proc_init(proc_dir) < 0)
-		TRACE_BASE(DBG_ERR, "vb proc init failed\n");
-
-	if (log_proc_init(proc_dir, ndev->shared_mem) < 0)
-		TRACE_BASE(DBG_ERR, "log proc init failed\n");
-
-	if (sys_proc_init(proc_dir, ndev->shared_mem) < 0)
-		TRACE_BASE(DBG_ERR, "sys proc init failed\n");
-
 	if (vb_create_instance()) {
 		TRACE_BASE(DBG_ERR, "vb_create_instance failed\n");
 		return -ENOMEM;
 	}
 
 	bind_init();
-	ndev->miscdev.name = BASE_DEV_NAME;
-	ndev->miscdev.fops = &base_fops;
 
-	ret = misc_register(&ndev->miscdev);
-	if (ret) {
-		dev_err(dev, "base: failed to register misc device.\n");
-		return ret;
-	}
-
-	platform_set_drvdata(pdev, ndev);
 	TRACE_BASE(DBG_WARN, "base probe done\n");
 
 	return 0;
@@ -283,68 +209,19 @@ static int base_probe(struct platform_device *pdev)
 
 static int base_remove(struct platform_device *pdev)
 {
-	struct base_device *ndev = platform_get_drvdata(pdev);
-
 	bind_deinit();
 	vb_destroy_instance();
-
-	vb_proc_remove(proc_dir);
-	log_proc_remove(proc_dir);
-	sys_proc_remove(proc_dir);
-	proc_remove(proc_dir);
-	proc_dir = NULL;
-	kfree(ndev->shared_mem);
-	ndev->shared_mem = NULL;
-
-	misc_deregister(&ndev->miscdev);
-	platform_set_drvdata(pdev, NULL);
-	TRACE_BASE(DBG_DEBUG, "%s DONE\n", __func__);
-
-	return 0;
-}
-
-static const struct of_device_id base_dt_match[] = { { .compatible = "cvitek,base" }, {} };
-
-static struct platform_driver base_driver = {
-	.probe = base_probe,
-	.remove = base_remove,
-	.driver = {
-		.name = BASE_DEV_NAME,
-		.owner = THIS_MODULE,
-		.of_match_table = base_dt_match,
-	},
-};
-
-static int __init base_init(void)
-{
-	int rc;
-
-	pbase_class = class_create(THIS_MODULE, BASE_CLASS_NAME);
-	if (IS_ERR(pbase_class)) {
-		TRACE_BASE(DBG_ERR, "create class failed\n");
-		rc = PTR_ERR(pbase_class);
-		goto cleanup;
-	}
-
-	rc = platform_driver_register(&base_driver);
-
-	return 0;
-
-cleanup:
-	class_destroy(pbase_class);
-
-	return rc;
-}
-
-static void __exit base_exit(void)
-{
-	platform_driver_unregister(&base_driver);
 	vb_cleanup();
-	class_destroy(pbase_class);
+
+	return 0;
 }
 
+int drv_base_init(void)
+{
+	return base_probe(NULL);
+}
 
-MODULE_DESCRIPTION("Cvitek base driver");
-MODULE_LICENSE("GPL");
-module_init(base_init);
-module_exit(base_exit);
+int drv_base_deinit(void)
+{
+	return base_remove(NULL);
+}

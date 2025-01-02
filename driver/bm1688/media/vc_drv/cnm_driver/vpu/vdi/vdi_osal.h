@@ -37,7 +37,7 @@ enum {
     TERM_COLOR_BRIGHT = 8    /**< Bright mask.   */
 };
 
-#define MAX_PRINT_LENGTH 512
+#define MAX_PRINT_LENGTH 128
 
 #ifdef ANDROID
 #include <utils/Log.h>

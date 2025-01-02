@@ -15,7 +15,7 @@
 #include "wave/wave5_regdefine.h"
 #include <linux/mutex.h>
 #include <linux/delay.h>
-
+#include <linux/vmalloc.h>
 
 #define INVALID_CORE_INDEX_RETURN_ERROR(_coreIdx)  \
     if (_coreIdx >= MAX_NUM_VPU_CORE) \
@@ -3105,21 +3105,22 @@ RetCode VPU_EncGiveCommand(
         }
     case ENC_SET_GOP_NUMBER:
         {
-            ParamChange paramChange;
-
-            paramChange.paraEnable = C9_ENC_CHANGE_PARAM_GOP_NUM;
-            paramChange.NewGopNum  = *(int*)param;
+            ParamChange *paramChange;
 
             if ((pCodecInst->codecMode != MP4_ENC) && (pCodecInst->codecMode != AVC_ENC))
                 return RETCODE_INVALID_COMMAND;
-            if (paramChange.NewGopNum < 0)
+            if (*(int*)param < 0)
                 return RETCODE_INVALID_PARAM;
 
+            paramChange = vzalloc(sizeof(ParamChange));
+            paramChange->paraEnable = C9_ENC_CHANGE_PARAM_GOP_NUM;
+            paramChange->NewGopNum  = *(int*)param;
             ret = EnterLock(pCodecInst->coreIdx);
             if (ret == RETCODE_SUCCESS) {
-                ret = ProductVpuEncChangeParam(pCodecInst, &paramChange);
+                ret = ProductVpuEncChangeParam(pCodecInst, paramChange);
                 LeaveLock(pCodecInst->coreIdx);
             }
+            vfree(paramChange);
             return ret;
         }
     case ENC_SET_PERIOD:
@@ -3133,77 +3134,82 @@ RetCode VPU_EncGiveCommand(
         }
     case ENC_SET_INTRA_QP:
         {
-            ParamChange paramChange;
-
-            paramChange.paraEnable = C9_ENC_CHANGE_PARAM_INTRA_QP;
-            paramChange.NewIntraQp = *(int*)param;
+            ParamChange *paramChange;
 
             if ((pCodecInst->codecMode != MP4_ENC) && (pCodecInst->codecMode != AVC_ENC))
                 return RETCODE_INVALID_COMMAND;
-            if ((pCodecInst->codecMode == MP4_ENC) && (paramChange.NewIntraQp < 1 || paramChange.NewIntraQp > 31))
+            if ((pCodecInst->codecMode == MP4_ENC) && (*(int*)param < 1 || *(int*)param > 31))
                 return RETCODE_INVALID_PARAM;
-            if ((pCodecInst->codecMode == AVC_ENC) && (paramChange.NewIntraQp < 0 || paramChange.NewIntraQp > 51))
+            if ((pCodecInst->codecMode == AVC_ENC) && (*(int*)param < 0 || *(int*)param > 51))
                 return RETCODE_INVALID_PARAM;
 
+            paramChange = vzalloc(sizeof(ParamChange));
+            paramChange->paraEnable = C9_ENC_CHANGE_PARAM_INTRA_QP;
+            paramChange->NewIntraQp = *(int*)param;
             ret = EnterLock(pCodecInst->coreIdx);
             if (ret == RETCODE_SUCCESS) {
-                ret = ProductVpuEncChangeParam(pCodecInst, &paramChange);
+                ret = ProductVpuEncChangeParam(pCodecInst, paramChange);
                 LeaveLock(pCodecInst->coreIdx);
             }
+            vfree(paramChange);
             return ret;
         }
     case ENC_SET_BITRATE:
         {
-            ParamChange paramChange;
-
-            paramChange.paraEnable = C9_ENC_CHANGE_PARAM_BIT_RATE;
-            paramChange.NewBitrate = *(int*)param;
+            ParamChange *paramChange;
 
             if ((pCodecInst->codecMode != MP4_ENC) && (pCodecInst->codecMode != AVC_ENC))
                 return RETCODE_INVALID_COMMAND;
-            if ((pCodecInst->codecMode == AVC_ENC) && (paramChange.NewBitrate < 0 || paramChange.NewBitrate > 32767))
+            if ((pCodecInst->codecMode == AVC_ENC) && (*(int*)param < 0 || *(int*)param > 32767))
                 return RETCODE_INVALID_PARAM;
-            if ((pCodecInst->codecMode == MP4_ENC) && (paramChange.NewBitrate < 0 || paramChange.NewBitrate > 32767))
+            if ((pCodecInst->codecMode == MP4_ENC) && (*(int*)param < 0 || *(int*)param > 32767))
                 return RETCODE_INVALID_PARAM;
 
+            paramChange = vzalloc(sizeof(ParamChange));
+            paramChange->paraEnable = C9_ENC_CHANGE_PARAM_BIT_RATE;
+            paramChange->NewBitrate = *(int*)param;
             ret = EnterLock(pCodecInst->coreIdx);
             if (ret == RETCODE_SUCCESS) {
-                ret = ProductVpuEncChangeParam(pCodecInst, &paramChange);
+                ret = ProductVpuEncChangeParam(pCodecInst, paramChange);
                 LeaveLock(pCodecInst->coreIdx);
             }
+            vfree(paramChange);
             return ret;
         }
     case ENC_SET_FRAME_RATE:
         {
-            ParamChange paramChange;
-
-            paramChange.paraEnable   = C9_ENC_CHANGE_PARAM_FRAME_RATE;
-            paramChange.NewFrameRate = *(int*)param;
+            ParamChange *paramChange;
 
             if ((pCodecInst->codecMode != MP4_ENC) && (pCodecInst->codecMode != AVC_ENC))
                 return RETCODE_INVALID_COMMAND;
-            if (paramChange.NewFrameRate <= 0)
+            if (*(int*)param <= 0)
                 return RETCODE_INVALID_PARAM;
 
+            paramChange = vzalloc(sizeof(ParamChange));
+            paramChange->paraEnable   = C9_ENC_CHANGE_PARAM_FRAME_RATE;
+            paramChange->NewFrameRate = *(int*)param;
             ret = EnterLock(pCodecInst->coreIdx);
             if (ret == RETCODE_SUCCESS) {
-                ret = ProductVpuEncChangeParam(pCodecInst, &paramChange);
+                ret = ProductVpuEncChangeParam(pCodecInst, paramChange);
                 LeaveLock(pCodecInst->coreIdx);
             }
+            vfree(paramChange);
             return ret;
         }
     case ENC_SET_INTRA_MB_REFRESH_NUMBER:
         {
-            ParamChange paramChange;
+            ParamChange *paramChange;
 
-            paramChange.paraEnable      = C9_ENC_CHANGE_PARAM_INTRA_REFRESH;
-            paramChange.NewIntraRefresh = *(int*)param;
+            paramChange = vzalloc(sizeof(ParamChange));
+            paramChange->paraEnable      = C9_ENC_CHANGE_PARAM_INTRA_REFRESH;
+            paramChange->NewIntraRefresh = *(int*)param;
 
             ret = EnterLock(pCodecInst->coreIdx);
             if (ret == RETCODE_SUCCESS) {
-                ret = ProductVpuEncChangeParam(pCodecInst, &paramChange);
+                ret = ProductVpuEncChangeParam(pCodecInst, paramChange);
                 LeaveLock(pCodecInst->coreIdx);
             }
+            vfree(paramChange);
             return ret;
         }
     case ENC_SET_SLICE_INFO:

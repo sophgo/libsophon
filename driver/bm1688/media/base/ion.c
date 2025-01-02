@@ -35,6 +35,9 @@ module_param(ion_debug_alloc_free, int, 0644);
 static DEFINE_SPINLOCK(ion_lock);
 static DEFINE_HASHTABLE(ion_hash, 8);
 
+extern uint64_t vc_ion_alloc(uint32_t len);
+extern unsigned int vc_ion_free(uint64_t p_addr);
+
 int32_t mem_put(struct mem_mapping *mem_info)
 {
 	struct mem_mapping *p;
@@ -96,99 +99,53 @@ static int32_t _base_ion_alloc(uint64_t *addr_p, void **addr_v, uint32_t len,
 	uint32_t is_cached, uint8_t *name)
 {
 	int32_t ret = 0;
-	// int32_t dmabuf_fd = 0;
-	// struct dma_buf *dmabuf;
-	// struct ion_buffer *ionbuf;
-	// uint8_t *owner_name = NULL;
-	// void *vmap_addr = NULL;
-	// struct mem_mapping mem_info;
+	struct mem_mapping mem_info;
 
 	// vpp heap
-	// dmabuf_fd = bm_ion_alloc(0x1, len, is_cached);
-	// if (dmabuf_fd < 0) {
-	// 	TRACE_BASE(DBG_ERR, "bm_ion_alloc len=0x%x failed\n", len);
-	// 	return -ENOMEM;
-	// }
+	//push into memory manager
+	mem_info.dmabuf = NULL;
+	mem_info.dmabuf_fd = 0;
+	mem_info.vir_addr = NULL;
+	mem_info.phy_addr = vc_ion_alloc(len);
+	mem_info.size = len;
+	mem_info.fd_pid = current->pid;
+	if (mem_put(&mem_info)) {
+		TRACE_BASE(DBG_ERR, "allocate mm put failed\n");
+		return -ENOMEM;
+	}
 
-	// dmabuf = dma_buf_get(dmabuf_fd);
-	// if (!dmabuf) {
-	// 	TRACE_BASE(DBG_ERR, "allocated get dmabuf failed\n");
-	// 	return -ENOMEM;
-	// }
+	if (ion_debug_alloc_free) {
+		TRACE_BASE(DBG_INFO, "ion alloc: pid=%d name=%s phy_addr=0x%llx size=%d\n",
+			mem_info.fd_pid, ionbuf->name, mem_info.phy_addr, mem_info.size);
+	}
 
-	// ionbuf = (struct ion_buffer *)dmabuf->priv;
-	// owner_name = vmalloc(MAX_ION_BUFFER_NAME);
-	// if (name)
-	// 	strncpy(owner_name, name, MAX_ION_BUFFER_NAME);
-	// else
-	// 	strncpy(owner_name, "anonymous", MAX_ION_BUFFER_NAME);
-
-	// ionbuf->name = owner_name;
-
-	// ret = dma_buf_begin_cpu_access(dmabuf, DMA_TO_DEVICE);
-	// if (ret < 0) {
-	// 	TRACE_BASE(DBG_ERR, "dma_buf_begin_cpu_access failed\n");
-	// 	dma_buf_put(dmabuf);
-	// 	return ret;
-	// }
-
-	// vmap_addr = ionbuf->vaddr;
-	// if (IS_ERR(vmap_addr)) {
-	// 	ret = -EINVAL;
-	// 	return ret;
-	// }
-
-	// //push into memory manager
-	// mem_info.dmabuf = (void *)dmabuf;
-	// mem_info.dmabuf_fd = dmabuf_fd;
-	// mem_info.vir_addr = vmap_addr;
-	// mem_info.phy_addr = ionbuf->paddr;
-	// mem_info.size = len;
-	// mem_info.fd_pid = current->pid;
-	// if (mem_put(&mem_info)) {
-	// 	TRACE_BASE(DBG_ERR, "allocate mm put failed\n");
-	// 	return -ENOMEM;
-	// }
-
-	// if (ion_debug_alloc_free) {
-	// 	TRACE_BASE(DBG_INFO, "ion alloc: pid=%d name=%s phy_addr=0x%llx size=%d\n",
-	// 		mem_info.fd_pid, ionbuf->name, mem_info.phy_addr, mem_info.size);
-	// }
-
-	// *addr_p = ionbuf->paddr;
-	// *addr_v = vmap_addr;
+	*addr_p = mem_info.phy_addr;
+	*addr_v = NULL;
 
 	return ret;
 }
 
 static int32_t _base_ion_free(uint64_t addr_p, int32_t *size)
 {
-	// struct mem_mapping mem_info;
-	// struct ion_buffer *ionbuf;
-	// struct dma_buf *dmabuf;
+	struct mem_mapping mem_info;
 
 	//get from memory manager
-	// memset(&mem_info, 0, sizeof(struct mem_mapping));
-	// mem_info.phy_addr = addr_p;
-	// if (mem_get(&mem_info)) {
-	// 	TRACE_BASE(DBG_ERR, "dmabuf_fd get failed, addr:0x%llx\n", addr_p);
-	// 	return -ENOMEM;
-	// }
+	memset(&mem_info, 0, sizeof(struct mem_mapping));
+	mem_info.phy_addr = addr_p;
+	if (mem_get(&mem_info)) {
+		TRACE_BASE(DBG_ERR, "dmabuf_fd get failed, addr:0x%llx\n", addr_p);
+		return -ENOMEM;
+	}
 
-	// dmabuf = (struct dma_buf *)(mem_info.dmabuf);
-	// ionbuf = (struct ion_buffer *)dmabuf->priv;
+	if (ion_debug_alloc_free) {
+		TRACE_BASE(DBG_INFO, "ion free: pid=%d name=%s phy_addr=0x%llx size=%d\n",
+			mem_info.fd_pid, ionbuf->name, mem_info.phy_addr, mem_info.size);
+	}
 
-	// if (ion_debug_alloc_free) {
-	// 	TRACE_BASE(DBG_INFO, "ion free: pid=%d name=%s phy_addr=0x%llx size=%d\n",
-	// 		mem_info.fd_pid, ionbuf->name, mem_info.phy_addr, mem_info.size);
-	// }
+	vc_ion_free(addr_p);
 
-	// dma_buf_end_cpu_access(dmabuf, DMA_TO_DEVICE);
-	// dma_buf_put(dmabuf);
-	// // bm_ion_free(mem_info.dmabuf_fd);
-
-	// if (size)
-	// 	*size = mem_info.size;
+	if (size)
+		*size = mem_info.size;
 
 	return 0;
 }
@@ -212,20 +169,12 @@ EXPORT_SYMBOL_GPL(base_ion_alloc);
 
 int32_t base_ion_cache_invalidate(uint64_t addr_p, void *addr_v, uint32_t len)
 {
-	// arch_sync_dma_for_device(addr_p, len, DMA_FROM_DEVICE);
-
-	/*	*/
-	smp_mb();
 	return 0;
 }
 EXPORT_SYMBOL_GPL(base_ion_cache_invalidate);
 
 int32_t base_ion_cache_flush(uint64_t addr_p, void *addr_v, uint32_t len)
 {
-	// arch_sync_dma_for_device(addr_p, len, DMA_TO_DEVICE);
-
-	/*	*/
-	smp_mb();
 	return 0;
 }
 EXPORT_SYMBOL_GPL(base_ion_cache_flush);

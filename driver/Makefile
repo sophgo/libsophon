@@ -42,7 +42,7 @@ BM1684_OBJ := $(addprefix $(BM1684_DIR)/, $(BM1684_OBJ))
 BM1688_DIR ?= bm1688
 ifeq ($(SOC_MODE), 1)
 else
-BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o
+BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o  bm1688_vcodec.o
 endif
 BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_smmu.o bm1688_clkrst.o bm1688_card.o \
 			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
@@ -66,6 +66,102 @@ VPSS_OBJ += chip/soph/vpss_platform.o chip/soph/vpss_core.o chip/soph/vpss_hal.o
 VPSS_OBJ := $(addprefix $(VPSS_DIR)/, $(VPSS_OBJ))
 VPP_OBJ += $(VPSS_OBJ)
 endif
+
+BASE_DIR ?= bm1688/media/base
+ifeq ($(SOC_MODE), 0)
+ccflags-y += 						\
+	-I$(src)/bm1688/media/include/common/uapi	\
+	-I$(src)/bm1688/media/include/common/kapi	\
+	-I$(src)/bm1688/media/base			\
+	-I$(src)/bm1688/media/base/proc
+
+BASE_OBJ += base.o	\
+	base_common.o	\
+	bind.o		\
+	callback.o	\
+	ion.o		\
+	vb.o		\
+	vbq.o
+
+BASE_OBJ := $(addprefix $(BASE_DIR)/, $(BASE_OBJ))
+endif
+
+
+VPU_DIR ?= bm1688/media/vc_drv
+ifeq ($(SOC_MODE), 1)
+else
+ccflags-y += -DENABLE_DEC
+ccflags-y +=								\
+	-I$(src)/$(VPU_DIR)						\
+	-I$(src)/$(VPU_DIR)/common					\
+	-I$(src)/$(VPU_DIR)/common/rcKernel				\
+	-I$(src)/$(VPU_DIR)/common/rcKernel/float_point			\
+	-I$(src)/$(VPU_DIR)/module/include				\
+	-I$(src)/$(VPU_DIR)/include					\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpeg/jpuapi			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpeg/jdi				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpeg/sample			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpeg/sample/helper		\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpu/bmjpuapi/inc			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpu				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpu/jpuapi			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpu/jdi				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/jpu/include			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/vdi				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/vdi/linux/driver		\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/sample_v2/helper		\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/sample_v2/helper/misc	\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/sample_v2/component		\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/sample_v2/component_decoder	\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/sample_v2/component_encoder	\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/vpuapi			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/vpuapi/coda9			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/vpuapi/wave			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/cvi				\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/fw/wave_521			\
+	-I$(src)/$(VPU_DIR)/cnm_driver/vpu/fw/wave_517
+
+VPU_OBJ += vc_drv.o							\
+	module/src/venc.o						\
+	module/src/vdec.o						\
+	module/src/enc_ctx.o						\
+	module/src/venc_api.o						\
+	module/src/vdec_api.o						\
+	module/src/jpeg_api.o						\
+	module/src/venc_help.o						\
+	module/src/vc_drv_proc.o					\
+	module/src/venc_rc.o						\
+	common/rcKernel/float_point/float_point.o			\
+	common/rcKernel/float_point/soft_float.o			\
+	common/drv_file.o						\
+	common/vc_getopt.o						\
+	common/datastructure.o						\
+	cnm_driver/vpu/vdi/linux/vdi.o					\
+	cnm_driver/vpu/vdi/linux/vdi_osal.o				\
+	cnm_driver/vpu/vdi/linux/driver/vpu.o				\
+	cnm_driver/vpu/vdi/vdi_debug.o					\
+	cnm_driver/vpu/vpuapi/vpuapi.o					\
+	cnm_driver/vpu/vpuapi/vpuapifunc.o				\
+	cnm_driver/vpu/vpuapi/product.o					\
+	cnm_driver/vpu/vpuapi/wave/wave5.o				\
+	cnm_driver/vpu/vpuapi/wave/wave6.o				\
+	cnm_driver/vpu/vpuapi/coda9/coda9.o				\
+	cnm_driver/vpu/sample_v2/helper/main_helper.o			\
+	cnm_driver/vpu/sample_v2/helper/misc/pbu.o			\
+	cnm_driver/vpu/sample_v2/helper/misc/debug.o			\
+	cnm_driver/jpeg/jpuapi/jpuapi.o					\
+	cnm_driver/jpeg/jpuapi/jpuapifunc.o				\
+	cnm_driver/jpeg/jdi/mm.o					\
+	cnm_driver/jpeg/jdi/linux/jdi.o					\
+	cnm_driver/jpeg/jdi/linux/driver/jpu_core_res.o			\
+	cnm_driver/jpeg/jdi/linux/driver/jpeg.o				\
+	cnm_driver/jpeg/sample/helper/jpulog.o				\
+	cnm_driver/jpeg/sample/helper/jpuhelper.o
+
+VPU_OBJ := $(addprefix $(VPU_DIR)/, $(VPU_OBJ))
+endif
+
 
 BM_KERNEL_DRIVER_OUT_DIR ?= $(PWD)/../build/driver/$(TARGET_PROJECT)
 ifeq ($(SOC_MODE), 1)
@@ -118,6 +214,10 @@ $(BM_MODULE_NAME)-y += $(BM1682_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1684_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1688_OBJ)
 $(BM_MODULE_NAME)-y += $(VPP_OBJ)
+ifeq ($(SOC_MODE), 0)
+$(BM_MODULE_NAME)-y += $(BASE_OBJ)
+$(BM_MODULE_NAME)-y += $(VPU_OBJ)
+endif
 
 ifeq ($(SOC_MODE), 1)
   ifndef SOC_LINUX_DIR

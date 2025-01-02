@@ -11,7 +11,7 @@
 #include "vpss_core.h"
 #include "vpss.h"
 
-#define VPSS_PROC_NAME          "vpss"
+#define VPSS_PROC_NAME          "bmsophon/vpss"
 #define VPP_PROC_NAME          "vppinfo"
 
 // for proc info

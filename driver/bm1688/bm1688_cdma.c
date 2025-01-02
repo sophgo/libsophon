@@ -102,11 +102,7 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	u32 timeout = timeout_ms * 1000;
 	// u32 int_mask_val;
 
-	bm1688_timer_start(bmdi);
-	udelay(1);
-	// printk("cdma transfer enter\n");
-	cdma_xfer_info.cdma_xfer_status = 0;
-	nv_cdma_send_us = bm1688_timer_get_time_us(bmdi);
+	//printk("cdma transfer enter\n");
 
 	if (bmdi->cinfo.platform == PALLADIUM)
 		timeout_ms *= PALLADIUM_CLK_RATIO;
@@ -119,6 +115,11 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	}
 	if (lock_cdma)
 		mutex_lock(&memcpy_info->cdma_mutex);
+
+	bm1688_timer_start(bmdi);
+	udelay(1);
+	cdma_xfer_info.cdma_xfer_status = 0;
+	nv_cdma_send_us = bm1688_timer_get_time_us(bmdi);
 
 	api_pid = current->pid;
 	ti = bmdrv_find_thread_info(h_info, api_pid);
@@ -193,7 +194,7 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 	src_addr_lo = src & 0xffffffff;
 	dst_addr_hi = dst >> 32;
 	dst_addr_lo = dst & 0xffffffff;
-	// pr_info("src:0x%llx dst:0x%llx size:%lld\n", src, dst, parg->size);
+	//pr_info("src:0x%llx dst:0x%llx size:%lld type:%d\n", src, dst, parg->size, parg->type);
 	PR_TRACE("src_addr_hi 0x%x src_addr_low 0x%x\n", src_addr_hi, src_addr_lo);
 	PR_TRACE("dst_addr_hi 0x%x dst_addr_low 0x%x\n", dst_addr_hi, dst_addr_lo);
 
@@ -284,9 +285,10 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 		mutex_unlock(&ti->trace_mutex);
 	}
 
+	bm1688_timer_stop(bmdi);
+
 	if (lock_cdma)
 		mutex_unlock(&memcpy_info->cdma_mutex);
-	bm1688_timer_stop(bmdi);
 	// printk("cdma transfer exit\n");
 	return 0;
 }
@@ -323,7 +325,7 @@ void bm1688_cdma0_irq_handler(struct bm_device_info* bmdi)
 		}
 		cdma0_reg_write(bmdi, CDMA_INT_STAT, int_status);
 	}
-	printk("cdma0 interrupt 0x%x\n", int_status);
+	pr_debug("cdma0 interrupt 0x%x\n", int_status);
 }
 
 void bm1688_cdma1_irq_handler(struct bm_device_info* bmdi)
@@ -342,7 +344,7 @@ void bm1688_cdma1_irq_handler(struct bm_device_info* bmdi)
 		}
 		cdma1_reg_write(bmdi, CDMA_INT_STAT, int_status);
 	}
-	printk("cdma1 interrupt 0x%x\n", int_status);
+	pr_debug("cdma1 interrupt 0x%x\n", int_status);
 }
 
 static ssize_t bm1688_dual_cdma_read(struct file* filp, char __user* buff, size_t count, loff_t* offp)

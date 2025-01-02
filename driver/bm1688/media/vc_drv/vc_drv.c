@@ -2202,9 +2202,7 @@ static int vc_drv_plat_remove(struct platform_device *pdev)
     h264e_proc_deinit();
     jpege_proc_deinit();
     rc_proc_deinit();
-    #ifdef ENABLE_DEC
     vdec_proc_deinit();
-    #endif
     codecinst_proc_deinit();
 
     return ret;
@@ -2226,26 +2224,6 @@ int _vc_drv_resume(struct platform_device *pdev)
     return 0;
 }
 #endif
-
-
-
-static const struct of_device_id vc_drv_match_table[] = {
-    {.compatible = "sophgo,vc_drv"},
-    {},
-};
-
-static struct platform_driver vc_plat_driver = {
-    .driver = {
-        .name = "sophgo,vc_drv",
-        .of_match_table = vc_drv_match_table,
-    },
-    .probe      = vc_drv_plat_probe,
-    .remove     = vc_drv_plat_remove,
-    #if defined(CONFIG_PM)
-    .suspend    = _vc_drv_suspend,
-    .resume     = _vc_drv_resume,
-    #endif
-};
 
 static int __init _vc_drv_init(void)
 {
@@ -2269,15 +2247,20 @@ static int __init _vc_drv_init(void)
 
     pVcDrvDevice = vdev;
 
-    ret = platform_driver_register(&vc_plat_driver);
     for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
+#ifdef VPU_SUPPORT_CLOCK_CONTROL
         vpu_clk_enable(core);
         vpu_clk_disable(core);
+#endif
     }
+
     for (core = 0; core < MAX_NUM_JPU_CORE; core++) {
+#ifdef JPU_SUPPORT_CLOCK_CONTROL
         jpu_clk_enable(core);
         jpu_clk_disable(core);
+#endif
     }
+
     pr_info("_vc_drv_init result = 0x%x\n", ret);
 
     return ret;
@@ -2313,13 +2296,19 @@ static void __exit _vc_drv_exit(void)
     class_destroy(vdev->vc_class);
     vfree(vdev);
     pVcDrvDevice = NULL;
-
-    platform_driver_unregister(&vc_plat_driver);
 }
 
-MODULE_AUTHOR("vc sdk driver.");
-MODULE_DESCRIPTION("vc sdk driver");
-MODULE_LICENSE("GPL");
+int drv_vpu_init(void)
+{
+    _vc_drv_init();
+    vc_drv_plat_probe(NULL);
 
-module_init(_vc_drv_init);
-module_exit(_vc_drv_exit);
+    return 0;
+}
+
+int drv_vpu_deinit(void)
+{
+    _vc_drv_exit();
+    vc_drv_plat_remove(NULL);
+    return 0;
+}

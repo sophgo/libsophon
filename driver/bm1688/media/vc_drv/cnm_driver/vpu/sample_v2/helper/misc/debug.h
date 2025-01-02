@@ -133,8 +133,6 @@ extern void InitializeDebugEnv(Uint32 options);
 extern void ReleaseDebugEnv(void);
 extern void ExecuteDebugger(void);
 
-extern void ChekcAndPrintDebugInfo(VpuHandle handle, BOOL isEnc, RetCode result);
-
 extern void PrintDecVpuStatus(
     DecHandle   handle
     );

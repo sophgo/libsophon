@@ -49,6 +49,7 @@
 #include "../../../jpuapi/jpuconfig.h"
 #include "jpu.h"
 #include "jpulog.h"
+#include "ion.h"
 
 //#define ENABLE_DEBUG_MSG
 #ifdef ENABLE_DEBUG_MSG
@@ -62,8 +63,8 @@ static struct file *g_filp;
 
 /* definitions to be changed as customer  configuration */
 /* if you want to have clock gating scheme frame by frame */
-#define JPU_SUPPORT_CLOCK_CONTROL
-#define JPU_SUPPORT_ISR
+//#define JPU_SUPPORT_CLOCK_CONTROL
+// #define JPU_SUPPORT_ISR
 /* if the platform driver knows the name of this driver */
 /* JPU_PLATFORM_DEVICE_NAME */
 #define JPU_SUPPORT_PLATFORM_DRIVER_REGISTER
@@ -76,7 +77,7 @@ static struct file *g_filp;
 #define JPU_DEV_NAME                "jpu"
 
 #define JPU_REG_BASE_ADDR           0x75300000
-#define JPU_REG_SIZE                0x300
+#define JPU_REG_SIZE                0x10000
 
 
 #define JPEG_TOP_REG                0x21000010
@@ -86,7 +87,7 @@ static struct file *g_filp;
 #ifdef JPU_SUPPORT_ISR
 #define JPU_IRQ_NUM                 (15+32)
 /* if the driver want to disable and enable IRQ whenever interrupt asserted. */
-#define JPU_IRQ_CONTROL
+// #define JPU_IRQ_CONTROL
 #endif
 
 
@@ -148,7 +149,7 @@ void jpu_clk_enable(int core_idx);
 
 static jpudrv_buffer_t s_instance_pool = {0};
 static jpu_drv_context_t s_jpu_drv_context;
-static int s_jpu_major;
+
 static int s_jpu_open_ref_count;
 #ifdef JPU_SUPPORT_ISR
 //static int s_jpu_irq = JPU_IRQ_NUM;
@@ -174,9 +175,9 @@ static const char *const jpu_clk_name[9] = {
             "jpeg_apb0", "jpeg_apb1", "jpeg_apb2", "jpeg_apb3",
             "jpeg_src",
 };
+static int s_jpu_reg_phy_base[MAX_NUM_JPU_CORE] = {0x21020000, 0x21030000, 0x21040000, 0x21050000};
 
 static jpu_power_ctrl jpu_pwm_ctrl = {0};
-static struct device *jpu_dev;
 
 static int s_interrupt_flag[MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE];
 static wait_queue_head_t s_interrupt_wait_q[MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE];
@@ -199,9 +200,8 @@ static struct list_head s_inst_list_head = LIST_HEAD_INIT(s_inst_list_head);
 #define NPT_REG_SIZE                            0x300
 #define MJPEG_PIC_STATUS_REG(_inst_no)          (NPT_BASE + (_inst_no*NPT_REG_SIZE) + 0x004)
 
-#define ReadJpuRegister(core,addr)           *(volatile unsigned int *)(s_jpu_register[core].virt_addr + addr)
-#define WriteJpuRegister(core,addr, val)     *(volatile unsigned int *)(s_jpu_register[core].virt_addr + addr) = (unsigned int)val
-#define WriteJpu(addr, val)                  *(volatile unsigned int *)(addr) = (unsigned int)val;
+#define ReadJpuRegister(core,addr)           vc_read_reg(s_jpu_register[core].phys_addr + addr)
+#define WriteJpuRegister(core,addr, val)     vc_write_reg((s_jpu_register[core].phys_addr + addr), val)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
 #define IOREMAP(addr, size) ioremap(addr, size)
@@ -211,23 +211,16 @@ static struct list_head s_inst_list_head = LIST_HEAD_INIT(s_inst_list_head);
 
 extern int jpu_core_init_resources(unsigned int core_num);
 extern void jpu_core_cleanup_resources(void);
-extern int32_t base_ion_free(uint64_t u64PhyAddr);
-extern int32_t base_ion_alloc(uint64_t *p_paddr, void **pp_vaddr, uint8_t *buf_name, uint32_t buf_len, bool is_cached);
-extern int32_t base_ion_cache_invalidate(uint64_t addr_p, void *addr_v, uint32_t u32Len);
-extern int32_t base_ion_cache_flush(uint64_t addr_p, void *addr_v, uint32_t u32Len);
+extern unsigned int vc_read_reg(unsigned int addr);
+extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
 
 uint32_t jpu_get_extension_address(int core_idx)
 {
     uint32_t origin_value = 0;
     int shift = 0;
 
-    if (!virt_top_addr) {
-        JLOG(ERR, "[JPUDRV] JPEG_TOP_REG not mapped\n");
-        return 0;
-    }
-
     shift = (core_idx + 1) * 4;
-    origin_value = readl((void *)virt_top_addr);
+    origin_value = vc_read_reg(JPEG_TOP_REG);
     return ((origin_value >> shift) & 0xf);
 }
 
@@ -236,11 +229,6 @@ void jpu_set_extension_address(int core_idx, uint32_t addr)
     uint32_t origin_value = 0;
     uint32_t bit_mask = 0;
     int shift = 0;
-
-    if (!virt_top_addr) {
-        JLOG(ERR, "[JPUDRV] JPEG_TOP_REG not mapped\n");
-        return;
-    }
 
     DPRINTK("[JPUDRV] jpu_set_extension_address: core_idx=%d, addr=0x%lx\n", core_idx, addr);
 
@@ -266,8 +254,8 @@ void jpu_set_extension_address(int core_idx, uint32_t addr)
             return;
     }
 
-    origin_value = readl((void *)virt_top_addr);
-    writel((origin_value & bit_mask) | ((addr & 0xf) << shift), (void *)virt_top_addr);
+    origin_value = vc_read_reg(JPEG_TOP_REG);
+    vc_write_reg(JPEG_TOP_REG, (origin_value & bit_mask) | ((addr & 0xf) << shift));
     return;
 }
 
@@ -275,7 +263,6 @@ void jpu_sw_top_reset(int core_idx)
 {
     uint32_t origin_value = 0;
     uint32_t bit_mask = 0;
-    unsigned long virt_top_reset_addr = 0;
 
     switch (core_idx) {
         case 0:  // jpu core 0
@@ -297,13 +284,11 @@ void jpu_sw_top_reset(int core_idx)
     DPRINTK("[JPUDRV] jpu_top_reset: bit_mask = 0x%lx\n", bit_mask);
 
     mutex_lock(&s_jpu_lock);
-    virt_top_reset_addr = (unsigned long)ioremap(JPEG_TOP_RESET_REG, 4);
-    origin_value = readl((void *)virt_top_reset_addr);
+    origin_value = vc_read_reg(JPEG_TOP_RESET_REG);
     DPRINTK("[JPUDRV] jpu_top_reset: origin_value = 0x%lx\n", origin_value);
-    writel(origin_value & bit_mask, (void *)virt_top_reset_addr);
+    vc_write_reg(JPEG_TOP_RESET_REG, origin_value & bit_mask);
     udelay(1);
-    writel(origin_value, (void *)virt_top_reset_addr);
-    iounmap((void *)virt_top_reset_addr);
+    vc_write_reg(JPEG_TOP_RESET_REG, origin_value);
     mutex_unlock(&s_jpu_lock);
 
     return;
@@ -384,12 +369,11 @@ int get_max_num_jpu_core(void) {
     return MAX_NUM_JPU_CORE;
 }
 
-static irqreturn_t jpu_irq_handler(int irq, void *dev_id)
+irqreturn_t jpu_irq_handler(int core, void *dev_id)
 {
     jpu_drv_context_t*  dev = (jpu_drv_context_t *)dev_id;
     int i;
     u32 flag;
-    int core;
 
     DPRINTK("[JPUDRV][+]%s, irq:%d\n", __func__, irq);
 
@@ -397,19 +381,6 @@ static irqreturn_t jpu_irq_handler(int irq, void *dev_id)
     disable_irq_nosync(irq);
 #endif
     flag = 0;
-
-    for(core = 0; core < MAX_NUM_JPU_CORE; core++)
-    {
-        if(s_jpu_irq[core] == irq)
-        {
-#ifdef JPU_IRQ_CONTROL
-            jpu_core_irq_count[core]++;
-            irq_status[core] = 0;
-#endif
-            break;
-        }
-    }
-
     for (i=0; i< MAX_NUM_REGISTER_SET; i++) {
         flag = ReadJpuRegister(core, MJPEG_PIC_STATUS_REG(i));
         if (flag != 0) {
@@ -420,11 +391,12 @@ static irqreturn_t jpu_irq_handler(int irq, void *dev_id)
     if (i != 0) {
         pr_err("%s,%d,invalid inst idx : %d\n", __func__,__LINE__, i);
     }
-    dev->interrupt_reason[core][i] = flag;
+    if (dev)
+        dev->interrupt_reason[core][i] = flag;
     s_interrupt_flag[core*MAX_JPEG_NUM_INSTANCE + i] = 1;
     DPRINTK("[JPUDRV][%d] core:%d INTERRUPT FLAG: %08x, %08x\n", i, core, dev->interrupt_reason[core][i], MJPEG_PIC_STATUS_REG(i));
 
-    if (dev->async_queue)
+    if (dev && dev->async_queue)
         kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    // notify the interrupt to userspace
 
     wake_up(&s_interrupt_wait_q[core * MAX_JPEG_NUM_INSTANCE + i]);
@@ -727,9 +699,10 @@ int jpeg_drv_resume(struct platform_device *pdev)
 int jpeg_platform_init(struct platform_device *pdev)
 {
     u32 i;
+#if !defined(JPU_SUPPORT_ION_MEMORY) && !defined(JPU_SUPPORT_RESERVED_VIDEO_MEMORY)
     int err = 0;
+#endif
     struct resource *res = NULL;
-    unsigned long size;
 
     DPRINTK("[JPUDRV] begin jpeg_platform_init\n");
 
@@ -747,32 +720,17 @@ int jpeg_platform_init(struct platform_device *pdev)
         }
         if (res) {/* if platform driver is implemented */
             s_jpu_register[i].phys_addr = res->start;
-            size = resource_size(res);
-            s_jpu_register[i].virt_addr = (unsigned long)IOREMAP(res->start, size);
-            s_jpu_register[i].size      = size;
-            DPRINTK("[JPUDRV] : jpu base address res  physical base addr==0x%lx, virtual base=0x%lx, size=%lx\n", s_jpu_register[i].phys_addr , s_jpu_register[i].virt_addr, size);
+            s_jpu_register[i].size  = resource_size(res);
         } else {
-            s_jpu_register[i].phys_addr = JPU_REG_BASE_ADDR;
-            s_jpu_register[i].virt_addr = (unsigned long)IOREMAP(s_jpu_register[i].phys_addr, JPU_REG_SIZE);
+            s_jpu_register[i].phys_addr = s_jpu_reg_phy_base[i];
             s_jpu_register[i].size      = JPU_REG_SIZE;
-            DPRINTK("[JPUDRV] : jpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx\n", s_jpu_register[i].phys_addr, s_jpu_register[i].virt_addr);
         }
-    }
-
-    jpu_dev = &pdev->dev;
-    err = dma_set_mask_and_coherent(jpu_dev, DMA_BIT_MASK(64));
-    if (err) {
-        JLOG(ERR, "dma_set_mask_and_coherent 64 fail\n");
-        err = dma_set_mask_and_coherent(jpu_dev, DMA_BIT_MASK(32));
-    }
-    if (err) {
-        JLOG(ERR, "dma_set_mask_and_coherent 32 fail\n");
-        goto ERROR_PROVE_DEVICE;
+        s_jpu_register[i].virt_addr = (unsigned long)IOREMAP(s_jpu_register[i].phys_addr, s_jpu_register[i].size);
+        DPRINTK("[JPUDRV] : jpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx\n", s_jpu_register[i].phys_addr, s_jpu_register[i].virt_addr);
     }
 
 #ifdef JPU_SUPPORT_ISR
         for(i = 0; i < MAX_NUM_JPU_CORE; i++) {
-#ifdef JPU_SUPPORT_PLATFORM_DRIVER_REGISTER
             if(pdev)
                 res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
             if (res) {/* if platform driver is implemented */
@@ -781,9 +739,7 @@ int jpeg_platform_init(struct platform_device *pdev)
             } else {
                 DPRINTK("[JPUDRV] : jpu irq number get from defined value irq=0x%x\n", s_jpu_irq[i] );
             }
-#else
-            DPRINTK("[JPUDRV] : jpu irq number get from defined value irq=0x%x\n", s_jpu_irq[i]);
-#endif
+
             err = request_irq(s_jpu_irq[i], jpu_irq_handler, IRQF_TRIGGER_NONE, "JPU_CODEC_IRQ", (void *)(&s_jpu_drv_context));
             if (err) {
                 printk(KERN_ERR "[JPUDRV] :  fail to register interrupt handler\n");
@@ -793,17 +749,16 @@ int jpeg_platform_init(struct platform_device *pdev)
 #endif
 
         virt_top_addr = (unsigned long)ioremap(JPEG_TOP_REG,4);
-
+#ifdef JPU_SUPPORT_CLOCK_CONTROL
         if (jpu_register_clk(pdev)) {
             DPRINTK("[JPUDRV] : jpeg clock init failed\n");
             goto ERROR_PROVE_DEVICE;
         }
-
+#endif
         return 0;
+#if defined(JPU_SUPPORT_ISR) || defined(JPU_SUPPORT_CLOCK_CONTROL)
 ERROR_PROVE_DEVICE:
-
-    if (s_jpu_major)
-        unregister_chrdev_region(s_jpu_major, 1);
+#endif
 
     for(i=0; i < MAX_NUM_JPU_CORE; i++) {
         if (s_jpu_register[i].virt_addr)
@@ -820,7 +775,6 @@ void jpeg_platform_exit(void)
 {
     int i;
     DPRINTK("[JPUDRV] [+]jpeg_exit\n");
-#ifdef JPU_SUPPORT_PLATFORM_DRIVER_REGISTER
 
     if (s_instance_pool.base) {
         vfree((const void *)s_instance_pool.base);
@@ -846,8 +800,6 @@ void jpeg_platform_exit(void)
             iounmap((void*)s_jpu_register[i].virt_addr);
         s_jpu_register[i].virt_addr = 0;
     }
-
-#endif /* JPU_SUPPORT_PLATFORM_DRIVER_REGISTER */
 
     if (virt_top_addr) {
         iounmap((void *)virt_top_addr);

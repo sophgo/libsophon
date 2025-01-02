@@ -26,6 +26,7 @@ extern vb_blk vb_phys_addr2handle(uint64_t u64PhyAddr);
 extern wait_queue_head_t tVencWaitQueue[];
 static DEFINE_MUTEX(__venc_init_mutex);
 extern int32_t base_ion_cache_flush(uint64_t addr_p, void *addr_v, uint32_t u32Len);
+extern int vc_memcpy_c2c(uint64_t dst, uint64_t src, uint32_t size);
 
 #define MAX_SRC_BUFFER_NUM 32
 #define MAX_RETRY_TIMES 5
@@ -908,8 +909,7 @@ static void venc_process_bsbuf_full(void *handle)
             }
 
             // step 3
-            osal_memcpy((void *)vb_buffer.virt_addr, (void *)pst_bsfull_info->extra_vb_buffer.virt_addr
-                , pst_bsfull_info->extra_vb_buffer.size);
+            vc_memcpy_c2c(vb_buffer.phys_addr, pst_bsfull_info->extra_vb_buffer.phys_addr, pst_bsfull_info->extra_vb_buffer.size);
             vdi_flush_ion_cache(vb_buffer.phys_addr, (void *)vb_buffer.virt_addr, vb_buffer.size);
 
             vdi_free_dma_memory(pst_handle->core_idx, &pst_bsfull_info->extra_vb_buffer, ENC_BS, 0);
@@ -929,9 +929,8 @@ static void venc_process_bsbuf_full(void *handle)
     }
 
     // step 4
-    vdi_read_memory(pst_handle->core_idx, ptr_read
-            , (unsigned char *)(pst_bsfull_info->extra_vb_buffer.virt_addr + pst_bsfull_info->bs_size)
-            , cur_encoded_size,  VPU_STREAM_ENDIAN);
+    vc_memcpy_c2c(pst_bsfull_info->extra_vb_buffer.phys_addr + pst_bsfull_info->bs_size, ptr_read, cur_encoded_size);
+
     pst_bsfull_info->bs_size += cur_encoded_size;
 }
 
@@ -1086,15 +1085,8 @@ static int venc_process_frame_done(void* handle, int async_mode)
         if (pst_extra_buf_info->bs_size > 0) {
             VLOG(INFO, "pre encoded size:%d, bs encoded:%d\n", pst_extra_buf_info->bs_size, output_info.bitstreamSize);
             remain_encoded_size = MAX(output_info.bitstreamSize - pst_extra_buf_info->bs_size, 0);
-            osal_memcpy((void *)(pst_extra_buf_info->extra_vb_buffer.virt_addr
-                            + pst_extra_buf_info->bs_size)
-                        , phys_to_virt(output_info.bitstreamBuffer)
-                        , remain_encoded_size);
+            vc_memcpy_c2c(pst_extra_buf_info->extra_vb_buffer.phys_addr + pst_extra_buf_info->bs_size, output_info.bitstreamBuffer, remain_encoded_size);
             pst_extra_buf_info->bs_size = output_info.bitstreamSize;
-
-            vdi_flush_ion_cache(pst_extra_buf_info->extra_vb_buffer.phys_addr
-                            , phys_to_virt(pst_extra_buf_info->extra_vb_buffer.phys_addr)
-                            , pst_extra_buf_info->bs_size);
             encode_pack.u64PhyAddr = pst_extra_buf_info->extra_vb_buffer.phys_addr;
             encode_pack.addr = (void *)pst_extra_buf_info->extra_vb_buffer.virt_addr;
             encode_pack.len = pst_extra_buf_info->bs_size;
@@ -1226,7 +1218,6 @@ reinit:
     ret = VPU_InitWithBitcode(0, pus_bitCode, fw_size);
     if ((ret == RETCODE_VPU_RESPONSE_TIMEOUT) && (reinit_count < 3)) {
         reinit_count++;
-        VPU_HWReset(0);
         goto reinit;
     } else if ((ret != RETCODE_SUCCESS) && (ret != RETCODE_CALLED_BEFORE)) {
         VLOG(ERR, "<%s:%d> Failed to VPU_InitWithBitcode()\n", __func__, __LINE__);
@@ -1473,7 +1464,6 @@ int venc_get_encode_header(void *handle, void *arg)
     EncodeHeaderInfo *encHeaderRbsp = (EncodeHeaderInfo *)arg;
     EncHeaderParam encHeaderParam = {0};
     vpu_buffer_t vb_buffer;
-    uint8_t *pVirtHeaderBuf = NULL;
     BOOL is_wait_interrupt = 1;
     BOOL is_publish = 0;
 
@@ -1487,11 +1477,7 @@ int venc_get_encode_header(void *handle, void *arg)
 
     ret = build_encode_header(pst_handle, &encHeaderParam, is_wait_interrupt, is_publish);
     if (ret == RETCODE_SUCCESS) {
-        pVirtHeaderBuf = phys_to_virt(encHeaderParam.buf);
-        vdi_invalidate_ion_cache(encHeaderParam.buf
-                                    , pVirtHeaderBuf
-                                    , encHeaderParam.size);
-        osal_memcpy(encHeaderRbsp->headerRbsp, pVirtHeaderBuf, encHeaderParam.size);
+        vdi_read_memory(pst_handle->core_idx, encHeaderParam.buf, encHeaderRbsp->headerRbsp, encHeaderParam.size, VDI_128BIT_LITTLE_ENDIAN);
         encHeaderRbsp->u32Len = encHeaderParam.size;
         pst_handle->header_encoded = 1;
     }

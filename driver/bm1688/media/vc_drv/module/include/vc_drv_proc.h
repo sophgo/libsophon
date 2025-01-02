@@ -3,13 +3,13 @@
 
 #include <linux/device.h>
 
-#define VENC_PROC_NAME "soph/venc"
-#define H265E_PROC_NAME "soph/h265e"
-#define H264E_PROC_NAME "soph/h264e"
-#define JPEGE_PROC_NAME "soph/jpege"
-#define CODEC_PROC_NAME "soph/codec"
-#define RC_PROC_NAME "soph/rc"
-#define VDEC_PROC_NAME "soph/vdec"
+#define VENC_PROC_NAME "bmsophon/venc"
+#define H265E_PROC_NAME "bmsophon/h265e"
+#define H264E_PROC_NAME "bmsophon/h264e"
+#define JPEGE_PROC_NAME "bmsophon/jpege"
+#define CODEC_PROC_NAME "bmsophon/codec"
+#define RC_PROC_NAME "bmsophon/rc"
+#define VDEC_PROC_NAME "bmsophon/vdec"
 #define VIDEO_PROC_PERMS (0644)
 #define VIDEO_PROC_PARENT (NULL)
 #define MAX_PROC_STR_SIZE (255)

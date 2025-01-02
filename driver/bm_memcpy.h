@@ -102,5 +102,6 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,
 		uint64_t dst, void __user *src, u32 size, bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
-
+int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
+		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 #endif
