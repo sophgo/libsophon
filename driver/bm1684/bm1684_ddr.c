@@ -77,7 +77,7 @@ void bm1684_ddr0b_ecc_irq_handler(struct bm_device_info *bmdi)
 	ddr_reg_write_enh(bmdi, 0x1, 0x7c, (status | 0x1f));
 }
 
-void bm1684_ddr1_ecc_irq_handler(struct bm_device_info *bmdi)
+static void bm1684_ddr1_ecc_irq_handler(struct bm_device_info *bmdi)
 {
 	u32 status = ddr_reg_read_enh(bmdi, 0x2, 0x78);
 
@@ -87,7 +87,7 @@ void bm1684_ddr1_ecc_irq_handler(struct bm_device_info *bmdi)
 	ddr_reg_write_enh(bmdi, 0x2, 0x7c, (status | 0x1f));
 }
 
-void bm1684_ddr2_ecc_irq_handler(struct bm_device_info *bmdi)
+static void bm1684_ddr2_ecc_irq_handler(struct bm_device_info *bmdi)
 {
 	u32 status = ddr_reg_read_enh(bmdi, 0x3, 0x78);
 

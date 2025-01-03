@@ -150,7 +150,7 @@ static void bm1684_init_i2c_for_mcu(struct bm_device_info *bmdi)
 	bmdrv_i2c_init(bmdi, i2c_index, rx_level, tx_level, target_addr);
 }
 
-int bm1684_correct_hw_version(struct bm_device_info *bmdi, u8 hw_version)
+static int bm1684_correct_hw_version(struct bm_device_info *bmdi, u8 hw_version)
 {
 	static u8 chip0_hw_version = 0;
 
@@ -479,7 +479,7 @@ void bm1684_get_fusing_temperature(struct bm_device_info *bmdi, int *max_tmp, in
 #endif
 
 #ifndef SOC_MODE
-void bm1684_stop_smbus(struct bm_device_info *bmdi)
+static void bm1684_stop_smbus(struct bm_device_info *bmdi)
 {
 /* mask i2c2*/
 	int value = 0x0;

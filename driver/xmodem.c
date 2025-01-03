@@ -1,5 +1,6 @@
 #include "uart.h"
 #include "bm_timer.h"
+#include "xmodem.h"
 
 #define TIMEOUT          (200)
 

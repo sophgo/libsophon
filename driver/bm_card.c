@@ -10,7 +10,7 @@
 
 static struct bm_card *g_bmcd[BM_MAX_CARD_NUM] = {NULL};
 
-int bm_card_get_chip_num(struct bm_device_info *bmdi)
+static int bm_card_get_chip_num(struct bm_device_info *bmdi)
 {
 #ifdef SOC_MODE
 	return 1;
@@ -83,7 +83,7 @@ static int bm_update_sc5p_mcu_bmdi_to_card(struct bm_device_info *bmdi)
 #endif
 
 #ifndef SOC_MODE
-int bm_card_update_sn(struct bm_device_info *bmdi, char *sn)
+static int bm_card_update_sn(struct bm_device_info *bmdi, char *sn)
 {
 	if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PLUS) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||

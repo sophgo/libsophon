@@ -18,7 +18,7 @@
 
 #define SC7_PRO_HAS_VFS
 
-int bm_monitor_thread(void *date)
+static int bm_monitor_thread(void *date)
 {
 	int ret = 0;
 	struct bm_device_info *bmdi = (struct bm_device_info *)date;

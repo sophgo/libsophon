@@ -2,6 +2,7 @@
 #include "bm_io.h"
 #include "bm_common.h"
 #include "bm1682_reg.h"
+#include "bm1682_irq.h"
 
 extern void bm1682_smmu_get_irq_status(struct bm_device_info *bmdi, u32 *status);
 

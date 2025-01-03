@@ -287,7 +287,7 @@ __maybe_unused static int vpp_cores_reset(struct bm_device_info *bmdi)
 	return 0;
 }
 
-void vpp_clear_int(struct bm_device_info *bmdi, int core_id)
+static void vpp_clear_int(struct bm_device_info *bmdi, int core_id)
 {
 	if (core_id == 0)
 		vpp0_reg_write(bmdi, VPP_INT_CLEAR, 0xffffffff);
@@ -295,7 +295,7 @@ void vpp_clear_int(struct bm_device_info *bmdi, int core_id)
 		vpp1_reg_write(bmdi, VPP_INT_CLEAR, 0xffffffff);
 }
 
-void vpp_irq_handler(struct bm_device_info *bmdi, int core_id)
+static void vpp_irq_handler(struct bm_device_info *bmdi, int core_id)
 {
 	bmdi->vppdrvctx.got_event_vpp[core_id] = 1;
 	wake_up(&bmdi->vppdrvctx.wq_vpp[core_id]);
@@ -661,7 +661,7 @@ __maybe_unused static void dump_des(struct vpp_batch *batch, struct vpp_descript
 	}
 }
 
-void vpp_dump(struct vpp_batch *batch)
+static void vpp_dump(struct vpp_batch *batch)
 {
 	struct vpp_cmd *cmd ;
 	int i;
@@ -715,7 +715,7 @@ void vpp_dump(struct vpp_batch *batch)
 	return;
 }
 
-int vpp_handle_setup(struct bm_device_info *bmdi, struct vpp_batch *batch)
+static int vpp_handle_setup(struct bm_device_info *bmdi, struct vpp_batch *batch)
 {
 	int ret = VPP_OK, ret1 = VPP_ERR, idx = 0;
 	u64 *vpp_desc_pa;

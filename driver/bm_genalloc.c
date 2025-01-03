@@ -36,6 +36,7 @@
 #include <linux/of_device.h>
 #include <linux/vmalloc.h>
 #include <linux/version.h>
+#include <linux/device.h>
 #include "bm_genalloc.h"
 static inline size_t chunk_size(const struct bm_gen_pool_chunk *chunk)
 {

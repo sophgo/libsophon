@@ -117,7 +117,7 @@ exit:
     return skb;
 }
 
-int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
+static int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
     u32 value;
 
     value = (1 << 2);
@@ -125,7 +125,7 @@ int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
     return 0;
 }
 
-void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
+static void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
     struct eth_dev_info *eth = &bmdi->vir_eth;
 
     bm1684_clear_ethirq(bmdi);
@@ -169,7 +169,7 @@ static netdev_tx_t eth_ndo_start_xmit(struct sk_buff *   skb,
 
 #ifndef CENTOS_KERNEL_FIX
 	#if  LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
-void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
+static void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 	#else
 static void eth_ndo_tx_timeout(struct net_device *ndev)
 	#endif
@@ -346,7 +346,7 @@ exit:
     return ret;
 }
 
-int napi_handle_irq(struct eth_dev_info *info) {
+static int napi_handle_irq(struct eth_dev_info *info) {
     napi_schedule(&info->napi);
     return 0;
 }
