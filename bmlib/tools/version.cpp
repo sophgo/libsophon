@@ -23,7 +23,7 @@ int main(int argc, char const *argv[])
     int chip_num = 0;
     boot_loader_version version;
     int bl1_strlen, bl1_print = 1;
-	int chip_info, i;
+	int chip_info, i, val;
 	char *str, *chip;
 	char bl2_str[100] = "";
 	char bl3_str[100] = "";
@@ -38,13 +38,25 @@ int main(int argc, char const *argv[])
     version.bl2_version = (char *)malloc(BL2_VERSION_SIZE);
     version.bl31_version = (char *)malloc(BL31_VERSION_SIZE);
     version.uboot_version = (char *)malloc(UBOOT_VERSION_SIZE);
-	version.chip_version = (char *)malloc(CHIP_VERSION_SIZE);
+	version.chip_version = (int *)malloc(CHIP_VERSION_SIZE);
 
     bm_get_boot_loader_version(handle, &version);
-	if (strcmp(version.chip_version, "" ))
-		chip = "cv186ah";
-	else
+	//if (strcmp(version.chip_version, "" ))
+	//	chip = "cv186ah";
+	//else
+	//	chip = "bm1688";
+	if (version.chip_version != nullptr) {
+		val = *version.chip_version & 0x7;
+	} else {
+		printf("chip_version is nullptr\n");
+		return -1;
+	}
+
+	if (val == 0 || val == 7) {
 		chip = "bm1688";
+	} else {
+		chip = "cv186ah";
+	}
 
 	str = strstr(version.bl2_version, ":");
 	strcat(bl2_str, chip);
