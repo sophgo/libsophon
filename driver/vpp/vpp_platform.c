@@ -4,7 +4,6 @@
 int vpp_init(struct bm_device_info *bmdi)
 {
   if (bmdi->cinfo.chip_id == 0x1686a200) {
-    bm1688_vpp_init(bmdi);
     bmdi->vppdrvctx.vpp_init           = bm1688_vpp_init;
     bmdi->vppdrvctx.vpp_exit           = bm1688_vpp_exit;
     bmdi->vppdrvctx.trigger_vpp        = bm1688_trigger_vpp;
