@@ -1376,7 +1376,7 @@ RetCode Wave5VpuDecode(CodecInst* instance, DecParam* option)
 
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_TEMPORAL_ID_PLUS1, pDecInfo->targetSubLayerId+1);
     VpuWriteReg(instance->coreIdx, W5_CMD_SEQ_CHANGE_ENABLE_FLAG, pDecInfo->seqChangeMask);
-#ifdef  __LINUX__
+#ifdef  __linux__
     if(getenv("NO_FRAMEBUFFER")!=NULL && strcmp(getenv("NO_FRAMEBUFFER"),"1")==0)
     {
         forceLatency = 0;

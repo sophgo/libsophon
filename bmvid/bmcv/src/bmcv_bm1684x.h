@@ -52,6 +52,7 @@ typedef struct sg_api_cv_warp {
   int src_w_stride;
   int dst_w_stride;
   int image_n;
+  int image_c;
   int image_sh;
   int image_sw;
   int image_dh;
@@ -184,21 +185,24 @@ typedef struct {
   int padding_r;
 } sg_api_crop_resize_t;
 
-typedef struct {
+#pragma pack(push, 4)
+struct sg_api_cv_fft_t {
     u64   XR;
     u64   XI;
     u64   YR;
     u64   YI;
     u64   ER;
-    int   EI;
+    u64   EI;
     int   batch;
     int   len;
-    int   forward;
-    int   realInput;
-    int   trans;
+    bool  forward;
+    bool  realInput;
+    int  trans;
     int   factorSize;
     int   factors[10];
-} sg_api_cv_fft_t;
+    bool normalize;
+};
+#pragma pack(pop)
 
 typedef struct bm_api_cv_feature_match_1684x {
   u64 input_data_global_addr;
@@ -286,7 +290,59 @@ typedef struct bm_api_cv_hist_balance2 {
     u64 Yaddr;
 } bm_api_cv_hist_balance_t2;
 
-#pragma pack(pop)
+typedef struct sg_api_cv_rotate {
+  int channel;
+  int rotation_angle;
+  u64 input_addr[3];
+  u64 output_addr[3];
+  int width;
+  int height;
+} sg_api_cv_rotate_t;
 
+typedef struct sg_api_cv_overlay {
+  int overlay_num;
+  unsigned long long base_addr;
+  unsigned long long overlay_addr[10];
+  int base_width;
+  int base_height;
+  int overlay_width[10];
+  int overlay_height[10];
+  int pos_x[10];
+  int pos_y[10];
+} sg_api_cv_overlay_t;
+
+typedef struct sg_api_cv_sobel_t {
+    int channel;
+    unsigned long long input_addr[3];
+    unsigned long long kernel_addr;
+    unsigned long long output_addr[3];
+    int width[3];
+    int height[3];
+    int kw;
+    int kh;
+    int stride_i[3];
+    int stride_o[3];
+    float delta;
+    int is_packed;
+    int out_type;
+} sg_api_cv_sobel_t;
+
+typedef struct sg_api_cv_gaussian_blur {
+  int channel;
+  u64 input_addr[3];
+  u64 kernel_addr;
+  u64 output_addr[3];
+  int width;
+  int height;
+  int kw;
+  int kh;
+  int stride_i;
+  int stride_o;
+  float delta;
+  int is_packed;
+  int out_type;
+} sg_api_cv_gaussian_blur_t;
+
+#pragma pack(pop)
 }
 // #endif

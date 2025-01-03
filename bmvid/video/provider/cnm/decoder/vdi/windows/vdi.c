@@ -638,14 +638,21 @@ int vdi_get_init_status(u64 core_idx)
 {
     int ret;
     vdi_info_t *vdi;
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#endif
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
     vdi = &s_vdi_info[core_idx];
 
-    if (ret = winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_FIRMWARE_STATUS, &core_idx) < 0) {
-            return NULL;
-        }
+    if(!vdi || vdi->hDevice == INVALID_HANDLE_VALUE || !(vdi->hDevice))
+        return -1;
+#ifdef BM_PCIE_MODE
+    if (ret = winDeviceIoControl(vdi->hDevice, VDI_IOCTL_GET_FIRMWARE_STATUS, &chip_core_idx) < 0) {
+        return NULL;
+    }
+#endif
 
     if(ret == 100) {
         return 0;
@@ -2593,6 +2600,17 @@ int *vdi_get_exception_info(unsigned int core_idx)
         return p_addr;
     }
     return NULL;
+}
+
+// TODO
+int vdi_get_reset_flag(u64 core_idx)
+{
+    return 0;
+}
+
+int vdi_set_reset_flag(u64 coreIdx)
+{
+    return 0;
 }
 
 int vdi_get_video_cap(int core_idx, int* video_cap, int* bin_type, int *max_core_num, int* chip_id)

@@ -410,6 +410,7 @@ RetCode VPU_DecOpen(DecHandle* pHandle, DecOpenParam* pop)
     {
         *pHandle = 0;
         LeaveLock(pop->coreIdx);
+        VLOG(ERR, "GetCodecInstance fail. ret=%d\n", ret);
         return ret;
     }
 
@@ -499,6 +500,7 @@ RetCode VPU_DecOpen(DecHandle* pHandle, DecOpenParam* pop)
     if ((ret=ProductVpuDecBuildUpOpenParam(pCodecInst, pop)) != RETCODE_SUCCESS) {
         *pHandle = 0;
         LeaveLock(pCodecInst->coreIdx);
+        VLOG(ERR, "ProductVpuDecBuildUpOpenParam fail. ret=%d\n", ret);
         return ret;
     }
 

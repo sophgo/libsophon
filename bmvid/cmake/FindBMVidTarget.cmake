@@ -186,9 +186,9 @@ function(ADD_TARGET_JPU_LIB target_name chip_name platform subtype debug ion com
                            POST_BUILD
                            COMMENT "copy to binary"
                            COMMAND rm -rf ${JPU_BINARY_LIB_PATH}
-                           COMMAND mkdir -p ${JPU_BINARY_LIB_PATH} && cp -rd ${JPU_LIB_TARGET}/libbmjpuapi.* ${JPU_LIB_TARGET}/libbmjpulite.* ${JPU_BINARY_LIB_PATH}/
+                           COMMAND mkdir -p ${JPU_BINARY_LIB_PATH} && cp -rd ${JPU_LIB_TARGET}/*jpu* ${JPU_BINARY_LIB_PATH}/
                            COMMAND rm -rf ${JPU_BINARY_HEADER_PATH}
-                           COMMAND mkdir -p ${JPU_BINARY_HEADER_PATH} && cp -rd ${JPU_HEADER_TARGET}/bm_jpeg_interface.h ${JPU_BINARY_HEADER_PATH}/
+                           COMMAND mkdir -p ${JPU_BINARY_HEADER_PATH} && cp -rd ${JPU_HEADER_TARGET}/*jpu* ${JPU_BINARY_HEADER_PATH}/
                            COMMAND rm -rf ${JPU_BINARY_APP_PATH}
                            COMMAND mkdir -p ${JPU_BINARY_APP_PATH} && cp -rd ${JPU_APP_TARGET}/bmjpeg* ${JPU_BINARY_APP_PATH}/)
     else()

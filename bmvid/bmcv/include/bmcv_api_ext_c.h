@@ -293,8 +293,79 @@ typedef enum {
     BM_MORPH_ELLIPSE
 } bmcv_morph_shape_t;
 
-// const char *bm_get_bmcv_version();
+DECL_EXPORT const char *bm_get_bmcv_version();
 
+/**
+ * @brief Update the bm_image structure with image information.
+ *
+ * This function updates the bm_image structure with the provided image information,
+ * including width, height, image format, data type, memory_layout and handle. It performs error
+ * checks on the image format and size, as well as the stride, before updating the
+ * image_private handle with the given handle.
+ *
+ * @param handle The handle associated with the image.
+ * @param img_h The height of the image.
+ * @param img_w The width of the image.
+ * @param image_format The image format.
+ * @param data_type The data type of the image.
+ * @param res Pointer to the bm_image structure to be updated.
+ * @param stride Pointer to the stride value.
+ * @return BM_SUCCESS if the update is successful, otherwise an error code.
+ */
+DECL_EXPORT bm_status_t bm_image_update(bm_handle_t handle,
+                            int img_h,
+                            int img_w,
+                            bm_image_format_ext image_format,
+                            bm_image_data_format_ext data_type,
+                            bm_image *res,
+                            int *stride);
+
+/**
+ * @brief Get the size of struct bm_image_private in bytes.
+ *
+ * This function calculates and returns the size in bytes of the struct bm_image_private.
+ *
+ * @return The size of struct bm_image_private in bytes.
+ */
+
+DECL_EXPORT size_t bmcv_get_private_size(void);
+
+/** bm_image_create
+ * @brief Create and fill bm_image structure
+ * @param [in] handle   The bm handle which return by bm_dev_request
+ * @param [in] img_h    The height or rows of the creating image
+ * @param [in] img_w    The width or cols of the creating image.
+ * @param [in] image_format  The image_format of the creating image,
+ *  please choose one from bm_image_format_ext enum.
+ * @param [in] data_type The data_type of the creating image,
+ *  be caution that not all combinations between image_format and data_type
+ *  are supported.
+ * @param [in] stride    the stride array for planes, each
+ * number in array means corresponding plane pitch stride in bytes. The plane
+ * size is determinated by image_format. If this array is null, we may use
+ * default value.
+ * @param [in] bm_private   A pointer to the bm_image_private structure to
+ * be initialized.
+ * @param [out] res       The filled bm_image structure.
+ * For example, we need create a 480x480 NV12 format image, we know that NV12
+ * format has 2 planes, we need pitch stride is 256 aligned(just for example) so
+ * the pitch stride for the first plane is 512, so as the same for the second
+ * plane.
+ * The call may as following
+ * bm_image res;
+ *  int stride[] = {512, 512};
+ *  bm_image_create_private(handle, 480, 480, FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE, &res,
+ * stride, bm_private); If bm_image_create return BM_SUCCESS, res is created successfully.
+ */
+
+DECL_EXPORT bm_status_t bm_image_create_private(bm_handle_t              handle,
+                            int                      img_h,
+                            int                      img_w,
+                            bm_image_format_ext      image_format,
+                            bm_image_data_format_ext data_type,
+                            bm_image *               res,
+                            int *                    stride,
+                            void*                    bm_private);
 /** bm_image_create
  * @brief Create and fill bm_image structure
  * @param [in] handle                     The bm handle which return by
@@ -569,7 +640,8 @@ DECL_EXPORT bm_status_t bmcv_image_convert_to(
         bm_image *           input,
         bm_image *           output);
 
-bm_status_t bmcv_width_align(
+/* input image Width align for output image */
+DECL_EXPORT bm_status_t bmcv_width_align(
         bm_handle_t handle,
         bm_image    input,
         bm_image    output);
@@ -715,7 +787,16 @@ DECL_EXPORT bm_status_t bmcv_batch_topk(
         int             src_batch_stride,
         bool            descending);
 
-bm_status_t bmcv_feature_match_normalized(
+/**
+ * network get feature points(float)and compares them with feature points(float) in database
+ * input_data_global_addr is address of the feature point data store to be compared
+ * db_data_global_addr is address of the database's feature point data store
+ * db_feature_global_addr is database feature_size indicates the reciprocal address of the direction mode
+ * output_similarity_global_addr is compare the result to the maximum address
+ * output_index_global_addr is serial number address in database
+ * batch_size is batch size;feature_size is each data feature points;db_size is number of feature points
+*/
+DECL_EXPORT bm_status_t bmcv_feature_match_normalized(
         bm_handle_t     handle,
         bm_device_mem_t input_data_global_addr,
         bm_device_mem_t db_data_global_addr,
@@ -1236,6 +1317,25 @@ DECL_EXPORT bm_status_t bmcv_image_quantify(
         bm_image input,
         bm_image output);
 
+
+DECL_EXPORT bm_status_t bmcv_image_rotate(
+        bm_handle_t handle,
+        bm_image input,
+        bm_image output,
+        int rotation_angle);
+
+DECL_EXPORT bm_status_t bmcv_image_overlay(
+        bm_handle_t      handle,
+        bm_image         image,
+        int              overlay_num,
+        bmcv_rect_t*     overlay_info,
+        bm_image*        overlay_image);
+/*
+* The image is operated by Gaussian filtering
+* input is input image; output is output image;kw is kernel width size;
+* kh is kernel height size;sigmaX is Gaussian kernel standard deviation in the X direction
+* sigmaY is Gaussian kernel standard deviation in the Y direction
+*/
 DECL_EXPORT bm_status_t bmcv_image_gaussian_blur(
         bm_handle_t handle,
         bm_image input,
@@ -1297,7 +1397,11 @@ DECL_EXPORT bm_status_t bmcv_image_dilate(
         bm_device_mem_t kmem
         );
 
-bm_status_t bmcv_image_pyramid_down(
+/**
+ * Realize downsampling in image Gaussian pyramid operation
+ * input is src image;output is dst image
+*/
+DECL_EXPORT bm_status_t bmcv_image_pyramid_down(
         bm_handle_t handle,
         bm_image input,
         bm_image output);
@@ -1555,6 +1659,14 @@ DECL_EXPORT bm_status_t bmcv_matrix_log(
   bm_image dst);
 
 DECL_EXPORT bm_status_t bm_image_zeros(bm_image image);
+
+/* Read information from a file into the bm_image data structure */
+DECL_EXPORT void bm_read_bin(bm_image src, const char *input_name);
+/* Insert the data from the bm_image structure into the file */
+DECL_EXPORT void bm_write_bin(bm_image dst, const char *output_name);
+
+DECL_EXPORT void bmcv_print_version();
+
 DECL_EXPORT unsigned long long bmcv_calc_cbcr_addr(unsigned long long y_addr, unsigned int y_stride, unsigned int frame_height);
 
 

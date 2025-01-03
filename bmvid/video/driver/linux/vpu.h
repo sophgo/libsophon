@@ -42,11 +42,10 @@
 #define VDI_IOCTL_WRITE_VMEM                     _IO(VDI_IOCTL_MAGIC, 20)
 #define VDI_IOCTL_READ_VMEM                      _IO(VDI_IOCTL_MAGIC, 21)
 #endif
-#if !defined(BM_PCIE_MODE) && !defined(BM_ION_MEM)
+#if !defined(BM_PCIE_MODE)
 #define VDI_IOCTL_FLUSH_DCACHE                   _IO(VDI_IOCTL_MAGIC, 24)
 #define VDI_IOCTL_INVALIDATE_DCACHE              _IO(VDI_IOCTL_MAGIC, 25)
 #endif
-
 #define VDI_IOCTL_SYSCXT_SET_STATUS              _IO(VDI_IOCTL_MAGIC, 26)
 #define VDI_IOCTL_SYSCXT_GET_STATUS              _IO(VDI_IOCTL_MAGIC, 27)
 #define VDI_IOCTL_SYSCXT_CHK_STATUS              _IO(VDI_IOCTL_MAGIC, 28)
@@ -57,6 +56,8 @@
 #define VDI_IOCTL_GET_MAX_CORE_NUM               _IO(VDI_IOCTL_MAGIC, 33)
 #define VDI_IOCTL_CTRL_KERNEL_RESET              _IO(VDI_IOCTL_MAGIC, 34)
 #define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
+#define VDI_IOCTL_SET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 36)
+#define VDI_IOCTL_GET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 37)
 
 typedef struct vpudrv_syscxt_info_s {
     unsigned int core_idx;

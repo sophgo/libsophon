@@ -11,7 +11,7 @@ In case of PCIe mode, the host side is the user’s host, and the Processor oper
 Preparatory Work
 ________________
 
-If you want to enable the on-chip processor, you need the following two files:
+If you want to enable the on-chip processor, you need the following two files(you need to additionally install sophon-rpc):
 
 * ramboot_rootfs.itb
 
@@ -19,11 +19,15 @@ If you want to enable the on-chip processor, you need the following two files:
 
 You need to set the path where these two files are located to the environment variable BMCV_CPU_KERNEL_PATH where the program runs, as follows:
 
-$ export BMCV_CPU_KERNEL_PATH=/path/to/kernel_fils/
+.. code-block:: bash
+
+    export BMCV_CPU_KERNEL_PATH=/opt/sophon/libsophon-current/data
 
 All implementations of BMCV that require Processor operations are in the library libbmcv_cpu_func.so, you need to add the path of the file to the environment variable BMCV_CPU_KERNEL_PATH where the program runs, as follows:
 
-$ export BMCV_CPU_LIB_PATH=/path/to/lib/
+.. code-block:: bash
+
+    export BMCV_CPU_LIB_PATH=/opt/sophon/libsophon-current/lib/bmcpu_bmcv/
 
 At present, the APIs that require Processor participation are as follows. If the following APIs are not used, this function can be ignored.
 
@@ -47,11 +51,11 @@ _____________________
 
 Users can use the following two interfaces at the beginning and end of the program to turn on and off the function respectively.
 
-    .. code-block:: c
+.. code-block:: c
 
-        bm_status_t bmcv_open_cpu_process(bm_handle_t handle);
+    bm_status_t bmcv_open_cpu_process(bm_handle_t handle);
 
-        bm_status_t bmcv_close_cpu_process(bm_handle_t handle);
+    bm_status_t bmcv_close_cpu_process(bm_handle_t handle);
 
 
 **Input parameters description:**

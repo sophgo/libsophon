@@ -67,6 +67,7 @@ typedef enum {
     INT_WAVE5_DEC_QUERY         = 14,
     INT_WAVE5_BSBUF_EMPTY       = 15,
     INT_WAVE5_BSBUF_FULL        = 15,
+    INT_WAVE5_CORE_HUNG         = 31
 } Wave5InterruptBit;
 
 typedef enum {

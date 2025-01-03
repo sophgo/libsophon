@@ -339,6 +339,8 @@ static bm_status_t bmcv_fft_1d_execute_bm1684X(bm_handle_t handle,
     api.forward = P->forward ? 1 : 0;
     api.realInput = realInput ? 1 : 0;
     api.trans = trans;
+    api.normalize = false;
+
     for (size_t i = 0; i < P->factors.size(); ++i)
         api.factors[i] = P->factors[i];
     api.factorSize = static_cast<int>(P->factors.size());

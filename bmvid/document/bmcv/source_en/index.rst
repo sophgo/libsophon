@@ -128,6 +128,13 @@ BMCV API
    api/bayer2rgb
    api/as_strided
    api/quantify
+   api/rotate
+   api/cos_similarity
+   api/matrix_prune
+   api/lapmatrix
+   api/knn
+   api/qr
+   api/cv_overlay
 
 PCIe CPU
 --------

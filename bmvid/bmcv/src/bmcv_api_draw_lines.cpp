@@ -279,7 +279,7 @@ bm_status_t bmcv_image_draw_lines(
                               bm_mem_from_system(param),
                               param_len);
         } catch (bm_status_t ret) {
-            return ret;
+            goto fail;
         }
         u64 param_addr_mapped = get_mapped_addr(handle, &param_mem);
         ret = (bm_status_t)bmcpu_exec_function_ext(handle,
@@ -291,31 +291,66 @@ bm_status_t bmcv_image_draw_lines(
                                       timeout);
         if (ret != BM_SUCCESS) {
             bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "exec function failed! return %d\r\n", ret);
-            return BM_ERR_FAILURE;
+            goto fail;
         }
         delete [] param;
     } else {
+#ifdef SOC_MODE
+        bm_device_mem_t dmem;
+        unsigned char *in_ptr[3];
+        unsigned long long virt_addr  = 0;
+        unsigned long long size[3] = {0};
+        unsigned long long total_size = 0;
+
+        for (int i = 0; i < image.image_private->plane_num; i++) {
+            size[i] = image.image_private->memory_layout[i].size;
+            total_size += size[i];
+        }
+
+        dmem = image.image_private->data[0];
+        bm_set_device_mem(&dmem, total_size, dmem.u.device.device_addr);
+        ret = bm_mem_mmap_device_mem_no_cache(image.image_private->handle, &dmem, &virt_addr);
+        if (ret != BM_SUCCESS) {
+            bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_mem_mmap_device_mem failed with error code %d\r\n", ret);
+            goto fail;
+        }
+
+        in_ptr[0] = (unsigned char *)virt_addr;
+        in_ptr[1] = in_ptr[0] + size[0];
+        in_ptr[2] = in_ptr[1] + size[1];
+#else
         int w = image.width;
         int h = image.height;
         unsigned char* host_buf = new unsigned char [w * h *3];
         unsigned char* in_ptr[3] = {host_buf, host_buf + w * h, host_buf + w * h * 2};
         bm_image_copy_device_to_host(image, (void **)in_ptr);
-        int str[3];
-        bm_image_get_stride(image, str);
+#endif
+        int strides[3];
+        bm_image_get_stride(image, strides);
         bmMat mat;
         mat.width = image.width;
         mat.height = image.height;
         mat.format = image.image_format;
-        mat.step = &str[0];
+        mat.step = &strides[0];
         mat.data = (void**)in_ptr;
         for (int i = 0; i < line_num; i++) {
             draw_line(mat, sp[i], ep[i], color, thickness);
         }
+#ifdef SOC_MODE
+        ret = bm_mem_unmap_device_mem(image.image_private->handle, (void *)&virt_addr, total_size);
+        if (ret != BM_SUCCESS) {
+            bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_mem_unmap_device_mem failed with error code %d\r\n", ret);
+            goto fail;
+        }
+#else
         bm_image_copy_host_to_device(image, (void **)in_ptr);
         delete [] host_buf;
+#endif
     }
+
+fail:
     delete [] sp;
     delete [] ep;
-    return BM_SUCCESS;
+    return ret;
 }
 

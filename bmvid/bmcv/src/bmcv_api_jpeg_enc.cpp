@@ -15,8 +15,6 @@
 #include <windows.h>
 #endif
 
-#define JPU_ENCODE_MAX_RETRY_COUNT 3
-
 typedef struct bmcv_jpeg_encoder_struct {
     BmJpuJPEGEncoder *encoder_;
 } bmcv_jpeg_encoder_t;
@@ -403,7 +401,6 @@ bm_status_t bmcv_jpeg_enc_one_image(bmcv_jpeg_encoder_t  *jpeg_enc,
     int y_size = info.stride[0] * height;
     int c_size = 0;
     int total_size = 0;
-    int count = 0;
 
     int src_image_format = src->image_format;
     bmcv_jpeg_buffer_t encoded_buffer;
@@ -500,34 +497,11 @@ bm_status_t bmcv_jpeg_enc_one_image(bmcv_jpeg_encoder_t  *jpeg_enc,
 
 
     /* Do the actual encoding */
-    for(count=0; count<JPU_ENCODE_MAX_RETRY_COUNT; count++)
-    {
-        ret = bm_jpu_jpeg_enc_encode(jpeg_enc->encoder_,
-                                     &framebuffer,
-                                     &enc_params,
-                                     p_jpeg_data,
-                                     out_size);
-        uint8_t* jpeg_virt_addr = (uint8_t*)*p_jpeg_data;
-        if(jpeg_virt_addr[0] != 0xff || jpeg_virt_addr[1] != 0xd8 || jpeg_virt_addr[2] != 0xff)
-        {
-            bm_jpu_hw_reset();
-#ifdef __linux__
-            usleep(20*1000);
-#else
-            Sleep(20);
-#endif
-            bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR, "wrong jpeg header, hw reset and retry count: %d, max count: %d\r\n", count+1, JPU_ENCODE_MAX_RETRY_COUNT);
-            continue;
-        } else {
-            break;
-        }
-    }
-
-    if(count == JPU_ENCODE_MAX_RETRY_COUNT)
-    {
-        bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR, "jpeg encode header is wrong\r\n");
-        return BM_ERR_FAILURE;
-    }
+    ret = bm_jpu_jpeg_enc_encode(jpeg_enc->encoder_,
+                                 &framebuffer,
+                                 &enc_params,
+                                 p_jpeg_data,
+                                 out_size);
 
     if (ret != BM_JPU_ENC_RETURN_CODE_OK) {
         bmlib_log("JPEG-ENC", BMLIB_LOG_ERROR, "jpeg encode failed!\r\n");

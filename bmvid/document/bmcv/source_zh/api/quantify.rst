@@ -84,7 +84,6 @@ bmcv_image_quantify
     .. code-block:: c
 
 
-        //pthread_mutex_t lock;
         static void read_bin(const char *input_path, float *input_data, int width, int height) {
             FILE *fp_src = fopen(input_path, "rb");
             if (fp_src == NULL)

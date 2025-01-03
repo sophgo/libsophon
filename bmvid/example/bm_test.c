@@ -78,6 +78,7 @@ typedef struct BMTestConfig_struct {
     int extraFrame;
     int min_frame_cnt;
     int frame_delay;
+    int enable_cache;
     BMVidCodHandle vidCodHandle;
     char outputPath[MAX_FILE_PATH];
     char inputPath[MAX_FILE_PATH];
@@ -125,7 +126,7 @@ int my_memcmp(const void* src, const void* dst, int size)
     return 0;
 }
 
-int ret = 0;
+int global_ret = 0;
 
 static int parse_args(int argc, char **argv, BMTestConfig* par);
 
@@ -206,7 +207,7 @@ static void process_output(void* arg)
     uint8_t* pRefMem = NULL;
     int32_t readLen = -1, compare = 0, compareNum = 1;
     uint32_t frameSize = 0, ySize = 0, allocedSize = 0;
-    int total_frame = 0, cur_frame_idx = 0;
+    int total_frame = 0, cur_frame_idx = 0, ret = 0;
     uint64_t start_time, dec_time;
     printf("Enter process_output!\n");
 
@@ -240,14 +241,11 @@ static void process_output(void* arg)
     }
 
     start_time = osal_gettime();
-    pFrame = malloc(sizeof(BMVidFrame));
 
     while(bmvpu_dec_get_status(vidHandle) <= BMDEC_CLOSE)
     {
         if(bmvpu_dec_get_output(vidHandle, pFrame) == 0)
         {
-            //printf("get a frame, display index: %d\n", pFrame->frameIdx);
-
             /* compare yuv if there is reference yum file */
             if(compare)
             {
@@ -665,8 +663,12 @@ static void process_output(void* arg)
         else
         {
             ret = bmvpu_dec_get_status(vidHandle);
-            if(ret == BMDEC_STOP || ret == BMDEC_WRONG_RESOLUTION || ret == BMDEC_FRAMEBUFFER_NOTENOUGH)
+            if(ret == BMDEC_STOP)
                 break;
+            if(ret == BMDEC_WRONG_RESOLUTION || ret == BMDEC_FRAMEBUFFER_NOTENOUGH || ret == BMDEC_HUNG) {
+                global_ret = -1;
+                break;
+            }
 #ifdef __linux__
             usleep(1);
 #elif _WIN32
@@ -681,7 +683,7 @@ static void process_output(void* arg)
         osal_fflush(fpRef);
         osal_fclose(fpRef);
         printf("Inst %d: verification %d %s!\n", testConfigPara->instanceNum, compareNum, result == TRUE ? "passed" :"failed");
-        if(result == FALSE) ret = -1;
+        if(result == FALSE) global_ret = -1;
     }
 
     if (fpOutput)
@@ -780,7 +782,7 @@ static void dec_test(void* arg)
     param.wtlFormat = testConfigPara->wtlFormat;
     param.extraFrameBufferNum = testConfigPara->extraFrame;
     param.streamBufferSize = 0x700000;
-    param.enable_cache = 1;
+    param.enable_cache = testConfigPara->enable_cache;
     param.bsMode = testConfigPara->bsMode;   /* VIDEO_MODE_STREAM */
     param.core_idx=-1;
     param.decode_order = testConfigPara->decode_order;
@@ -791,32 +793,41 @@ static void dec_test(void* arg)
     param.pcie_board_id = testConfigPara->pcie_board_id;
 #endif
 
+    if(param.streamFormat != BMDEC_AVC && param.streamFormat != BMDEC_HEVC)
+    {
+        fprintf(stderr, "Error: the stream type is invalid!\n");
+        global_ret = -1;
+        return;
+    }
+
     /* alloc frame buffer outside */
     if(testConfigPara->mem_alloc_type == 1)
     {
         if(testConfigPara->min_frame_cnt <= 0 || testConfigPara->extraFrame <= 0)
         {
             printf("invalid buffer count. min_frame_cnt:%d min_frame_cnt:%d\n", testConfigPara->min_frame_cnt, testConfigPara->extraFrame);
+            global_ret = -1;
             return;
         }
 
-        ret = bm_dev_request(&bm_handle, 0);
-        if(ret != 0)
+        if(bm_dev_request(&bm_handle, 0) != 0)
         {
             printf("failed to open vpu handle\n");
+            global_ret = -1;
             return;
         }
 
         if(param.picWidth <= 0 || param.picHeight <= 0)
         {
             printf("invalid buffer size\n");
+            global_ret = -1;
             return;
         }
 
-        ret = bm_get_gmem_total_heap_num(bm_handle, &heap_num);
-        if(ret != 0)
+        if(bm_get_gmem_total_heap_num(bm_handle, &heap_num) != 0)
         {
             printf("fail to get heap num\n");
+            global_ret = -1;
             return;
         }
 
@@ -857,10 +868,10 @@ static void dec_test(void* arg)
             Ytab_buf[i].size = Ytab_size;
             Ctab_buf[i].size = Ctab_size;
 
-            ret = bm_malloc_device_byte_heap_mask(bm_handle, &frame_buf[i], heap_mask, framebuf_size);
-            if(ret != 0)
+            if(bm_malloc_device_byte_heap_mask(bm_handle, &frame_buf[i], heap_mask, framebuf_size) != 0)
             {
                 printf("allocate compress frame buffer failed.\n");
+                global_ret = -1;
 
                 free_frame_buffer(bm_handle, i+1, frame_buf, Ytab_buf, Ctab_buf, compress_count, 0);
                 free(vpu_frame_buf);
@@ -871,10 +882,10 @@ static void dec_test(void* arg)
             vpu_frame_buf[i].size = frame_buf[i].size;
             vpu_frame_buf[i].phys_addr = frame_buf[i].u.device.device_addr;
 
-            ret = bm_malloc_device_byte_heap_mask(bm_handle, &Ytab_buf[i], heap_mask, Ytab_size);
-            if(ret != 0)
+            if(bm_malloc_device_byte_heap_mask(bm_handle, &Ytab_buf[i], heap_mask, Ytab_size) != 0)
             {
                 printf("allocate Y table buffer failed.\n");
+                global_ret = -1;
 
                 free_frame_buffer(bm_handle, i+1, frame_buf, Ytab_buf, Ctab_buf, compress_count, 0);
                 free(vpu_frame_buf);
@@ -885,10 +896,10 @@ static void dec_test(void* arg)
             vpu_Ytab_buf[i].size = Ytab_buf[i].size;
             vpu_Ytab_buf[i].phys_addr = Ytab_buf[i].u.device.device_addr;
 
-            ret = bm_malloc_device_byte_heap_mask(bm_handle, &Ctab_buf[i], heap_mask, Ctab_size);
-            if(ret != 0)
+            if(bm_malloc_device_byte_heap_mask(bm_handle, &Ctab_buf[i], heap_mask, Ctab_size) != 0)
             {
                 printf("allocate C table buffer failed.\n");
+                global_ret = -1;
 
                 free_frame_buffer(bm_handle, i+1, frame_buf, Ytab_buf, Ctab_buf, compress_count, 0);
                 free(vpu_frame_buf);
@@ -904,7 +915,9 @@ static void dec_test(void* arg)
         {
             if(testConfigPara->frame_delay <= 0)
             {
-                printf("invalid buffer count. min_frame_cnt:%d min_frame_cnt:%d\n", testConfigPara->min_frame_cnt, testConfigPara->extraFrame);
+                printf("invalid linear buffer delay. frame_delay:%d\n", testConfigPara->frame_delay);
+                global_ret = -1;
+
                 free_frame_buffer(bm_handle, compress_count, frame_buf, Ytab_buf, Ctab_buf, compress_count, 0);
                 free(vpu_frame_buf);
                 free(vpu_Ytab_buf);
@@ -916,10 +929,10 @@ static void dec_test(void* arg)
             for(i = compress_count; i < framebuffer_cnt; i++)
             {
                 frame_buf[i].size = framebuf_size;
-                ret = bm_malloc_device_byte_heap_mask(bm_handle, &frame_buf[i], heap_mask, framebuf_size);
-                if(ret != 0)
+                if(bm_malloc_device_byte_heap_mask(bm_handle, &frame_buf[i], heap_mask, framebuf_size) != 0)
                 {
                     printf("allocate linear frame buffer failed.\n");
+                    global_ret = -1;
 
                     free_frame_buffer(bm_handle, i+1, frame_buf, Ytab_buf, Ctab_buf, compress_count, linear_count);
                     free(vpu_frame_buf);
@@ -934,10 +947,10 @@ static void dec_test(void* arg)
 
         /* allocate bitstream buffer */
         bitstream_buf.size = param.streamBufferSize;
-        ret = bm_malloc_device_byte_heap_mask(bm_handle, &bitstream_buf, heap_mask, param.streamBufferSize);
-        if(ret != 0)
+        if(bm_malloc_device_byte_heap_mask(bm_handle, &bitstream_buf, heap_mask, param.streamBufferSize) != 0)
         {
             printf("allocate bitstream buffer failed.\n");
+            global_ret = -1;
             free_frame_buffer(bm_handle, framebuffer_cnt, frame_buf, Ytab_buf, Ctab_buf, compress_count, linear_count);
             free(vpu_frame_buf);
             free(vpu_Ytab_buf);
@@ -957,7 +970,7 @@ static void dec_test(void* arg)
     if (bmvpu_dec_create(&vidHandle, param)!= 0)
     {
         fprintf(stderr, "Can't create decoder.\n");
-        ret = -1;
+        global_ret = -1;
         return;
     }
 
@@ -971,7 +984,7 @@ static void dec_test(void* arg)
     if(pInMem==NULL)
     {
         fprintf(stderr, "Can't get input memory\n");
-        ret = -1;
+        global_ret = -1;
         return;
     }
 
@@ -1068,7 +1081,7 @@ static void dec_test(void* arg)
                 bFindEnd = 0;
                 int i;
 
-                ret = osal_fseek(fpIn, UsedBytes, SEEK_SET);
+                osal_fseek(fpIn, UsedBytes, SEEK_SET);
                 readLen = osal_fread(pInMem, 1, defaultReadBlockLen, fpIn);
                 if(readLen == 0){
                     break;
@@ -1144,18 +1157,13 @@ static void dec_test(void* arg)
                         readLen = i + 6;
                     }
                 }
-                else{
-                    fprintf(stderr, "Error: the stream type is invalid!\n");
-                    ret = -1;
-                    return;
-                }
 
                 vidStream.length = readLen;
             }
 
             int result = 0;
             while((result = bmvpu_dec_decode(vidHandle, vidStream))!= 0){
-                if(result == BM_ERR_VDEC_ILLEGAL_PARAM)
+                if(result == BM_ERR_VDEC_ILLEGAL_PARAM || result == BM_ERR_VDEC_ERR_HUNG)
                     goto OUT1;
 #ifdef __linux__
                 usleep(40*1000);
@@ -1187,8 +1195,10 @@ OUT1:
 
     while ((ret = bmvpu_dec_get_status(vidHandle)) != BMDEC_STOP)
     {
-        if(ret == BMDEC_FRAMEBUFFER_NOTENOUGH || ret == BMDEC_WRONG_RESOLUTION)
+        if(ret == BMDEC_FRAMEBUFFER_NOTENOUGH || ret == BMDEC_WRONG_RESOLUTION || ret == BMDEC_HUNG) {
+            global_ret = -1;
             break;
+        }
 #ifdef __linux__
         usleep(2*1000);
 #elif _WIN32
@@ -1222,7 +1232,7 @@ static void run(void* arg)
     if(testConfigPara->fpIn==NULL)
     {
         fprintf(stderr, "Can't open input file: %s\n", (char *)testConfigPara->inputPath);
-        ret = -1;
+        global_ret = -1;
         return;
     }
     for(i=0; i<testConfigPara->run_times; i++)
@@ -1270,6 +1280,7 @@ Help(const char *programName)
     fprintf(stderr, "--inject-lost         type of injection, default is 1 for data lost, set to 0 for scramble the data\n");
     fprintf(stderr, "--inject-whole-block  lost the whole block, default is lost part of the block\n");
     fprintf(stderr, "--decode_order        get yuv frame by decode order, default:0\n");
+    fprintf(stderr, "--enable_cache        enable cache for frame buffer, default:0\n");
 
 #ifdef	BM_PCIE_MODE
     fprintf(stderr, "--pcie_board_id    select pcie card by pci_board_id\n");
@@ -1281,7 +1292,7 @@ Help(const char *programName)
 
 int main(int argc, char **argv)
 {
-    int i = 0 , ret = 0;
+    int i = 0;
     osal_thread_t vpu_thread[MAX_NUM_INSTANCE * MAX_NUM_VPU_CORE];
     osal_thread_t monitor_thread;
     BMTestConfig *testConfigPara = malloc(MAX_NUM_INSTANCE * MAX_NUM_VPU_CORE * sizeof(BMTestConfig));//[MAX_NUM_INSTANCE * MAX_NUM_VPU_CORE];
@@ -1325,7 +1336,7 @@ int main(int argc, char **argv)
     g_exit_flag = 1;
     osal_thread_join(monitor_thread, NULL);
     free(testConfigPara);
-    return ret;
+    return global_ret;
 }
 
 static struct option   options[] = {
@@ -1351,6 +1362,7 @@ static struct option   options[] = {
     {"inject-percent",        1, NULL, 0},
     {"inject-lost",           1, NULL, 0},
     {"inject-whole-block",    1, NULL, 0},
+    {"enable_cache",          1, NULL, 0},
 #ifdef	BM_PCIE_MODE
     {"pcie_board_id",         1, NULL, 0},
 #endif
@@ -1480,6 +1492,9 @@ static int parse_args(int argc, char **argv, BMTestConfig* par)
 #endif
             else if (!strcmp(options[index].name, "decode_order")) {
                 par->decode_order = (int)atoi(optarg);
+            }
+            else if (!strcmp(options[index].name, "enable_cache")) {
+                par->enable_cache = (int)atoi(optarg);
             }
             break;
         case 'v':

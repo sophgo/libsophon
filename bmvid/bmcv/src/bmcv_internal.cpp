@@ -36,8 +36,9 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #else
 #define DLLEXPORT __attribute__((visibility("default")))
 #endif
-#define COMMIT_HASH "3cb9ecce6b778c1dd716fc675504903c43f66b60"
-#define BRANCH_NAME "(头指针分离于 origin/release)"
+#define COMMIT_HASH "b3f5308f"
+#define BRANCH_NAME "HEAD"
+#define COMMIT_COUNT "2168"
 #define FIRMWARE_NAME "libbm1684x_kernel_module.so"
 
 bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size) {
@@ -615,8 +616,9 @@ bm_status_t bm_image_mem_layout_adjust(bm_handle_t handle,
     return BM_SUCCESS;
 }
 
-int find_tpufirmaware_path(char fw_path[512], const char* path){
+int find_tpufirmaware_path(char fw_path[512], const char* name){
     char* ptr;
+    char cwd[512];
     int dirname_len;
     int ret = 0;
 #ifdef __linux__
@@ -624,17 +626,22 @@ int find_tpufirmaware_path(char fw_path[512], const char* path){
     const char* path1 = "/opt/sophon/libsophon-current/lib/tpu_module/";
 
     /* 1.test ./libbm1684x_kernel_module.so */
-    ret = access(path, F_OK);
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        printf("getcwd() failed\n");
+        return -1;
+    }
+    strcpy(fw_path, cwd);
+    strcat(fw_path, "/");
+    strcat(fw_path, name);
+    ret = access(fw_path, F_OK);
     if (ret == 0){
-        memset(fw_path, 0, 512);
-        strcpy(fw_path, path);
         return ret;
     }
 
     /* 2. test /system/data/lib/vpu_firmware/chagall.bin */
     memset(fw_path, 0, 512);
     strcpy(fw_path, path1);
-    strcat(fw_path, path);
+    strcat(fw_path, name);
     ret = access(fw_path, F_OK);
     if (ret == 0)
     {
@@ -667,8 +674,23 @@ int find_tpufirmaware_path(char fw_path[512], const char* path){
     memset(fw_path, 0, 512);
     strncpy(fw_path, dl_info.dli_fname, dirname_len);
     strcat(fw_path, "tpu_module/");
-    strcat(fw_path, path);
+    strcat(fw_path, name);
 
+    /* 3.test libbmcv_so_path/tpu_module/libbm1684x_kernel_module.so */
+    memset(fw_path, 0, 512);
+    strncpy(fw_path, dl_info.dli_fname, dirname_len);
+    strcat(fw_path, "tpu_module/");
+    strcat(fw_path, name);
+    ret = access(fw_path, F_OK);
+    if (ret == 0)
+    {
+        return ret;
+    }
+
+    /* 4. test /opt/sophon/libsophon-current/lib/tpu_module/libbm1684x_kernel_module.so */
+    memset(fw_path, 0, 512);
+    strcpy(fw_path, path1);
+    strcat(fw_path, name);
     ret = access(fw_path, F_OK);
     return ret;
 #endif
@@ -702,7 +724,7 @@ int find_tpufirmaware_path(char fw_path[512], const char* path){
     memset(fw_path, 0, 512);
     strncpy(fw_path, strDLLPath1, dirname_len);
     strcat(fw_path, "tpu_module\\");
-    strcat(fw_path, path);
+    strcat(fw_path, name);
 
     free(strDLLPath1);
     ret = _access(fw_path, 0);

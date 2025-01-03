@@ -4,7 +4,7 @@ bmcv_image_quantify
 Convert float type data into int type (the rounding mode is truncation directly after the decimal point), and change the number less than 0 to 0, and the number greater than 255 to 255.
 
 
-**Processor model support**
+**Processor model support:**
 
 This interface only support BM1684X.
 
@@ -83,7 +83,6 @@ Output data currently supports the following data_types:
 
     .. code-block:: c
 
-        //pthread_mutex_t lock;
         static void read_bin(const char *input_path, float *input_data, int width, int height) {
             FILE *fp_src = fopen(input_path, "rb");
             if (fp_src == NULL)

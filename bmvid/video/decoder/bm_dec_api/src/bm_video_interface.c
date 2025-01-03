@@ -50,7 +50,6 @@
 #define PPU_FB_COUNT                    5
 #define EXTRA_FRAME_BUFFER_NUM          5
 
-#define MAX_SEQUENCE_MEM_COUNT          16
 
 #define USLEEP_CLOCK  10000
 #define INPUT_QUEUE_LEN 20
@@ -84,6 +83,7 @@ static  __declspec(thread) int dump_frame_num = 0;
 
 /* This is a flag of init flag of each core.  */
 static void* sVpuInstPool[MAX_VPU_CORE_NUM * MAX_NUM_INSTANCE] = {0};
+static int sChipResetFlag[MAX_PCIE_BOARD_NUM][MAX_VPU_CORE_NUM] = {0};
 
 extern RetCode VPU_DecUpdateBitstreamBufferParam(DecHandle handle, int size);
 extern int VPU_DecGetBitstreamBufferRoom(DecHandle handle, PhysicalAddress wrPtr);
@@ -1530,7 +1530,6 @@ static void process_vpu_msg(void *arg)
     //clean memory
 }
 
-SequenceMemInfo seqMemInfo[MAX_NUM_INSTANCE][MAX_SEQUENCE_MEM_COUNT];
 
 static void releasePreviousSequenceResources(DecHandle handle, vpu_buffer_t* arrFbMem, DecGetFramebufInfo* prevSeqFbInfo, int mem_type)
 {
@@ -1643,7 +1642,7 @@ static int decSeqChange(BMVidCodHandle vidCodHandle, DecOutputInfo* outputInfo)
         Uint32 dispFlag;
         Uint32 curSeqNo    = outputInfo->sequenceNo;
         Uint32 seqMemIndex = curSeqNo % MAX_SEQUENCE_MEM_COUNT;
-        SequenceMemInfo* pSeqMem = &seqMemInfo[handle->instIndex][seqMemIndex];
+        SequenceMemInfo* pSeqMem = &vidHandle->seqMemInfo[seqMemIndex];
         DecGetFramebufInfo prevSeqFbInfo;
         VLOG(INFO, "----- SEQUENCE CHANGED -----\n");
         Queue_Enqueue(vidHandle->sequenceQ, (void*)&curSeqNo);
@@ -2054,11 +2053,11 @@ static void process_vpu_msg_w5(void *arg)
     bitstreamMode = handle->CodecInfo->decInfo.openParam.bitstreamMode;
     osal_memset(&decParam, 0x00, sizeof(DecParam));
     osal_memset(&outputInfo, 0x00, sizeof(DecOutputInfo));
-    osal_memset(seqMemInfo[instIdx], 0x00, sizeof(seqMemInfo[instIdx]));
+    osal_memset(vidCodHandle->seqMemInfo, 0x00, sizeof(vidCodHandle->seqMemInfo));
 #ifdef __linux__
-    VLOG(INFO, "<%x>InstIdx %d: Start process message from VPU!\n", pthread_self(), instIdx);
+    VLOG(INFO, "<%x>Core: %d InstIdx %d: Start process message from VPU!\n", pthread_self(), coreIdx, instIdx);
 #elif _WIN32
-    VLOG(INFO, "<%x>InstIdx %d: Start process message from VPU!\n", GetCurrentProcessId(), instIdx);
+    VLOG(INFO, "<%x>Core: %d InstIdx %d: Start process message from VPU!\n", GetCurrentProcessId(), coreIdx, instIdx);
 #endif
     while (vidCodHandle->endof_flag < BMDEC_START_CLOSE)
     {
@@ -2230,7 +2229,11 @@ static void process_vpu_msg_w5(void *arg)
                         osal_msleep(2);
                     }
                     timeoutCount++;
-                } while (ret == RETCODE_QUEUEING_FAILURE);
+                    if(timeoutCount % 5000 == 0) {
+                        VLOG(ERR, "VPU_DecIssueSeqInit queueing fail.\n");
+                        vidCodHandle->decStatus = BMDEC_HUNG;
+                    }
+                } while (ret == RETCODE_QUEUEING_FAILURE  && vidCodHandle->endof_flag < BMDEC_START_CLOSE);
 
                 //doingSeqInit = TRUE;
             }
@@ -2251,6 +2254,10 @@ static void process_vpu_msg_w5(void *arg)
                     {
                         VLOG(ERR, "\ncoreIdx %d InstIdx %d: VPU seqinit interrupt wait timeout\n", coreIdx, instIdx);
 
+                        if (timeoutRetry > 10){
+                            vidCodHandle->decStatus = BMDEC_HUNG;
+                            timeoutCount = 0;
+                        }
                         get_reset_flock(pcie_board_idx, coreIdx);
                         doSWReset = DoReset(handle);
                         timeoutCount = 0;
@@ -2290,6 +2297,10 @@ static void process_vpu_msg_w5(void *arg)
                         VLOG(ERR, "interrupt flag 0x%x in seq init...\n", interruptFlag);
                     }
                     doingSeqInit = FALSE;
+
+                    if(interruptFlag & (1 << INT_WAVE5_CORE_HUNG)){
+                        vidCodHandle->decStatus = BMDEC_HUNG;
+                    }
                 }
 
                 if(bitstreamMode == BS_MODE_INTERRUPT)
@@ -2392,7 +2403,7 @@ static void process_vpu_msg_w5(void *arg)
             VPU_DecGiveCommand(handle, DEC_GET_QUEUE_STATUS, (void *)&qStatus);
             if(qStatus.instanceQueueCount == 0) {
                 queueFailCount++;
-                if(queueFailCount > 500  && vidCodHandle->decStatus >= BMDEC_INT_TIMEOUT) {
+                if(queueFailCount % 5000 == 0) {
                     VLOG(ERR, "dec send stream queueing fail.\n");
                     vidCodHandle->decStatus = BMDEC_HUNG;
                 }
@@ -2404,7 +2415,7 @@ static void process_vpu_msg_w5(void *arg)
             QueueStatusInfo qStatus;
             VPU_DecGiveCommand(handle, DEC_GET_QUEUE_STATUS, (void *)&qStatus);
             vidCodHandle->decStatus = BMDEC_HUNG;
-            VLOG(ERR, "instIdx %d: VPU_DecStartOneFrame PIC ret %d, instanceQueueCount %d, totalQueueCount %d\n", instIdx, ret, qStatus.instanceQueueCount, qStatus.totalQueueCount);
+            VLOG(ERR, "core:%d instIdx %d: VPU_DecStartOneFrame PIC ret %d, instanceQueueCount %d, totalQueueCount %d\n", coreIdx, instIdx, ret, qStatus.instanceQueueCount, qStatus.totalQueueCount);
             PrintDecVpuStatus(handle);
             continue;
         }
@@ -2413,6 +2424,7 @@ static void process_vpu_msg_w5(void *arg)
             //QueueStatusInfo qStatus;
             //VPU_DecGiveCommand(handle, DEC_GET_QUEUE_STATUS, (void *)&qStatus);
             //VLOG(INFO, "instIdx %d: VPU_DecStartOneFrame PIC success, instanceQueueCount %d, totalQueueCount %d\n", instIdx, qStatus.instanceQueueCount, qStatus.totalQueueCount);
+            queueFailCount = 0;
             bufReuse = FALSE;
         }
         do {
@@ -2421,7 +2433,6 @@ static void process_vpu_msg_w5(void *arg)
             {
                 timeoutCount++;
                 VLOG(WARN, "coreIdx %d InstIdx %d: interruptFlag %d\n", coreIdx, instIdx, interruptFlag);
-                vidCodHandle->decStatus = BMDEC_INT_TIMEOUT;
                 //wait for 10ms to save stream filling time.
                 if (timeoutCount >= vidCodHandle->timeout_count)
                 {
@@ -2471,9 +2482,6 @@ static void process_vpu_msg_w5(void *arg)
                 //timeoutCount++;
                 interruptFlag = 0;
             }
-            else if (vidCodHandle->decStatus == BMDEC_INT_TIMEOUT) {
-                vidCodHandle->decStatus = BMDEC_DECODING;
-            }
 
             if (interruptFlag > 0)
             {
@@ -2486,6 +2494,10 @@ static void process_vpu_msg_w5(void *arg)
 */
                 timeoutRetry = 0;
                 timeoutCount = 0;
+
+                if(interruptFlag & (1 << INT_WAVE5_CORE_HUNG)){
+                    vidCodHandle->decStatus = BMDEC_HUNG;
+                }
             }
 
             if (interruptFlag & (1<<INT_WAVE5_DEC_PIC))
@@ -2750,7 +2762,10 @@ static void process_vpu_msg_w5(void *arg)
     {
         for (index = 0; index < MAX_SEQUENCE_MEM_COUNT; index++)
         {
-            releasePreviousSequenceResources(handle, seqMemInfo[handle->instIndex][index].allocFbMem,&seqMemInfo[handle->instIndex][index].fbInfo, mem_type);
+            releasePreviousSequenceResources(handle,
+                vidCodHandle->seqMemInfo[index].allocFbMem,
+                &vidCodHandle->seqMemInfo[index].fbInfo,
+                mem_type);
         }
     }
 
@@ -2857,7 +2872,7 @@ static int checkHandle(BMVidCodHandle handle)
     return 0;
 }
 
-static int bmvpu_dec_buffer_convert(int core_idx, vpu_buffer_t *vdb, BmVpuDecDMABuffer* vb)
+static int bmvpu_dec_buffer_convert(int core_idx, vpu_buffer_t *vdb, BmVpuDecDMABuffer* vb, int enable_cache)
 {
     int ret;
     if(vdb == NULL || vb == NULL)
@@ -2867,7 +2882,7 @@ static int bmvpu_dec_buffer_convert(int core_idx, vpu_buffer_t *vdb, BmVpuDecDMA
     vdb->size = vb->size;
     vdb->phys_addr = vb->phys_addr;
 #ifndef BM_PCIE_MODE
-    vdb->enable_cache = 1;
+    vdb->enable_cache = enable_cache;
     ret = vdi_mmap_memory(core_idx, vdb);
     if(ret != BM_SUCCESS)
     {
@@ -3229,6 +3244,7 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
     int first_in_one_vpu = 0;
     int maxW5CoreNum = 0;
     int instanceNum[MAX_NUM_VPU_CORE] = {0}, minInstNum = 0;
+    int i;
 #else
     int coreIdx = getVpuCoreIdx(decParam->streamFormat);
 #endif
@@ -3240,8 +3256,19 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
         VLOG(ERR, "board index exceeds max support number %d\n",decParam->pcie_board_id);
         return ret;
     }
+
+    for(i=0; i<(MAX_VPU_CORE_NUM - 1); i++) {
+        if(sChipResetFlag[decParam->pcie_board_id][i] == 1){
+            VLOG(INFO, "core:%d refuse create inst\n", coreIdx);
+            if(vdi_get_reset_flag(i) == 0) {
+                get_lock_timeout(TRY_OPEN_SEM_TIMEOUT, decParam->pcie_board_id);
+                sChipResetFlag[decParam->pcie_board_id][i] = 0;
+                unlock_flock(decParam->pcie_board_id);
+            }
+            return RETCODE_FAILURE;
+        }
+    }
     coreIdx = MAX_NUM_VPU_CORE_CHIP*decParam->pcie_board_id+coreIdx;
-    VLOG(ERR,"BMvidDecCreateW5 board id %d coreid %d\n",decParam->pcie_board_id, coreIdx);
 
     DecOpenParam decOP;
     //VpuReportConfig_t decReportCfg;
@@ -3356,11 +3383,14 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
         coreIdx = decParam->core_idx;
 
     coreIdx = MAX_NUM_VPU_CORE_CHIP*decParam->pcie_board_id+coreIdx;
+    testConfig.coreIdx = coreIdx;
 
     if(coreIdx < 0) {
         VLOG(ERR, "Failed to get core index....\n");
         goto ERR_DEC_INIT;
     }
+
+    VLOG(INFO, "BMvidDecCreateW5 board id %d coreid %d\n",decParam->pcie_board_id, coreIdx);
 
 //    if(minInstNum == 0) {
 //        VPU_HWReset(coreIdx);
@@ -3413,7 +3443,7 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
     if(decParam->bitstream_buffer.phys_addr && decParam->bitstream_buffer.size)
     {
         bitstream_flag = 1;
-        bmvpu_dec_buffer_convert(coreIdx, &vbStream, &decParam->bitstream_buffer);
+        bmvpu_dec_buffer_convert(coreIdx, &vbStream, &decParam->bitstream_buffer, decParam->enable_cache);
         if(vbStream.size == 0 || vbStream.phys_addr == 0)
         {
             VLOG(ERR, "bitstream buffer from user is NULL!!!\n");
@@ -3424,6 +3454,7 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
     else
     {
         vbStream.size = decParam->streamBufferSize == 0 ? STREAM_BUF_SIZE : decParam->streamBufferSize;
+        vbStream.enable_cache = decParam->enable_cache;
         if(vdi_allocate_dma_memory(coreIdx, &vbStream) < 0)
         {
             VLOG(ERR, "fail to allocate bitstream buffer\n");
@@ -3456,6 +3487,8 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
     if ((ret = VPU_DecOpen(&handle, &decOP)) != RETCODE_SUCCESS)
     {
         VLOG(ERR, "VPU_DecOpen failed Error code is 0x%x \n", ret);
+        if(handle == NULL)
+            goto ERR_DEC_INIT;
         goto DECODE_OPEN_END;
     }
 
@@ -3498,8 +3531,8 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
         framebuffer_cnt = decParam->min_framebuf_cnt + decParam->extraFrameBufferNum;
         for(index = 0; index < framebuffer_cnt; index++)
         {
-            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pYtabMem[index], &decParam->Ytable_buffer[index]);
-            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pCtabMem[index], &decParam->Ctable_buffer[index]);
+            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pYtabMem[index], &decParam->Ytable_buffer[index], vidHandle->enable_cache);
+            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pCtabMem[index], &decParam->Ctable_buffer[index], vidHandle->enable_cache);
             vdi_attach_dma_memory(coreIdx, &vidHandle->pYtabMem[index]);
             vdi_attach_dma_memory(coreIdx, &vidHandle->pCtabMem[index]);
         }
@@ -3508,7 +3541,7 @@ int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam)
             framebuffer_cnt += decParam->framebuf_delay + decParam->extraFrameBufferNum + 1;
         for(index = 0; index < framebuffer_cnt; index++)
         {
-            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pFbMem[index], &decParam->frame_buffer[index]);
+            bmvpu_dec_buffer_convert(coreIdx, &vidHandle->pFbMem[index], &decParam->frame_buffer[index], vidHandle->enable_cache);
             vdi_attach_dma_memory(coreIdx, &vidHandle->pFbMem[index]);
         }
     }
@@ -4109,6 +4142,7 @@ int BMVidDecSeqInitW5(BMVidCodHandle vidCodHandle)
     VLOG(INFO, "Start AllocateDecFrameBuffer....instIdx: %d\n", handle->instIndex);
 
     if (AllocateDecFrameBuffer(handle, &decParam, compressedFbCount, linearFbCount, pFrame, pFbMem, &framebufStride, vidHandle->enable_cache) == FALSE) {
+        vidHandle->decStatus = BMDEC_FRAMEBUFFER_NOTENOUGH;
         ret = -1;
         goto ERR_DEC_OPEN;
     }
@@ -4125,6 +4159,7 @@ int BMVidDecSeqInitW5(BMVidCodHandle vidCodHandle)
             LeaveLock(coreIdx);
         }
 
+        vidHandle->decStatus = BMDEC_FRAMEBUFFER_NOTENOUGH;
         VLOG(ERR, "VPU_DecRegisterFrameBuffer failed Error code is 0x%x \n", ret );
         goto ERR_DEC_OPEN;
     }
@@ -4203,6 +4238,7 @@ BMVidDecRetStatus bmvpu_dec_decode(BMVidCodHandle vidCodHandle, BMVidStream vidS
     PhysicalAddress wrPtr;
     Uint32 room;
     DecHandle decHandle;
+    int board_idx, core_idx;
 #ifdef VID_PERFORMANCE_TEST
     int64_t start_pts = 0, end_pts = 0;
     struct timeval tv;
@@ -4220,8 +4256,21 @@ BMVidDecRetStatus bmvpu_dec_decode(BMVidCodHandle vidCodHandle, BMVidStream vidS
 #endif
 
 #endif
+    board_idx = vidHandle->codecInst->coreIdx / MAX_NUM_VPU_CORE_CHIP;
+    core_idx = vidHandle->codecInst->coreIdx % MAX_NUM_VPU_CORE_CHIP;
+
+    if(sChipResetFlag[board_idx][core_idx] == 1) {
+        VLOG(ERR, "chip %d meybe meet some error ....\n", board_idx);
+        return BM_ERR_VDEC_ERR_HUNG;
+    }
+
     if(vidHandle->decStatus == BMDEC_HUNG) {
-        VLOG(ERR, "vpu decode failed ....\n");
+        VLOG(ERR, "chip:%d core:%d inst:%d vpu decode failed ....\n",
+            board_idx, core_idx, vidHandle->codecInst->instIndex);
+        get_lock_timeout(TRY_OPEN_SEM_TIMEOUT, board_idx);
+        sChipResetFlag[board_idx][core_idx] = 1;
+        unlock_flock(board_idx);
+        vdi_set_reset_flag(vidHandle->codecInst->coreIdx);
         return BM_ERR_VDEC_ERR_HUNG;
     }
 
@@ -4232,7 +4281,7 @@ BMVidDecRetStatus bmvpu_dec_decode(BMVidCodHandle vidCodHandle, BMVidStream vidS
 
     if(vidHandle->decStatus == BMDEC_FRAMEBUFFER_NOTENOUGH) {
         VLOG(ERR, "the frame buffer count set is wrong\n");
-        return BM_ERR_VDEC_ILLEGAL_PARAM;
+        return BM_ERR_VDEC_NOMEM;
     }
 
     if(vidHandle->decStatus == BMDEC_WRONG_RESOLUTION) {
@@ -4470,9 +4519,10 @@ BMVidDecRetStatus bmvpu_dec_clear_output(BMVidCodHandle vidCodHandle, BMVidFrame
         if (ptr && *ptr != frame->sequenceNo) {
             /* Release all framebuffers of previous sequence */
             SequenceMemInfo* p;
+            int core_idx = bmvpu_dec_get_core_idx(vidCodHandle);
             index = (*ptr) % MAX_SEQUENCE_MEM_COUNT;
 
-            p = &seqMemInfo[vidHandle->codecInst->instIndex][index];
+            p = &vidHandle->seqMemInfo[index];
             releasePreviousSequenceResources(vidHandle->codecInst, p->allocFbMem, &p->fbInfo, vidHandle->codecInst->CodecInfo->decInfo.framebuf_from_user);
             osal_memset(p, 0x00, sizeof(SequenceMemInfo));
             Queue_Dequeue(vidHandle->sequenceQ);
@@ -4515,7 +4565,12 @@ BMVidDecRetStatus bmvpu_dec_flush(BMVidCodHandle vidCodHandle)
         }
         else
             ret = Queue_Enqueue(vidHandle->inputQ2, &size);
-        vidHandle->endof_flag = BMDEC_START_FLUSH;
+
+        if (ret == 1)
+        {
+            vidHandle->endof_flag = BMDEC_START_FLUSH;
+            ret = BM_SUCCESS;
+        }
         osal_cond_signal(vidHandle->inputCond);
         osal_cond_unlock(vidHandle->inputCond);
 //        osal_cond_signal(vidHandle->outputCond);
@@ -4531,6 +4586,10 @@ BMVidDecRetStatus bmvpu_dec_delete(BMVidCodHandle vidCodHandle)
     int coreIdx = -1;
     int try_count = 0;
     int instIdx = -1;
+    int pcie_board_id = 0;
+    int reset_flag = 0;
+    int i;
+    int inst_num = 0;
 #ifdef _WIN32
         timeEndPeriod(1);
 #endif
@@ -4541,6 +4600,7 @@ BMVidDecRetStatus bmvpu_dec_delete(BMVidCodHandle vidCodHandle)
     }
     coreIdx = vidHandle->codecInst->coreIdx;
     instIdx = vidHandle->codecInst->instIndex;
+    pcie_board_id = coreIdx/MAX_NUM_VPU_CORE_CHIP;
     VLOG(INFO, "close decoder instance, core index: %d, instance index: %d\n",
                 coreIdx, instIdx);
 
@@ -4577,6 +4637,21 @@ BMVidDecRetStatus bmvpu_dec_delete(BMVidCodHandle vidCodHandle)
     if (vidHandle->processThread != NULL){
         osal_thread_join(vidHandle->processThread, NULL);
     }
+
+    if(sChipResetFlag[pcie_board_id][coreIdx%MAX_NUM_VPU_CORE_CHIP] == 1)
+    {
+        if((inst_num = vdi_get_reset_flag(coreIdx)) != 0){
+            reset_flag = 1;
+            VLOG(INFO, "chip:%d core:%d resume inst num:%d\n", pcie_board_id, coreIdx%MAX_NUM_VPU_CORE_CHIP, inst_num);
+        }
+
+        if(reset_flag == 0){
+            get_lock_timeout(TRY_OPEN_SEM_TIMEOUT, pcie_board_id);
+            sChipResetFlag[pcie_board_id][coreIdx%MAX_NUM_VPU_CORE_CHIP] = 0;
+            unlock_flock(pcie_board_id);
+            VLOG(INFO, "chip:%d core:%d all instance is closed.\n", pcie_board_id, coreIdx);
+        }
+    }
 #ifdef TRY_FLOCK
     if(s_flock_fd[coreIdx] != -1) {
         close(s_flock_fd[coreIdx]);
@@ -4603,8 +4678,21 @@ BMVidDecRetStatus bmvpu_dec_delete(BMVidCodHandle vidCodHandle)
 BMDecStatus bmvpu_dec_get_status(BMVidCodHandle vidCodHandle)
 {
     BMVidHandle vidHandle = (BMVidHandle)vidCodHandle;
-    if(checkHandle(vidCodHandle)!=0)
+    int board_idx = vidHandle->codecInst->coreIdx / MAX_NUM_VPU_CORE_CHIP;
+    int core_idx = vidHandle->codecInst->coreIdx % MAX_NUM_VPU_CORE_CHIP;
+
+    if(checkHandle(vidCodHandle) != 0){
+        if(vidHandle->decStatus == BMDEC_HUNG) {
+            get_lock_timeout(TRY_OPEN_SEM_TIMEOUT, board_idx);
+            sChipResetFlag[board_idx][core_idx] = 1;
+            unlock_flock(board_idx);
+            vdi_set_reset_flag(vidHandle->codecInst->coreIdx);
+
+            VLOG(INFO, "chip:%d core:%d inst:%d is hung. please check..\n",
+                board_idx, vidHandle->codecInst->coreIdx, vidHandle->codecInst->instIndex);
+        }
         return vidHandle->decStatus;
+    }
     else
     {
         VLOG(ERR, "handle err, 0x%p\n", vidCodHandle);
@@ -4829,7 +4917,7 @@ BMVidDecRetStatus bmvpu_dec_get_stream_info(BMVidCodHandle vidCodHandle, int* wi
     return RETCODE_SUCCESS;
 }
 
-int bmvpu_dec_read_memory(int coreIdx, unsigned long addr, unsigned char *data, int len, int endian)
+int bmvpu_dec_read_memory(int coreIdx, u64 addr, unsigned char *data, int len, int endian)
 {
     return vdi_read_memory(coreIdx, addr, data, len, endian);
 }

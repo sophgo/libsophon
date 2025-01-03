@@ -5,7 +5,7 @@ bmcv_image_sobel
 
 **处理器型号支持：**
 
-该接口仅支持BM1684。
+该接口支持BM1684/BM1684X。
 
 
 **接口形式：**
@@ -47,7 +47,7 @@ bmcv_image_sobel
 
 * int ksize = 3
 
-  Sobel核的大小，必须是-1,1,3,5或7。其中特殊的，如果是-1则使用3×3 Scharr滤波器，如果是1则使用3×1或者1×3的核。默认值为3。
+  Sobel核的大小，必须是1，3，5或7。3，5，7取值情况下，核大小为3*3，5*5，7*7。如果取1，则按照dx和dy的值决定Sobel核的大小，dx=1，dy=0则核大小为3×1，dx=0，dy=1，则核大小为1×3，dx=1,dy=1,核大小变为3*3。ksize默认值为3。
 
 * float scale = 1
 
@@ -72,35 +72,31 @@ bmcv_image_sobel
 +-----+------------------------+------------------------+
 | num | input image_format     | output image_format    |
 +=====+========================+========================+
-| 1   | FORMAT_BGR_PACKED      | FORMAT_BGR_PACKED      |
+| 1   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
 +-----+------------------------+------------------------+
-| 2   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
+| 2   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
 +-----+------------------------+------------------------+
-| 3   | FORMAT_RGB_PACKED      | FORMAT_RGB_PACKED      |
+| 3   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 4   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
+| 4   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 5   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
+| 5   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 6   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
+| 6   | FORMAT_YUV420P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 7   | FORMAT_GRAY            | FORMAT_GRAY            |
+| 7   | FORMAT_YUV422P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 8   | FORMAT_YUV420P         | FORMAT_GRAY            |
+| 8   | FORMAT_YUV444P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 9   | FORMAT_YUV422P         | FORMAT_GRAY            |
+| 9   | FORMAT_NV12            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 10  | FORMAT_YUV444P         | FORMAT_GRAY            |
+| 10  | FORMAT_NV21            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 11  | FORMAT_NV12            | FORMAT_GRAY            |
+| 11  | FORMAT_NV16            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 12  | FORMAT_NV21            | FORMAT_GRAY            |
+| 12  | FORMAT_NV61            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 13  | FORMAT_NV16            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 14  | FORMAT_NV61            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 15  | FORMAT_NV24            | FORMAT_GRAY            |
+| 13  | FORMAT_NV24            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
 
 
@@ -119,7 +115,7 @@ bmcv_image_sobel
 
 2、input output 的 data_type必须相同。
 
-3、目前支持图像的最大width为(2048 - ksize)。
+3、BM1684芯片下该算子支持图像的最大width为(2048 - ksize)。BM1684X芯片下该算子在Sobel核大小为1和3时，支持的宽高范围为8*8～8192*8192，核大小为5时支持的宽高范围为8*8～4096*8192，核大小为7时支持的宽高范围为8*8～2048*8192。
 
 
 **代码示例：**

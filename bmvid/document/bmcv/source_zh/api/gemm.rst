@@ -110,12 +110,23 @@ bmcv_gemm
         bool is_A_trans = false;
         bool is_B_trans = false;
         float *A     = new float[M * K];
-        float *B     = new float[N * K];
+        float *B     = new float[K * N];
         float *C     = new float[M * N];
-        memset(A, 0x11, M * K * sizeof(float));
-        memset(B, 0x22, N * K * sizeof(float));
-        memset(C, 0x33, M * N * sizeof(float));
 
+        for (int i = 0; i < M * K; ++i) {
+            A[i] = 1.0f;
+        }
+
+        for (int i = 0; i < N * K; ++i) {
+            B[i] = 2.0f;
+        }
+
+        for (int i = 0; i < M * N; ++i) {
+            C[i] = 3.0f;
+        }
+
+        bm_handle_t handle;
+        bm_dev_request(&handle, 0);
         bmcv_gemm(handle,
                   is_A_trans,
                   is_B_trans,
@@ -130,6 +141,31 @@ bmcv_gemm
                   beta,
                   bm_mem_from_system((void *)C),
                   N);
+
+            std::cout << "Matrix A:" << std::endl;
+            for (int i = 0; i < M; i++) {
+                for (int j = 0; j < K; j++) {
+                    std::cout << A[i * K + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::cout << "Matrix B:" << std::endl;
+            for (int i = 0; i < K; i++) {
+                for (int j = 0; j < N; j++) {
+                    std::cout << B[i * N + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::cout << "Matrix C:" << std::endl;
+            for (int i = 0; i < M; i++) {
+                for (int j = 0; j < N; j++) {
+                    std::cout << C[i * N + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
         delete A;
         delete B;
         delete C;

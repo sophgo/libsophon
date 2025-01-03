@@ -41,5 +41,8 @@ pdf: latex
 web: html
 	#@python3 -m http.server --directory build/html
 
+livehtml: livehtml
+	@sphinx-autobuild -b html $(SOURCEDIR) $(BUILDDIR)/html
+
 clean:
 	@rm -rf $(BUILDDIR)

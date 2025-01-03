@@ -17,6 +17,7 @@ typedef struct {
     int height;
     int width;
     int format;
+    int ksize;
     float sigmaX;
     float sigmaY;
     bool is_packed;
@@ -24,15 +25,6 @@ typedef struct {
     char* output_path;
     bm_handle_t handle;
 } gaussian_blur_thread_arg_t;
-
-static int parameters_check(int height, int width)
-{
-    if (height > 8192 || width > 4096){
-        printf("Unsupported size : size_max = 4096 x 8192 \n");
-        return -1;
-    }
-    return 0;
-}
 
 #if 0 // Use opencv for comparison to prove that the cpu side's own implementation of ref is correct.
 #include "opencv2/opencv.hpp"
@@ -148,6 +140,7 @@ static void create_gaussian_kernel(float* kernel, int kw, int kh, float sigma1, 
     free(k_sep_y);
 }
 
+
 static void borderfill(int width, int height, int ksize_w, int ksize_h,unsigned char *input_data,
                        unsigned char* input_data_border) {
     int border_w = ksize_w / 2;
@@ -193,50 +186,34 @@ static void borderfill(int width, int height, int ksize_w, int ksize_h,unsigned 
     }
 }
 
-static void conv(int width, int height, int kw, int kh, float *kernel,
-                 unsigned char *input_data_border, unsigned char *output) {
-    // The cpu side does the convolution on the input_img
-    float sum_ = 0;
-    for (int i = 0; i < (kh / 2 + height); i++) {
-        for (int j = 0; j < (kw / 2 + width); j++) {
-            for (int g = 0; g < kh; g++) {
-                for (int k = 0; k < kw; k++) {
-                    sum_ += input_data_border[(i + g) * (2 * (kw / 2) + width) + j + k] * kernel[g * kw + k];
+static int gaussian_blur_ref_single_channel(unsigned char *input, unsigned char *output, int height,
+                                            int width, int kw, float *kernel) {
+    int half_k = kw / 2;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            float sum = 0.0;
+            for (int i = -half_k; i <= half_k; i++) {
+                for (int j = -half_k; j <= half_k; j++) {  // Boundary reflection fill
+                    int yy = y + i;
+                    int xx = x + j;
+                    if (yy < 0) yy = -yy;
+                    if (yy >= height) yy = 2 * height - yy - 2;
+                    if (xx < 0) xx = -xx;
+                    if (xx >= width) xx = 2 * width - xx - 2;
+                    int pixel_index = yy * width + xx;
+                    int pixel = input[pixel_index];
+                    sum += pixel * kernel[(i + half_k) * kw + j + half_k];
                 }
             }
-            if (sum_ < 0) {sum_ = 0;}
-            if (sum_ > 255) {sum_ = 255;}
-            if ((i < height) && (j < width)) {
-                output[i * width + j] = (unsigned char)(sum_ + 0.5); // opencv是四舍五入
-            }
-            sum_ = 0;
+            if (sum > 255) sum = 255;
+            if (sum < 0) sum = 0;
+            int output_index = y * width + x;
+            output[output_index] = (unsigned char)sum;
         }
     }
-}
 
-static int gaussian_blur_ref_single_channel(unsigned char *input, unsigned char *output, int height,
-                                            int width, int kw, int kh, float *kernel) {
-    // 1.get kernel   --get from last param
-    // 2.border fill  --different from tpu,but the result is the same.
-    int border_w = kw / 2;
-    int border_h = kh / 2;
-    unsigned char* input_data_border = (unsigned char*)malloc((width + 2 * border_w) * (height + 2 * border_h + 1));
-    memset(input_data_border, 0, (width + 2 * border_w) * (height + 2 * border_h));
-    borderfill(width, height, kw, kh, input, input_data_border);
-#if 0 // check borderfill
-            for(int i = 0; i < 10; i++){
-                for(int j = 0; j < 10; j++){
-                    printf("%3d ",input_data_border[i * 10 + j]);
-                }
-                printf("\n");
-            }
-#endif
-    // 3.convolution
-    conv(width, height, kw, kh, kernel, input_data_border, output);
-    free(input_data_border);
     return 0;
 }
-
 static int gaussian_blur_cpu_ref(unsigned char *input, unsigned char *output, int channel, bool is_packed,
                                  int height, int width, int kw, int kh, float sigmaX, float sigmaY) {
     // create kernel
@@ -256,7 +233,7 @@ static int gaussian_blur_cpu_ref(unsigned char *input, unsigned char *output, in
         }
         for (int i = 0; i < 3; i++) {
             gaussian_blur_ref_single_channel(input_temp + i * width * height, output_temp + i * width * height,
-                                             height, width, kw, kh, kernel);
+                                             height, width, kw, kernel);
         }
         for (int i = 0; i < 3; i++) {
             int tep = 0;
@@ -270,7 +247,7 @@ static int gaussian_blur_cpu_ref(unsigned char *input, unsigned char *output, in
     } else {
         for (int i = 0; i < channel; i++) {
             gaussian_blur_ref_single_channel(input + i * width * height, output + i * width * height,
-                                             height, width, kw, kh, kernel);
+                                             height, width, kw, kernel);
         }
     }
     free(kernel);
@@ -319,8 +296,9 @@ static int gaussian_blur_tpu(unsigned char *input, unsigned char *output, int he
 
 static int cmp(unsigned char *got, unsigned char *exp, int len) {
     for (int i = 0; i < len; i++) {
-        if (abs(got[i] - exp[i]) > 2) {
-            printf("cmp error: idx=%d  exp=%d  got=%d\n", i, exp[i], got[i]);
+        if (abs(got[i] - exp[i]) > 1) {
+            for (int j = 0; j < 5; j++)
+                printf("cmp error: idx=%d  exp=%d  got=%d\n", i + j, exp[i + j], got[i + j]);
             return -1;
         }
     }
@@ -349,17 +327,23 @@ static void write_bin(const char *output_path, unsigned char *output_data, int w
     fclose(fp_dst);
 }
 
-static int test_gaussian_blur_random(int random, int channel, bool is_packed, int height, int width, int format,
+static int test_gaussian_blur_random(int random, int channel, bool is_packed, int height, int width, int ksize, int format,
                                      float sgmX, float sgmY, char *input_path, char *output_path, bm_handle_t handle) {
     struct timeval t1, t2;
-    int kw = 3, kh = 3;
+    int kw = ksize, kh = ksize;
     float sigmaX = sgmX;
     float sigmaY = sgmY;
-    printf("===== test gaussian blur =====\n");
     // 1.Define the parameters
-    printf("channel: %d,  width: %d,  height: %d\n", channel, width, height);
-    printf("kw: %d,  kh: %d,  is_packed: %d\n", kw, kh, is_packed);
-    printf("sigmaX: %f,  sigmaY: %f,  format: %d\n", sigmaX, sigmaY, format);
+    printf("random   = %d\n", random);
+    printf("width    = %d\n", width);
+    printf("height   = %d\n", height);
+    printf("format   = %d\n", format);
+    printf("ksize    = %d\n", ksize);
+    printf("sigmaX   =  %f\n", sigmaX);
+    printf("sigmaY   =  %f\n", sigmaY);
+    printf("channel  = %d\n", channel);
+    printf("is_packed= %d\n", is_packed);
+
     unsigned char *input_data = (unsigned char*)malloc(width * height * (is_packed ? 3 : channel));
     unsigned char *output_tpu = (unsigned char*)malloc(width * height * (is_packed ? 3 : channel));
     unsigned char *output_cpu = (unsigned char*)malloc(width * height * (is_packed ? 3 : channel));
@@ -417,6 +401,7 @@ void* test_gaussian_blur(void* args) {
     int height = gaussian_blur_thread_arg->height;
     int width = gaussian_blur_thread_arg->width;
     int format = gaussian_blur_thread_arg->format;
+    int ksize = gaussian_blur_thread_arg->ksize;
     float sigmaX = gaussian_blur_thread_arg->sigmaX;
     float sigmaY = gaussian_blur_thread_arg->sigmaY;
     bool is_packed = gaussian_blur_thread_arg->is_packed;
@@ -424,19 +409,31 @@ void* test_gaussian_blur(void* args) {
     char* output_path = gaussian_blur_thread_arg->output_path;
     bm_handle_t handle = gaussian_blur_thread_arg->handle;
     for (int i = 0; i < loop_num; i++) {
-        // if (loop_num > 1) {
-        //     width = 2 + rand() % 4094;
-        //     height = 2 + rand() % 8190;
-        //     int format_num[] = {8,9,10,11,12,13,14};
-        //     int size = sizeof(format_num) / sizeof(format_num[0]);
-        //     int rand_num = rand() % size;
-        //     format = format_num[rand_num];
-        //     sigmaX = (float)rand() / RAND_MAX * 5.0f;
-        //     sigmaY = (float)rand() / RAND_MAX * 5.0f;
-        //     channel = ((format == 10 || format == 11 || format == 14) ? 1 : 3);
-        //     is_packed = ((format == 10 || format == 11) ? 1 : 0);
-        // }
-        if (0 != test_gaussian_blur_random(random, channel, is_packed, height, width, format, sigmaX,
+        if (loop_num > 1) {
+            int k_size_num[] = {3, 5, 7};
+            int size = sizeof(k_size_num) / sizeof(k_size_num[0]);
+            int rand_num = rand() % size;
+            ksize = k_size_num[rand_num];
+            if(ksize == 1 || ksize == 3){
+                width = 8 + rand() % 8185;
+                height = 8 + rand() % 8185;
+            } else if (ksize == 5) {
+                width = 8 + rand() % 2041;
+                height = 8 + rand() % 8192;
+            } else if (ksize == 7) {
+                width = 8 + rand() % 2041;
+                height = 8 + rand() % 8192;
+            }
+            int format_num[] = {8,9,12,13,14};
+            size = sizeof(format_num) / sizeof(format_num[0]);
+            rand_num = rand() % size;
+            format = format_num[rand_num];
+            sigmaX = (float)rand() / RAND_MAX * 5.0f;
+            sigmaY = (float)rand() / RAND_MAX * 5.0f;
+            channel = ((format == 10 || format == 11 || format == 14) ? 1 : 3);
+            is_packed = ((format == 10 || format == 11) ? 1 : 0);
+        }
+        if (0 != test_gaussian_blur_random(random, channel, is_packed, height, width, ksize, format, sigmaX,
                                            sigmaY, input_path, output_path, handle)) {
             printf("------TEST GAUSSIAN_BLUR FAILED------\n");
             return (void*)-1;
@@ -446,27 +443,39 @@ void* test_gaussian_blur(void* args) {
     return (void*)0;
 }
 
-
 int main(int argc, char *args[]) {
     struct timespec tp;
     clock_gettime(0, &tp);
     unsigned int seed = tp.tv_nsec;
     srand(seed);
     printf("seed = %d\n", seed);
-    int random = 1;
+    int thread_num = 1;
     int loop = 1;
-    int width = 2 + rand() % 4094;
-    int height = 2 + rand() % 8190;
-    int format_num[] = {8,9,10,11,12,13,14};
-    int size = sizeof(format_num) / sizeof(format_num[0]);
+    int random = 1;
+    int width = 8;
+    int height = 8;
+    int k_size_num[] = {3, 5, 7};
+    int size = sizeof(k_size_num) / sizeof(k_size_num[0]);
     int rand_num = rand() % size;
+    int ksize = k_size_num[rand_num];
+    if(ksize == 3){
+        width = 8 + rand() % 8185;
+        height = 8 + rand() % 8185;
+    } else if (ksize == 5) {
+        width = 8 + rand() % 2041;
+        height = 8 + rand() % 8192;
+    } else if (ksize == 7) {
+        width = 8 + rand() % 2041;
+        height = 8 + rand() % 8192;
+    }
+    int format_num[] = {8,9,12,13,14};
+    size = sizeof(format_num) / sizeof(format_num[0]);
+    rand_num = rand() % size;
     int format = format_num[rand_num];
     float sigmaX = (float)rand() / RAND_MAX * 5.0f;
     float sigmaY = (float)rand() / RAND_MAX * 5.0f;
     int channel;
     int is_packed;
-    int thread_num = 1;
-    int check = 0;
     int ret = 0;
     char *input_path = NULL;
     char *output_path = NULL;
@@ -479,7 +488,7 @@ int main(int argc, char *args[]) {
 
     if (argc == 2 && atoi(args[1]) == -1) {
         printf("usage: \n");
-        printf("%s thread_num loop random height width format sigmaX sigmaY input_path output_path(when random = 0,need to set input_path and output_path) \n", args[0]);
+        printf("%s thread_num loop random width height format ksize sigmaX sigmaY input_path output_path(when random = 0,need to set input_path and output_path) \n", args[0]);
         printf("example:\n");
         printf("%s \n", args[0]);
         printf("%s 2\n", args[0]);
@@ -492,21 +501,18 @@ int main(int argc, char *args[]) {
     if (argc > 1) thread_num = atoi(args[1]);
     if (argc > 2) loop = atoi(args[2]);
     if (argc > 3) random = atoi(args[3]);
-    if (argc > 4) height = atoi(args[4]);
-    if (argc > 5) width = atoi(args[5]);
+    if (argc > 4) width = atoi(args[4]);
+    if (argc > 5) height = atoi(args[5]);
     if (argc > 6) format = atoi(args[6]);
-    if (argc > 7) sigmaX = atof(args[7]);
-    if (argc > 8) sigmaY = atof(args[8]);
-    if (argc > 9) input_path = args[9];
-    if (argc > 10) output_path = args[10];
+    if (argc > 7) ksize = atoi(args[7]);
+    if (argc > 8) sigmaX = atof(args[8]);
+    if (argc > 9) sigmaY = atof(args[9]);
+    if (argc > 10) input_path = args[10];
+    if (argc > 11) output_path = args[11];
     channel = ((format == 10 || format == 11 || format == 14) ? 1 : 3);
     is_packed = ((format == 10 || format == 11) ? 1 : 0);
-    check = parameters_check(height, width);
-    if (check) {
-        printf("Parameters Failed! \n");
-        return check;
-    }
-
+    printf("thread_num = %d\n", thread_num);
+    printf("loop_num   = %d\n", loop);
     // test for multi-thread
     pthread_t pid[thread_num];
     gaussian_blur_thread_arg_t gaussian_blur_thread_arg[thread_num];
@@ -518,6 +524,7 @@ int main(int argc, char *args[]) {
         gaussian_blur_thread_arg[i].height = height;
         gaussian_blur_thread_arg[i].width = width;
         gaussian_blur_thread_arg[i].format = format;
+        gaussian_blur_thread_arg[i].ksize = ksize;
         gaussian_blur_thread_arg[i].sigmaX = sigmaX;
         gaussian_blur_thread_arg[i].sigmaY = sigmaY;
         gaussian_blur_thread_arg[i].input_path = input_path;

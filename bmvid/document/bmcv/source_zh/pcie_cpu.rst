@@ -11,7 +11,7 @@ PCIe CPU
 准备工作
 ________
 
-如果要使能片上处理器，那么需要以下两个文件：
+如果要使能片上处理器，那么需要以下两个文件（需要额外安装sophon-rpc）：
 
 * ramboot_rootfs.itb
 
@@ -19,11 +19,15 @@ ________
 
 需要将这两个文件所在的路径设置到程序运行的环境变量 BMCV_CPU_KERNEL_PATH 中， 如下：
 
-$ export BMCV_CPU_KERNEL_PATH=/path/to/kernel_fils/
+.. code-block:: bash
+
+    export BMCV_CPU_KERNEL_PATH=/opt/sophon/libsophon-current/data
 
 BMCV所有需要Processor操作的实现均在库 libbmcv_cpu_func.so 中，需要将该文件所在路径添加到程序运行的环境变量 BMCV_CPU_LIB_PATH 中，如下：
 
-$ export BMCV_CPU_LIB_PATH=/path/to/lib/
+.. code-block:: bash
+
+    export BMCV_CPU_LIB_PATH=/opt/sophon/libsophon-current/lib/bmcpu_bmcv/
 
 目前需要Processor参与实现的API如下所示，如果没有使用以下API可忽略该功能。
 
@@ -47,11 +51,11 @@ ___________
 
 用户可以在程序的开始结束处分别使用以下两个接口，即可分别实现该功能的开启和关闭。
 
-    .. code-block:: c
+.. code-block:: c
 
-        bm_status_t bmcv_open_cpu_process(bm_handle_t handle);
+    bm_status_t bmcv_open_cpu_process(bm_handle_t handle);
 
-        bm_status_t bmcv_close_cpu_process(bm_handle_t handle);
+    bm_status_t bmcv_close_cpu_process(bm_handle_t handle);
 
 
 **传入参数说明:**

@@ -141,41 +141,29 @@ Int32 LoadFirmware(
         char addr[255] = "/system/data/lib/vpu_firmware/";
         strcat(addr, path);
         if((fp=osal_fopen(addr, "rb")) == NULL) {
-            void *handle = dlopen("libbmvideo.so", RTLD_NOW);
-            struct link_map *map;
-            if (handle == NULL) {
-                fprintf(stderr, "dlopen() failed: %s\n", dlerror());
+            Dl_info dl_info;
+            if (!dladdr("libbmvideo.so", &dl_info)) {
+                fprintf(stderr, "dladdr(libbmvideo.so) failed: %s  \n", dlerror());
                 return -1;
             }
-            if(dlinfo(handle, RTLD_DI_LINKMAP, &map) != -1) {
-                char *ptr = strrchr(map->l_name, '/');
-                if(ptr) {
-                    int name_len = ptr - map->l_name + 1;
-                    printf("so addr : %s, name_len: %d\n", map->l_name, name_len);
+            char *ptr = strrchr(dl_info.dli_fname, '/');
+            if(ptr) {
+                size_t name_len = ptr - dl_info.dli_fname + 1;
+                printf("so addr : %s, name_len: %lu\n", dl_info.dli_fname, name_len);
 
-                    if(name_len > 0) {
-                        memset(addr, 0, 255);
-                        strncpy(addr, map->l_name, name_len);
-                        strcat(addr, "vpu_firmware/");
-                        strcat(addr, path);
-                        printf("vpu firmware addr: %s\n", addr);
-                        fp=osal_fopen(addr, "rb");
-                    }
-                }
-                else {
-                    VLOG(ERR, "can't get the absolute pathname of so\n");
-                    dlclose(handle);
-                    return -1;
+                if(name_len > 0) {
+                    memset(addr, 0, 255);
+                    strncpy(addr, dl_info.dli_fname, name_len);
+                    strcat(addr, "vpu_firmware/");
+                    strcat(addr, path);
+                    printf("vpu firmware addr: %s\n", addr);
+                    fp=osal_fopen(addr, "rb");
                 }
             }
             else {
-                printf("can't get addr of fw file.\n");
-                dlclose(handle);
+                VLOG(ERR, "can't get the absolute pathname of so\n");
                 return -1;
             }
-            int ret = dlclose(handle);
-            if (ret != 0)
-                VLOG(WARN, "WARNING! dlclose failed.\n");
         }
         else {
             VLOG(INFO, "vpu firmware %s open.", addr);
@@ -1157,7 +1145,7 @@ BOOL AllocateDecFrameBuffer(
         vdi_lock(coreIndex);
         for (idx=linearFbStartIdx; idx<totalFbCount; idx++) {
             pvb = &retFbAddrs[idx];
-            pvb->enable_cache = 1;
+            pvb->enable_cache = enable_cache;
             if(config->framebuf_from_user != FRAME_BUFFER_FROM_USER)
             {
                 pvb->size = framebufSize;

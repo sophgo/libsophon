@@ -1,7 +1,7 @@
 bmcv_image_vpp_stitch
 =====================
 
-使用vpp硬件资源的 crop 功能，实现图像拼接的效果，对输入 image 可以一次完成 src crop + csc + resize + dst crop操作。dst image 中拼接的小图像数量不能超过256。
+使用vpp硬件资源的 crop 功能，实现图像拼接的效果，对输入 image 可以一次完成 src crop + csc + resize + dst crop操作。
 
 
     .. code-block:: c
@@ -81,5 +81,7 @@ bmcv_image_vpp_stitch
 2. 该 API 所需要满足的格式以及部分要求与 bmcv_image_vpp_basic 一致。
 
 3. 如果对src image做crop操作，一张src image只crop一个目标。
+
+4. 1684支持 input_num 最大为256，1684x支持 input_num 最大为512。
 
 

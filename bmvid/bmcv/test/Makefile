@@ -12,14 +12,34 @@
 
 TEST_BMCV_DIR = $(BMCV_SRC_DIR)/test
 
+VPP_DIR ?= $(OUT_DIR)/vpp
+
 BMCV_DIR ?= $(OUT_DIR)/bmcv
 
 INCLUDE_DIR += -I$(TEST_BMCV_DIR)
 
+ifeq ($(PRODUCTFORM), soc)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/
+else ifeq ($(PRODUCTFORM), pcie_arm64)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/
+else ifeq ($(PRODUCTFORM), pcie_mips64)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/mips/
+else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/
+else ifeq ($(PRODUCTFORM), pcie_sw64)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/
+else ifeq ($(PRODUCTFORM), pcie_riscv64)
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/riscv64/
+else  # pcie_x86
+TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/pcie/
+endif
+
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
-TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_convert_to.cpp  \
+TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_rotate.cpp  \
+					 $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_csc_convert_to.cpp  \
-                     $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
+                     			 $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_as_strided.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_bayer2rgb.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_add_weighted.cpp \
@@ -133,6 +153,18 @@ $(TEST_BMCV_OBJ_DIR):
 INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/src/bm1684x/
 INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/src/
 
+TEST_BMCV_DYN_LDFLAGS =
+ifeq ($(USING_OPENBLAS),1)
+TEST_BMCV_DYN_LDFLAGS         += -L$(OPENBLAS_DIR) -lopenblas
+ifeq ($(PRODUCTFORM), pcie)
+TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
+else ifeq ($(PRODUCTFORM),soc)
+TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else
+    $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
+endif
+endif
+
 ifeq ($(USING_CMODEL),1)
 INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include
 
@@ -155,9 +187,10 @@ INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include \
 			   -I$(BMVID_ROOT)/allocator/ion/inc
 
 TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(JPU_DIR)/lib/ -L$(BMION_DIR)/lib/ \
-					-L$(OUT_DIR)/lib/ -L$(BMCV_DIR)/lib/ \
+					-L$(OUT_DIR)/lib/ -L$(BMCV_DIR)/lib/ -L$(VPP_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
-					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp_cmodel -ldl\
+					-L$(TURBO_JPEG_PATH) \
+					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp -lturbojpeg -lvpp_cmodel -ldl\
 
 TEST_MISC_CXX = $(TEST_BMCV_DIR)/test_misc.cpp $(TEST_BMCV_DIR)/md5.cpp
 

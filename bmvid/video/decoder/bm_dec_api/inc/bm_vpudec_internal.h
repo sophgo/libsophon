@@ -19,6 +19,8 @@
 #endif
 #include "bm_vpudec_interface.h"
 
+#define MAX_SEQUENCE_MEM_COUNT          16
+
 typedef enum {
     BMDEC_START_CREATE,
     BMDEC_START_LOAD,
@@ -92,6 +94,11 @@ typedef struct BMVidExtraInfo {
     int chromaLocation;
 } BMVidExtraInfo;
 
+typedef struct {
+    DecGetFramebufInfo  fbInfo;
+    vpu_buffer_t        allocFbMem[MAX_REG_FRAME];
+} SequenceMemInfo;
+
 typedef struct BMVidCodInst {
     DecHandle codecInst;
     vpu_buffer_t vbStream;
@@ -134,6 +141,7 @@ typedef struct BMVidCodInst {
     int no_reorder_flag;
     int enable_cache;
     BMVidExtraInfo extraInfo;
+    SequenceMemInfo seqMemInfo[MAX_SEQUENCE_MEM_COUNT];
     //bm_handle_t devHandles;
     int64_t total_time;
     int64_t max_time;
@@ -161,11 +169,6 @@ typedef struct PkgInfo {
 } PkgInfo;
 
 typedef struct BMVidCodInst* BMVidHandle;
-
-typedef struct {
-    DecGetFramebufInfo  fbInfo;
-    vpu_buffer_t        allocFbMem[MAX_REG_FRAME];
-} SequenceMemInfo;
 
 int BMVidDecCreateW5(BMVidCodHandle *pVidCodHandle, BMVidDecParam *decParam);
 int bmvpu_dec_seq_init(BMVidCodHandle vidCodHandle);

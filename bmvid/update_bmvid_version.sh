@@ -11,14 +11,17 @@ function update_bmcv_commit_and_branch()
         cd "$file_dir" || exit
 
         if git rev-parse --git-dir > /dev/null 2>&1; then
-            commit_hash=$(git log -1 --pretty=format:"%H")
-            branch_name=$(git branch --contains HEAD | sed -n '/\* /s///p')
+            commit_hash=$(git rev-parse --short HEAD)
+            branch_name=$(git rev-parse --abbrev-ref HEAD)
+            commit_count=$(git rev-list --count HEAD)
 
             sed -i "s|#define COMMIT_HASH .*|#define COMMIT_HASH \"$commit_hash\"|" "bmcv_internal.cpp"
             sed -i "s|#define BRANCH_NAME .*|#define BRANCH_NAME \"$branch_name\"|" "bmcv_internal.cpp"
+            sed -i "s|#define COMMIT_COUNT .*|#define COMMIT_COUNT \"$commit_count\"|" "bmcv_internal.cpp"
 
             echo "Commit hash $commit_hash has been written to $file_path"
             echo "Branch name $branch_name has been written to $file_path"
+            echo "Commit count $commit_count has been written to $file_path"
         else
             echo "This directory is not a git repository."
         fi

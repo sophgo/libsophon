@@ -11,6 +11,10 @@
 #include <string>
 #endif
 
+#if __linux__
+#include <dlfcn.h>
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -1009,7 +1013,7 @@ bm_status_t bm_image_write_to_bmp(bm_image image, const char *filename) {
     }
     int component = image.image_format == FORMAT_GRAY ? 1 : 3;
     int stride[4] = {0};
-    bm_image_get_stride(image, stride);
+    bm_image_get_stride(image_temp, stride);
     void *      buf_tmp = malloc(stride[0] * image_temp.height);
     void *      buf = malloc(image_temp.width * image_temp.height * component);
     bm_status_t ret = bm_image_copy_device_to_host(image_temp, &buf_tmp);
@@ -1584,6 +1588,67 @@ bm_status_t bmcv_close_cpu_process(bm_handle_t handle) {
     bmlib_log("BMCV", BMLIB_LOG_WARNING, "NOT support CPU process!\r\n");
 #endif
     return BM_SUCCESS;
+}
+
+void bmcv_print_version() {
+    const char *env_val = getenv("BMCV_PRINT_VERSION");
+    if (env_val == nullptr || strcmp(env_val, "1") != 0) {
+        return;
+    }
+    const char *fw_fname = "libbm1684x_kernel_module.so";
+    static char fw_path[512] = {0};
+    static char bmcv_path[512] = {0};
+    char cmd[1024] = {0};
+    char *ptr;
+    int ret = 0;
+#ifdef __linux__
+    Dl_info dl_info;
+
+    ret = dladdr((void*)bmcv_print_version, &dl_info);
+    if (ret == 0){
+        printf("dladdr() failed: %s\n", dlerror());
+        return;
+    }
+    if (dl_info.dli_fname == NULL){
+        printf("%s is NOT a symbol\n", __FUNCTION__);
+        return;
+    }
+
+    ptr = (char*)strrchr(dl_info.dli_fname, '/');
+    if (!ptr){
+        printf("Invalid absolute path name of libbmcv.so\n");
+        return;
+    }
+
+    int dirname_len = ptr - dl_info.dli_fname + 1;
+    if (dirname_len <= 0){
+        printf("Invalid length of folder name\n");
+        return;
+    }
+
+    strncpy(bmcv_path, dl_info.dli_fname, dirname_len);
+    strcat(bmcv_path, ptr + 1);
+    printf("libbmcv_path:%s\n", bmcv_path);
+    sprintf(cmd, "strings %s | grep -E \"libbmcv_version:.*, branch:.*, minor version:.*, commit:.*\" | sed -n \'2p\'", bmcv_path);
+    ret = system(cmd);
+    if (ret != 0) {
+        printf("Error print tpu_firmware_version!\n");
+    }
+
+    if (0 != find_tpufirmaware_path(fw_path, fw_fname)) {
+        printf("libbm1684x_kernel_module.so does not exist\n");
+        return;
+    }
+
+    printf("tpu_firmware_path:%s\n", fw_path);
+    memset (cmd, 0, sizeof(cmd));
+    sprintf(cmd, "strings %s | grep -E \"tpu_firmware_version:.*, branch:.*, minor version:.*, commit:.*\"", fw_path);
+    ret = system(cmd);
+    if (ret != 0) {
+        printf("Error print tpu_firmware_version!\n");
+    }
+#endif
+    return;
 }
 
 

@@ -158,7 +158,6 @@ typedef enum {
     BMDEC_FRAME_BUF_FULL,
     BMDEC_ENDOF,
     BMDEC_STOP,
-    BMDEC_INT_TIMEOUT,
     BMDEC_HUNG,
     BMDEC_CLOSE,
     BMDEC_CLOSED,
@@ -524,7 +523,7 @@ DECL_EXPORT int bmvpu_dec_get_inst_idx(BMVidCodHandle vidCodHandle);
 DECL_EXPORT BMVidDecRetStatus bmvpu_dec_get_stream_info(BMVidCodHandle vidCodHandle, int* width, int* height, int* mini_fb, int* frame_delay);
 
 #ifdef BM_PCIE_MODE
-DECL_EXPORT BMVidDecRetStatus bmvpu_dec_read_memory(int coreIdx, unsigned long addr, unsigned char *data, int len, int endian);
+DECL_EXPORT BMVidDecRetStatus bmvpu_dec_read_memory(int coreIdx, u64 addr, unsigned char *data, int len, int endian);
 #endif
 u64 bmvpu_dec_calc_cbcr_addr(int codec_type, u64 y_addr, int y_stride, int frame_height); // calc cbcr addr by offset.
 #endif
