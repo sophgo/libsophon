@@ -5,7 +5,7 @@
 #include <string.h>
 #ifndef USING_CMODEL
 
-#include "bmjpuapi_jpeg.h"
+#include "bm_jpeg_interface.h"
 
 #endif
 
@@ -234,6 +234,15 @@ struct dynamic_load_param{
     char param[0];
 };
 
+bm_status_t bm_handle_check_1(bm_handle_t handle,
+                            bm_image image1);
+bm_status_t bm_handle_check_2(bm_handle_t handle,
+                            bm_image image1,
+                            bm_image image2);
+bm_status_t bm_handle_check_3(bm_handle_t handle,
+                            bm_image image1,
+                            bm_image image2,
+                            bm_image image3);
 int find_tpufirmaware_path(char fw_path[512], const char* path);
 bm_status_t bm_load_tpu_module(bm_handle_t handle, tpu_kernel_module_t *tpu_module);
 bm_status_t bm_kernel_main_launch(bm_handle_t handle, int api_id, void *param, size_t size);

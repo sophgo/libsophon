@@ -3,6 +3,12 @@ bmcv_image_draw_rectangle
 
 This interface is used to draw one or more rectangular boxes on the image.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
     .. code-block:: c
 

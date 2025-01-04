@@ -3,6 +3,11 @@ bmcv_image_pyramid_down
 
 该接口实现图像高斯金字塔操作中的向下采样。
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c
@@ -85,7 +90,7 @@ bmcv_image_pyramid_down
         gettimeofday_(&t1);
         bmcv_image_pyramid_down(handle, img_i, img_o);
         gettimeofday_(&t2);
-        cout << "pyramid down TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        cout << "pyramid down Tensor Computing Processor using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
 
         bm_image_copy_device_to_host(img_o, (void **)(&output));
         bm_image_destroy(img_i);

@@ -3,7 +3,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include "bm_video_interface.h"
+#include "bm_vpudec_interface.h"
 
 #ifdef __linux__
 #include <unistd.h>
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
     if (ret < 0)
         return -1;
 
-    return BMVidVpuReset(devIdx, coreIdx);
+    return bmvpu_dec_reset(devIdx, coreIdx);
 }
 
 static void usage(char* prog_name)

@@ -15,6 +15,11 @@ The format of the interface is as follows:
                                  int len);
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Input parameter description:**
 
 * bm_handle_t handle

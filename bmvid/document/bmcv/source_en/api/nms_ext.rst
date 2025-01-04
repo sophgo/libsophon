@@ -4,6 +4,11 @@ bmcv_nms_ext
 This interface is the generalized form of bmcv_nms.It supports Hard_NMS/Soft_NMS/Adaptive_NMS/SSD_NMS which is used to eliminate excessive object frames obtained by network calculation and find the best object frame.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

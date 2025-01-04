@@ -4,6 +4,11 @@ bmcv_base64_enc(dec)
 A common encoding method in base64 network transmission, which uses 64 common characters to encode 6-bit binary numbers.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

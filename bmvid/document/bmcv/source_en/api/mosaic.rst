@@ -13,6 +13,11 @@ This interface is used to print one or more mosaics on the image.
                     int is_expand)
 
 
+**Processor model support**
+
+This interface only supports BM1684X.
+
+
 **Description of incoming parameters:**
 
 * bm_handle_t handle
@@ -67,9 +72,7 @@ This interface is used to print one or more mosaics on the image.
 
 **Note:**
 
-1. bm1684x:
-
-- bm1684x supports the following data_type of bm_image:
+1.bm1684x supports the following data_type of bm_image:
 
 +-----+-------------------------------+
 | num | data_type                     |
@@ -107,12 +110,10 @@ This interface is used to print one or more mosaics on the image.
 
 Returns a failure if the input and output format requirements are not met.
 
-2. bm1684: bm1684 mosaic function is not supported。
+2. All input and output bm_image structures must be created in advance, or a failure will be returned.
 
-3. All input and output bm_image structures must be created in advance, or a failure will be returned.
+3. If the width and height of the mosaic are not aligned with 8, it will automatically align up to 8. If it is in the edge area, the 8 alignment will extend toward the non edge direction.
 
-4. If the width and height of the mosaic are not aligned with 8, it will automatically align up to 8. If it is in the edge area, the 8 alignment will extend toward the non edge direction.
+4. If the mosaic area exceeds the width and height of the original drawing, the exceeding part will be automatically pasted to the edge of the original drawing.
 
-5. If the mosaic area exceeds the width and height of the original drawing, the exceeding part will be automatically pasted to the edge of the original drawing.
-
-6. Only mosaic sizes above 8x8 are supported.
+5. Only mosaic sizes above 8x8 are supported.

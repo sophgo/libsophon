@@ -3,6 +3,12 @@ bmcv_image_threshold
 
 Image thresholding operation.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

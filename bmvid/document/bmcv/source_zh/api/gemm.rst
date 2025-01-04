@@ -28,6 +28,10 @@ bmcv_gemm
                                bm_device_mem_t C,
                                int             ldc);
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
 
 **输入参数说明：**
 
@@ -65,7 +69,7 @@ bmcv_gemm
 
 * int lda
 
-  输入参数。矩阵 A 的 leading dimension, 即第一维度的大小，在行与行之间没有stride的情况下即为 A 的列数（不做转置）或行数（做转置） 
+  输入参数。矩阵 A 的 leading dimension, 即第一维度的大小，在行与行之间没有stride的情况下即为 A 的列数（不做转置）或行数（做转置）
 
 * bm_device_mem_t B
 
@@ -105,13 +109,24 @@ bmcv_gemm
         float alpha = 0.4, beta = 0.6;
         bool is_A_trans = false;
         bool is_B_trans = false;
-        float *A     = new float[M * K]; 
-        float *B     = new float[N * K]; 
-        float *C     = new float[M * N]; 
-        memset(A, 0x11, M * K * sizeof(float));
-        memset(B, 0x22, N * K * sizeof(float));
-        memset(C, 0x33, M * N * sizeof(float));
-    
+        float *A     = new float[M * K];
+        float *B     = new float[K * N];
+        float *C     = new float[M * N];
+
+        for (int i = 0; i < M * K; ++i) {
+            A[i] = 1.0f;
+        }
+
+        for (int i = 0; i < N * K; ++i) {
+            B[i] = 2.0f;
+        }
+
+        for (int i = 0; i < M * N; ++i) {
+            C[i] = 3.0f;
+        }
+
+        bm_handle_t handle;
+        bm_dev_request(&handle, 0);
         bmcv_gemm(handle,
                   is_A_trans,
                   is_B_trans,
@@ -119,13 +134,38 @@ bmcv_gemm
                   N,
                   K,
                   alpha,
-                  bm_mem_from_system((void *)A),   
-                  is_A_trans ? M : K,              
-                  bm_mem_from_system((void *)B),   
-                  is_B_trans ? K : N,              
+                  bm_mem_from_system((void *)A),
+                  is_A_trans ? M : K,
+                  bm_mem_from_system((void *)B),
+                  is_B_trans ? K : N,
                   beta,
-                  bm_mem_from_system((void *)C),   
+                  bm_mem_from_system((void *)C),
                   N);
+
+            std::cout << "Matrix A:" << std::endl;
+            for (int i = 0; i < M; i++) {
+                for (int j = 0; j < K; j++) {
+                    std::cout << A[i * K + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::cout << "Matrix B:" << std::endl;
+            for (int i = 0; i < K; i++) {
+                for (int j = 0; j < N; j++) {
+                    std::cout << B[i * N + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
+            std::cout << "Matrix C:" << std::endl;
+            for (int i = 0; i < M; i++) {
+                for (int j = 0; j < N; j++) {
+                    std::cout << C[i * N + j] << " ";
+                }
+                std::cout << std::endl;
+            }
+
         delete A;
         delete B;
         delete C;

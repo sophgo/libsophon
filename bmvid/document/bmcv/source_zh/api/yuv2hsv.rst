@@ -4,6 +4,11 @@ bmcv_image_yuv2hsv
 对YUV图像的指定区域转为HSV格式。
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c

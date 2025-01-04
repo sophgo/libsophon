@@ -4,6 +4,11 @@ bmcv_image_put_text
 The functions of writing (English) on an image and specifying the color, size and width of words are supported.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

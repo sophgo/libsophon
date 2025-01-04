@@ -139,11 +139,11 @@ image_format has the following enumeration types:
 
 * FORMAT_ARGB_PACKED
 
-  It means to pre-create a picture in ARGB format with one plane and staggered sequenced ARGB
+  It means to precreate an ARGB format image with only one plane, and the pixel values are interleaved and continuously arranged in RGBA order, specifically: RGBARGBA
 
 * FORMAT_ABGR_PACKED
 
-  It means to pre-create a picture in ABGR format with one plane and staggered sequenced ABGR
+  It means to precreate an ABGR format image with only one plane, and the pixel values are interleaved and continuously arranged in BGRA order, specifically: BGRABGRA
 
 * FORMAT_YUV444_PACKED
 

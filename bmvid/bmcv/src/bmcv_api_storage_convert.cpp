@@ -1,4 +1,5 @@
 #include <vector>
+#include <stdio.h>
 #include <memory>
 #ifdef __linux__
   #include <sys/time.h>
@@ -41,14 +42,14 @@ static bm_status_t bmcv_convert_check(
   if (image_n<1 || image_n>4) {
       bmlib_log("BMCV", BMLIB_LOG_ERROR, "expected 1 <= image_n  <= 4 %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+      return BM_ERR_PARAM;
   }
   int width = output[0].width;
   int height = output[0].height;
   if (width > 8192) {
       bmlib_log("BMCV", BMLIB_LOG_ERROR, "expected width <= 8192 %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
-      return BM_NOT_SUPPORTED;
+      return BM_ERR_DATA;
   }
   bm_image_format_ext expected_input_image_format, expected_output_image_format;
   bm_image_data_format_ext expected_input_data_format, expected_output_data_format;
@@ -67,7 +68,7 @@ static bm_status_t bmcv_convert_check(
       (output[0].data_type == DATA_TYPE_EXT_BF16)){
       BMCV_ERR_LOG("data type not support\n");
 
-      return BM_NOT_SUPPORTED;
+      return BM_ERR_DATA;
   }
 
   if (!IS_4N(expected_input_data_format)) {
@@ -83,7 +84,7 @@ static bm_status_t bmcv_convert_check(
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "expected consistant input image format "
                 "and size %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
   }
 
@@ -93,7 +94,7 @@ static bm_status_t bmcv_convert_check(
             || height != output[i].height) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "expected consistant output image format and size %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
   }
 
@@ -102,7 +103,7 @@ static bm_status_t bmcv_convert_check(
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input output image format "
                 "FORMAT_COMPRESSED or output image format FORMAT_GRAY %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     switch(expected_input_image_format)
@@ -125,7 +126,7 @@ static bm_status_t bmcv_convert_check(
       default:
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input image format, %s: %s: %d\n",
           filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     switch(expected_output_image_format)
@@ -147,21 +148,21 @@ static bm_status_t bmcv_convert_check(
       default:
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input image format, %s: %s: %d\n",
           filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (expected_input_data_format == DATA_TYPE_EXT_1N_BYTE_SIGNED \
             || expected_input_data_format == DATA_TYPE_EXT_4N_BYTE_SIGNED) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "not expected signed data format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if (expected_output_data_format == DATA_TYPE_EXT_1N_BYTE_SIGNED \
             || expected_output_data_format == DATA_TYPE_EXT_4N_BYTE_SIGNED) {
         bmlib_log("BMCV", BMLIB_LOG_ERROR, "not expected signed data format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     bm_image_get_stride(input[0], stride);
@@ -172,7 +173,7 @@ static bm_status_t bmcv_convert_check(
             if (stride[k] != stride_[k]) {
                 bmlib_log("BMCV", BMLIB_LOG_ERROR, "all input should have same stride %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
-                return BM_NOT_SUPPORTED;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -185,7 +186,7 @@ static bm_status_t bmcv_convert_check(
             if (stride[k] != stride_[k]) {
                 bmlib_log("BMCV", BMLIB_LOG_ERROR, "all output should have same stride %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
-                return BM_NOT_SUPPORTED;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -299,7 +300,7 @@ bm_status_t bmcv_image_storage_convert_(
     csc_type_t       csc_type) {
     if (handle == NULL) {
         bmlib_log("STORAGE_CONVERT", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     bm_status_t ret = bmcv_convert_check(image_num, input_, output_);
     if (ret != BM_SUCCESS)
@@ -316,7 +317,7 @@ bm_status_t bmcv_image_storage_convert_(
         if (!bm_image_is_attached(input_[i])) {
             bmlib_log("BMCV", BMLIB_LOG_ERROR, "input image not attach device memory %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
 
 #ifndef USING_CMODEL
@@ -352,7 +353,7 @@ bm_status_t bmcv_image_storage_convert_(
                     bm_free_device(handle, dmem);
                 }
             }
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
             }
         }
         output_alloc_flag[i] = true;
@@ -460,7 +461,7 @@ bm_status_t bmcv_image_storage_convert_(
                         delete [] in_planar;
                     }
                     delete [] out;
-                    return BM_ERR_FAILURE;
+                    return BM_ERR_NOMEM;
                 }
             }
         } else {
@@ -544,7 +545,7 @@ bm_status_t bmcv_image_storage_convert_(
                     }
                     delete [] in_planar;
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             input_inner_alloc_flag[i] = true;
             for (int p = 0; p < plane_num; p++) {
@@ -615,7 +616,7 @@ bm_status_t bmcv_image_storage_convert_(
                     }
                     delete [] in_planar;
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             output_inner_alloc_flag[i] = true;
         } else {
@@ -691,7 +692,7 @@ bm_status_t bmcv_image_storage_convert_(
                     }
                     delete [] in_planar;
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
                 }
             }
             for (int k = 0; k < expect_output_num; k++) {
@@ -745,7 +746,7 @@ bm_status_t bmcv_image_storage_convert_(
                 }
                 delete [] in_planar;
             }
-            return BM_ERR_FAILURE;
+            return BM_ERR_TIMEOUT;
         }
         if (BM_SUCCESS != bm_sync_api(handle)) {
             BMCV_ERR_LOG("storage_convert sync api error\r\n");
@@ -755,7 +756,7 @@ bm_status_t bmcv_image_storage_convert_(
                 }
                 delete [] in_planar;
             }
-            return BM_ERR_FAILURE;
+            return BM_ERR_TIMEOUT;
         }
         inner_in = inner_out;
     }
@@ -833,7 +834,7 @@ bm_status_t bmcv_image_storage_convert_with_csctype(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -850,7 +851,7 @@ bm_status_t bmcv_image_storage_convert(
 
   bm_status_t ret = BM_SUCCESS;
   csc_type_t csc_type = CSC_MAX_ENUM;
-
+  bm_handle_check_2(handle, input_[0], output_[0]);
   ret = bmcv_image_storage_convert_with_csctype(handle, image_num, input_, output_, csc_type);
   return ret;
 }

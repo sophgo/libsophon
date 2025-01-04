@@ -3,6 +3,12 @@ bmcv_image_jpeg_dec
 
 The interface can decode multiple  JPEG  images.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

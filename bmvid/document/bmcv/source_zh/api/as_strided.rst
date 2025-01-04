@@ -3,6 +3,10 @@ bmcv_as_strided
 
 该接口可以根据现有矩阵以及给定的步长来创建一个视图矩阵。
 
+**处理器型号支持：**
+
+该接口仅支持BM1684X。
+
 
 **接口形式：**
 
@@ -109,7 +113,7 @@ bmcv_as_strided
                               output_row, output_col,
                               row_stride, col_stride);
         gettimeofday_(&t2);
-        std::cout << "as_strided TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+        std::cout << "as_strided Tensor Computing Processor using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
         if (ret != BM_SUCCESS) {
         printf("as_strided failed. ret = %d\n", ret);
         goto exit;

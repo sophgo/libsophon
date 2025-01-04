@@ -708,18 +708,19 @@ BOOL osal_mutex_unlock(osal_mutex_t mutex)
 
 Uint64 osal_gettime(void)
 {
-/*
     struct timespec tp;
 
     clock_gettime(CLOCK_MONOTONIC, &tp);
 
     return (tp.tv_sec*1000 + tp.tv_nsec/1000000);
-    */
+
+   /*
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     gettimeofday(&tv, NULL);
     return tv.tv_sec*1000 + tv.tv_usec/1000;
+    */
 }
 
 

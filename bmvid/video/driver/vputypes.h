@@ -20,6 +20,9 @@
 #include <stdint.h>
 
 #define STATIC          static
+
+#ifndef DATA_TYPES
+#define DATA_TYPES
 /**
 * @brief    This type is an 8-bit unsigned integral type, which is used for declaring pixel data.
 */
@@ -60,6 +63,7 @@ typedef int64_t         Int64;
 typedef unsigned long long u64;
 #else
 typedef unsigned long u64;
+#endif
 #endif
 
 #ifndef PhysicalAddress

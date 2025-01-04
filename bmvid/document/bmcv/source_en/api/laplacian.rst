@@ -4,6 +4,11 @@ bmcv_image_laplacian
 Laplacian operator of gradient calculation.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

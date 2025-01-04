@@ -325,11 +325,19 @@ int vpu_ShowProductInfo(uint32_t coreIdx, ProductInfo *productInfo)
 uint64_t vpu_gettime(void)
 {
 #ifdef __linux__
+    /*
     struct timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     gettimeofday(&tv, NULL);
     return tv.tv_sec*1000 + tv.tv_usec/1000;
+*/
+
+    struct timespec tp;
+
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+
+    return (tp.tv_sec*1000 + tp.tv_nsec/1000000);
 #elif _WIN32
     SYSTEMTIME wtm;
     time_t clock;

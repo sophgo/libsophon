@@ -192,7 +192,7 @@ static bm_status_t bmcv_resize_check(
 
     if (handle == NULL) {
         BMCV_ERR_LOG("[RESIZE] Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     bm_image_format_ext src_format = input[0].image_format;
     bm_image_format_ext dst_format = output[0].image_format;
@@ -201,7 +201,7 @@ static bm_status_t bmcv_resize_check(
 
     if (image_num < 0 || image_num > MAX_INPUT_NUM) {
         BMCV_ERR_LOG("[RESIZE]: image num not support:%d\n", image_num);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     int out_num = 0;
     for (int i = 0; i < image_num; i++) {
@@ -212,22 +212,22 @@ static bm_status_t bmcv_resize_check(
     out_num = out_is_4N ? (out_num + 3) / 4 : out_num;
     if (out_num <= 0) {
         BMCV_ERR_LOG("[RESIZE]: output image number must bigger than 0\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num; i++) {
         if (!bm_image_is_attached(input[i])) {
             BMCV_ERR_LOG("[RESIZE]: input[%d] is not attached device memory\n", i);
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
         if ((input[i].data_type != src_type) || (input[i].image_format != src_format)) {
             BMCV_ERR_LOG("[RESIZE]: all src image_format and data_type should be same\n");
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
     }
     for (int i = 1; i < out_num; i++) {
         if ((output[i].data_type != dst_type) || (output[i].image_format != dst_format)) {
             BMCV_ERR_LOG("[RESIZE]: all dst image_format and data_type should be same\n");
-            return BM_NOT_SUPPORTED;
+            return BM_ERR_DATA;
         }
     }
 #if TPU_ONLY
@@ -241,20 +241,20 @@ static bm_status_t bmcv_resize_check(
         src_format != FORMAT_RGB_PACKED && src_format != FORMAT_BGR_PACKED &&
         src_format != FORMAT_GRAY) {
         BMCV_ERR_LOG("[RESIZE]: src format not support:%d\n", src_format);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (dst_format != FORMAT_RGB_PLANAR && dst_format != FORMAT_BGR_PLANAR &&
         dst_format != FORMAT_RGB_PACKED && dst_format != FORMAT_BGR_PACKED &&
         dst_format != FORMAT_GRAY) {
         BMCV_ERR_LOG("[RESIZE]: dst format not support:%d\n", dst_format);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (((input[0].data_type == DATA_TYPE_EXT_1N_BYTE) &&
          (output[0].data_type == DATA_TYPE_EXT_FLOAT32)) ||
         ((output[0].data_type == DATA_TYPE_EXT_1N_BYTE) &&
          (input[0].data_type == DATA_TYPE_EXT_FLOAT32))) {
         BMCV_ERR_LOG("[RESIZE]: image data type not support\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if ((input[0].data_type == DATA_TYPE_EXT_FP16) ||
@@ -263,7 +263,7 @@ static bm_status_t bmcv_resize_check(
         (output[0].data_type == DATA_TYPE_EXT_BF16)){
         BMCV_ERR_LOG("data type not support\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -300,7 +300,7 @@ bm_status_t bmcv_resize_internal(bm_handle_t       handle,
         bm_malloc_device_byte(handle, &img_attr_dev, resize_img_attr_size)) {
         BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     u64          resize_attr_start_addr = bm_mem_get_device_addr(img_attr_dev);
     u64          temp_addr              = resize_attr_start_addr;
@@ -317,7 +317,7 @@ bm_status_t bmcv_resize_internal(bm_handle_t       handle,
             BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
             bm_free_device(handle, img_attr_dev);
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         if (i != (image_num - 1)) {
             temp_addr = temp_addr + temp_size;
@@ -331,7 +331,7 @@ bm_status_t bmcv_resize_internal(bm_handle_t       handle,
             BMCV_ERR_LOG("bm_image_tensor_alloc_dev_mem error\r\n");
             bm_free_device(handle, img_attr_dev);
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     }
     bm_device_mem_t input_image_dev, output_image_dev;
@@ -349,7 +349,7 @@ bm_status_t bmcv_resize_internal(bm_handle_t       handle,
             bm_free_device(handle, dmem);
         }
 
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     if (BM_SUCCESS != bm_memcpy_s2d(handle, roi_num_array_dev, roi_num_array)) {
         BMCV_ERR_LOG("bm_memcpy_s2d error\r\n");
@@ -388,13 +388,13 @@ bm_status_t bmcv_resize_internal(bm_handle_t       handle,
         BMCV_ERR_LOG("resize send api error\r\n");
         bm_free_device(handle, img_attr_dev);
         bm_free_device(handle, roi_num_array_dev);
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     if (BM_SUCCESS != bm_sync_api(handle)) {
         BMCV_ERR_LOG("resize sync api error\r\n");
         bm_free_device(handle, img_attr_dev);
         bm_free_device(handle, roi_num_array_dev);
-        return BM_ERR_FAILURE;
+        return BM_ERR_TIMEOUT;
     }
     bm_free_device(handle, img_attr_dev);
     bm_free_device(handle, roi_num_array_dev);
@@ -990,7 +990,7 @@ bm_status_t bmcv_query_idx_in_array(int              query_idx,
     }
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "find nothing \r\n");
 
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
 }
 
 bm_status_t try_image_align(bm_handle_t handle,
@@ -998,6 +998,7 @@ bm_status_t try_image_align(bm_handle_t handle,
                             bm_image *  src_images,
                             bm_image *  converted_images,
                             int *       image_align_flag) {
+    bm_status_t ret = BM_SUCCESS;
     #ifdef __linux__
     bool image_alloc_flag[image_num];
     #else
@@ -1022,7 +1023,7 @@ bm_status_t try_image_align(bm_handle_t handle,
             if (bm_vpp_query_limitation(src_images[i].image_format, \
                     FORMAT_RGB_PACKED, limit) != BM_SUCCESS){
                 BMCV_ERR_LOG("format not support!\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
 
             if (image_stride[idx]%limit.src_stride_align[idx] != 0){
@@ -1032,13 +1033,14 @@ bm_status_t try_image_align(bm_handle_t handle,
             }
         }
         if (1 == image_align_flag[i]) {
-            if (BM_SUCCESS != bm_image_create(handle,
-                                              src_images[i].height,
-                                              src_images[i].width,
-                                              src_images[i].image_format,
-                                              src_images[i].data_type,
-                                              &converted_images[i],
-                                              image_stride)) {
+            ret = bm_image_create(handle,
+                                src_images[i].height,
+                                src_images[i].width,
+                                src_images[i].image_format,
+                                src_images[i].data_type,
+                                &converted_images[i],
+                                image_stride);
+            if (BM_SUCCESS != ret) {
                 BMCV_ERR_LOG("failed to create internal image\n");
                 for (int free_idx = 0; free_idx < i; free_idx++) {
                     bm_image_destroy(converted_images[free_idx]);
@@ -1050,7 +1052,7 @@ bm_status_t try_image_align(bm_handle_t handle,
                     }
                 }
 
-                return BM_ERR_FAILURE;
+                return ret;
             }
             if (bm_image_is_attached(src_images[i])) {
                 // keep same heap location with before
@@ -1076,7 +1078,7 @@ bm_status_t try_image_align(bm_handle_t handle,
                         }
                     }
 
-                    return BM_ERR_FAILURE;
+                    return BM_ERR_NOMEM;
                 }
                 image_alloc_flag[i] = true;
             } else {
@@ -1084,23 +1086,24 @@ bm_status_t try_image_align(bm_handle_t handle,
                 for (int free_idx = 0; free_idx <= i; free_idx++) {
                     bm_image_destroy(converted_images[free_idx]);
                 }
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
             // bmcv_width_align(handle, src_images[i], converted_images[i]);
         } else {
-            if (BM_SUCCESS != bm_image_create(handle,
-                                              src_images[i].height,
-                                              src_images[i].width,
-                                              src_images[i].image_format,
-                                              src_images[i].data_type,
-                                              &converted_images[i],
-                                              image_stride)) {
+            ret = bm_image_create(handle,
+                                src_images[i].height,
+                                src_images[i].width,
+                                src_images[i].image_format,
+                                src_images[i].data_type,
+                                &converted_images[i],
+                                image_stride);
+            if (BM_SUCCESS != ret) {
                 BMCV_ERR_LOG("failed to create internal image\n");
                 for (int free_idx = 0; free_idx < i; free_idx++) {
                     bm_image_destroy(converted_images[free_idx]);
                 }
 
-                return BM_ERR_FAILURE;
+                return ret;
             }
             if (bm_image_is_attached(src_images[i])) {
                 bm_device_mem_t dmem[3];
@@ -1112,7 +1115,7 @@ bm_status_t try_image_align(bm_handle_t handle,
                     bm_image_destroy(converted_images[free_idx]);
                 }
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_DATA;
             }
         }
     }
@@ -1125,9 +1128,14 @@ bm_status_t do_image_align(bm_handle_t handle,
                            bm_image *  src_images,
                            bm_image *  converted_images,
                            int *       image_align_flag) {
+    bm_status_t ret = BM_ERR_FAILURE;
     for (int i = 0; i < image_num; i++) {
         if (1 == image_align_flag[i]) {
-            bmcv_width_align(handle, src_images[i], converted_images[i]);
+            ret = bmcv_width_align(handle, src_images[i], converted_images[i]);
+            if (BM_SUCCESS != ret) {
+                BMCV_ERR_LOG("bmcv_width_align error\n");
+                return ret;
+            }
         }
     }
 
@@ -1152,7 +1160,7 @@ bm_status_t image_restore_align(bm_handle_t handle,
             (!bm_image_is_attached(restored_images[i]))) {
             BMCV_ERR_LOG("image should be attached memory firstly\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         if (1 == image_align_flag[i]) {
             bmcv_width_align(handle, aligned_images[i], restored_images[i]);
@@ -1218,7 +1226,7 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                     }
                 }
 
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
             output_mem_alloc_flag[output_idx] = true;
         }
@@ -1250,8 +1258,8 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
 #endif
     bm_image tmp_input[32], tmp_output[32];
     int      in_align_flag[32] = {0}, out_align_flag[32] = {0};
-    if (BM_SUCCESS !=
-        try_image_align(handle, input_num, input, tmp_input, in_align_flag)) {
+    ret = try_image_align(handle, input_num, input, tmp_input, in_align_flag);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("try_image_align error\n");
         for (int free_idx = 0; free_idx < output_num; free_idx++) {
             if (output_mem_alloc_flag[free_idx]) {
@@ -1261,11 +1269,10 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             }
         }
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
-    if (BM_SUCCESS !=
-        try_image_align(
-            handle, output_num, output, tmp_output, out_align_flag)) {
+    ret = try_image_align(handle, output_num, output, tmp_output, out_align_flag);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("try_image_align error\n");
         for (int free_idx = 0; free_idx < output_num; free_idx++) {
             if (output_mem_alloc_flag[free_idx]) {
@@ -1275,12 +1282,12 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             }
         }
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
 
     if(!if_use_vpp(tmp_input, tmp_output, input_num, output_num, resize_attr)&&(BMCV_INTER_NEAREST != resize_attr[0].interpolation)){
         BMCV_ERR_LOG("[RESIZE]: vpp and tpu not support\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
 
     // if input is packed format, convert it to planar
@@ -1367,8 +1374,9 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
         }
         delete [] output_planar;
     }
-    if (BM_SUCCESS != image_restore_align(
-                          handle, input_num, tmp_input, NULL, in_align_flag)) {
+    ret = image_restore_align(
+                          handle, input_num, tmp_input, NULL, in_align_flag);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("image_restore_align error\n");
         for (int free_idx = 0; free_idx < output_num; free_idx++) {
             if (output_mem_alloc_flag[free_idx]) {
@@ -1383,11 +1391,11 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             }
             delete[] input_planar;
         }
-        return BM_ERR_FAILURE;
+        return ret;
     }
-    if (BM_SUCCESS !=
-        image_restore_align(
-            handle, output_num, tmp_output, NULL, out_align_flag)) {
+    ret = image_restore_align(
+            handle, output_num, tmp_output, NULL, out_align_flag);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("image_restore_align error\n");
         for (int free_idx = 0; free_idx < output_num; free_idx++) {
             if (output_mem_alloc_flag[free_idx]) {
@@ -1403,7 +1411,7 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             delete[] input_planar;
         }
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
 #else
     int resize_alg = VPP_SCALE_BILINEAR;
@@ -1432,9 +1440,9 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             delete[] output_planar;
         }
         output_idx = 0;
-        if (BM_SUCCESS !=
-            do_image_align(
-                handle, input_num, input_planar, tmp_input, in_align_flag)) {
+        ret = do_image_align(
+                handle, input_num, input_planar, tmp_input, in_align_flag);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("do_image_align error\n");
             for (int free_idx = 0; free_idx < output_num; free_idx++) {
                 if (output_mem_alloc_flag[free_idx]) {
@@ -1450,7 +1458,7 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                 delete[] input_planar;
             }
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
         for (int input_idx = 0; input_idx < input_num; input_idx++) {
             for (int i = 0; i < resize_attr[input_idx].roi_num; i++) {
@@ -1491,9 +1499,9 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
 
             return BM_ERR_FAILURE;
         }
-        if (BM_SUCCESS !=
-            image_restore_align(
-                handle, input_num, tmp_input, NULL, in_align_flag)) {
+        ret = image_restore_align(
+                handle, input_num, tmp_input, NULL, in_align_flag);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("image_restore_align error\n");
             for (int free_idx = 0; free_idx < output_num; free_idx++) {
                 if (output_mem_alloc_flag[free_idx]) {
@@ -1509,11 +1517,11 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                 delete[] input_planar;
             }
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
-        if (BM_SUCCESS !=
-            image_restore_align(
-                handle, output_num, tmp_output, output, out_align_flag)) {
+        ret = image_restore_align(
+                handle, output_num, tmp_output, output, out_align_flag);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("image_restore_align error\n");
             for (int free_idx = 0; free_idx < output_num; free_idx++) {
                 if (output_mem_alloc_flag[free_idx]) {
@@ -1529,7 +1537,7 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                 delete[] input_planar;
             }
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
     } else {
         int             in_concat_status  = 0;
@@ -1560,18 +1568,18 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
         } else {
             if (if_4N_to_1N != 0) {
                 BMCV_ERR_LOG("[RESIZE]: mem must be continuous when in 4n to 1n mode\r\n");
-                return BM_ERR_FAILURE;
+                return BM_ERR_PARAM;
             }
             int tmp_idx = 0;
             for (int i = 0; i < input_num; i++) {
                 concat_images_to_tensor(handle, 1, &input_planar[i], &in_tensor[i]);
-                if (BM_SUCCESS !=
-                    concat_images_to_tensor(handle,
+                ret = concat_images_to_tensor(handle,
                                             resize_attr[i].roi_num,
                                             &output[tmp_idx],
-                                            &out_tensor[i])) {
+                                            &out_tensor[i]);
+                if (BM_SUCCESS != ret) {
                     BMCV_ERR_LOG("[RESIZE]: output images not continuous\r\n");
-                    return BM_ERR_FAILURE;
+                    return ret;
                 }
                 bmcv_resize_internal(
                     handle, 1, &resize_attr[i], in_tensor[i], out_tensor[i]);
@@ -1587,9 +1595,9 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
             }
             delete [] output_planar;
         }
-        if (BM_SUCCESS !=
-            image_restore_align(
-                handle, input_num, tmp_input, NULL, in_align_flag)) {
+        ret = image_restore_align(
+                handle, input_num, tmp_input, NULL, in_align_flag);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("image_restore_align error\n");
             for (int free_idx = 0; free_idx < output_num; free_idx++) {
                 if (output_mem_alloc_flag[free_idx]) {
@@ -1605,11 +1613,11 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                 delete[] input_planar;
             }
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
-        if (BM_SUCCESS !=
-            image_restore_align(
-                handle, output_num, tmp_output, NULL, out_align_flag)) {
+        ret = image_restore_align(
+                handle, output_num, tmp_output, NULL, out_align_flag);
+        if (BM_SUCCESS != ret) {
             BMCV_ERR_LOG("image_restore_align error\n");
             for (int free_idx = 0; free_idx < output_num; free_idx++) {
                 if (output_mem_alloc_flag[free_idx]) {
@@ -1625,7 +1633,7 @@ bm_status_t bmcv_image_resize_(bm_handle_t       handle,
                 delete[] input_planar;
             }
 
-            return BM_ERR_FAILURE;
+            return ret;
         }
     }
 
@@ -1650,7 +1658,7 @@ bm_status_t bmcv_image_resize(
 {
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input[0], output[0]);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -1666,7 +1674,7 @@ bm_status_t bmcv_image_resize(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

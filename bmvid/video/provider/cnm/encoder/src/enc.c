@@ -20,6 +20,7 @@
 #include "vpuapi.h"
 
 #ifdef __linux__
+#include <unistd.h>
 #ifdef BM_PCIE_MODE
 #include <pthread.h>
 #endif
@@ -563,8 +564,12 @@ void vpu_SetEncOpenParam(VpuEncOpenParam* pEncOP, int width, int height,
 
     /* for VUI / time information. */
     wave_par->numTicksPocDiffOne   = 0;
-    wave_par->timeScale            = fps_n ; //pEncOP->frameRateInfo * 1000; // TODO
-    wave_par->numUnitsInTick       = fps_d;
+    if (pEncOP->bitstreamFormat == VPU_CODEC_AVC)
+        wave_par->timeScale            = pEncOP->frameRateInfo * 1000 * 2;
+    else
+        wave_par->timeScale            = pEncOP->frameRateInfo * 1000;
+
+    wave_par->numUnitsInTick       = 1000;
 
     wave_par->chromaCbQpOffset = 0;
     wave_par->chromaCrQpOffset = 0;
@@ -917,6 +922,7 @@ int vpu_EncStartOneFrame(VpuEncoder* h, VpuEncParam* param)
             h->inputMap[i].context = param->context;
             h->inputMap[i].pts     = param->pts;
             h->inputMap[i].dts     = param->dts;
+            h->inputMap[i].addrCustomMap = param->customMapOpt.addrCustomMap;
             break;
         }
     }
@@ -966,6 +972,7 @@ int vpu_EncGetOutputInfo(VpuEncoder* h, VpuEncOutputInfo* info)
                 }
                 // TODO
                 info->dts = info->encPicCnt-1-h->bframe_delay+h->fistIFramePTS;
+                info->addrCustomMap = h->inputMap[i].addrCustomMap;
 
                 /* release */
                 h->inputMap[i].idx = -2;
@@ -1269,6 +1276,15 @@ int vpu_GetFrameBufSize(int mapType, int stride, int height,
     return size_dpb_all;
 }
 
+int vpu_write_memory(const uint8_t* host_va, int size, int vpu_core_idx, uint64_t vpu_pa)
+{
+    return bm_vdi_write_memory(vpu_core_idx, vpu_pa, (uint8_t*)host_va, size);
+}
+
+int vpu_read_memory(uint8_t* host_va, int size, int vpu_core_idx, uint64_t vpu_pa)
+{
+    return bm_vdi_read_memory(vpu_core_idx, vpu_pa, host_va, size);
+}
 
 int vpu_GetProductId(int coreIdx)
 {
@@ -1302,6 +1318,7 @@ int vpu_GetProductId(int coreIdx)
 int vpu_InitWithBitcode(uint32_t coreIdx, const uint16_t* code, uint32_t size)
 {
     int ret;
+    int init_status;
 
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return VPU_RET_INVALID_PARAM;
@@ -1325,7 +1342,8 @@ int vpu_InitWithBitcode(uint32_t coreIdx, const uint16_t* code, uint32_t size)
         }
     }
 
-    if (VpuIsInit(coreIdx) != 0) {
+    init_status = bm_vdi_get_firmware_status(coreIdx);
+    if (VpuIsInit(coreIdx) != 0 && init_status == 1) {
         Wave5VpuReInit(coreIdx, (void*)code, size);
         LeaveLock(coreIdx);
         return VPU_RET_CALLED_BEFORE;
@@ -1373,6 +1391,188 @@ int vpu_GetProductInfo(uint32_t coreIdx, ProductInfo* productInfo)
     return ret;
 }
 
+/*---------------------------------------
+        device memory management
+ ----------------------------------------*/
+int vpu_EncAllocateDMABuffer(int coreIdx, BmVpuDMABuffer *buf, unsigned int size)
+{
+    int  ret;
+    vpu_buffer_t vb;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE)
+        return VPU_RET_INVALID_PARAM;
+
+    vb.size = size;
+    vb.enable_cache = TRUE;
+
+    ret = bm_vdi_allocate_dma_memory(coreIdx, &vb);
+    if (ret < 0) {
+        VLOG(INFO, "allocate device memory failed, size=%d byte\n", vb.size);
+        return VPU_RET_FAILURE;
+    }
+
+    buf->phys_addr = vb.phys_addr;
+    buf->size = size;
+    buf->enable_cache = TRUE;
+    if (vb.virt_addr)
+        buf->virt_addr = vb.virt_addr;
+    else
+        buf->virt_addr = 0;
+
+    return VPU_RET_SUCCESS;
+}
+
+int vpu_EncDeAllocateDMABuffer(int coreIdx, BmVpuDMABuffer *buf)
+{
+    int  ret;
+    vpu_buffer_t vb;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE)
+        return VPU_RET_INVALID_PARAM;
+
+    vb.phys_addr    = buf->phys_addr;
+    vb.size         = buf->size;
+    vb.virt_addr    = buf->virt_addr;
+    vb.enable_cache = buf->enable_cache;
+
+    ret = bm_vdi_free_dma_memory(coreIdx, &vb);
+    if (ret < 0) {
+        VLOG(INFO, "allocate device memory failed, size=%d byte\n", vb.size);
+        return VPU_RET_FAILURE;
+    }
+
+    return VPU_RET_SUCCESS;
+}
+
+
+int vpu_EncAttachDMABuffer(int coreIdx, BmVpuDMABuffer *buf)
+{
+    int  ret;
+    vpu_buffer_t vb;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE)
+        return VPU_RET_INVALID_PARAM;
+
+    vb.phys_addr    = buf->phys_addr;
+    vb.size         = buf->size;
+    ret = bm_vdi_attach_dma_memory(coreIdx, &vb);
+    if (ret < 0) {
+        VLOG(INFO, "attach device memory failed, size=%d byte\n", vb.size);
+        return VPU_RET_FAILURE;
+    }
+    return VPU_RET_SUCCESS;
+}
+
+int vpu_EncDeattachDMABuffer(int coreIdx, BmVpuDMABuffer *buf)
+{
+    int  ret;
+    vpu_buffer_t vb;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE)
+        return VPU_RET_INVALID_PARAM;
+
+    vb.phys_addr    = buf->phys_addr;
+    vb.size         = buf->size;
+    ret = bm_vdi_deattach_dma_memory(coreIdx, &vb);
+    if (ret < 0) {
+        VLOG(INFO, "deattach device memory failed, size=%d byte\n", vb.size);
+        return VPU_RET_FAILURE;
+    }
+    return VPU_RET_SUCCESS;
+}
+
+
+
+int vpu_EncMmap(int coreIdx, BmVpuDMABuffer* buf, int port_flag)
+{
+    int  ret;
+    int enable_read  = port_flag & BM_VPU_MAPPING_FLAG_READ;
+    int enable_write = port_flag & BM_VPU_MAPPING_FLAG_WRITE;
+    vpu_buffer_t tmp_buf;
+
+    if (coreIdx >= MAX_NUM_VPU_CORE)
+        return VPU_RET_INVALID_PARAM;
+
+    if (buf->virt_addr) {
+        VLOG(WARN, "%s:%d dma_buffer already have vaddr 0x%lx\n", __func__, __LINE__, buf->virt_addr);
+    }
+
+    tmp_buf.phys_addr = buf->phys_addr;
+    tmp_buf.size      = buf->size;
+    ret = bm_vdi_mmap_dma_memory(coreIdx, &tmp_buf, enable_read, enable_write);
+    if (ret < 0)
+        return VPU_RET_FAILURE;
+
+    buf->virt_addr = tmp_buf.virt_addr;
+    return VPU_RET_SUCCESS;
+};
+
+int vpu_EncMunmap(int coreIdx, BmVpuDMABuffer* buf)
+{
+#ifdef BM_PCIE_MODE
+    return 0;
+#else
+    int ret;
+    vpu_buffer_t tmp_buf;
+
+    if (buf->virt_addr == 0 || buf->size == 0) {
+        return VPU_RET_SUCCESS;
+    }
+
+    tmp_buf.phys_addr = buf->phys_addr;
+    tmp_buf.virt_addr = buf->virt_addr;
+    tmp_buf.size      = buf->size;
+    ret = bm_vdi_unmap_dma_memory(coreIdx, &tmp_buf);
+    if (ret < 0)
+        return VPU_RET_FAILURE;
+
+    buf->virt_addr = 0;
+    return ret;
+#endif
+}
+
+int vpu_EncFlushDecache(int coreIdx, BmVpuDMABuffer* buf)
+{
+#ifdef BM_PCIE_MODE
+#else
+    int ret;
+    vpu_buffer_t tmp_buf;
+
+    if (buf->size == 0) {
+        return VPU_RET_SUCCESS;
+    }
+
+    tmp_buf.size         = buf->size;
+    tmp_buf.phys_addr    = buf->phys_addr;
+    tmp_buf.virt_addr    = buf->virt_addr;
+    tmp_buf.enable_cache = buf->enable_cache;
+    ret = bm_vdi_flush_dma_memory(coreIdx, &tmp_buf);
+    if (ret < 0)
+        return VPU_RET_FAILURE;
+#endif
+    return VPU_RET_SUCCESS;
+}
+
+int vpu_EncInvalidateDecache(int coreIdx, BmVpuDMABuffer* buf)
+{
+    int ret;
+    vpu_buffer_t tmp_buf;
+
+    if (buf->size == 0) {
+        return VPU_RET_SUCCESS;
+    }
+
+    tmp_buf.size         = buf->size;
+    tmp_buf.phys_addr    = buf->phys_addr;
+    tmp_buf.virt_addr    = buf->virt_addr;
+    tmp_buf.enable_cache = buf->enable_cache;
+    ret = bm_vdi_invalidate_dma_memory(coreIdx, &tmp_buf);
+    if (ret < 0)
+        return VPU_RET_FAILURE;
+    return VPU_RET_SUCCESS;
+}
+
+
 /**
  * vpu_sw_reset
  * IN
@@ -1419,6 +1619,31 @@ int vpu_unlock(int soc_idx)
     return VPU_RET_SUCCESS;
 }
 
+static int SendQuery(EncHandle handle, QUERY_OPT queryOpt)
+{
+    uint32_t regVal;
+    int ret;
+
+    /* Send QUERY cmd */
+    VpuWriteReg(handle->coreIdx, W5_QUERY_OPTION, queryOpt);
+    VpuWriteReg(handle->coreIdx, W5_VPU_BUSY_STATUS, 1);
+    Wave5BitIssueCommand(handle, W5_QUERY);
+
+    ret = enc_wait_vpu_busy(handle->coreIdx, __VPU_BUSY_TIMEOUT, W5_VPU_BUSY_STATUS);
+    if (ret == -1) {
+        VLOG(ERR, "timeout\n");
+        if (handle->loggingEnable)
+            bm_vdi_log(handle->coreIdx, W5_QUERY, 2);
+        return VPU_RET_VPU_RESPONSE_TIMEOUT;
+    }
+
+    regVal = VpuReadReg(handle->coreIdx, W5_RET_SUCCESS);
+    if (regVal == FALSE)
+        return VPU_RET_FAILURE;
+
+    return VPU_RET_SUCCESS;
+}
+
 
 static int enc_open(EncHandle* pHandle, VpuEncOpenParam* pop)
 {
@@ -1458,7 +1683,6 @@ static int enc_open(EncHandle* pHandle, VpuEncOpenParam* pop)
         VLOG(ERR, "Wave5VpuBuildUpEncParam failed\n");
     }
 
-    bm_vdi_resume_kernel_reset(pop->coreIdx);
     LeaveLock(pop->coreIdx);
 
     return ret;
@@ -1481,16 +1705,26 @@ static int enc_close(EncHandle handle)
     if (pEncInfo->initialInfoObtained) {
         VpuWriteReg(handle->coreIdx, pEncInfo->streamWrPtrRegAddr, pEncInfo->streamWrPtr);
         VpuWriteReg(handle->coreIdx, pEncInfo->streamRdPtrRegAddr, pEncInfo->streamRdPtr);
-        ret = Wave5VpuEncFiniSeq(handle);
-        if (ret != VPU_RET_SUCCESS) {
+        while(Wave5VpuEncFiniSeq(handle) != VPU_RET_SUCCESS)
+        {
             if (handle->loggingEnable)
                 bm_vdi_log(handle->coreIdx, ENC_SEQ_END, 2);
 
             if (ret == VPU_RET_VPU_STILL_RUNNING) {
+                SendQuery(handle, GET_RESULT);
+                if (ret != VPU_RET_SUCCESS) {
+                    if (VpuReadReg(handle->coreIdx, W5_RET_FAIL_REASON) == WAVE5_RESULT_NOT_READY)
+                        return VPU_RET_REPORT_NOT_READY;
+                    else
+                        return VPU_RET_QUERY_FAILURE;
+                }
+            }
+            else{
                 LeaveLock(handle->coreIdx);
                 return ret;
             }
         }
+
         if (handle->loggingEnable)
             bm_vdi_log(handle->coreIdx, ENC_SEQ_END, 0);
         pEncInfo->streamWrPtr = VpuReadReg(handle->coreIdx, pEncInfo->streamWrPtrRegAddr);
@@ -2276,31 +2510,6 @@ static void Wave5BitIssueCommand(EncHandle handle, uint32_t cmd)
 
     VpuWriteReg(coreIdx, W5_VPU_HOST_INT_REQ, 1);
     return;
-}
-
-static int SendQuery(EncHandle handle, QUERY_OPT queryOpt)
-{
-    uint32_t regVal;
-    int ret;
-
-    /* Send QUERY cmd */
-    VpuWriteReg(handle->coreIdx, W5_QUERY_OPTION, queryOpt);
-    VpuWriteReg(handle->coreIdx, W5_VPU_BUSY_STATUS, 1);
-    Wave5BitIssueCommand(handle, W5_QUERY);
-
-    ret = enc_wait_vpu_busy(handle->coreIdx, __VPU_BUSY_TIMEOUT, W5_VPU_BUSY_STATUS);
-    if (ret == -1) {
-        VLOG(ERR, "timeout\n");
-        if (handle->loggingEnable)
-            bm_vdi_log(handle->coreIdx, W5_QUERY, 2);
-        return VPU_RET_VPU_RESPONSE_TIMEOUT;
-    }
-
-    regVal = VpuReadReg(handle->coreIdx, W5_RET_SUCCESS);
-    if (regVal == FALSE)
-        return VPU_RET_FAILURE;
-
-    return VPU_RET_SUCCESS;
 }
 
 static int SetupWave5Properties(uint32_t coreIdx)
@@ -3395,6 +3604,9 @@ static int Wave5VpuEncInitSeq(EncHandle handle)
         }
 
         VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_USER_SCALING_LIST_ADDR, pParam->userScalingListAddr);
+        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_NUM_UNITS_IN_TICK, pParam->numUnitsInTick);
+        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_TIME_SCALE, pParam->timeScale);
+        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_NUM_TICKS_POC_DIFF_ONE, pParam->numTicksPocDiffOne);
     }
 
     if (handle->codecMode == W_HEVC_ENC) {
@@ -3440,10 +3652,6 @@ static int Wave5VpuEncInitSeq(EncHandle handle)
 
         regVal = (pParam->dependSliceModeArg<<16 | pParam->dependSliceMode);
         VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_DEPENDENT_SLICE, regVal);
-
-        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_NUM_UNITS_IN_TICK, pParam->numUnitsInTick);
-        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_TIME_SCALE, pParam->timeScale);
-        VpuWriteReg(coreIdx, W5_CMD_ENC_SEQ_NUM_TICKS_POC_DIFF_ONE, pParam->numTicksPocDiffOne);
 
         regVal = ((pParam->nrYEnable<<0)       |
                   (pParam->nrCbEnable<<1)      |

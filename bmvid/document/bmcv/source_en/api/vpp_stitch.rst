@@ -1,7 +1,7 @@
 bmcv_image_vpp_stitch
 =====================
 
-Use the crop function of vpp hardware to complete image stitching. The src crop , csc, resize and dst crop operation can be completed on the input image at one time. The number of small images stitiched in dst image cannot exceed 256.
+Use the crop function of vpp hardware to complete image stitching. The src crop , csc, resize and dst crop operation can be completed on the input image at one time.
 
 
     .. code-block:: c
@@ -14,6 +14,12 @@ Use the crop function of vpp hardware to complete image stitching. The src crop 
             bmcv_rect_t*          dst_crop_rect,
             bmcv_rect_t*          src_crop_rect = NULL,
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
+
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Description of incoming parameters:**
 
@@ -76,4 +82,5 @@ Use the crop function of vpp hardware to complete image stitching. The src crop 
 
 3. If the src image is cropped, only one target will be cropped for one src image.
 
+4. 1684 supports input_num up to 256, and 1684x supports input_num up to 512.
 

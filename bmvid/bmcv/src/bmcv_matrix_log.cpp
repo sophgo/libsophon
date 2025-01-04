@@ -1,5 +1,6 @@
 #include "bmcv_internal.h"
 #include "bmcv_bm1684x.h"
+#include <stdio.h>
 
 bm_status_t check_matrix_log_param(bm_image src, bm_image dst)
 {
@@ -39,7 +40,7 @@ bm_status_t bmcv_matrix_log(bm_handle_t handle, bm_image src, bm_image dst)
 {
   bm_status_t ret = BM_SUCCESS;
   bm_device_mem_t s_mem[4],d_mem[4];
-
+  bm_handle_check_2(handle, src, dst);
   ret = check_matrix_log_param(src,dst);
 
   if (BM_SUCCESS != ret)

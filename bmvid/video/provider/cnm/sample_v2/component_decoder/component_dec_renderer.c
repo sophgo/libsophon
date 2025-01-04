@@ -33,7 +33,7 @@ typedef struct {
     Uint32                      framebufStride;
     Uint32                      displayPeriodTime;
     FrameBuffer                 pFrame[MAX_REG_FRAME];
-    bm_device_mem_t             pFbMem[MAX_REG_FRAME];
+    vpu_buffer_t                pFbMem[MAX_REG_FRAME];
     Uint64                      FbmemVaddr[MAX_REG_FRAME];
     BOOL                        fbAllocated;
     ParamDecNeedFrameBufferNum  fbCount;
@@ -131,28 +131,18 @@ static BOOL ReallocateFrameBuffers(ComponentImpl* com, ParamDecReallocFB* param)
     RendererContext* ctx        = (RendererContext*)com->context;
     Int32            fbcIndex    = param->compressedIdx;
     Int32            linearIndex = param->linearIdx;
-    bm_device_mem_t* pFbMem      = ctx->pFbMem;
+    vpu_buffer_t*    pFbMem      = ctx->pFbMem;
     FrameBuffer*     pFrame      = ctx->pFrame;
     FrameBuffer*     newFbs      = param->newFbs;
-    bm_handle_t  bm_handle;
     vdi_lock(ctx->testDecConfig.coreIdx);
     if (fbcIndex >= 0) {
         /* Release the FBC framebuffer */
-
-    bm_handle= bmvpu_dec_get_bmlib_handle(ctx->testDecConfig.coreIdx);
-#ifndef BM_PCIE_MODE
-        bm_mem_unmap_device_mem(bm_handle,(void *)ctx->FbmemVaddr[fbcIndex],ctx->pFbMem[fbcIndex].size);
-#endif
-        bm_free_device(bm_handle,pFbMem[fbcIndex]);
-
+        vdi_free_dma_memory(ctx->testDecConfig.coreIdx, &pFbMem[fbcIndex]);
     }
 
     if (linearIndex >= 0) {
-#ifndef BM_PCIE_MODE
-        bm_mem_unmap_device_mem(bm_handle,(void *)ctx->FbmemVaddr[linearIndex],ctx->pFbMem[linearIndex].size);
-#endif
-        bm_free_device(bm_handle,pFbMem[linearIndex]);
-
+        /* Release the linear framebuffer */
+        vdi_free_dma_memory(ctx->testDecConfig.coreIdx, &pFbMem[linearIndex]);
     }
     vdi_unlock(ctx->testDecConfig.coreIdx);
 
@@ -389,18 +379,11 @@ static void ReleaseRenderer(ComponentImpl* com)
     RendererContext* ctx = (RendererContext*)com->context;
     Uint32           coreIdx = ctx->testDecConfig.coreIdx;
     Uint32           i;
-    bm_handle_t      bm_handle;
     vdi_lock(coreIdx);
-    bm_handle=bmvpu_dec_get_bmlib_handle(coreIdx);
     for (i=0; i<MAX_REG_FRAME; i++) {
         if (ctx->pFbMem[i].size)
         {
-#ifndef BM_PCIE_MODE
-            bm_mem_unmap_device_mem(bm_handle,(void *)ctx->FbmemVaddr[i],ctx->pFbMem[i].size);
-#endif
-            bm_free_device(bm_handle,ctx->pFbMem[i]);
-
-
+            vdi_free_dma_memory(coreIdx, &ctx->pFbMem[i]);
         }
     }
     vdi_unlock(coreIdx);

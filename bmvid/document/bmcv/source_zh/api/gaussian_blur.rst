@@ -1,7 +1,11 @@
 bmcv_image_gaussian_blur
 ========================
 
-图像的高斯滤波。
+该接口用于对图像进行高斯滤波。
+
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
 
 
 **接口形式：**
@@ -63,27 +67,16 @@ bmcv_image_gaussian_blur
 +-----+------------------------+------------------------+
 | num | input image_format     | output image_format    |
 +=====+========================+========================+
-| 1   | FORMAT_BGR_PACKED      | FORMAT_BGR_PACKED      |
+| 1   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
 +-----+------------------------+------------------------+
-| 2   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
+| 2   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
 +-----+------------------------+------------------------+
-| 3   | FORMAT_RGB_PACKED      | FORMAT_RGB_PACKED      |
+| 3   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 4   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
+| 4   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 5   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
+| 5   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 6   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
-+-----+------------------------+------------------------+
-| 7   | FORMAT_GRAY            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 8   | FORMAT_YUV420P         | FORMAT_YUV420P         |
-+-----+------------------------+------------------------+
-| 9   | FORMAT_YUV422P         | FORMAT_YUV422P         |
-+-----+------------------------+------------------------+
-| 10  | FORMAT_YUV444P         | FORMAT_YUV444P         |
-+-----+------------------------+------------------------+
-
 
 目前支持以下 data_type:
 
@@ -100,7 +93,11 @@ bmcv_image_gaussian_blur
 
 2、input output 的 data_type，image_format必须相同。
 
-3、目前支持图像的最大width为(2048 - kw)。
+3、BM1684支持的图像最大宽为(2048 - kw)，BM1684X芯片下该算子在卷积核大小为3时，支持的宽高范围为8*8～8192*8192，核大小为5时支持的宽高范围为8*8～4096*8192，核大小为7时支持的宽高范围为8*8～2048*8192。
+
+4、BM1684X下卷积核支持的大小为3*3,5*5和7*7。
+
+5、BM1684支持的最大卷积核宽高为31，BM1684X支持的最大卷积核宽高为7。
 
 
 **代码示例：**

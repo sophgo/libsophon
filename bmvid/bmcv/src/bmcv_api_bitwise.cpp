@@ -4,6 +4,7 @@
 #include "bmcv_common_bm1684.h"
 #include <memory>
 #include <vector>
+#include <stdio.h>
 
 typedef enum bmcv_bitwise_op {
     AND = 7,
@@ -174,6 +175,7 @@ bm_status_t bmcv_image_bitwise_and(
         bm_image input1,
         bm_image input2,
         bm_image output) {
+    bm_handle_check_3(handle, input1, input2, output);
     return bmcv_image_bitwise(handle, input1, input2, output, AND);
 }
 
@@ -182,6 +184,7 @@ bm_status_t bmcv_image_bitwise_or(
         bm_image input1,
         bm_image input2,
         bm_image output) {
+    bm_handle_check_3(handle, input1, input2, output);
     return bmcv_image_bitwise(handle, input1, input2, output, OR);
 }
 
@@ -190,5 +193,6 @@ bm_status_t bmcv_image_bitwise_xor(
         bm_image input1,
         bm_image input2,
         bm_image output) {
+    bm_handle_check_3(handle, input1, input2, output);
     return bmcv_image_bitwise(handle, input1, input2, output, XOR);
 }

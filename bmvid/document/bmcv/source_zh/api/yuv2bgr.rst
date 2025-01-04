@@ -3,6 +3,12 @@ bmcv_image_yuv2bgr_ext
 
 该接口实现YUV格式到RGB格式的转换。
 
+
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式:**
 
     .. code-block:: c
@@ -55,18 +61,18 @@ bmcv_image_yuv2bgr_ext
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
-         
+
          int main(int argc, char *argv[]) {
              bm_handle_t handle;
              bm_dev_request(&handle, 0);
-         
+
              int image_n = 1;
              int image_h = 1080;
              int image_w = 1920;
              bm_image src, dst;
-             bm_image_create(handle, image_h, image_w, FORMAT_NV12, 
+             bm_image_create(handle, image_h, image_w, FORMAT_NV12,
                      DATA_TYPE_EXT_1N_BYTE, &src);
-             bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, 
+             bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
                      DATA_TYPE_EXT_1N_BYTE, &dst);
              std::shared_ptr<u8*> y_ptr = std::make_shared<u8*>(
                      new u8[image_h * image_w]);

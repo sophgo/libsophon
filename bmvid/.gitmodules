@@ -1,6 +1,3 @@
-[submodule "3rdparty/3rdparty-tools/googletest"]
-	path = 3rdparty/3rdparty-tools/googletest
-	url = https://github.com/google/googletest.git
 [submodule "provider/cnm/test/bmtest"]
 	path = provider/cnm/test/bmtest
 	url = ../bmtest.git

@@ -13,4 +13,3 @@ rm  ../driver/jpuapi/jpuapi.h
 rm ../driver/jpuapi/jputable.h
 rm ../driver/jdi/linux/jdi.c
 rm -rf ../driver/jdi/nonos
-rm -rf ../../bmcv/vpp_cmodel

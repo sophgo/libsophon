@@ -632,7 +632,9 @@ static bm_status_t per_image_deal_nearest(bm_handle_t handle,
     bm_device_mem_t tensor_input;
     bm_image_get_device_mem(input, &tensor_input);
     bm_image_get_device_mem(output, &tensor_output);
-    ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    // ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    int index_size_temp = image_dw > image_dh ? ALIGN(image_dw, 64) : ALIGN(image_dh, 64);
+    ret = bm_malloc_device_byte(handle, &tensor_S, index_size_temp * index_size_temp * image_c * 4);
     if(BM_SUCCESS != ret) {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
                 "bm_malloc error, %s: %s: %d\n",
@@ -706,7 +708,9 @@ static bm_status_t per_image_deal_bilinear(bm_handle_t handle,
     bm_device_mem_t tensor_input;
     bm_image_get_device_mem(input, &tensor_input);
     bm_image_get_device_mem(output, &tensor_output);
-    ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    // ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);
+    int index_size_temp = image_dw > image_dh ? ALIGN(image_dw, 64) : ALIGN(image_dh, 64);
+    ret = bm_malloc_device_byte(handle, &tensor_S, index_size_temp * index_size_temp * image_c * 4);
     if (BM_SUCCESS != ret) return ret;
 
     sg_api_cv_warp_perspective_1684x_t param;
@@ -786,6 +790,10 @@ bm_status_t bmcv_image_warp_perspective_1684X(
     }
 
     for (int num = 0;num < image_num;num++) {
+        int stride = 0;
+        bm_image_get_stride(input[num], &stride);
+        input[num].width = stride;
+
         if (!use_bilinear) {
         ret = per_image_deal_nearest(handle, image_dh, image_dw, input[num], output[num],
                     tensor_output[num], matrix[num]);
@@ -816,6 +824,7 @@ bm_status_t bmcv_image_warp_perspective_with_coordinate(
     int dh = output[0].height;
     int dw = output[0].width;
     int coord_sum = 0;
+    bm_handle_check_2(handle, input[0], output[0]);
     for (int i = 0; i < image_num; i++) {
         coord_sum += coord[i].coordinate_num;
     }
@@ -858,6 +867,8 @@ bm_status_t bmcv_image_warp_perspective_similar_to_opencv(
 {
     float matrix_tem[3][3];
     float matrix_tem_inv[3][3];
+
+    bm_handle_check_2(handle, input[0], output[0]);
     for (int i = 0; i < image_num; i++) {
         for(int matrix_no = 0; matrix_no < matrix[i].matrix_num; matrix_no++){
             memset(matrix_tem, 0, sizeof(matrix_tem));
@@ -889,6 +900,7 @@ bm_status_t bmcv_image_warp_perspective(
     int                           use_bilinear)
 {
     unsigned int chipid;
+    bm_handle_check_2(handle, input[0], output[0]);
     bm_get_chipid(handle, &chipid);
     if (chipid == BM1684X){
         return bmcv_image_warp_perspective_1684X(

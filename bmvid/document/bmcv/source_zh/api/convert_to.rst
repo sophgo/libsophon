@@ -10,6 +10,11 @@ bmcv_image_convert_to
     y=kx+b
     \end{array}
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式:**
 
     .. code-block:: c
@@ -194,4 +199,4 @@ bm1684x支持：
 
 8. bm1684支持最大尺寸为2048*2048，最小尺寸为16*16，当 image format 为 DATA_TYPE_EXT_4N_BYTE 时，w * h 不应大于 1024 * 1024。
 
-   bm1684x支持最大尺寸为4096*4096，最小尺寸为16*16。
+   bm1684x支持最小尺寸为16*16, 当input data_type 为 DATA_TYPE_EXT_1N_BYTE_SIGNED 或 DATA_TYPE_EXT_FLOAT32 时 ，支持最大尺寸为4096*4096，当input data_type 为 DATA_TYPE_EXT_1N_BYTE 时，支持最大尺寸为8192*8192。

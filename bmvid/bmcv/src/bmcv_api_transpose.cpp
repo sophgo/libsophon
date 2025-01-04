@@ -3,6 +3,7 @@
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 #include <memory>
+#include <stdio.h>
 #ifdef __linux__
 #include <sys/time.h>
 #else
@@ -15,6 +16,7 @@
 bm_status_t bmcv_image_transpose(bm_handle_t handle,
                                  bm_image input,
                                  bm_image output) {
+    bm_handle_check_2(handle, input, output);
     if (handle == NULL) {
         bmlib_log("TRANSPOSE", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
         return BM_ERR_FAILURE;

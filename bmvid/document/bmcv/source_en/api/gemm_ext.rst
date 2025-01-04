@@ -28,6 +28,10 @@ The format of the interface is as follows:
                                bm_image_data_format_ext input_dtype,
                                bm_image_data_format_ext output_dtype);
 
+**Processor model support**
+
+This interface only supports BM1684X.
+
 
 **Input parameter description:**
 
@@ -95,11 +99,9 @@ The format of the interface is as follows:
 
 **Note**
 
-1. This interface only supports BM1684X.
+1. In the case of FP16 input and A matrix transpose, M only supports values less than or equal to 64.
 
-2. In the case of FP16 input and A matrix transpose, M only supports values less than or equal to 64.
-
-3. This interface does not support FP32 input and FP16 output.
+2. This interface does not support FP32 input and FP16 output.
 
 **Sample code**
 

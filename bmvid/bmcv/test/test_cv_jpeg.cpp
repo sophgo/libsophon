@@ -463,7 +463,6 @@ DWORD WINAPI test_jpeg_enc_and_dec(LPVOID argv)
         }
         ret = bmcv_image_jpeg_dec(handle, (void**)jpeg_data, size, image_n, dst);
         assert(ret == BM_SUCCESS);
-
         int image_byte_size[3] = {0};
         bm_image_get_byte_size(dst[0], image_byte_size);
 #ifdef DEBUG_JPEG
@@ -651,7 +650,7 @@ int main(int argc, char *argv[]) {
     }
     printf("random seed %d\n", seed);
     srand(seed);
-    bmlib_log_set_level(BMLIB_LOG_INFO);
+    bmlib_log_set_level(BMLIB_LOG_ERROR);
 #ifdef EXAMPLE_JPEG
     char* file = (char*)"dehua1.jpg";
     test_jpeg_dec(file);

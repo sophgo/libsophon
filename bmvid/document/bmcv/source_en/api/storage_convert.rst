@@ -4,6 +4,11 @@ bmcv_image_storage_convert
 The interface converts the data corresponding to the source image format into the format data of the target image and fills it in the device memory associated with the target image.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

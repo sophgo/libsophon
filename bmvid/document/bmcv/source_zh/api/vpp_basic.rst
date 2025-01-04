@@ -2,7 +2,7 @@ bmcv_image_vpp_basic
 =========================
 
 
-bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件下可以一次实现 crop、color-space-convert、resize 以及 padding 功能，速度比 TPU 更快。
+bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件下可以一次实现 crop、color-space-convert、resize 以及 padding 功能，速度比 Tensor Computing Processor 更快。
 该 API 可以实现对多张图片的 crop、color-space-convert、resize、padding 及其任意若干个功能的组合。
 
     .. code-block:: c
@@ -18,6 +18,11 @@ bm1684和bm1684x 上有专门的视频后处理模块VPP，在满足一定条件
             bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
             csc_type_t            csc_type = CSC_MAX_ENUM,
             csc_matrix_t*         matrix = NULL);
+
+
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
 
 
 **传入参数说明:**

@@ -1,7 +1,7 @@
 bmcv_image_lkpyramid
 ====================
 
-LK pyramid optical flow algorithm. The complete call flow include creation, execution and destruction. The first half of the algorithm uses TPU, and the second half uses CPU for serial operation. Therefore, for PCIe mode, it is recommended to enable CPU to accelerate. Please refer to Chapter 5 for specific steps.
+LK pyramid optical flow algorithm. The complete call flow include creation, execution and destruction. The first half of the algorithm uses Tensor Computing Processor, and the second half uses Processor for serial operation. Therefore, for PCIe mode, it is recommended to enable Processor to accelerate. Please refer to Chapter 5 for specific steps.
 
 Create
 ______
@@ -18,6 +18,12 @@ The internal implementation of the algorithm requires some cache space. Therefor
                 int winW = 21,
                 int winH = 21,
                 int maxLevel = 3);
+
+
+**Processor model support**
+
+This interface only supports BM1684.
+
 
 **Input parameter description:**
 
@@ -174,7 +180,7 @@ ___________
         }
         ret = bmcv_open_cpu_process(handle);
         if (ret != BM_SUCCESS) {
-            printf("BMCV enable CPU failed. ret = %d\n", ret);
+            printf("BMCV enable Processor failed. ret = %d\n", ret);
             bm_dev_free(handle);
             return -1;
         }
@@ -211,7 +217,7 @@ ___________
         bm_image_destroy(nextImg);
         ret = bmcv_close_cpu_process(handle);
         if (ret != BM_SUCCESS) {
-            printf("BMCV disable CPU failed. ret = %d\n", ret);
+            printf("BMCV disable Processor failed. ret = %d\n", ret);
             bm_dev_free(handle);
             return -1;
         }
