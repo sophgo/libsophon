@@ -7,7 +7,6 @@ libsophon目前包含如下组件：
 2. 运行时库
     1. bmlib
     2. tpu runtime
-    .. 3. bmcv
 3. 运行时库的开发环境（头文件等）
 4. 辅助工具
 
@@ -169,7 +168,7 @@ libsophon目前包含如下组件：
 首先您需要编译SoC BSP，请参考BSP的编译指导。
 
 
-我们提供2种方式编译soc版本
+.. 我们提供2种方式编译soc版本
 
 
 **交叉编译环境方式：**
@@ -178,6 +177,7 @@ libsophon目前包含如下组件：
 环境准备：
 
 ::
+
     参考步骤是在docker里编译，如果已经有Ubuntu18.04以上环境，也可以直接在本机编译。
     拷贝交叉编译工具链：
     mkdir -p ${path_to_local_workspace}
@@ -224,30 +224,32 @@ libsophon目前包含如下组件：
 
     make -j8
     make driver -j8
-    .. make vpu_driver -j8
-    .. make jpu_driver
-    make package -j8
+    make install -j8
+.. make vpu_driver -j8
+.. make jpu_driver
+.. make package -j8
 
-    过程中如果遇到下面的问题，按照提示操作执行即可：
-        cd /workspace/libsophon/bmvid/jpeg/driver/bmjpulite && /usr/bin/cmake -E chdir .. git checkout -- include/version.h
-        fatal: detected dubious ownership in repository at '/workspace/bmvid'
-        To add an exception for this directory, call:
+.. 过程中如果遇到下面的问题，按照提示操作执行即可：
+..     cd /workspace/libsophon/bmvid/jpeg/driver/bmjpulite && /usr/bin/cmake -E chdir .. git checkout -- include/version.h
+..     fatal: detected dubious ownership in repository at '/workspace/bmvid'
+..     To add an exception for this directory, call:
 
-            git config --global --add safe.directory /workspace/bmvid
+..         git config --global --add safe.directory /workspace/bmvid
 
 脚本安装:
 
-
 ::
-	chmod +x temp_install.sh
-	./install_libsophon.sh /path/to/libsophon-0.4.9
-	./install_libsophon.sh
+
+  chmod +x temp_install.sh
+  ./install_libsophon.sh /path/to/libsophon-0.4.9
+  ./install_libsophon.sh
 
 模型运行:
 
 ::
-	bmodel模式下：
-	./path/to/libsophon-0.4.9/bin/bmrt_test --context_dir /model to path/ --devid 0  &
+
+  bmodel模式下：
+  ./path/to/libsophon-0.4.9/bin/bmrt_test --context_dir /model to path/ --devid 0  &
 
 
 
