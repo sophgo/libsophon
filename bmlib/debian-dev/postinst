@@ -1,0 +1,2 @@
+mkdir -p /usr/lib/cmake/libsophon
+cp /opt/sophon/libsophon-current/data/libsophon-config.cmake /usr/lib/cmake/libsophon/

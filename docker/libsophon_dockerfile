@@ -1,0 +1,46 @@
+FROM ubuntu:18.04
+ARG DEBIAN_FRONTEND=nointeractive
+ENV DEBCONF_NOWARNINGS="yes"
+ENV TZ=Asia/Shanghai
+ENV PIP_ROOT_USER_ACTION=ignore
+
+RUN apt-get update && apt-get install -y apt-transport-https ca-certificates && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic main restricted universe multiverse" > /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-proposed main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-updates main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-security main restricted universe multiverse" >> /etc/apt/sources.list && \
+    echo "deb-src https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ bionic-proposed main restricted universe multiverse" >> /etc/apt/sources.list && \
+    apt-get update
+
+RUN apt-get install -y \
+        dkms \
+        dpkg \
+        dpkg-dev \
+        git \
+        wget \
+        sudo \
+        curl \
+        udev \
+        libhdf5-dev \
+        libatlas-base-dev \
+        libgl1-mesa-glx \
+        libboost-system-dev \
+        vim \
+        unzip \
+        locales && \
+    locale-gen en_US.UTF-8 && \
+    locale-gen zh_CN.UTF-8
+
+ENV CMAKE_VERSION 3.20.0
+RUN wget https://github.com/Kitware/CMake/releases/download/v$CMAKE_VERSION/cmake-$CMAKE_VERSION-Linux-x86_64.sh \
+        --no-check-certificate \
+        -q -O /tmp/cmake-install.sh && \
+    chmod u+x /tmp/cmake-install.sh && \
+    /tmp/cmake-install.sh --skip-license --prefix=/usr/local && \
+    rm /tmp/cmake-install.sh
+

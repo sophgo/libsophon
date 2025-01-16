@@ -1,0 +1,15 @@
+[submodule "tpu-bmodel"]
+	path = tpu-bmodel
+	url = ../tpu-bmodel
+[submodule "tpu-cpuop"]
+	path = tpu-cpuop
+	url = ../tpu-cpuop
+[submodule "tpu-runtime"]
+	path = tpu-runtime
+	url = ../tpu-runtime
+[submodule "tpu-common"]
+	path = tpu-common
+	url = ../tpu-common
+[submodule "libsophav"]
+	path = libsophav
+	url = ../libsophav.git
