@@ -2994,7 +2994,7 @@ bm_status_t bm_memcpy_d2s(bm_handle_t handle, void *dst, bm_device_mem_t src) {
     fprintf(stderr, "Failed to read data from device memory, error code: %d\n", read_status);
     return read_status;
   }else{
-    printf("read data from device memory successfully, size=%d\n",bm_mem_get_size(src));
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG,"read data from device memory successfully, size=%d\n",bm_mem_get_size(src));
   }
   return BM_SUCCESS;
   // bm_status_t ret;
@@ -4112,27 +4112,27 @@ bm_status_t bm_mem_convert_system_to_device_coeff_byte(
   }
 
 bm_status_t bm_mem_write_data_to_ion(
-    bm_handle_t      handle,
-    bm_device_mem_t *dmem,
-    void *           data,
-    size_t size) {
+  bm_handle_t      handle,
+  bm_device_mem_t *dmem,
+  void *           data,
+  size_t size) {
 
-    // mmap ion buffer
-    void *mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, dmem->u.device.dmabuf_fd, 0);
-    if (mapped_memory == MAP_FAILED) {
-        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "mmap failed, fd=%d\n",dmem->u.device.dmabuf_fd);
-        return BM_ERR_PARAM;
-    }
-    // write data to ion buffer
-    if (memcpy(mapped_memory, data, size) == NULL) {
-        perror("memcpy failed");
-        munmap(mapped_memory, size);
-        return BM_ERR_PARAM;
-    }
-    
-    munmap(mapped_memory, size);
-  return BM_SUCCESS;
+  // mmap ion buffer
+  void *mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, dmem->u.device.dmabuf_fd, 0);
+  if (mapped_memory == MAP_FAILED) {
+      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "mmap failed, fd=%d\n",dmem->u.device.dmabuf_fd);
+      return BM_ERR_PARAM;
   }
+  // write data to ion buffer
+  if (memcpy(mapped_memory, data, size) == NULL) {
+      perror("memcpy failed");
+      munmap(mapped_memory, size);
+      return BM_ERR_PARAM;
+  }
+
+  munmap(mapped_memory, size);
+  return BM_SUCCESS;
+}
 
 bm_status_t bm_mem_read_data_from_ion(
     bm_handle_t handle,
@@ -4150,12 +4150,12 @@ bm_status_t bm_mem_read_data_from_ion(
 
     memcpy(buffer, mapped_memory, size);
 
-    for (int i = 0; i < size/sizeof(float); i++) {
-      if (i==50){
-        break;
-      }
-      printf("%f ", ((float *)buffer)[i]);
-    }
+    // for (int i = 0; i < size/sizeof(float); i++) {
+    //   if (i==50){
+    //     break;
+    //   }
+    //   printf("%f ", ((float *)buffer)[i]);
+    // }
 
     munmap(mapped_memory, size);
 

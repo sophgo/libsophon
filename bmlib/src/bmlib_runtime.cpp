@@ -202,9 +202,9 @@ u64 bm_gmem_arm_reserved_request(bm_handle_t handle) {
   if (!ret)
     return val;
   else
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
               "bmdev request arm reserverd failed, ioclt ret = %d %d\n", ret, __LINE__);
-    return BM_MEM_ADDR_NULL;
+  return BM_MEM_ADDR_NULL;
   #endif
   }
 
@@ -298,7 +298,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
 
   // open message queue
   // bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-  // 							"open message queue.\n");
+            // "open message queue.\n");
   struct mq_attr attr;
   attr.mq_flags = 0;
   attr.mq_maxmsg = 20;
@@ -311,7 +311,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
       return BM_ERR_FAILURE;
   }
 
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "create semget.....\n");
   int semid = semget(sem_key, 1, IPC_CREAT | IPC_EXCL | 0666);
   if (semid == -1) {
@@ -321,7 +321,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
               perror("Failed to get existing semaphore");
               return BM_ERR_FAILURE;
           }
-          printf("Existing semaphore acquired, semid: %d\n", semid);
+          bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "Existing semaphore acquired, semid: %d\n", semid);
       } else {
           perror("Failed to create semaphore");
           return BM_ERR_FAILURE;
@@ -334,7 +334,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
       printf("New semaphore created, semid: %d\n", semid);
   }
 
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "send data to mquequ.....\n");
   if (mq_send(mq1, (const char*)&bm_api, sizeof(bm_api_to_bmcpu_t), 0) == -1) {
       perror("mq_send header");
@@ -342,7 +342,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
       return BM_ERR_FAILURE;
   }
 
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "mq_send success! send_size %d, thread_id %d, wait for sem_key %ld \n",
                 sizeof(bm_api_to_bmcpu_t), tid, sem_key);
   P(semid);
@@ -371,12 +371,12 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
 
   mq_close(mq1);
   mq_close(mq2);
-  if(bm_ret.result!=0) {
+  if (bm_ret.result!=0) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "api result = %u\n", bm_ret.result);
     return BM_ERR_FAILURE;
   }
 
-  if(api_id==BM_API_ID_TPUSCALER_GET_FUNC) {
+  if (api_id==BM_API_ID_TPUSCALER_GET_FUNC) {
     int read_f_id;
     a53lite_get_func_t *api_new=(a53lite_get_func_t*)api;
     if (sscanf(bm_ret.msg, "f_id value: %d", &read_f_id) == 1) {
@@ -385,7 +385,7 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
     api_new->f_id=read_f_id;
   }
 
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "api_id 0x%x done *************\n", api_id);
   return BM_SUCCESS;
 
@@ -402,7 +402,7 @@ bm_status_t bm_send_api_multicores(bm_handle_t handle, int api_id, tpu_launch_pa
   unsigned int param_size;
   const u8 *api;
 
-  if (handle == nullptr){
+  if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
@@ -550,7 +550,7 @@ bm_status_t bm_reset_tpu(bm_handle_t handle){
   #else
   int ret;
 
-  if (handle == nullptr){
+  if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG,
               BMLIB_LOG_ERROR,
               "handle is nullptr %s: %s: %d\n",
@@ -740,15 +740,15 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
           perror("pthread_create");
           return BM_ERR_FAILURE;
       }
-      printf("bmcpu app thread id is %ld\n", bmcpu);
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "bmcpu app thread id is %ld\n", bmcpu);
       pthread_detach(bmcpu);
 
-    // 	ret = ioctl(ctx->dev_fd, BMDEV_STORE_BMCPU_APP_THREAD, (int)bmcpu);
-    // 	if(ret!=0){
-    // 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-    // 					"bmdev store bmcpu app thread id failed, ioclt ret = %d %d\n", ret, __LINE__);
-    // 		return BM_ERR_FAILURE;
-    // 	}
+    // ret = ioctl(ctx->dev_fd, BMDEV_STORE_BMCPU_APP_THREAD, (int)bmcpu);
+    // if(ret!=0){
+    //   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+    //         "bmdev store bmcpu app thread id failed, ioclt ret = %d %d\n", ret, __LINE__);
+    //   return BM_ERR_FAILURE;
+    // }
     }
 
     // add drvier version check here???? according to sc5 version format
@@ -2543,7 +2543,8 @@ bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status) {
   return BM_SUCCESS;
   } else {
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "bmdev get dynamic frequence status failed, ioclt ret = %d %d\n", ret, __LINE__);
+            "bmdev get dynamic frequence status failed, ioclt ret = %d %d\n",
+            ret, __LINE__);
   return BM_ERR_FAILURE;
   }
   #endif
@@ -2571,13 +2572,14 @@ bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status) {
   return BM_SUCCESS;
   } else {
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "bmdev change dynamic frequence status failed, ioclt ret = %d %d\n", ret, __LINE__);
+            "bmdev change dynamic frequence status failed, ioclt ret = %d %d\n",
+            ret, __LINE__);
   return BM_ERR_FAILURE;
   }
   #endif
   }
 
-bm_status_t bm_get_handle_fd(bm_handle_t handle,FD_ID id, int *fd){
+bm_status_t bm_get_handle_fd(bm_handle_t handle, FD_ID id, int *fd) {
   #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(id);
@@ -2591,8 +2593,8 @@ bm_status_t bm_get_handle_fd(bm_handle_t handle,FD_ID id, int *fd){
     return BM_ERR_DEVNOTREADY;
   }
   #ifdef __linux__
-  if(fd != nullptr) {
-    switch(id){
+  if (fd != nullptr) {
+    switch (id) {
       case 0:
         *fd = handle->dev_fd;
       break;
@@ -2612,7 +2614,7 @@ bm_status_t bm_get_handle_fd(bm_handle_t handle,FD_ID id, int *fd){
         return BM_ERR_PARAM;
       break;
     }
-  }else{
+  } else {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
           "fd is nullptr %s: %s: %d\n",
           __FILE__, __func__, __LINE__);
@@ -2633,7 +2635,8 @@ bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
   #else
   int ret;
   if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n",
+    __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
 

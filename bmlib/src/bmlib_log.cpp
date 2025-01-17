@@ -21,7 +21,7 @@
 static int bmlib_log_level = BMLIB_LOG_DEBUG;
 #define BMLIB_LOG_LOG_TAG "bmlib_log"
 
-    static pthread_mutex_t bmlog_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t bmlog_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
 
