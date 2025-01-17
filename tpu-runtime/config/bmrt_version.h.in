@@ -1,0 +1,3 @@
+#cmakedefine COMMIT_HASH "@COMMIT_HASH@"
+#cmakedefine BRANCH_NAME "@BRANCH_NAME@"
+#cmakedefine COMPILE_TIME "@COMPILE_TIME@"
