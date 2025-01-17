@@ -45,4 +45,5 @@ void MD5Encode(unsigned char *output, unsigned int *input, unsigned int len);
 void MD5Decode(unsigned int *output, unsigned char *input, unsigned int len);
 void read_md5(unsigned char *file_path, unsigned char *md5sum);
 void calc_md5(unsigned char *data, size_t len, unsigned char *md5sum);
+void simple_hash(const char *input, unsigned char hash[16]);
 #endif

@@ -4139,9 +4139,8 @@ bm_status_t bm_mem_read_data_from_ion(
     bm_device_mem_t *dmem,
     void *buffer,
     size_t size) {
-    
-    printf("size = %d, dmem.dmabuf_fd=%d\n", size, dmem->u.device.dmabuf_fd);
-    
+
+    // printf("size = %d, dmem.dmabuf_fd=%d\n", size, dmem->u.device.dmabuf_fd);
     void *mapped_memory = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, dmem->u.device.dmabuf_fd, 0);
     if (mapped_memory == MAP_FAILED) {
         bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "mmap failed, fd=%d\n",dmem->u.device.dmabuf_fd);

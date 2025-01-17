@@ -191,11 +191,11 @@ void read_md5(unsigned char *file_path, unsigned char *md5sum)
 
     MD5_CTX md5;
     MD5Init(&md5);
-		bmlib_log("bmlib_md5", BMLIB_LOG_INFO,
-							"MD5Init**************.\n");
+    bmlib_log("bmlib_md5", BMLIB_LOG_INFO,
+              "MD5Init**************.\n");
     MD5Update(&md5, file_buffer, u32FileSize);
-		bmlib_log("bmlib_md5", BMLIB_LOG_INFO,
-							"MD5Update**************.\n");
+    bmlib_log("bmlib_md5", BMLIB_LOG_INFO,
+              "MD5Update**************.\n");
     MD5Final(&md5, md5sum);
     free(file_buffer);
 }
@@ -212,4 +212,14 @@ void calc_md5(unsigned char *data, size_t len, unsigned char *md5sum)
     MD5Init(&md5);
     MD5Update(&md5, data, len);
     MD5Final(&md5, md5sum);
+}
+
+void simple_hash(const char *input, unsigned char hash[16]) {
+    // Initialize the hash array
+    memset(hash, 0, 16);
+
+    // Simple hash calculation
+    for (size_t i = 0; i < strlen(input); ++i) {
+        hash[i % 16] ^= static_cast<unsigned char>(input[i]) + static_cast<unsigned char>(i);
+    }
 }

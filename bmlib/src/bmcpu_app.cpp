@@ -251,7 +251,7 @@ static int load_lib_process(bm_api_cpu_load_library_internal_t* api) {
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "Library Size: %d\n", api->size);
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "MD5: ");
   for (int i = 0; i < MD5SUM_LEN; i++) {
-      bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "%d", (int)api->md5[i]);
+      printf("%x", (int)api->md5[i]);
   }
   std::cout << std::endl;
   std::cout << std::dec;
@@ -294,7 +294,7 @@ static int unload_lib_process(bm_api_cpu_load_library_internal_t* api) {
   // std::cout << "Library Size: " << api->size << std::endl;
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "MD5: ");
   for (int i = 0; i < MD5SUM_LEN; i++) {
-      bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO,"%d", (int)api->md5[i]);
+      printf("%x", (int)api->md5[i]);
   }
   std::cout << std::endl;
   std::cout << std::dec;
