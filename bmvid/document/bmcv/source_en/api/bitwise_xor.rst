@@ -4,6 +4,11 @@ bmcv_image_bitwise_xor
 Perform bitwise xor operate on the corresponding pixel values of two images with the same size.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

@@ -28,6 +28,10 @@ bmcv_gemm_ext
                                bm_image_data_format_ext input_dtype,
                                bm_image_data_format_ext output_dtype);
 
+**处理器型号支持：**
+
+该接口仅支持BM1684X。
+
 
 **输入参数说明：**
 
@@ -95,11 +99,9 @@ bmcv_gemm_ext
 
 **注意：**
 
-1. 该接口仅支持BM1684X。
+1. 该接口在FP16输入、A矩阵转置的情况下，M仅支持小于等于64的取值。
 
-2. 该接口在FP16输入、A矩阵转置的情况下，M仅支持小于等于64的取值。
-
-3. 该接口不支持FP32输入且FP16输出。
+2. 该接口不支持FP32输入且FP16输出。
 
 **示例代码**
 

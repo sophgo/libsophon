@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <memory>
 #include <vector>
+#include <stdio.h>
 
 
 static bm_status_t bmcv_pyramid_check(
@@ -48,6 +49,7 @@ bm_status_t bmcv_image_pyramid_down(
         bm_image input,
         bm_image output) {
     bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_2(handle, input, output);
     ret = bmcv_pyramid_check(handle, input, output, true);
     if (BM_SUCCESS != ret) {
         return ret;

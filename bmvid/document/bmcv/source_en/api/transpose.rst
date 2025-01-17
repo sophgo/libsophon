@@ -3,6 +3,12 @@ bmcv_image_transpose
 
 The interface can transpose  image width and height.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form::**
 
     .. code-block:: c

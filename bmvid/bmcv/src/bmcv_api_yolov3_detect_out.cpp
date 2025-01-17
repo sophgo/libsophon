@@ -44,10 +44,10 @@ bm_status_t bmcv_nms_yolov3_bm1684(
     int keep_top_k, float bias[18], float anchor_scale[3], float mask[9],
     bm_device_mem_t output, int yolo_flag, int len_per_batch) {
   if (handle == NULL)
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
 
   if (input_num > 3)
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
   bm_device_mem_t b_mem[3];
   bm_device_mem_t top_mem;
   for (int i = 0; i < 3; ++i) {
@@ -131,9 +131,9 @@ bm_status_t bmcv_nms_yolov7(
     bm_device_mem_t output, int yolo_flag, int len_per_batch,
     int scale, int *orig_image_shape, int model_h, int model_w) {
   if (handle == NULL)
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
   if (input_num > 3)
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
 
   bm_device_mem_t b_mem[3];
   bm_device_mem_t top_mem;
@@ -206,10 +206,10 @@ bm_status_t bmcv_nms_yolov3_bm1684X(
     int keep_top_k, float bias[18], float anchor_scale[3], float mask[9],
     bm_device_mem_t output, int yolo_flag, int len_per_batch) {
   if (handle == NULL)
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
 
   if (input_num > 3)
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
 
   bm_device_mem_t b_mem[3];
   bm_device_mem_t top_mem;
@@ -296,9 +296,9 @@ bm_status_t bmcv_nms_yolo(
     int keep_top_k, float bias[18], float anchor_scale[3], float mask[9],
     bm_device_mem_t output, int yolo_flag, int len_per_batch, void *ext) {
   if (handle == NULL)
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
   if (input_num > 3)
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
   // UNUSED(ext);
 
   if (yolo_flag == 0 || yolo_flag == 1){
@@ -321,7 +321,7 @@ bm_status_t bmcv_nms_yolo(
             temp->scale, temp->orig_image_shape, temp->model_h, temp->model_w);
   }else{
     printf("Not supported !\n");
-    return BM_NOT_SUPPORTED;
+    return BM_ERR_PARAM;
   }
 }
 
@@ -356,7 +356,7 @@ bm_status_t bmcv_nms_yolov3(
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

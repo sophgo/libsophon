@@ -22,6 +22,10 @@ _________
                 const float *ranges,
                 int inputDtype);
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Parameter Description:**
 
@@ -147,6 +151,10 @@ _________
 
 Weighted Histogram
 __________________
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
 
 
 **Interface form:**

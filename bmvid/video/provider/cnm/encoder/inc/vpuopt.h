@@ -74,7 +74,7 @@
 #define DEFAULT_SRC_AXI                 USE_SRC_PRP_AXI
 
 /* vpu common memory  */
-#define COMMAND_QUEUE_DEPTH             4
+#define COMMAND_QUEUE_DEPTH             1
 #define ONE_TASKBUF_SIZE_FOR_CQ         (8*1024*1024)  /* upto 8Kx8K, need 8Mbyte per task. TODO */
 #define SIZE_COMMON                     ((2*1024*1024)+(COMMAND_QUEUE_DEPTH*ONE_TASKBUF_SIZE_FOR_CQ))
 

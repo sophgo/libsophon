@@ -4,6 +4,11 @@ bmcv_nms_ext
 该接口是bmcv_nms接口的广义形式，支持Hard_NMS/Soft_NMS/Adaptive_NMS/SSD_NMS，用于消除网络计算得到过多的物体框，并找到最佳物体框。
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式:**
 
     .. code-block:: c

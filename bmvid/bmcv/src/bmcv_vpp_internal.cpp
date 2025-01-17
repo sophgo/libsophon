@@ -19,6 +19,8 @@ bm_status_t bmcv_image_vpp_basic(
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
 
+  bm_handle_check_2(handle, *input, *output);
+
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
@@ -39,7 +41,7 @@ bm_status_t bmcv_image_vpp_basic(
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 
@@ -56,7 +58,7 @@ bm_status_t bmcv_image_vpp_convert(
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, *output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -77,7 +79,7 @@ bm_status_t bmcv_image_vpp_convert(
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 
@@ -94,7 +96,7 @@ bm_status_t bmcv_image_vpp_convert_padding(
 {
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
-
+  bm_handle_check_2(handle, input, *output);
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
@@ -114,7 +116,7 @@ bm_status_t bmcv_image_vpp_convert_padding(
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 
@@ -132,7 +134,7 @@ bm_status_t bmcv_image_vpp_stitch(
 {
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
-
+  bm_handle_check_2(handle, input[0], output);
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
@@ -152,7 +154,7 @@ bm_status_t bmcv_image_vpp_stitch(
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 
@@ -171,7 +173,7 @@ bm_status_t bmcv_image_vpp_csc_matrix_convert(
 {
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
-
+  bm_handle_check_2(handle, input, *output);
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
@@ -191,7 +193,7 @@ bm_status_t bmcv_image_vpp_csc_matrix_convert(
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 
@@ -206,20 +208,20 @@ bm_status_t bmcv_image_mosaic_check(bm_handle_t         handle,
   if(is_expand != 0 && is_expand != 1){
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "is_expand out of range, is_expand=%d, %s: %s: %d\n",
             is_expand, filename(__FILE__), __func__, __LINE__);
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
   }
   if(mosaic_num > 512 || mosaic_num < 1){
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "mosaic_num out of range, mosaic_num=%d, %s: %s: %d\n",
             mosaic_num, filename(__FILE__), __func__, __LINE__);
-    return BM_ERR_FAILURE;
+    return BM_ERR_PARAM;
   }
   if(handle == NULL){
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr");
-    return BM_ERR_FAILURE;
+    return BM_ERR_DEVNOTREADY;
   }
   if(input.image_private == NULL){
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input is nullptr");
-    return BM_ERR_FAILURE;
+    return BM_ERR_DATA;
   }
   for(int i=0; i<mosaic_num; i++){
     crop_rect[i].crop_w = crop_rect[i].crop_w + (is_expand << 4);
@@ -249,7 +251,7 @@ bm_status_t bmcv_image_mosaic_check(bm_handle_t         handle,
         crop_rect[i].crop_w + crop_rect[i].start_x > input.width || crop_rect[i].crop_h + crop_rect[i].start_y > input.height){
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "mosaic_rect out of range, i=%d, stx=%d, sty=%d, crop_w=%d, crop_h=%d, image_w=%d, image_h=%d, %s: %s: %d\n",
             i, crop_rect[i].start_x, crop_rect[i].start_y, crop_rect[i].crop_w, crop_rect[i].crop_h, input.width, input.height, filename(__FILE__), __func__, __LINE__);
-      return BM_ERR_FAILURE;
+      return BM_ERR_PARAM;
     }
   }
   return BM_SUCCESS;
@@ -262,6 +264,7 @@ bm_status_t bmcv_image_mosaic(bm_handle_t               handle,
                                   int                   is_expand){
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
+  bm_handle_check_1(handle, input);
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
@@ -277,7 +280,7 @@ bm_status_t bmcv_image_mosaic(bm_handle_t               handle,
       break;
 
     default:
-      ret = BM_NOT_SUPPORTED;
+      ret = BM_ERR_NOFEATURE;
       break;
   }
 fail:
@@ -296,6 +299,7 @@ bm_status_t bmcv_image_watermark_superpose(bm_handle_t          handle,
 {
     unsigned int chipid = BM1684X;
     bm_status_t ret = BM_SUCCESS;
+    bm_handle_check_1(handle, *image);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -314,7 +318,7 @@ bm_status_t bmcv_image_watermark_superpose(bm_handle_t          handle,
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
     return ret;
@@ -331,6 +335,7 @@ bm_status_t bmcv_image_watermark_repeat_superpose(bm_handle_t         handle,
     bm_status_t ret = BM_SUCCESS;
     bm_image *image_inner = new bm_image [bitmap_num];
     bm_device_mem_t *mem_inner = new bm_device_mem_t [bitmap_num];
+    bm_handle_check_1(handle, image);
     for(int i=0; i<bitmap_num; i++){
       image_inner[i] = image;
       mem_inner[i] = bitmap_mem;
@@ -357,25 +362,26 @@ bm_status_t bmcv_image_draw_point(bm_handle_t handle,
     }
     if(!image.image_private) {
         BMCV_ERR_LOG("invalidate image, not created\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(image.data_type != DATA_TYPE_EXT_1N_BYTE) {
         BMCV_ERR_LOG("invalidate image, data type should be DATA_TYPE_EXT_1N_BYTE\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(!bm_image_is_attached(image)) {
         BMCV_ERR_LOG("invalidate image, please attach device memory\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DATA;
     }
     if(image.height >= (1 << 16) || image.width >= (1 << 16)) {
         BMCV_ERR_LOG("Not support such big size image\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     if(length > 510){
         BMCV_ERR_LOG("Not support such big length(%d) point\n", length);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_PARAM;
     }
+    bm_handle_check_1(handle, image);
 
     bm_status_t ret = BM_SUCCESS;
     unsigned int chipid = BM1684X;
@@ -393,13 +399,13 @@ bm_status_t bmcv_image_draw_point(bm_handle_t handle,
             calculate_yuv(r, g, b, fill_val, fill_val + 1, fill_val + 2);
         ret = bm1684x_vpp_point(handle, image, point_num, coord, length, fill_val[0], fill_val[1], fill_val[2]);
         if(ret!=BM_SUCCESS){
-            BMCV_ERR_LOG("error 1684x draw point\n");
+            BMCV_ERR_LOG("error draw point\n");
         }
         break;
       }
       default:
       {
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_NOFEATURE;
       }
     }
     return ret;

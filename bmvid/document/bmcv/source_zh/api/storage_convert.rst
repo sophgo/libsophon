@@ -4,6 +4,11 @@ bmcv_image_storage_convert
 该接口将源图像格式的对应的数据转换为目的图像的格式数据，并填充在目的图像关联的 device memory 中。
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式:**
 
     .. code-block:: c
@@ -244,9 +249,9 @@ bm1684x时，该API，
             int image_h = 1080;
             int image_w = 1920;
             bm_image src, dst;
-            bm_image_create(handle, image_h, image_w, FORMAT_NV12, 
+            bm_image_create(handle, image_h, image_w, FORMAT_NV12,
                     DATA_TYPE_EXT_1N_BYTE, &src);
-            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, 
+            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
                     DATA_TYPE_EXT_1N_BYTE, &dst);
             std::shared_ptr<u8*> y_ptr = std::make_shared<u8*>(
                     new u8[image_h * image_w]);

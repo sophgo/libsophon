@@ -11,79 +11,80 @@
 #endif
 
 #define GRAY_SERIES 256
-#define TIME_COST_US(start, end) ((end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec))
-#define HIST_BALANCE_LEN_MAX 32640
 
-static bm_status_t bmcv_param_check(int len)
+static float get_cdf_min(int32_t* cdf, int len)
 {
-    if(len < 0 || len > HIST_BALANCE_LEN_MAX) {
-        printf("the bmcv_param_check failed, the len sholud larger than 0 & smaller than 32640\n");
-        return BM_ERR_PARAM;
+    int i;
+
+    for(i = 0; i < len; ++i) {
+        if (cdf[i] != 0) {
+            return (float)cdf[i];
+        }
     }
-    return BM_SUCCESS;
+    return 0.f;
 }
 
 bm_status_t bmcv_hist_balance(bm_handle_t handle, bm_device_mem_t input, bm_device_mem_t output,
-                            int H, int W, int batch)
+                            int H, int W)
 {
     bm_status_t ret = BM_SUCCESS;
-    bm_api_cv_hist_balance_t api;
+    bm_api_cv_hist_balance_t1 api1;
+    bm_api_cv_hist_balance_t2 api2;
     int imageSize = H * W;
-    bm_device_mem_t cdf, cdf_index;
-    uint8_t* cdf_sys = NULL;
+    bm_device_mem_t cdf;
+    int32_t* cdf_sys = NULL;
+    float cdf_min = 0.f;
     int i;
 
-    ret = bmcv_param_check(imageSize);
-    if (ret != BM_SUCCESS) {
-        printf("the param check failed!\n");
-        return ret;
-    }
-
-    cdf_sys = (uint8_t*)malloc(GRAY_SERIES * sizeof(uint8_t));
-    memset(cdf_sys, 0, GRAY_SERIES * sizeof(uint8_t));
+    cdf_sys = (int32_t*)malloc(GRAY_SERIES * sizeof(int32_t));
+    memset(cdf_sys, 0, GRAY_SERIES * sizeof(int32_t));
 
     for (i = 0; i < GRAY_SERIES; ++i) {
         cdf_sys[i] = i;
     }
 
-    ret = bm_malloc_device_byte(handle, &cdf, GRAY_SERIES * sizeof(uint8_t));
+    ret = bm_malloc_device_byte(handle, &cdf, GRAY_SERIES * sizeof(int32_t));
     if (ret != BM_SUCCESS) {
         printf("the bm_malloc_device_byte failed!\n");
         free(cdf_sys);
-        return ret;
-    }
-
-    ret = bm_malloc_device_byte(handle, &cdf_index, GRAY_SERIES * sizeof(uint32_t));
-    if (ret != BM_SUCCESS) {
-        printf("the bm_malloc_device_byte failed!\n");
-        free(cdf_sys);
-        bm_free_device(handle, cdf);
         return ret;
     }
 
     ret = bm_memcpy_s2d(handle, cdf, cdf_sys);
-    if (ret) {
+    if (ret != BM_SUCCESS) {
         printf("bm_memcpy_s2d failed!\n");
         goto exit;
     }
 
-    for (i = 0; i < batch ; ++i) {
-        api.Xaddr = bm_mem_get_device_addr(input) + i * imageSize * sizeof(uint8_t);
-        api.len = imageSize;
-        api.cdf_addr = bm_mem_get_device_addr(cdf);
-        api.cdf_index_addr = bm_mem_get_device_addr(cdf_index);
-        api.Yaddr = bm_mem_get_device_addr(output) + i * imageSize * sizeof(uint8_t);
-        ret = bm_tpu_kernel_launch(handle, "cv_hist_balance", (u8*)(&api), sizeof(api));
-        if (ret != BM_SUCCESS) {
-            bmlib_log("HIST_BALANCE", BMLIB_LOG_ERROR, "hist_balance sync api error\n");
-            goto exit;
-        }
+    api1.Xaddr = bm_mem_get_device_addr(input);
+    api1.len = imageSize;
+    api1.cdf_addr = bm_mem_get_device_addr(cdf);
+    ret = bm_tpu_kernel_launch(handle, "cv_hist_balance1", (u8*)(&api1), sizeof(api1));
+    if (ret != BM_SUCCESS) {
+        printf("bm_tpu_kernel_launch cv_hist_balance1 failed!\n");
+        goto exit;
+    }
+
+    ret = bm_memcpy_d2s(handle, cdf_sys, cdf);
+    if (ret != BM_SUCCESS) {
+        printf("bm_memcpy_s2d failed!\n");
+        goto exit;
+    }
+    cdf_min = get_cdf_min(cdf_sys, GRAY_SERIES);
+
+    api2.Xaddr = bm_mem_get_device_addr(input);
+    api2.len = imageSize;
+    api2.cdf_min = cdf_min;
+    api2.cdf_addr = bm_mem_get_device_addr(cdf);
+    api2.Yaddr = bm_mem_get_device_addr(output);
+    ret = bm_tpu_kernel_launch(handle, "cv_hist_balance2", (u8*)(&api2), sizeof(api2));
+    if (ret != BM_SUCCESS) {
+        printf("bm_tpu_kernel_launch cv_hist_balance2 failed!\n");
+        goto exit;
     }
 
 exit:
     free(cdf_sys);
     bm_free_device(handle, cdf);
-    bm_free_device(handle, cdf_index);
-
     return ret;
 }

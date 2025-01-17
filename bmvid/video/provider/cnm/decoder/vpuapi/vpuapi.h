@@ -26,10 +26,8 @@
 #if defined(_WIN32) || defined(WIN32) || defined(__WIN32__)
 #include<stdbool.h>
 #endif
-#include "bmlib_interface.h"
 #define MAX_GDI_IDX                             31
 #define MAX_REG_FRAME                           MAX_GDI_IDX*2 // 2 for WTL
-#define HEAP_MASK 0x06                          //for alloc memory in  2 heap firstly
 #define WAVE5_ENC_FBC50_LUMA_TABLE_SIZE(_w, _h)     (VPU_ALIGN2048(VPU_ALIGN32(_w))*VPU_ALIGN4(_h)/64)
 #define WAVE5_ENC_FBC50_CHROMA_TABLE_SIZE(_w, _h)   (VPU_ALIGN2048(VPU_ALIGN32(_w)/2)*VPU_ALIGN4(_h)/128)
 
@@ -1474,13 +1472,6 @@ It enables source frame data with long burst length to be loaded for reducing DM
 @* 1 : enable the long-burst mode.
 @endverbatim
 */
-    Uint64 bufYVaddr;       /**< It indicates the base address for Y component in the physical address space when linear map is used. It is the RAS base address for Y component when tiled map is used (CODA9). It is also compressed Y buffer or ARM compressed framebuffer (WAVE). */
-    Uint64 bufCbVaddr;      /**< It indicates the base address for Cb component in the physical address space when linear map is used. It is the RAS base address for Cb component when tiled map is used (CODA9). It is also compressed CbCr buffer (WAVE) */
-    Uint64 bufCrVaddr;      /**< It indicates the base address for Cr component in the physical address space when linear map is used. It is the RAS base address for Cr component when tiled map is used (CODA9). */
-    Uint64 bufYBotVaddr;    /**< It indicates the base address for Y bottom field component in the physical address space when linear map is used. It is the RAS base address for Y bottom field component when tiled map is used (CODA980 only). */ // coda980 only
-    Uint64 bufCbBotVaddr;   /**< It indicates the base address for Cb bottom field component in the physical address space when linear map is used. It is the RAS base address for Cb bottom field component when tiled map is used (CODA980 only). */ // coda980 only
-    Uint64 bufCrBotVaddr;
-
 
     int sourceLBurstEn;
     int sequenceNo;     /**< A sequence number that the frame belongs to. It increases by 1 every time a sequence changes in decoder.  */
@@ -2067,7 +2058,6 @@ when VPU_DecOpen() is executed.
 */
     vpu_buffer_t    vbWork;
 
-    bm_device_mem_t devMemInfoVbWork;
 /**
 @verbatim
 It determines prediction mode of frame buffer compression.
@@ -2081,13 +2071,14 @@ It determines prediction mode of frame buffer compression.
     Uint32          virtAxiID; /**< AXI_ID to distinguish guest OS. For virtualization only. Set this value in highest bit order.*/
     BOOL            bwOptimization; /**< Bandwidth optimization feature which allows WTL(Write to Linear)-enabled VPU to skip writing compressed format of non-reference pictures or linear format of non-display pictures to the frame buffer for BW saving reason. */
 
-
 /**
 @verbatim
 It record the sophon chip index setted by user.
 @endverbatim
 */
       Uint32          sophon_idx;
+
+    Uint32           decodeOrder; /**< get yuv frame by decode order */
 } DecOpenParam;
 
 /**
@@ -2906,24 +2897,6 @@ A CTU size (only for WAVE series)
     vpu_buffer_t  vbFbcCTbl[MAX_REG_FRAME];        /**< The information of frame buffer to save chroma offset table of compressed frame */
     vpu_buffer_t  vbMvCol[MAX_REG_FRAME];          /**< The information of frame buffer to save co-located motion vector buffer */
     FrameBuffer   framebufPool[64]; /**< This is an array of <<vpuapi_h_FrameBuffer>> which contains the information of each frame buffer. When WTL is enabled, the number of framebufPool would be [number of compressed frame buffer] x 2, and the starting index of frame buffer for WTL is framebufPool[number of compressed frame buffer].  */
-
-
-    Uint64                sysMemCol[MAX_REG_FRAME];
-    bm_system_mem_t       devMvCol[MAX_REG_FRAME];
-
-
-    Uint64                sysMemWtl;
-    bm_system_mem_t       devMemWTL;
-
-
-    Uint64                sysMemFrame;
-    bm_device_mem_t       devMemFrame;
-
-    bm_device_mem_t       devMemInfoVbMv[MAX_REG_FRAME];
-    bm_device_mem_t        devMemInfoVbFbcYTbl[MAX_REG_FRAME];
-    bm_device_mem_t        devMemInfoVbFbcCTbl[MAX_REG_FRAME];
-
-
 
 } DecGetFramebufInfo;
 
@@ -6198,10 +6171,6 @@ int VPU_GetInNum(Uint32 coreIdx, Uint32 instIdx);
 int VPU_GetOutNum(Uint32 coreIdx, Uint32 instIdx);
 DecHandle VPU_GetDecHanle(Uint32 coreIdx, Uint32 instIdx);
 RetCode VPU_DecDestroy(DecHandle handle);
-void bmvpu_dec_load_bmlib_handle(int coreIdx);
-void bmvpu_dec_unload_bmlib_handle(int coreIdx);
-int bmvpu_malloc_device_byte_heap(bm_handle_t bm_handle, bm_device_mem_t *pmem, unsigned int size, int heap_id_mask, int high_bit_first);
-bm_handle_t bmvpu_dec_get_bmlib_handle(int coreIdx);
 #ifdef __cplusplus
 }
 #endif

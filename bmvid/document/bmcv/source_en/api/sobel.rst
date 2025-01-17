@@ -4,6 +4,11 @@ bmcv_image_sobel
 Sobel operator for edge detection.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c
@@ -43,7 +48,7 @@ Sobel operator for edge detection.
 
 * int ksize = 3
 
-  The size of Sobel core, which must be - 1,1,3,5 or 7. In particular, if it is - 1, use 3 × 3 Scharr filter; if it is 1, use 3 × 1 or 1 × 3 core. The default value is 3.
+  The size of the Sobel kernel must be 1, 3, 5, or 7. When the values ​​are 3, 5, or 7, the kernel size is 3*3, 5*5, or 7*7. If it is 1, the size of the Sobel kernel is determined by the values ​​of dx and dy. If dx=1, dy=0, the kernel size is 3×1, if dx=0, dy=1, the kernel size is 1×3, and if dx=1, dy=1, the kernel size becomes 3*3. The default value of ksize is 3.
 
 * float scale = 1
 
@@ -68,35 +73,31 @@ The interface currently supports the following image_format:
 +-----+------------------------+------------------------+
 | num | input image_format     | output image_format    |
 +=====+========================+========================+
-| 1   | FORMAT_BGR_PACKED      | FORMAT_BGR_PACKED      |
+| 1   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
 +-----+------------------------+------------------------+
-| 2   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
+| 2   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
 +-----+------------------------+------------------------+
-| 3   | FORMAT_RGB_PACKED      | FORMAT_RGB_PACKED      |
+| 3   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 4   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
+| 4   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 5   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
+| 5   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 6   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
+| 6   | FORMAT_YUV420P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 7   | FORMAT_GRAY            | FORMAT_GRAY            |
+| 7   | FORMAT_YUV422P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 8   | FORMAT_YUV420P         | FORMAT_GRAY            |
+| 8   | FORMAT_YUV444P         | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 9   | FORMAT_YUV422P         | FORMAT_GRAY            |
+| 9   | FORMAT_NV12            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 10  | FORMAT_YUV444P         | FORMAT_GRAY            |
+| 10  | FORMAT_NV21            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 11  | FORMAT_NV12            | FORMAT_GRAY            |
+| 11  | FORMAT_NV16            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 12  | FORMAT_NV21            | FORMAT_GRAY            |
+| 12  | FORMAT_NV61            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 13  | FORMAT_NV16            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 14  | FORMAT_NV61            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 15  | FORMAT_NV24            | FORMAT_GRAY            |
+| 13  | FORMAT_NV24            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
 
 
@@ -115,8 +116,7 @@ The interface currently supports the following data_type:
 
 2. The data_type of input and output must be the same.
 
-3. The currently supported maximum image width is (2048 - ksize).
-
+3. In the BM1684, the maximum width of the image supported by this operator chip is (2048 - ksize). In the BM1684X chip, when the Sobel kernel size is 1 and 3, the supported width and height range is 8*8 to 8192*8192, when the kernel size is 5, the supported width and height range is 8*8 to 4096*8192, and when the kernel size is 7, the supported width and height range is 8*8 to 2048*8192.
 
 **Code example:**
 

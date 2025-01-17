@@ -19,6 +19,11 @@ _____
                 bool forward,
                 void *&plan);
 
+**处理器型号支持：**
+
+该接口仅支持BM1684。
+
+
 **输入参数说明：**
 
 * bm_handle_t handle

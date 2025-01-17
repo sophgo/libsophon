@@ -3,6 +3,11 @@ bmcv_image_jpeg_dec
 
 该接口可以实现对多张图片的 JPEG 解码过程。
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c
@@ -39,7 +44,7 @@ bmcv_image_jpeg_dec
   输出参数。输出 bm_image的指针。每个 dst bm_image 用户可以选择自行调用 bm_image_create 创建，也可以选择不创建。如果用户只声明而不创建则由接口内部根据待解码图片信息自动创建，默认的 format 如下表所示, 当不再需要时仍然需要用户调用 bm_image_destory 来销毁。
 
 +------------+------------------+
-|  码 流     | 默认输出 format  | 
+|  码 流     | 默认输出 format  |
 +============+==================+
 |  YUV420    |  FORMAT_YUV420P  |
 +------------+------------------+
@@ -67,7 +72,7 @@ bmcv_image_jpeg_dec
 2. 目前解码支持的图片格式及其输出格式对应如下，如果用户需要指定以下某一种输出格式，可通过使用 bmcv_image_create 自行创建 dst bm_image，从而实现将图片解码到以下对应的某一格式。
 
 +------------------+------------------+
-|     码 流        |   输 出 format   | 
+|     码 流        |   输 出 format   |
 +==================+==================+
 |                  |  FORMAT_YUV420P  |
 +  YUV420          +------------------+
@@ -109,13 +114,13 @@ bmcv_image_jpeg_dec
         fseek(fp, 0, SEEK_SET);
         fread(jpeg_data, *size, 1, fp);
         fclose(fp);
-    
+
         // create bm_image used to save output
         bm_image dst;
         memset((char*)&dst, 0, sizeof(bm_image));
         // if you not create dst bm_image it will create automatically inside.
         // you can also create dst bm_image here, like this:
-        // bm_image_create(handle, IMAGE_H, IMAGE_W, FORMAT_YUV420P, 
+        // bm_image_create(handle, IMAGE_H, IMAGE_W, FORMAT_YUV420P,
         //         DATA_TYPE_EXT_1N_BYTE, &dst);
 
         // decode input

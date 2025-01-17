@@ -3,6 +3,11 @@ bmcv_feature_match
 
 该接口用于将网络得到特征点（int8格式）与数据库中特征点（int8格式）进行比对，输出最佳匹配的top-k。
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c
@@ -54,11 +59,11 @@ bmcv_feature_match
 
   输入参数。数据库中数据特征点的组数。db_size最大值不应该超过500000。
 
-* int  sort_cnt 
+* int  sort_cnt
 
   输入参数。每个 batch 对比结果中所要排序个数，也就是输出结果个数，如需要最大的3个比对结果，则sort_cnt设置为3。该值默认为1。sort_cnt最大值不应该超过30。
 
-* int  rshiftbits 
+* int  rshiftbits
 
   输入参数。对结果进行右移处理的位数，右移采用round对小数进行取整处理。该参数默认为0。
 
@@ -83,7 +88,7 @@ bmcv_feature_match
 
 **示例代码**
 
-    
+
     .. code-block:: c
 
          int batch_size = 4;

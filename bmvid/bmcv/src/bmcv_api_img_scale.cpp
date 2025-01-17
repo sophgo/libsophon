@@ -19,41 +19,41 @@ bmcv_img_scale_check(bm_handle_t handle, bmcv_image input, bmcv_image output) {
     if ((if_4n == 1) && (if_fp32 == 1)) {
         BMCV_ERR_LOG("Not support 4n and fp32\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (!handle) {
         BMCV_ERR_LOG("Can not get handle!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DEVNOTREADY;
     }
     if ((input.color_space != COLOR_RGB) || (output.color_space != COLOR_RGB)) {
         BMCV_ERR_LOG("color_space not support\r\n");
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((input.image_format != BGR) && (input.image_format != RGB) &&
         (input.image_format != BGR4N) && (input.image_format != RGB4N)) {
         BMCV_ERR_LOG("input image_format not support:%d\n", input.image_format);
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((output.image_format != BGR) && (output.image_format != RGB) &&
         (output.image_format != BGR4N) && (output.image_format != RGB4N)) {
         BMCV_ERR_LOG("output image_format not support:%d\n",
                      output.image_format);
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((input.data_format != DATA_TYPE_FLOAT) &&
         (input.data_format != DATA_TYPE_BYTE)) {
         BMCV_ERR_LOG("input data format not support:%d\n", input.data_format);
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((output.data_format != DATA_TYPE_FLOAT) &&
         (output.data_format != DATA_TYPE_BYTE)) {
         BMCV_ERR_LOG("output data format not support:%d\n", output.data_format);
 
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -79,10 +79,11 @@ bm_status_t bmcv_img_scale(bm_handle_t   handle,
                            float         weight_r,
                            float         bias_r,
                            bmcv_image    output) {
-    if (BM_SUCCESS != bmcv_img_scale_check(handle, input, output)) {
+    bm_status_t ret = bmcv_img_scale_check(handle, input, output);
+    if (BM_SUCCESS != ret) {
         BMCV_ERR_LOG("bmcv_img_scale_check error\r\n");
 
-        return BM_ERR_FAILURE;
+        return ret;
     }
     bmcv_resize_image resize_attr[4];
     bmcv_resize_t     resize_img_attr[4];
@@ -158,7 +159,7 @@ bm_status_t bmcv_img_scale(bm_handle_t   handle,
                 bm_image_destroy(output_image[i]);
             }
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         char *input_addr = (char *)bm_mem_get_system_addr(input.data[0]);
         int   img_offset = input_image[0].width * input_image[0].height * c *
@@ -183,7 +184,7 @@ bm_status_t bmcv_img_scale(bm_handle_t   handle,
                 bm_image_destroy(output_image[i]);
             }
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
     } else {
         bm_image_attach_contiguous_mem(n, output_image, output.data[0]);
@@ -229,7 +230,7 @@ bm_status_t bmcv_img_scale(bm_handle_t   handle,
                 bm_image_destroy(temp_input_image[i]);
             }
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_NOMEM;
         }
         bmcv_image_convert_to(
             handle, n, convert_to_attr, input_image, temp_input_image);

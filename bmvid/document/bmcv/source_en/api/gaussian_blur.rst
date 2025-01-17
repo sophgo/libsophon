@@ -3,6 +3,10 @@ bmcv_image_gaussian_blur
 
 Gaussian blur of the image.
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form:**
 
@@ -63,27 +67,16 @@ The interface currently supports the following image_format:
 +-----+------------------------+------------------------+
 | num | input image_format     | output image_format    |
 +=====+========================+========================+
-| 1   | FORMAT_BGR_PACKED      | FORMAT_BGR_PACKED      |
+| 1   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
 +-----+------------------------+------------------------+
-| 2   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
+| 2   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
 +-----+------------------------+------------------------+
-| 3   | FORMAT_RGB_PACKED      | FORMAT_RGB_PACKED      |
+| 3   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 4   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
+| 4   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
 +-----+------------------------+------------------------+
-| 5   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
+| 5   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
-| 6   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
-+-----+------------------------+------------------------+
-| 7   | FORMAT_GRAY            | FORMAT_GRAY            |
-+-----+------------------------+------------------------+
-| 8   | FORMAT_YUV420P         | FORMAT_YUV420P         |
-+-----+------------------------+------------------------+
-| 9   | FORMAT_YUV422P         | FORMAT_YUV422P         |
-+-----+------------------------+------------------------+
-| 10  | FORMAT_YUV444P         | FORMAT_YUV444P         |
-+-----+------------------------+------------------------+
-
 
 The interface currently supports the following data_type:
 
@@ -100,7 +93,9 @@ The interface currently supports the following data_type:
 
 2. The data_type and image_format of input and must be the same.
 
-3. The currently supported maximum image width is (2048 - kw).
+3. The maximum width of the image supported by BM1684 is (2048 - kw), In the BM1684X chip, when the kernel size is 1 and 3, the supported width and height range is 8*8 to 8192*8192, when the kernel size is 5, the supported width and height range is 8*8 to 4096*8192, and when the kernel size is 7, the supported width and height range is 8*8 to 2048*8192.
+
+4. The maximum convolution kernel width and height supported by BM1684 is 31, and the maximum convolution kernel width and height supported by BM1684X is 7.
 
 
 **Code example:**

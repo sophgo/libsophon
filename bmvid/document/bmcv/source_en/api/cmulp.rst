@@ -12,6 +12,10 @@ This interface is used to implement the complex number multiplication, as shown 
 
   Among that, :math:`i` is the imaginary unit and satisfying the equation :math:`i^2 = -1`.
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
 
 **Interface form:**
 

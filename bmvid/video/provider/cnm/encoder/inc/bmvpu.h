@@ -124,6 +124,16 @@ enum {
     VPU_GOP_PRESET_IDX_RA_IB      = 8,    /* Random Access, cyclic gopsize = 8 */
 };
 
+/* VpuMappingFlags: flags for the vpu_EncMmap() function
+ * These flags can be bitwise-OR combined */
+typedef enum
+{
+    /* Map memory for CPU write access */
+    BM_VPU_MAPPING_FLAG_WRITE   = (1UL << 0),
+    /* Map memory for CPU read access */
+    BM_VPU_MAPPING_FLAG_READ    = (1UL << 1)
+} BmVpuMappingFlags;
+
 /**
  * Adding a header syntax layer into the encoded bitstream.
  * The headerType, buf are input parameters to VPU.
@@ -980,6 +990,7 @@ typedef struct {
     uint32_t  picDistortionHigh;
 
     int       result; /* VPU_RET_xxx */
+    bm_pa_t  addrCustomMap;
 } VpuEncOutputInfo;
 
 typedef struct {
@@ -1020,6 +1031,7 @@ typedef struct {
         uint64_t        pts;
         uint64_t        dts;
         int             idx;
+        bm_pa_t         addrCustomMap;
     } inputMap[32];
 
     void*               priv;
@@ -1028,6 +1040,12 @@ typedef struct {
     int                 bframe_delay;
 } VpuEncoder;
 
+typedef struct {
+    unsigned int  size;
+    uint64_t      phys_addr;
+    uint64_t      virt_addr;
+    BOOL           enable_cache;
+} BmVpuDMABuffer;
 
 DECL_EXPORT int  vpu_EncGetUniCoreIdx(int soc_idx);
 
@@ -1065,6 +1083,17 @@ DECL_EXPORT int vpu_CalcChromaSize(int mapType, uint32_t stride, uint32_t height
 DECL_EXPORT int vpu_GetFrameBufSize(int mapType, int stride, int height,
                         int yuv_format, int interleave);
 
+DECL_EXPORT int vpu_write_memory(const uint8_t *host_va, int size, int vpu_core_idx, uint64_t vpu_pa);
+DECL_EXPORT int vpu_read_memory(uint8_t *host_va, int size, int vpu_core_idx, uint64_t vpu_pa);
+
+DECL_EXPORT int vpu_EncAllocateDMABuffer(int coreIdx, BmVpuDMABuffer *buf, unsigned int size);
+DECL_EXPORT int vpu_EncDeAllocateDMABuffer(int coreIdx, BmVpuDMABuffer *buf);
+DECL_EXPORT int vpu_EncAttachDMABuffer(int coreIdx, BmVpuDMABuffer *buf);
+DECL_EXPORT int vpu_EncDeattachDMABuffer(int coreIdx, BmVpuDMABuffer *buf);
+DECL_EXPORT int vpu_EncMmap(int coreIdx, BmVpuDMABuffer* buf, int port_flag);
+DECL_EXPORT int vpu_EncMunmap(int coreIdx, BmVpuDMABuffer* buf);
+DECL_EXPORT int vpu_EncFlushDecache(int coreIdx, BmVpuDMABuffer* buf);
+DECL_EXPORT int vpu_EncInvalidateDecache(int coreIdx, BmVpuDMABuffer* buf);
 
 #endif /* __BM_VPU_LIB_H__ */
 

@@ -8,6 +8,11 @@ The interface is used to do the linear change of image pixels. The specific data
     y=kx+b
     \end{array}
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c
@@ -192,4 +197,4 @@ bm1684x supports the fllowing data_type:
 
 8. bm1684 supports the maximum size is 2048*2048 and the minimum size is 16*16. When the image format is DATA_TYPE_EXT_4N_BYTE, w*h should not be greater than 1024*1024.
 
-   bm1684x supports the maximum size is 4096*4096 and the minimum size is 16*16.
+   The minimum size supported by bm1684x is 16*16. When the input data_type is DATA_TYPE_EXT_1N_BYTE_SIGNED or DATA_TYPE_EXT_FLOAT32, the maximum size supported is 4096*4096. When the input data_type is DATA_TYPE_EXT_1N_BYTE, the maximum size supported is 8192*8192.

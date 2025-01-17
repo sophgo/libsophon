@@ -139,11 +139,11 @@ ________________________________
 
 * FORMAT_ARGB_PACKED
 
-  表示预创建一个ARGB 格式的图片，ARGB 交错排列，有一个 plane
+  表示预创建一个ARGB 格式的图片，该图片仅有一个 plane，并且像素值以 RGBA 顺序交错连续排列，即 RGBARGBA
 
 * FORMAT_ABGR_PACKED
 
-  表示预创建一个ABGR 格式的图片，BGRA 交错排列，有一个 plane
+  表示预创建一个ABGR 格式的图片，该图片仅有一个 plane，并且像素值以 BGRA 顺序交错连续排列，即 BGRABGRA
 
 * FORMAT_YUV444_PACKED
 

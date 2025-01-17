@@ -4,6 +4,11 @@ bmcv_image_yuv2hsv
 Convert the specified area of YUV image to HSV format.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

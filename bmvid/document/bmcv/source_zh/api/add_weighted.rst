@@ -9,6 +9,11 @@ bmcv_image_add_weighted
     \end{array}
 
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c

@@ -45,9 +45,10 @@ ifneq ($(DEBUG), 0)
 CFLAGS += -O0 -g
 endif
 
+LDLIBS += -lpthread
 ifeq ($(PRODUCTFORM), pcie_loongarch64)
 LDFLAGS += -Wl,-melf64loongarch
-LDLIBS += -lm -lstdc++ -lpthread
+LDLIBS += -lm -lstdc++
 endif
 
 ifeq ($(PRODUCTFORM), pcie_sw64)

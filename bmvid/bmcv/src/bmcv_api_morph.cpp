@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 #include <cmath>
+#include <stdio.h>
 #include <thread>
 
 using namespace std;
@@ -17,12 +18,12 @@ static bm_status_t bmcv_morph_check(
         bm_image output) {
     if (handle == NULL) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (input.height != output.height ||
         input.width != output.width) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "input and output image size should be same\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.image_format != FORMAT_BGR_PACKED &&
         input.image_format != FORMAT_RGB_PACKED &&
@@ -30,16 +31,16 @@ static bm_status_t bmcv_morph_check(
         input.image_format != FORMAT_RGB_PLANAR &&
         input.image_format != FORMAT_GRAY) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "Not supported input image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.image_format != output.image_format) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "input and output image format should be same\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (input.data_type != DATA_TYPE_EXT_1N_BYTE ||
         output.data_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "Not supported image data type\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -308,7 +309,7 @@ bm_status_t bmcv_image_morph_bm1684(
     if (BM_SUCCESS != ret) {
         bmlib_log("MORPH", BMLIB_LOG_ERROR, "kernel d2s failed!\r\n");
         delete [] kernel;
-        return BM_ERR_FAILURE;
+        return BM_ERR_NOMEM;
     }
     int not_zero_cnt = 0;
     for (int i = 0; i < kw * kh; i++) {
@@ -456,12 +457,12 @@ bm_status_t bmcv_image_morph(
         break;
 
       case BM1684X:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 
@@ -476,6 +477,7 @@ bm_status_t bmcv_image_erode(
         int kh,
         bm_device_mem_t kmem
         ) {
+    bm_handle_check_2(handle, src, dst);
     return bmcv_image_morph(handle, src, dst, kw, kh, kmem, 0);
 }
 
@@ -487,5 +489,6 @@ bm_status_t bmcv_image_dilate(
         int kh,
         bm_device_mem_t kmem
         ) {
+    bm_handle_check_2(handle, src, dst);
     return bmcv_image_morph(handle, src, dst, kw, kh, kmem, 1);
 }

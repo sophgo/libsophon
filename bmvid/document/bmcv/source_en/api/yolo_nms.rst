@@ -4,6 +4,11 @@ bmcv_nms_yolo
 This interface supports yolov3/yolov7, which is used to eliminate too many object boxes obtained by network calculation and find the best object box.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c

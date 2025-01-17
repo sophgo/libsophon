@@ -19,6 +19,10 @@ bmcv_image_csc_convert_to
             csc_matrix_t*         matrix = NULL,
             bmcv_convert_to_attr* convert_to_attr);
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
+
 
 **传入参数说明:**
 
@@ -59,7 +63,7 @@ bmcv_image_csc_convert_to
 
 * bmcv_padding_atrr_t*  padding_attr = NULL
 
-  输入参数。所有 crop 的目标小图在 dst image 中的位置信息以及要 padding 的各通道像素值，若不使用 padding 功能则设置为 NULL。 
+  输入参数。所有 crop 的目标小图在 dst image 中的位置信息以及要 padding 的各通道像素值，若不使用 padding 功能则设置为 NULL。
 
     .. code-block:: c
 

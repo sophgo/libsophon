@@ -1,8 +1,10 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_common_bm1684.h"
+#include "bmcv_internal.h"
 #include <cstring>
 #include <memory>
 #include <vector>
+#include <stdio.h>
 
 
 #define IS_YUV(a) (a == FORMAT_NV12 || a == FORMAT_NV21 || a == FORMAT_NV16 ||     \
@@ -88,7 +90,7 @@ static bm_status_t bmcv_canny_check(
         int aperture_size) {
     if (handle == NULL) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_PARAM;
+        return BM_ERR_DEVNOTREADY;
     }
     if (aperture_size != 3) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "Only support the aperture size is 3!\n" );
@@ -106,29 +108,29 @@ static bm_status_t bmcv_canny_check(
     bm_image_get_stride(output, stride_o);
     if (image_sw + aperture_size - 1 >= 2048) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "image width is too large!\r\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (!IS_YUV(src_format) &&
         src_format != FORMAT_GRAY) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "Not supported input image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (dst_format != FORMAT_GRAY) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "Not supported output image format\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (src_type != DATA_TYPE_EXT_1N_BYTE ||
         dst_type != DATA_TYPE_EXT_1N_BYTE) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "Not supported image data type\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (image_sh != image_dh || image_sw != image_dw) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "input and output image size should be same\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if (output.width != stride_o[0]) {
         bmlib_log("CANNY", BMLIB_LOG_ERROR, "output image stride should be equal to width\n");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -310,7 +312,7 @@ bm_status_t bmcv_image_canny(
 
     unsigned int chipid = 0x1686;
     bm_status_t ret = BM_SUCCESS;
-
+    bm_handle_check_2(handle, input, output);
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret)
       return ret;
@@ -323,12 +325,12 @@ bm_status_t bmcv_image_canny(
         break;
 
       case 0x1686:
-        printf("bm1684x not support\n");
-        ret = BM_NOT_SUPPORTED;
+        printf("current card not support\n");
+        ret = BM_ERR_NOFEATURE;
         break;
 
       default:
-        ret = BM_NOT_SUPPORTED;
+        ret = BM_ERR_NOFEATURE;
         break;
     }
 

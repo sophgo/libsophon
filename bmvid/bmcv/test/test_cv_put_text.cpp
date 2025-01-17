@@ -207,13 +207,13 @@ static int put_text_bmcv(
         gettimeofday(&t1, NULL);
         bmcv_image_put_text(handle, input_img, text, org, rgb, fontScale, thickness);
         gettimeofday(&t2, NULL);
-        cout << "Draw-Line bmcv using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "um" << endl;
+        cout << "Put-Text bmcv using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "um" << endl;
     #else
         struct timespec tp1, tp2;
         clock_gettime(0, &tp1);
         bmcv_image_put_text(handle, input_img, text, org, rgb, fontScale, thickness);
         clock_gettime(0, &tp2);
-        cout << "Draw-Line bmcv using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "um" << endl;
+        cout << "Put-Text bmcv using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "um" << endl;
     #endif
     bm_image_copy_device_to_host(input_img, (void **)in_ptr);
     bm_image_destroy(input_img);

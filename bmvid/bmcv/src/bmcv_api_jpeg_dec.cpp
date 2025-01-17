@@ -19,20 +19,21 @@ typedef struct bmcv_jpeg_decoder_struct {
     BmJpuJPEGDecoder *decoder_;
 } bmcv_jpeg_decoder_t;
 
+#if 0
 static int format_switch(BmJpuJPEGDecInfo info) {
     BmJpuColorFormat jpu_format = info.color_format;
-    int chroma_itlv = info.chroma_interleave;
+    BmJpuChromaFormat chroma_itlv = info.chroma_interleave;
     int bmcv_fmt = -1;
     switch(jpu_format) {
         case BM_JPU_COLOR_FORMAT_YUV420:
-            bmcv_fmt = (chroma_itlv == 0) ? FORMAT_YUV420P :
-                       ((chroma_itlv == 1) ? FORMAT_NV12 :
-                        ((chroma_itlv == 2) ? FORMAT_NV21 : -1));
+            bmcv_fmt = (chroma_itlv == BM_JPU_CHROMA_FORMAT_CBCR_SEPARATED) ? FORMAT_YUV420P :
+                       ((chroma_itlv == BM_JPU_CHROMA_FORMAT_CBCR_INTERLEAVE) ? FORMAT_NV12 :
+                        ((chroma_itlv == BM_JPU_CHROMA_FORMAT_CRCB_INTERLEAVE) ? FORMAT_NV21 : -1));
             break;
         case BM_JPU_COLOR_FORMAT_YUV422_HORIZONTAL:
-            bmcv_fmt = (chroma_itlv == 0) ? FORMAT_YUV422P :
-                       ((chroma_itlv == 1) ? FORMAT_NV16 :
-                        ((chroma_itlv == 2) ? FORMAT_NV61 : -1));
+            bmcv_fmt = (chroma_itlv == BM_JPU_CHROMA_FORMAT_CBCR_SEPARATED) ? FORMAT_YUV422P :
+                       ((chroma_itlv == BM_JPU_CHROMA_FORMAT_CBCR_INTERLEAVE) ? FORMAT_NV16 :
+                        ((chroma_itlv == BM_JPU_CHROMA_FORMAT_CRCB_INTERLEAVE) ? FORMAT_NV61 : -1));
             break;
         case BM_JPU_COLOR_FORMAT_YUV422_VERTICAL:
             bmcv_fmt = -1;
@@ -48,6 +49,42 @@ static int format_switch(BmJpuJPEGDecInfo info) {
     }
     return bmcv_fmt;
 }
+#endif
+
+/* Version 2: change to use image format */
+static int format_switch(BmJpuJPEGDecInfo info) {
+    BmJpuImageFormat jpu_format = info.image_format;
+    int bmcv_fmt = -1;
+    switch (jpu_format) {
+        case BM_JPU_IMAGE_FORMAT_YUV420P:
+            bmcv_fmt = FORMAT_YUV420P;
+            break;
+        case BM_JPU_IMAGE_FORMAT_NV12:
+            bmcv_fmt = FORMAT_NV12;
+            break;
+        case BM_JPU_IMAGE_FORMAT_NV21:
+            bmcv_fmt = FORMAT_NV21;
+            break;
+        case BM_JPU_IMAGE_FORMAT_YUV422P:
+            bmcv_fmt = FORMAT_YUV422P;
+            break;
+        case BM_JPU_IMAGE_FORMAT_NV16:
+            bmcv_fmt = FORMAT_NV16;
+            break;
+        case BM_JPU_IMAGE_FORMAT_NV61:
+            bmcv_fmt = FORMAT_NV61;
+            break;
+        case BM_JPU_IMAGE_FORMAT_YUV444P:
+            bmcv_fmt = FORMAT_YUV444P;
+            break;
+        case BM_JPU_IMAGE_FORMAT_GRAY:
+            bmcv_fmt = FORMAT_GRAY;
+            break;
+        default:
+            break;
+    }
+    return bmcv_fmt;
+}
 
 static bm_status_t bmcv_jpeg_dec_check(bm_image*        src,
                                        BmJpuJPEGDecInfo info) {
@@ -56,14 +93,14 @@ static bm_status_t bmcv_jpeg_dec_check(bm_image*        src,
         bmlib_log("JEPG-DEC", BMLIB_LOG_ERROR,
                   "data type only support 1N_BYTE %s: %s: %d\n",
                    filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     if ((format_switch(info) == -1) ||
         (format_switch(info) != src->image_format)) {
         bmlib_log("JEPG-DEC", BMLIB_LOG_ERROR,
                   "bm_image format should be same with image %s: %s: %d\n",
                    filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     // only support yuv420p, yuv422p, yuv444p, nv12, nv16, gray.
     if (!((src->image_format == FORMAT_YUV420P) ||
@@ -75,7 +112,7 @@ static bm_status_t bmcv_jpeg_dec_check(bm_image*        src,
         bmlib_log("JEPG-DEC", BMLIB_LOG_ERROR,
                   "dst image format only support those format now:\n \
                    FORMAT_YUV420P/FORMAT_YUV444P/FORMAT_YUV422P/FORMAT_NV12/FORMAT_NV16/FORMAT_GRAY");
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
     // width and height should be same
     if (((unsigned int)src->width != info.actual_frame_width) &&
@@ -83,7 +120,7 @@ static bm_status_t bmcv_jpeg_dec_check(bm_image*        src,
         bmlib_log("JEPG-DEC", BMLIB_LOG_ERROR,
                   "bm_image width and height should be same with image %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
-        return BM_NOT_SUPPORTED;
+        return BM_ERR_DATA;
     }
 
     return BM_SUCCESS;
@@ -137,15 +174,21 @@ static int bmcv_jpeg_decoder_create(bmcv_jpeg_decoder_t** p_jpeg_decoder,
     memset(dec, 0, sizeof(*dec));
     /* Open the JPEG decoder */
     memset(&open_params, 0, sizeof(BmJpuDecOpenParams));
-    open_params.frame_width  = 0;
-    open_params.frame_height = 0;
-    open_params.chroma_interleave = 0;
+    open_params.min_frame_width = 0;
+    open_params.min_frame_height = 0;
+    open_params.max_frame_width = 0;
+    open_params.max_frame_height = 0;
+    open_params.chroma_interleave = BM_JPU_CHROMA_FORMAT_CBCR_SEPARATED;
     /* avoid the false alarm that bs buffer is empty */
     open_params.bs_buffer_size = (bs_size + 256);
     open_params.device_index = devid;
     if (dst->image_private != NULL &&
-        ((dst->image_format == FORMAT_NV12) || dst->image_format == FORMAT_NV16)) {
-        open_params.chroma_interleave = 1;
+        ((dst->image_format == FORMAT_NV12) || (dst->image_format == FORMAT_NV16))) {
+        open_params.chroma_interleave = BM_JPU_CHROMA_FORMAT_CBCR_INTERLEAVE;
+    }
+    if (dst->image_private != NULL &&
+        ((dst->image_format == FORMAT_NV21) || (dst->image_format == FORMAT_NV61))) {
+        open_params.chroma_interleave = BM_JPU_CHROMA_FORMAT_CRCB_INTERLEAVE;
     }
 
     ret = bm_jpu_dec_load(devid);
@@ -424,7 +467,6 @@ static int try_soft_decoding(bm_handle_t  handle,
     int soft_decoding = 1;
     volatile int bmimage_created = 0;
     volatile int bmimage_allocated = 0;
-
     cinfo.err = jpeg_std_error(&errorMgr.pub);
     errorMgr.pub.error_exit = error_exit;
 
@@ -441,7 +483,6 @@ static int try_soft_decoding(bm_handle_t  handle,
     jpeg_mem_src(&cinfo, (const unsigned char*)buf, size);
 
     jpeg_read_header(&cinfo, TRUE);
-
     if (!determine_hw_decoding(&cinfo)){
         unsigned char *p_raw_pic;
         int row_stride;
@@ -580,8 +621,9 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
                                     bm_image*            dst) {
     BmJpuDecReturnCodes ret;
     BmJpuJPEGDecInfo info;
+    bm_status_t bmret;
 
-    ret = bm_jpu_jpeg_dec_decode(jpeg_dec->decoder_, (const unsigned char*)buf, in_size);
+    ret = bm_jpu_jpeg_dec_decode(jpeg_dec->decoder_, (const unsigned char*)buf, in_size, 0, 0);
     if (ret != BM_JPU_DEC_RETURN_CODE_OK)
     {
         bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "jpeg decode failed!\r\n");
@@ -597,20 +639,18 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
            "pixel Y/Cb/Cr stride: %u/%u/%u\n"
            "pixel Y/Cb/Cr size: %u/%u/%u\n"
            "pixel Y/Cb/Cr offset: %u/%u/%u\n"
-           "color format: %s\n"
-           "chroma interleave: %d\n",
+           "image format: %s\n",
            info.aligned_frame_width, info.aligned_frame_height,
            info.actual_frame_width, info.actual_frame_height,
            info.y_stride, info.cbcr_stride, info.cbcr_stride,
            info.y_size, info.cbcr_size, info.cbcr_size,
            info.y_offset, info.cb_offset, info.cr_offset,
-           bm_jpu_color_format_string(info.color_format),
-           info.chroma_interleave);
+           bm_jpu_image_format_string(info.image_format));
 
     if (info.framebuffer == NULL)
     {
         bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "could not decode this JPEG image : no framebuffer returned!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
 
     bm_jpu_phys_addr_t phys_addr = bm_mem_get_device_addr(*(info.framebuffer->dma_buffer));
@@ -620,7 +660,7 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
         if(BM_SUCCESS != bmcv_jpeg_dec_check(dst, info)) {
             BMCV_ERR_LOG("bmcv_jpeg_dec_check error\r\n");
 
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
         // if stride is not same, need to convert
         int jpu_stride[3] = {(int)info.y_stride, (int)info.cbcr_stride, (int)info.cbcr_stride};
@@ -635,10 +675,11 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
     } else {
         int format = format_switch(info);
         int stride[3] = {(int)info.y_stride, (int)info.cbcr_stride, (int)info.cbcr_stride};
-        if(BM_SUCCESS != bm_image_create(handle, info.actual_frame_height, info.actual_frame_width,
-                                     (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, dst, stride)) {
+        bmret = bm_image_create(handle, info.actual_frame_height, info.actual_frame_width,
+                                     (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, dst, stride);
+        if(BM_SUCCESS != bmret) {
             BMCV_ERR_LOG("bm_image_create error\r\n");
-            return BM_ERR_FAILURE;
+            return bmret;
         }
     }
     // create device mem, and attach it to bm_image
@@ -649,35 +690,39 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
     dev_mem[1] = bm_mem_from_device(phys_addr + info.cb_offset, img_size[1]);
     dev_mem[2] = bm_mem_from_device(phys_addr + info.cr_offset, img_size[2]);
     if (!need_convert) {
-        if(BM_SUCCESS != bm_image_attach(*dst, dev_mem)) {
+        bmret = bm_image_attach(*dst, dev_mem);
+        if(BM_SUCCESS != bmret) {
             BMCV_ERR_LOG("bm_image_attach error\r\n");
-            return BM_ERR_FAILURE;
+            return bmret;
         }
     } else {
         bm_image dst_tmp;
         int stride[3] = {(int)info.y_stride, (int)info.cbcr_stride, (int)info.cbcr_stride};
-        if (BM_SUCCESS != bm_image_create(handle, info.actual_frame_height, info.actual_frame_width,
-                                     dst->image_format, DATA_TYPE_EXT_1N_BYTE, &dst_tmp, stride)) {
+        bmret = bm_image_create(handle, info.actual_frame_height, info.actual_frame_width,
+                                     dst->image_format, DATA_TYPE_EXT_1N_BYTE, &dst_tmp, stride);
+        if (BM_SUCCESS != bmret) {
             BMCV_ERR_LOG("bm_image_create error\r\n");
-            return BM_ERR_FAILURE;
+            return bmret;
         }
-        if (BM_SUCCESS != bm_image_attach(dst_tmp, dev_mem)) {
+        bmret = bm_image_attach(dst_tmp, dev_mem);
+        if (BM_SUCCESS != bmret) {
             BMCV_ERR_LOG("bm_image_attach error\r\n");
             bm_image_destroy(dst_tmp);
-            return BM_ERR_FAILURE;
+            return bmret;
         }
         if (!bm_image_is_attached(*dst)) {
             // not alloc in heap0, because it maybe use by VPP after this operation
             if (BM_SUCCESS != bm_image_alloc_dev_mem_heap_mask(*dst, 6)) {
                 BMCV_ERR_LOG("bm_image_alloc_dev_mem error\r\n");
                 bm_image_destroy(dst_tmp);
-                return BM_ERR_FAILURE;
+                return BM_ERR_NOMEM;
             }
         }
-        if (BM_SUCCESS != bmcv_width_align(handle, dst_tmp, *dst)) {
+        bmret = bmcv_width_align(handle, dst_tmp, *dst);
+        if (BM_SUCCESS != bmret) {
             BMCV_ERR_LOG("bmcv_width_align error\r\n");
             bm_image_destroy(dst_tmp);
-            return BM_ERR_FAILURE;
+            return bmret;
         }
         bm_image_destroy(dst_tmp);
     }
@@ -690,7 +735,7 @@ bm_status_t bmcv_jpeg_dec_one_image(bm_handle_t          handle,
      if (mapped_virtual_address==NULL)
      {
          fprintf(stderr, "bm_jpu_dma_buffer_map failed\n");
-         return BM_ERR_FAILURE;
+         return BM_ERR_NOMEM;
      }
 
      char* filename = (char*)"test_dbg.dec";
@@ -711,18 +756,23 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
                                 int          image_num,
                                 bm_image*    dst,
                                 int          bs_in_device) {
+    if (dst != NULL) {
+        if (dst->image_private != NULL) {
+            bm_handle_check_1(handle, dst[0]);
+        }
+    }
     if (handle == NULL) {
         bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_DEVNOTREADY;
     }
     if (in_size == NULL || p_jpeg_data == NULL) {
         bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "The pointer of data and size should not be NULL!\r\n");
-        return BM_ERR_FAILURE;
+        return BM_ERR_PARAM;
     }
     for (int i = 0; i < image_num; i++) {
         if (p_jpeg_data[i] == NULL) {
             bmlib_log("JPEG-DEC", BMLIB_LOG_ERROR, "The pointer of data should not be NULL!\r\n");
-            return BM_ERR_FAILURE;
+            return BM_ERR_DATA;
         }
     }
 
@@ -734,13 +784,12 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
         if(bs_in_device == 1 )
         {
             bm_device_mem_t *mem = (bm_device_mem_t *)p_jpeg_data[i];
-            uint8_t* tmp_data = (uint8_t *)malloc(*in_size + 64);
+            uint8_t* tmp_data = (uint8_t *)malloc(in_size[i]);
 
             if(bm_memcpy_d2s(handle, tmp_data, *mem) != BM_SUCCESS)
             {
                 printf("d2s failed!!! p_jpeg_data_addr=%p\n",p_jpeg_data[i]);
             }
-
             bm_free_device(handle, *((bm_device_mem_t *)p_jpeg_data[i]));
             free(p_jpeg_data[i]);
             p_jpeg_data[i] = tmp_data;
@@ -767,10 +816,10 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
                 if (info.framebuffer)
                     bm_jpu_jpeg_dec_frame_finished(jpeg_dec[i]->decoder_, info.framebuffer);
                 else
-                    return BM_ERR_FAILURE;
+                    return BM_ERR_DATA;
                 bmcv_jpeg_decoder_destroy(jpeg_dec[i]);
             }
-            return BM_ERR_FAILURE;
+            return ret;
         }
     }
 

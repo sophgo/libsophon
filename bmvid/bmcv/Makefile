@@ -90,6 +90,20 @@ ifeq ($(PRODUCTFORM), pcie_mips64)
 LDFLAGS         += -mips64r2 -mabi=64 -march=gs464e
 endif
 
+ifeq ($(USING_OPENBLAS),1)
+LDFLAGS             += -L$(OPENBLAS_DIR) -lopenblas
+DYN_LDFLAGS         += -L$(OPENBLAS_DIR) -lopenblas
+ifeq ($(PRODUCTFORM), pcie)
+LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
+DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
+else ifeq ($(PRODUCTFORM),soc)
+LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else
+    $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
+endif
+endif
+
 DYN_LDFLAGS     +=  -L$(JPU_DIR)/lib/ \
 					-L$(BMION_DIR)/lib \
 					-L$(OUT_DIR)/lib/ \
@@ -278,6 +292,15 @@ bmcv: $(BMCV_DYN) $(BMCV_CPU_LIB) $(BMCV_STATIC)
 	@cp -f $(RELEASE_HEADERS)  $(OUT_DIR)/bmcv/include
 	@cp -f $(DYNAMIC_LIBRARYS) $(OUT_DIR)/bmcv/lib/tpu_module
 	@cp -f $(VPP_CMODEL_DYN_LIB) $(OUT_DIR)/bmcv/lib/
+ifeq ($(USING_OPENBLAS),1)
+ifeq ($(PRODUCTFORM), pcie)
+	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/x86/* $(OUT_DIR)/bmcv/lib/
+else ifeq ($(PRODUCTFORM), soc)
+	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/arm/* $(OUT_DIR)/bmcv/lib/
+else
+	$(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
+endif
+endif
 
 clean:
 	@echo rm -rf $(OUT_DIR)/bmcv/lib

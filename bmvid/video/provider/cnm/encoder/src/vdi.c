@@ -149,9 +149,9 @@ int bm_vdi_init(uint32_t core_idx)
 
     if (vdi->vpu_fd < 0) {
 #ifndef BM_PCIE_MODE
-        VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load vpu.ko again\n", strerror(errno));
+        VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load ko again\n", strerror(errno));
 #else
-        VLOG(ERR, "[VDI] Can't open Sophon device driver. [error=%s]. try to load bmsophon.ko again\n", strerror(errno));
+        VLOG(ERR, "[VDI] Can't open device driver. [error=%s]. try to load ko again\n", strerror(errno));
 #endif
         goto ERR_VDI_INIT0;
     }
@@ -331,6 +331,7 @@ int bm_vdi_release(uint32_t core_idx)
 
     /* get common memory information to free virtual address */
     /* TODO */
+    pthread_mutex_lock((pthread_mutex_t *)vdi->buffer_pool_lock);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++) {
         if (vdi->common_memory.phys_addr >= vdi->buffer_pool[i].vdb.phys_addr &&
             vdi->common_memory.phys_addr < (vdi->buffer_pool[i].vdb.phys_addr +
@@ -341,10 +342,11 @@ int bm_vdi_release(uint32_t core_idx)
             break;
         }
     }
+    pthread_mutex_unlock((pthread_mutex_t *)vdi->buffer_pool_lock);
 
     vdi->task_num--;
     bm_vdi_get_kernel_reset(core_idx);
-    if(vdi->reset_core_flag.reset_core_disable!=0)
+    if(vdi->reset_core_flag.reset == 1)
         bm_vdi_resume_kernel_reset(core_idx);
     bm_vdi_unlock(core_idx);
 
@@ -449,6 +451,383 @@ static int bm_vdi_allocate_common_memory(uint32_t core_idx)
     VLOG(DEBUG, "[VDI] physaddr=0x%lx, size=%d, virtaddr=0x%lx\n",
          vdi->common_memory.phys_addr, vdi->common_memory.size, vdi->common_memory.virt_addr);
 
+    return 0;
+}
+
+int bm_vdi_allocate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    vpudrv_buffer_t vdb;
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#endif
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+
+    if(vdi == NULL || vdi->vpu_fd < 0)
+        return -1;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+#if defined(BM_PCIE_MODE)
+    vdb.core_idx = chip_core_idx;
+#endif
+
+    vdb.size = vb->size;
+#if !defined(BM_PCIE_MODE)
+    vdb.enable_cache = vb->enable_cache;
+#endif
+    if (ioctl(vdi->vpu_fd, VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY, &vdb) < 0) {
+        VLOG(ERR, "[VDI] fail to vdi_allocate_dma_memory size=%d\n", vdb.size);
+        return -1;
+    }
+
+#ifndef BM_PCIE_MODE
+    /* map to virtual address */
+    // vdb.virt_addr = (unsigned long)mmap(NULL, vdb.size, PROT_READ | PROT_WRITE,
+    //                                     MAP_SHARED, vdi->vpu_fd, vdb.phys_addr);
+    // if ((void *)vdb.virt_addr == MAP_FAILED) {
+    //     memset(vb, 0x00, sizeof(vpu_buffer_t));
+    //     return -1;
+    // }
+
+    // memset(vb->virt_addr, 0x00, sizeof(vb->size));
+    /* unmap */
+    // if (munmap((void *)vdb.virt_addr, vdb.size) < 0) {
+    //     VLOG(ERR, "[VDI] munmap failed, vaddr=0x%lx\n", vdb.virt_addr);
+    //     return -1;
+    // }
+    // vdb.virt_addr = 0;
+
+    /* flush operation */
+    // if (vdb.enable_cache) {
+    //     if (ioctl(vdi->vpu_fd, VDI_IOCTL_FLUSH_DCACHE, &vdb) < 0) {
+    //         VLOG(ERR, "[VDI] fail to flush ioctl\n");
+    //         return -1;
+    //     }
+    // }
+#else
+    vdb.virt_addr = FAKE_PCIE_VIRT_ADDR;
+    // vdi_clear_memory(core_idx, vdb.phys_addr, vdb.size, VDI_SYSTEM_ENDIAN); //if need clear, todo
+#endif
+
+    vb->base      = vdb.base;
+    vb->phys_addr = vdb.phys_addr;
+    vb->virt_addr = vdb.virt_addr;
+
+    pthread_mutex_lock((pthread_mutex_t *)vdi->buffer_pool_lock);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++) {
+        if (vdi->buffer_pool[i].inuse == 0) {
+            vdi->buffer_pool[i].vdb = vdb;
+            vdi->buffer_pool_count++;
+            vdi->buffer_pool[i].inuse = 1;
+            break;
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)vdi->buffer_pool_lock);
+
+    VLOG(DEBUG, "[VDI] vdi_allocate_dma_memory, physaddr=0x%lx, virtaddr=0x%lx~0x%lx, size=%d\n",
+         vb->phys_addr, vb->virt_addr, vb->virt_addr + vb->size, vb->size);
+
+    return 0;
+}
+
+int bm_vdi_free_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    int i, ret;
+    vpudrv_buffer_t vdb;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return 0;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+    pthread_mutex_lock((pthread_mutex_t *)vdi->buffer_pool_lock);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].inuse = 0;
+            vdi->buffer_pool_count--;
+            vdb = vdi->buffer_pool[i].vdb;
+            break;
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)vdi->buffer_pool_lock);
+
+    if (!vdb.size) {
+        VLOG(ERR, "[VDI] invalid buffer to free address = 0x%lx\n", vdb.virt_addr);
+        return -1;
+    }
+
+    ret = ioctl(vdi->vpu_fd, VDI_IOCTL_FREE_PHYSICALMEMORY, &vdb);
+    if (ret < 0) {
+        VLOG(ERR, "[VDI] ioctl free_physical_memory failed!\n", vdb.virt_addr);
+        if (vdb.virt_addr) {
+#ifndef BM_PCIE_MODE
+            munmap((void *)vdb.virt_addr, vdb.size);
+#endif
+            vdb.virt_addr = 0;
+        }
+        return -1;
+    }
+
+    if (vdb.virt_addr) {
+#ifndef BM_PCIE_MODE
+        munmap((void *)vdb.virt_addr, vdb.size);
+#endif
+        vdb.virt_addr = 0;
+    }
+
+    VLOG(DEBUG, "[VDI] vdi_free_dma_memory, physaddr=0x%lx, virtaddr=0x%lx~0x%lx, size=%d\n",
+         vdb.phys_addr, vdb.virt_addr, vdb.virt_addr + vdb.size, vdb.size);
+
+    memset(vb, 0, sizeof(vpu_buffer_t));
+
+    return 0;
+}
+
+int bm_vdi_mmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb, int enable_read, int enable_write)
+{
+#ifdef BM_PCIE_MODE
+    return 0;
+#else
+    bm_vdi_info_t *vdi;
+    int port_flag = 0;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return -1;
+
+    if (enable_read)
+        port_flag |= PROT_READ;
+    if (enable_write)
+        port_flag |= PROT_WRITE;
+
+    //defaule enable_cache
+    vb->virt_addr = (unsigned long)mmap(NULL, vb->size, port_flag, MAP_SHARED, vdi->vpu_fd, vb->phys_addr);
+
+    if ((void *)vb->virt_addr == MAP_FAILED) {
+        VLOG(ERR, "[VDI] mmap failed, addr=0x%lx size=%d\n", vb->phys_addr, vb->size);
+        vb->virt_addr = 0;
+        return -1;
+    }
+
+    return 0;
+#endif
+}
+
+int bm_vdi_unmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+#ifdef BM_PCIE_MODE
+    return 0;
+#else
+    bm_vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return -1;
+
+    if (vb->virt_addr) {
+        if (munmap((void *)vb->virt_addr, vb->size) < 0) {
+            vb->virt_addr = 0;
+            return -1;
+        }
+    }
+    vb->virt_addr = 0;
+    return 0;
+#endif
+}
+
+int bm_vdi_flush_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+#if !defined(BM_PCIE_MODE) && !defined(BM_ION_MEM)
+    vpudrv_buffer_t vdb = {0};
+#endif
+    bm_vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if(vdi == NULL || vdi->vpu_fd < 0)
+        return -1;
+
+#if defined(BM_ION_MEM)
+    if (!vb->size) {
+        VLOG(ERR, "address 0x%08x is not mapped address!!!\n", (int)vb->phys_addr);
+    }
+    else
+    {
+        if(vb->enable_cache == 1) {
+            if(msync((void *)vb->virt_addr, vb->size, MS_ASYNC) == -1) {
+                VLOG(ERR, "[VDI] fail to flush memory. addr=0x%lx size=%d\n", vb->virt_addr, vb->size);
+            }
+        }
+    }
+#elif !defined(BM_PCIE_MODE)
+    vdb.phys_addr = vb->phys_addr;
+    vdb.size = vb->size;
+    if (ioctl(vdi->vpu_fd, VDI_IOCTL_FLUSH_DCACHE, &vdb) < 0)
+    {
+        VLOG(ERR, "[VDI] fail to flush dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
+    }
+#endif
+    return 0;
+}
+
+int bm_vdi_invalidate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+#if !defined(BM_PCIE_MODE) && !defined(BM_ION_MEM)
+    vpudrv_buffer_t vdb = {0};
+#endif
+    bm_vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if(vdi == NULL || vdi->vpu_fd < 0)
+        return -1;
+
+#if defined(BM_ION_MEM)
+    if (!vb->size) {
+        VLOG(ERR, "address 0x%08x is not mapped address!!!\n", (int)vb->phys_addr);
+    }
+    else
+    {
+        if(vb->enable_cache == 1) {
+            if(msync((void *)vb->virt_addr, vb->size, MS_INVALIDATE) == -1) {
+                VLOG(ERR, "[VDI] fail to invalidate memory. addr=0x%lx size=%d\n", vb->virt_addr, vb->size);
+            }
+        }
+    }
+#elif !defined(BM_PCIE_MODE)
+    vdb.phys_addr = vb->phys_addr;
+    vdb.size = vb->size;
+    if (ioctl(vdi->vpu_fd, VDI_IOCTL_INVALIDATE_DCACHE, &vdb) < 0)
+    {
+        VLOG(ERR, "[VDI] fail to fluch invalidate mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
+    }
+#endif
+    return 0;
+}
+
+int bm_vdi_attach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    vpudrv_buffer_t vdb;
+    bm_vdi_info_t *vdi;
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return -1;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+    vdb.size = vb->size;
+    vdb.phys_addr = vb->phys_addr;
+
+    pthread_mutex_lock((pthread_mutex_t *)vdi->buffer_pool_lock);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].vdb = vdb;
+            vdi->buffer_pool[i].inuse = 1;
+            break;
+        }
+        else
+        {
+            if (vdi->buffer_pool[i].inuse == 0)
+            {
+                vdi->buffer_pool[i].vdb = vdb;
+                vdi->buffer_pool[i].inuse = 1;
+                break;
+            }
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)vdi->buffer_pool_lock);
+    return 0;
+}
+
+int bm_vdi_deattach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if(!vb || !vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
+        return -1;
+
+    pthread_mutex_lock((pthread_mutex_t *)vdi->buffer_pool_lock);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].vdb.phys_addr = 0;
+            vdi->buffer_pool[i].vdb.size      = 0;
+            vdi->buffer_pool[i].inuse         = 0;
+            break;
+        }
+    }
+    pthread_mutex_unlock((pthread_mutex_t *)vdi->buffer_pool_lock);
     return 0;
 }
 
@@ -681,12 +1060,14 @@ int bm_vdi_resume_kernel_reset(uint32_t core_idx){
 #if defined(BM_PCIE_MODE)
     chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
 #endif
-    vdi->reset_core_flag.reset_core_disable = 0;
-    vdi->reset_core_flag.core_idx = chip_core_idx;
-    ret = ioctl(vdi->vpu_fd, VDI_IOCTL_CTRL_KERNEL_RESET, &(vdi->reset_core_flag));
-    if (ret < 0) {
-        VLOG(ERR, "[VDI] encoder fail to resume kernel_reset ability with ioctl()\n");
-        return -1;
+    if(vdi->reset_core_flag.pid == vdi->pid) {
+        vdi->reset_core_flag.reset = 0;
+        vdi->reset_core_flag.core_idx = chip_core_idx;
+        ret = ioctl(vdi->vpu_fd, VDI_IOCTL_CTRL_KERNEL_RESET, &(vdi->reset_core_flag));
+        if (ret < 0) {
+            VLOG(ERR, "[VDI] encoder fail to resume kernel_reset ability with ioctl()\n");
+            return -1;
+        }
     }
     return 0;
 }
@@ -707,7 +1088,8 @@ int bm_vdi_disable_kernel_reset(uint32_t core_idx){
 #if defined(BM_PCIE_MODE)
     chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
 #endif
-    vdi->reset_core_flag.reset_core_disable = vdi->pid;
+    vdi->reset_core_flag.pid = vdi->pid;
+    vdi->reset_core_flag.reset = 1;
     vdi->reset_core_flag.core_idx = chip_core_idx;
     ret = ioctl(vdi->vpu_fd, VDI_IOCTL_CTRL_KERNEL_RESET, &(vdi->reset_core_flag));
     if (ret < 0) {
@@ -823,12 +1205,14 @@ void bm_vdi_fio_write_register(uint32_t core_idx, uint64_t addr, uint32_t data)
     VpuWriteReg(core_idx, W5_VPU_FIO_CTRL_ADDR, ctrl);
 }
 
+
 int bm_vdi_write_memory(uint32_t core_idx, uint64_t dst_addr, uint8_t *src_data, int len)
 {
     bm_vdi_info_t *vdi;
     vpudrv_buffer_t vdb;
 #ifndef BM_PCIE_MODE
     uint64_t offset;
+    int mmap_flag;
 #endif
     int i;
 
@@ -859,8 +1243,33 @@ int bm_vdi_write_memory(uint32_t core_idx, uint64_t dst_addr, uint8_t *src_data,
 
 #ifndef BM_PCIE_MODE
     offset = dst_addr - (uint64_t)vdb.phys_addr;
+    vpu_buffer_t vb;
+    vb.phys_addr    = vdb.phys_addr;
+    vb.size         = vdb.size;
+    vb.enable_cache = vdb.enable_cache;
+    if (!vdb.virt_addr) {
+        bm_vdi_mmap_dma_memory(core_idx, &vb, 0, 1);
+        vdb.virt_addr = vb.virt_addr;
+        mmap_flag = 1;
+    } else {
+        mmap_flag = 0;
+    }
 
     memcpy((void *)((uint64_t)vdb.virt_addr+offset), src_data, len);
+
+    /* flush operation */
+    if (vdb.enable_cache) {
+        int ret = bm_vdi_flush_dma_memory(core_idx, &vb);
+        if (ret < 0) {
+            VLOG(ERR, "[VDI] fail to flush cache\n");
+            return -1;
+        }
+    }
+
+    if (mmap_flag) {
+        bm_vdi_unmap_dma_memory(core_idx, &vb);
+        vdb.virt_addr = 0;
+    }
 #else
     vpu_video_mem_op_t vmem_op;
     vmem_op.dst = dst_addr;
@@ -877,12 +1286,15 @@ int bm_vdi_write_memory(uint32_t core_idx, uint64_t dst_addr, uint8_t *src_data,
     return len;
 }
 
-#ifdef BM_PCIE_MODE
 int bm_vdi_read_memory(uint32_t core_idx, uint64_t src_addr, uint8_t *dst_data, int len)
 {
     bm_vdi_info_t *vdi;
     vpudrv_buffer_t vdb;
     int i;
+#ifndef BM_PCIE_MODE
+    uint64_t offset;
+    int mmap_flag;
+#endif
 
     vdi = bm_vdi_check_info_ptr(core_idx);
     if (vdi == NULL || vdi->vpu_fd < 0) {
@@ -902,7 +1314,7 @@ int bm_vdi_read_memory(uint32_t core_idx, uint64_t src_addr, uint8_t *dst_data, 
 
     if (!vdb.size)
         return -1;
-
+#ifdef BM_PCIE_MODE
     vpu_video_mem_op_t vmem_op;
     vmem_op.src = src_addr;
     vmem_op.dst = (uint64_t)dst_data;
@@ -914,9 +1326,38 @@ int bm_vdi_read_memory(uint32_t core_idx, uint64_t src_addr, uint8_t *dst_data, 
         return -1;
     }
 
+#else
+    offset = src_addr - (uint64_t)vdb.phys_addr;
+
+    vpu_buffer_t vb;
+    vb.phys_addr = vdb.phys_addr;
+    vb.size      = vdb.size;
+    if (!vdb.virt_addr) {
+        bm_vdi_mmap_dma_memory(core_idx, &vb, 1, 0);
+        vdb.virt_addr = vb.virt_addr;
+        mmap_flag = 1;
+    } else {
+        mmap_flag = 0;
+    }
+
+    /* invalidate operation */
+    if (vdb.enable_cache) {
+        int ret = bm_vdi_invalidate_dma_memory(core_idx, &vb);
+        if (ret < 0) {
+            VLOG(ERR, "[VDI] fail to invalidate cache\n");
+            return -1;
+        }
+    }
+
+    memcpy((void*)dst_data, (void *)((uint64_t)vdb.virt_addr+offset), len);
+
+    if (mmap_flag) {
+        bm_vdi_unmap_dma_memory(core_idx, &vb);
+        vdb.virt_addr = 0;
+    }
+#endif
     return len;
 }
-#endif
 
 int bm_vdi_get_sram_memory(uint32_t core_idx, vpu_buffer_t *vb)
 {

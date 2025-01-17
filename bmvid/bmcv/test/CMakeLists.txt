@@ -223,7 +223,7 @@ test_bmcv(
 	bm1684x/test_bm1684x_vpp_resize.cpp
 	bm1684x/test_bm1684x_vpp_stitch.cpp
 	bm1684x/test_bm1684x_vpp_convert.cpp
-	bm1684x/test_bm1684x_vpp_padding.cpp
+	bm1684x/test_bm1684x_vpp_dst_position.cpp
 	bm1684x/test_bm1684x_vpp_comparison.cpp
 	bm1684x/test_bm1684x_vpp_border_comapre.cpp
 	bm1684x/test_bm1684x_vpp_fill_rectangle.cpp

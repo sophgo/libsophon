@@ -3,6 +3,12 @@ bmcv_faiss_indexflatL2
 
 计算查询向量与数据库向量 L2 距离的平方, 输出前 K （sort_cnt）个最匹配的 L2 距离的平方值及其对应的索引。
 
+
+**处理器型号支持：**
+
+该接口仅支持BM1684X。
+
+
 **接口形式：**
 
     .. code-block:: c++
@@ -101,13 +107,13 @@ bmcv_faiss_indexflatL2
 
 2、输出的排序后的相似度结果的数据类型为 float, 相对应的索引的数据类型为 int。
 
-3、假设输入数据和底库数据的 L2 范数的平方值已提前计算完成, 并存储在芯片上。
+3、假设输入数据和底库数据的 L2 范数的平方值已提前计算完成, 并存储在处理器上。
 
 3、底库数据通常以 database_vecs_num * vec_dims 的形式排布在内存中。此时, 参数 is_transpose 需要设置为 1。
 
 5、查询向量和数据库向量 L2 距离的平方值越小, 表示两者的相似度越高。因此, 在 TopK 过程中对 L2 距离的平方值按升序排序。
 
-6、该接口用于 Faiss::IndexFlatL2.search(), 在 BM1684X 上实现。考虑 BM1684X 上TPU 的连续内存, 针对 100W 底库, 可以在单芯片上一次查询最多约 512 个 256 维的输入。
+6、该接口用于 Faiss::IndexFlatL2.search(), 在 BM1684X 上实现。考虑 BM1684X 上 Tensor Computing Processor 的连续内存, 针对 100W 底库, 可以在单处理器上一次查询最多约 512 个 256 维的输入。
 
 7、database_vecs_num与sort_cnt的取值需要满足条件：database_vecs_num > sort_cnt。
 

@@ -20,9 +20,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <windows.h>
-#include <fcntl.h>   
+#include <fcntl.h>
 #include <stdlib.h>
-#include <sys/stat.h> 
+#include <sys/stat.h>
 #include <msrdc.h>
 #include <winioctl.h>
 #include <setupapi.h>
@@ -153,7 +153,7 @@ static BOOL getDriverContext(bm_vid_drv_info* vdi, uint32_t board_idx) {
     DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
 
     if (INVALID_HANDLE_VALUE == vdi->hDevInfo) {
-        printf("No sophon devices interface class are in the system.\n");
+        printf("No devices interface class are in the system.\n");
         return FALSE;
     }
 
@@ -169,7 +169,7 @@ static BOOL getDriverContext(bm_vid_drv_info* vdi, uint32_t board_idx) {
         (LPGUID)g_guid_interface[0],
         vdi->dev_id,
         &DeviceInterfaceData)) {
-        printf("No sophon devices SetupDiEnumDeviceInterfaces for dev%d.\n", vdi->dev_id);
+        printf("No devices SetupDiEnumDeviceInterfaces for dev%d.\n", vdi->dev_id);
         goto Error;
     }
 
@@ -312,9 +312,9 @@ int bm_vdi_init(uint32_t core_idx)
     vdi->vpu_fd = open(vpu_dev_name, O_RDWR);
     if (vdi->vpu_fd < 0) {
 #ifndef BM_PCIE_MODE
-        VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load vpu.ko again\n", strerror(errno));
+        VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load ko again\n", strerror(errno));
 #else
-        VLOG(ERR, "[VDI] Can't open Sophon device driver. [error=%s]. try to load bmsophon.ko again\n", strerror(errno));
+        VLOG(ERR, "[VDI] Can't open device driver. [error=%s]. try to load ko again\n", strerror(errno));
 #endif
         goto ERR_VDI_INIT0;
     }
@@ -492,6 +492,7 @@ int bm_vdi_release(uint32_t core_idx)
 
     /* get common memory information to free virtual address */
     /* TODO */
+    WaitForSingleObject(*(vdi->buffer_pool_lock), INFINITE);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++) {
         if (vdi->common_memory.phys_addr >= vdi->buffer_pool[i].vdb.phys_addr &&
             vdi->common_memory.phys_addr < (vdi->buffer_pool[i].vdb.phys_addr +
@@ -502,6 +503,7 @@ int bm_vdi_release(uint32_t core_idx)
             break;
         }
     }
+    ReleaseMutex(*(vdi->buffer_pool_lock));
 
     bm_vdi_unlock(core_idx);
 
@@ -603,6 +605,212 @@ static int bm_vdi_allocate_common_memory(uint32_t core_idx)
     VLOG(DEBUG, "[VDI] physaddr=0x%lx, size=%d, virtaddr=0x%lx\n",
          vdi->common_memory.phys_addr, vdi->common_memory.size, vdi->common_memory.virt_addr);
 
+    return 0;
+}
+
+int bm_vdi_allocate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    vpudrv_buffer_t vdb;
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#endif
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+
+    if(vdi == NULL || vdi->vid_drv_info->hDevice == INVALID_HANDLE_VALUE || !(vdi->vid_drv_info->hDevice))
+        return -1;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+#if defined(BM_PCIE_MODE)
+    vdb.core_idx = chip_core_idx;
+#endif
+
+    vdb.size = vb->size;
+#if !defined(BM_PCIE_MODE)
+    vdb.enable_cache = vb->enable_cache;
+#endif
+    if (winDeviceIoControl(vdi->vid_drv_info->hDevice, VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY, &vdb) < 0) {
+        VLOG(ERR, "[VDI] fail to vdi_allocate_dma_memory size=%d\n", vdb.size);
+        return -1;
+    }
+
+    vdb.virt_addr = FAKE_PCIE_VIRT_ADDR;
+    // vdi_clear_memory(core_idx, vdb.phys_addr, vdb.size, VDI_SYSTEM_ENDIAN); //if need clear, todo
+
+    vb->base      = vdb.base;
+    vb->phys_addr = vdb.phys_addr;
+    vb->virt_addr = vdb.virt_addr;
+
+    WaitForSingleObject(*(vdi->buffer_pool_lock), INFINITE);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++) {
+        if (vdi->buffer_pool[i].inuse == 0) {
+            vdi->buffer_pool[i].vdb = vdb;
+            vdi->buffer_pool_count++;
+            vdi->buffer_pool[i].inuse = 1;
+            break;
+        }
+    }
+    ReleaseMutex(*(vdi->buffer_pool_lock));
+
+    VLOG(DEBUG, "[VDI] vdi_allocate_dma_memory, physaddr=0x%lx, size=%d\n", vb->phys_addr, vb->size);
+
+    return 0;
+}
+
+int bm_vdi_free_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    int i, ret;
+    vpudrv_buffer_t vdb;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vid_drv_info->hDevice == INVALID_HANDLE_VALUE || !(vdi->vid_drv_info->hDevice)) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return 0;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+    WaitForSingleObject(*(vdi->buffer_pool_lock), INFINITE);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].inuse = 0;
+            vdi->buffer_pool_count--;
+            vdb = vdi->buffer_pool[i].vdb;
+            break;
+        }
+    }
+    ReleaseMutex(*(vdi->buffer_pool_lock));
+
+    if (!vdb.size) {
+        VLOG(ERR, "[VDI] invalid buffer to free address = 0x%lx\n", vdb.virt_addr);
+        return -1;
+    }
+
+    ret = winDeviceIoControl(vdi->vid_drv_info->hDevice, VDI_IOCTL_FREE_PHYSICALMEMORY, &vdb);
+    if (ret < 0) {
+        VLOG(ERR, "[VDI] ioctl free_physical_memory failed!\n", vdb.virt_addr);
+        return -1;
+    }
+
+    VLOG(INFO, "[VDI] vdi_free_dma_memory, physaddr=0x%lx, virtaddr=0x%lx~0x%lx, size=%d\n",
+         vdb.phys_addr, vdb.virt_addr, vdb.virt_addr + vdb.size, vdb.size);
+
+    memset(vb, 0, sizeof(vpu_buffer_t));
+
+    return 0;
+}
+
+int bm_vdi_attach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    vpudrv_buffer_t vdb;
+    bm_vdi_info_t *vdi;
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vid_drv_info->hDevice == INVALID_HANDLE_VALUE || !(vdi->vid_drv_info->hDevice)) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vb->size == 0)
+        return -1;
+
+    memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
+
+    vdb.size = vb->size;
+    vdb.phys_addr = vb->phys_addr;
+
+    WaitForSingleObject(*(vdi->buffer_pool_lock), INFINITE);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].vdb = vdb;
+            vdi->buffer_pool[i].inuse = 1;
+            break;
+        }
+        else
+        {
+            if (vdi->buffer_pool[i].inuse == 0)
+            {
+                vdi->buffer_pool[i].vdb = vdb;
+                vdi->buffer_pool[i].inuse = 1;
+                break;
+            }
+        }
+    }
+    ReleaseMutex(*(vdi->buffer_pool_lock));
+    return 0;
+}
+
+int bm_vdi_deattach_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    bm_vdi_info_t *vdi;
+    int i;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vid_drv_info->hDevice == INVALID_HANDLE_VALUE || !(vdi->vid_drv_info->hDevice)) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    WaitForSingleObject(*(vdi->buffer_pool_lock), INFINITE);
+    for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
+    {
+        if (vdi->buffer_pool[i].vdb.phys_addr == vb->phys_addr)
+        {
+            vdi->buffer_pool[i].vdb.phys_addr = 0;
+            vdi->buffer_pool[i].vdb.size      = 0;
+            vdi->buffer_pool[i].inuse         = 0;
+            break;
+        }
+    }
+    ReleaseMutex(*(vdi->buffer_pool_lock));
+    return 0;
+}
+
+int bm_vdi_mmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb, int enable_read, int enable_write)
+{
+    //win pcie mode, don't need mmap and unmap
+    return 0;
+}
+
+int bm_vdi_unmap_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    //win pcie mode, don't need mmap and unmap
+    return 0;
+}
+
+int bm_vdi_flush_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    //win pcie mode, don't need this function
+    return 0;
+}
+
+int bm_vdi_invalidate_dma_memory(uint32_t core_idx, vpu_buffer_t *vb)
+{
+    //win pcie mode, don't need this function
     return 0;
 }
 

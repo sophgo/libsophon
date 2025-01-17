@@ -1,7 +1,7 @@
 bmcv_image_lkpyramid
 ====================
 
-LK金字塔光流算法。完整的使用步骤包括创建、执行、销毁三步。该算法前半部分使用TPU，而后半部分为串行运算需要使用CPU，因此对于PCIe模式，建议使能CPU进行加速，具体步骤参考第5章节。
+LK金字塔光流算法。完整的使用步骤包括创建、执行、销毁三步。该算法前半部分使用智能视觉深度学习处理器，而后半部分为串行运算需要使用处理器，因此对于PCIe模式，建议使能处理器进行加速，具体步骤参考第5章节。
 
 创建
 _____
@@ -18,6 +18,11 @@ _____
                 int winW = 21,
                 int winH = 21,
                 int maxLevel = 3);
+
+**处理器型号支持：**
+
+该接口仅支持BM1684。
+
 
 **输入参数说明：**
 
@@ -174,7 +179,7 @@ ___________
         }
         ret = bmcv_open_cpu_process(handle);
         if (ret != BM_SUCCESS) {
-            printf("BMCV enable CPU failed. ret = %d\n", ret);
+            printf("BMCV enable Processor failed. ret = %d\n", ret);
             bm_dev_free(handle);
             return -1;
         }
@@ -211,7 +216,7 @@ ___________
         bm_image_destroy(nextImg);
         ret = bmcv_close_cpu_process(handle);
         if (ret != BM_SUCCESS) {
-            printf("BMCV disable CPU failed. ret = %d\n", ret);
+            printf("BMCV disable Processor failed. ret = %d\n", ret);
             bm_dev_free(handle);
             return -1;
         }

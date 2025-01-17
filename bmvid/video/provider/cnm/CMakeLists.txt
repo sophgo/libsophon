@@ -115,7 +115,6 @@ set(SRCS
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/windows/vdi_osal.c
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/mm.c
     ${PROJECT_ROOT}/video/decoder/bm_dec_api/src/bm_video_interface.c
-    ${PROJECT_ROOT}/video/decoder/bm_dec_api/src/bm_video_syscxt.c
 )
 
 add_library(libbmvideo SHARED ${SRCS})
@@ -141,7 +140,7 @@ install(TARGETS libbmvideo libbmvideo-static DESTINATION lib)
 
 if(WIN32)
 file(
-    COPY ${PROJECT_ROOT}/video/decoder/bm_dec_api/inc/bm_video_interface.h
+    COPY ${PROJECT_ROOT}/video/decoder/bm_dec_api/inc/bm_vpudec_interface.h
     DESTINATION ${CMAKE_INSTALL_PREFIX}/include
 )
 endif()

@@ -48,6 +48,9 @@ bmcv_matmul
                                  float            alpha = 1,
                                  float            beta = 0);
 
+**处理器型号支持：**
+
+该接口支持BM1684/BM1684X。
 
 
 **输入参数说明：**

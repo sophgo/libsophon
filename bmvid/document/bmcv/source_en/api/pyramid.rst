@@ -3,6 +3,12 @@ bmcv_image_pyramid_down
 
 This interface implements downsampling in image gaussian pyramid operations.
 
+
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c
@@ -83,7 +89,7 @@ The interface currently supports the following image_format and data_type:
         gettimeofday_(&t1);
         bmcv_image_pyramid_down(handle, img_i, img_o);
         gettimeofday_(&t2);
-        cout << "pyramid down TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        cout << "pyramid down Tensor Computing Processor using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
 
         bm_image_copy_device_to_host(img_o, (void **)(&output));
         bm_image_destroy(img_i);

@@ -48,6 +48,8 @@
 #include "windatatype.h"
 #endif
 
+#define FAKE_PCIE_VIRT_ADDR 0xDEADBEEFl
+
 /************************************************************************/
 /* COMMON REGISTERS                                                     */
 /************************************************************************/
@@ -190,11 +192,14 @@ extern "C" {
     vpu_instance_pool_t * vdi_get_instance_pool(u64 core_idx);
     int vdi_allocate_common_memory(u64 core_idx);
     int vdi_get_common_memory(u64 core_idx, vpu_buffer_t *vb);
+    int vdi_get_init_status(u64 core_idx);
     int vdi_allocate_dma_memory(u64 core_idx, vpu_buffer_t *vb);
     int vdi_attach_dma_memory(u64 core_idx, vpu_buffer_t *vb);
     void vdi_free_dma_memory(u64 core_idx, vpu_buffer_t *vb);
     int vdi_get_sram_memory(u64 core_idx, vpu_buffer_t *vb);
     int vdi_dettach_dma_memory(u64 core_idx, vpu_buffer_t *vb);
+    int vdi_mmap_memory(u64 core_idx, vpu_buffer_t *vb);
+    int vdi_unmap_memory(u64 core_idx, vpu_buffer_t *vb);
 
 #ifdef SUPPORT_MULTI_INST_INTR
     int vdi_wait_interrupt(u64 coreIdx, unsigned int instIdx, int timeout);
@@ -224,7 +229,8 @@ extern "C" {
     int vdi_set_change_clock(u64 core_idx, u64 clock_mask);
     int vdi_done_change_clock(u64 core_idx);
 
-    int  vdi_get_instance_num(u64 core_idx);
+    int vdi_get_instance_num(u64 core_idx);
+    int vdi_get_init_status(u64 core_idx);
 
     void vdi_write_register(u64 core_idx, u64 addr, unsigned int data);
     unsigned int vdi_read_register(u64 core_idx, u64 addr);
@@ -255,6 +261,8 @@ extern "C" {
     int vdi_convert_endian(u64 core_idx, unsigned int endian);
     void vdi_print_vpu_status(u64 coreIdx);
 
+    int vdi_set_reset_flag(u64 coreIdx);
+    int vdi_get_reset_flag(u64 core_idx);
     int vdi_resume_kernel_reset(u64 core_idx);
     int vdi_disable_kernel_reset(u64 core_idx);
     int vdi_get_kernel_reset(u64 coreIdx);

@@ -4,6 +4,11 @@ bmcv_nms
 The interface is used to eliminate excessive object frames obtained by network calculation and find the best object frame.
 
 
+**Processor model support**
+
+This interface supports BM1684/BM1684X.
+
+
 **Interface form:**
 
     .. code-block:: c
