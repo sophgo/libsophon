@@ -462,89 +462,89 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
     }
 
 #ifdef __linux__
-	tmp = strrchr((const char *)module_file, (int)'/');
+    tmp = strrchr((const char *)module_file, (int)'/');
 #else
-	tmp = strrchr((const char *)module_file, (int)'\\');
+    tmp = strrchr((const char *)module_file, (int)'\\');
 #endif
-  if (tmp)
-    tmp += 1;
-  else
-    tmp = (const char *)module_file;
+    if (tmp)
+      tmp += 1;
+    else
+      tmp = (const char *)module_file;
 
-  if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "%s send api error, ret %d, library name len %d too long\n",
-          __func__, ret, strlen(tmp));
-    free(p_module);
-    return NULL;
-  }
+    if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "%s send api error, ret %d, library name len %d too long\n",
+            __func__, ret, strlen(tmp));
+      free(p_module);
+      return NULL;
+    }
 
-  if (loaded_lib.loaded == 1)
-  {
+    if (loaded_lib.loaded == 1)
+    {
+      strncpy(p_module->lib_name, tmp, strlen(tmp));
+      memcpy(p_module->md5, loaded_lib.md5, MD5SUM_LEN);
+      return p_module;
+    }
+
+    memset(&api_load_lib, 0, sizeof(api_load_lib));
+    if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+      free(p_module);
+      return nullptr;
+    }
+
+    memset(&dev_mem, 0, sizeof(dev_mem));
+    ret = a53lite_load_file(handle, module_file, &dev_mem, &file_size);
+    if (ret != BM_SUCCESS)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "%s %d: load file failed!\n", __FILE__, __LINE__);
+      free(p_module);
+      return nullptr;
+    }
+
+    strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
+    api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
+    api_load_lib.size = file_size;
+    calc_md5((unsigned char *)key, size, api_load_lib.md5);
+    // show_md5(api_load_lib.md5);
+    ret = bm_send_api_to_core(handle,
+                  BM_API_ID_TPUSCALER_LOAD_LIB,
+                  (u8 *)&api_load_lib,
+                  sizeof(api_load_lib),
+                  core_id);
+    if (ret != 0)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "load library send api error, ret %d\n",
+            ret);
+      free(p_module);
+      return NULL;
+    }
+
+    ret = bm_sync_api_from_core(handle, core_id);
+    if (ret != 0)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "load module file sync api error, ret %d\n",
+            ret);
+      free(p_module);
+      return nullptr;
+    }
     strncpy(p_module->lib_name, tmp, strlen(tmp));
-    memcpy(p_module->md5, loaded_lib.md5, MD5SUM_LEN);
+    memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
+
+    bm_profile_load_module(handle, p_module, core_id);
+    bm_free_device(handle, dev_mem);
     return p_module;
-  }
-
-  memset(&api_load_lib, 0, sizeof(api_load_lib));
-  if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
-    free(p_module);
-    return nullptr;
-  }
-
-  memset(&dev_mem, 0, sizeof(dev_mem));
-  ret = a53lite_load_file(handle, module_file, &dev_mem, &file_size);
-  if (ret != BM_SUCCESS)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "%s %d: load file failed!\n", __FILE__, __LINE__);
-    free(p_module);
-    return nullptr;
-  }
-
-  strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
-  api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
-  api_load_lib.size = file_size;
-  calc_md5((unsigned char *)key, size, api_load_lib.md5);
-  // show_md5(api_load_lib.md5);
-  ret = bm_send_api_to_core(handle,
-                BM_API_ID_TPUSCALER_LOAD_LIB,
-                (u8 *)&api_load_lib,
-                sizeof(api_load_lib),
-                core_id);
-  if (ret != 0)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "load library send api error, ret %d\n",
-          ret);
-    free(p_module);
-    return NULL;
-  }
-
-  ret = bm_sync_api_from_core(handle, core_id);
-  if (ret != 0)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "load module file sync api error, ret %d\n",
-          ret);
-    free(p_module);
-    return nullptr;
-  }
-  strncpy(p_module->lib_name, tmp, strlen(tmp));
-  memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
-
-  bm_profile_load_module(handle, p_module, core_id);
-  bm_free_device(handle, dev_mem);
-  return p_module;
 #endif
 }
 
@@ -556,149 +556,149 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const ch
 tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const char *data, size_t length, int core_id)
 {
 #ifdef USING_CMODEL
-  const char *module_file = "__data__";
-  return cmodel_load_module(handle, module_file, core_id);
+    const char *module_file = "__data__";
+    return cmodel_load_module(handle, module_file, core_id);
 #else
-  int ret;
-  a53lite_load_lib_t api_load_lib;
-  bm_device_mem_t dev_mem;
-  char lib_name[LIB_MAX_NAME_LEN]="/tmp/firmwareXXXXXX";
-  char lib_name_so[256];
-  tpu_kernel_module_t p_module;
-  const char *tmp;
+    int ret;
+    a53lite_load_lib_t api_load_lib;
+    bm_device_mem_t dev_mem;
+    char lib_name[LIB_MAX_NAME_LEN]="/tmp/firmwareXXXXXX";
+    char lib_name_so[256];
+    tpu_kernel_module_t p_module;
+    const char *tmp;
 
-  int fd = mkstemp(lib_name);
-  if (fd == -1) {
+    int fd = mkstemp(lib_name);
+    if (fd == -1) {
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "mkstemp open file failed!: %s\n", lib_name);
+        return NULL;
+    }
+
+    if (write(fd, data, length) != length) {
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "can not alloc memory for module: %s\n", lib_name);
+        close(fd);
+        unlink(lib_name);
+        return NULL;
+    }
+
+
+    close(fd);
+
+
+    snprintf(lib_name_so, sizeof(lib_name_so), "%s.so", lib_name);
+
+
+    if (rename(lib_name, lib_name_so) != 0) {
+        perror("Failed to rename the temporary file");
+        return nullptr;
+    }
+
+    memset(&api_load_lib, 0, sizeof(api_load_lib));
+
+    // calc_md5((unsigned char *)data, length, api_load_lib.md5);
+    // show_md5(api_load_lib.md5);
+    // caculate md5 via file name
+    char current_time[20];
+    char combined[288];
+    std::time_t now = std::time(nullptr);
+    std::tm *tm_now = std::localtime(&now);
+    std::strftime(current_time, 20, "%Y-%m-%d %H:%M:%S", tm_now);
+    snprintf(combined, sizeof(combined), "%s%s", lib_name_so, current_time);
+    simple_hash(combined, api_load_lib.md5);
+
+
+    p_module = (tpu_kernel_module_t)malloc(sizeof(struct bm_module));
+    if (p_module == nullptr)
+    {
       bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "mkstemp open file failed!: %s\n", lib_name);
-      return NULL;
-  }
-
-  if (write(fd, data, length) != length) {
-      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "can not alloc memory for module: %s\n", lib_name);
-      close(fd);
-      unlink(lib_name);
-      return NULL;
-  }
-
-
-  close(fd);
-
-
-  snprintf(lib_name_so, sizeof(lib_name_so), "%s.so", lib_name);
-
-
-  if (rename(lib_name, lib_name_so) != 0) {
-      perror("Failed to rename the temporary file");
+            BMLIB_LOG_ERROR,
+            "can not alloc memory for module: %s\n", lib_name_so);
       return nullptr;
-  }
+    }
 
-  memset(&api_load_lib, 0, sizeof(api_load_lib));
+    if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
+      free(p_module);
+      return nullptr;
+    }
 
-  // calc_md5((unsigned char *)data, length, api_load_lib.md5);
-  // show_md5(api_load_lib.md5);
-  // caculate md5 via file name
-  char current_time[20];
-  char combined[288];
-  std::time_t now = std::time(nullptr);
-  std::tm *tm_now = std::localtime(&now);
-  std::strftime(current_time, 20, "%Y-%m-%d %H:%M:%S", tm_now);
-  snprintf(combined, sizeof(combined), "%s%s", lib_name_so, current_time);
-  simple_hash(combined, api_load_lib.md5);
-
-
-  p_module = (tpu_kernel_module_t)malloc(sizeof(struct bm_module));
-  if (p_module == nullptr)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "can not alloc memory for module: %s\n", lib_name_so);
-    return nullptr;
-  }
-
-  if (sizeof(a53lite_load_lib_t) % sizeof(u32) != 0)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "%s: %d invalid size = 0x%lx!\n", __FILE__, __LINE__, sizeof(a53lite_load_lib_t));
-    free(p_module);
-    return nullptr;
-  }
-
-  // memset(&dev_mem, 0, sizeof(dev_mem));
-  // ret = a53lite_load_module(handle, lib_name_so, data, length, &dev_mem);
-  // if (ret != BM_SUCCESS)
-  // {
-  // 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-  // 			  BMLIB_LOG_ERROR,
-  // 			  "%s %d: laod file failed!\n", __FILE__, __LINE__);
-  // 	free(p_module);
-  // 	return nullptr;
-  // }
+    // memset(&dev_mem, 0, sizeof(dev_mem));
+    // ret = a53lite_load_module(handle, lib_name_so, data, length, &dev_mem);
+    // if (ret != BM_SUCCESS)
+    // {
+    // 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+    // 			  BMLIB_LOG_ERROR,
+    // 			  "%s %d: laod file failed!\n", __FILE__, __LINE__);
+    // 	free(p_module);
+    // 	return nullptr;
+    // }
 
 
 
-  tmp = strrchr((const char *)lib_name_so, (int)'/');
-  if (tmp)
-    tmp += 1;
-  else
-    tmp = (const char *)lib_name_so;
+    tmp = strrchr((const char *)lib_name_so, (int)'/');
+    if (tmp)
+      tmp += 1;
+    else
+      tmp = (const char *)lib_name_so;
 
-  if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "%s send api error, ret %d, library name len %d too long\n",
-          __func__, ret, strlen(tmp));
-    free(p_module);
-    return NULL;
-  }
+    if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "%s send api error, ret %d, library name len %d too long\n",
+            __func__, ret, strlen(tmp));
+      free(p_module);
+      return NULL;
+    }
 
 
-  strncpy((char *)api_load_lib.lib_name, tmp, LIB_MAX_NAME_LEN);
-  strncpy((char *)api_load_lib.lib_path, lib_name_so, strlen(lib_name_so));
-  api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
-  api_load_lib.size = length;
+    strncpy((char *)api_load_lib.lib_name, tmp, LIB_MAX_NAME_LEN);
+    strncpy((char *)api_load_lib.lib_path, lib_name_so, strlen(lib_name_so));
+    api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
+    api_load_lib.size = length;
 
-  ret = bm_send_api_to_core(handle,
-                BM_API_ID_TPUSCALER_LOAD_LIB,
-                (u8 *)&api_load_lib,
-                sizeof(api_load_lib),
-                core_id);
-  if (ret != 0)
-  {
-    bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-          BMLIB_LOG_ERROR,
-          "load library send api error, ret %d\n",
-          ret);
-    free(p_module);
-    return NULL;
-  }
+    ret = bm_send_api_to_core(handle,
+                  BM_API_ID_TPUSCALER_LOAD_LIB,
+                  (u8 *)&api_load_lib,
+                  sizeof(api_load_lib),
+                  core_id);
+    if (ret != 0)
+    {
+      bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+            BMLIB_LOG_ERROR,
+            "load library send api error, ret %d\n",
+            ret);
+      free(p_module);
+      return NULL;
+    }
 
-  // ret = bm_sync_api_from_core(handle, core_id);
-  // if (ret != 0)
-  // {
-  // 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-  // 			  BMLIB_LOG_ERROR,
-  // 			  "load module file sync api error, ret %d\n",
-  // 			  ret);
-  // 	free(p_module);
-  // 	return nullptr;
-  // }
-  strncpy(p_module->lib_name, lib_name, LIB_MAX_NAME_LEN);
-  memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
+    // ret = bm_sync_api_from_core(handle, core_id);
+    // if (ret != 0)
+    // {
+    // 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+    // 			  BMLIB_LOG_ERROR,
+    // 			  "load module file sync api error, ret %d\n",
+    // 			  ret);
+    // 	free(p_module);
+    // 	return nullptr;
+    // }
+    strncpy(p_module->lib_name, lib_name, LIB_MAX_NAME_LEN);
+    memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
 
-  bm_profile_load_module(handle, p_module, core_id);
-  // bm_free_device(handle, dev_mem);
-  if (unlink(lib_name_so) != 0) {
-      perror("Failed to delete the shared library file");
-  } else {
-      printf("Shared library file deleted: %s\n", lib_name_so);
-  }
-  return p_module;
+    bm_profile_load_module(handle, p_module, core_id);
+    // bm_free_device(handle, dev_mem);
+    if (unlink(lib_name_so) != 0) {
+        perror("Failed to delete the shared library file");
+    } else {
+        printf("Shared library file deleted: %s\n", lib_name_so);
+    }
+    return p_module;
 #endif
 }
 

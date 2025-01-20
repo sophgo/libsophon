@@ -30,7 +30,7 @@ set(SRCS
   src/linux/bmlib_ioctl.cpp
   src/bmlib_md5.cpp
   src/bmlib_type.cpp
-	src/bmcpu_app.cpp
+  src/bmcpu_app.cpp
 )
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/debian-lib")
@@ -54,7 +54,7 @@ add_custom_command(OUTPUT ${DEB_SCRIPT_TARGET}
 add_custom_target(libsophon_deb_script ALL DEPENDS ${DEB_SCRIPT_TARGET})
 
 add_library(${TARGET_NAME} SHARED ${SRCS})
-# target_link_libraries(${TARGET_NAME} pthread)
+target_link_libraries(${TARGET_NAME} pthread -lrt)
 add_definitions(-DUSING_INT_CDMA=1)
 if("${PLATFORM}" STREQUAL "soc")
     add_definitions(-DSOC_MODE=1)
@@ -68,7 +68,7 @@ set_target_properties(${TARGET_NAME} PROPERTIES SOVERSION ${sover})
 if("${PLATFORM}" STREQUAL "cmodel")
     message(STATUS "USING_CMODEL")
     target_compile_definitions(${TARGET_NAME} PUBLIC -DUSING_CMODEL=1)
-    target_link_libraries(${TARGET_NAME} dl pthread)
+    target_link_libraries(${TARGET_NAME} dl pthread -lrt)
 endif()
 
 if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "riscv64")

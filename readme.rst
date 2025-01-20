@@ -10,7 +10,7 @@ libsophon目前包含如下组件：
 3. 运行时库的开发环境（头文件等）
 4. 辅助工具
 
-**如何从源码编译版本：**
+**如何从源码编译文档：**
 
 .. **安装依赖包：**
 
@@ -133,7 +133,7 @@ libsophon目前包含如下组件：
 ..     make install
 ..     make package
 
-**编译文档：**
+.. **编译文档：**
 
 需要的依赖包：
 
@@ -241,8 +241,8 @@ libsophon目前包含如下组件：
 ::
 
   chmod +x temp_install.sh
-  ./install_libsophon.sh /path/to/libsophon-0.4.9
-  ./install_libsophon.sh
+  ./temp_install.sh /path/to/libsophon-0.4.9
+.. ./install_libsophon.sh
 
 模型运行:
 
