@@ -155,6 +155,7 @@ libsophon目前包含如下组件：
 编译：
 
 ::
+
     如果没有进行区域设置（locale），请先设置区域：
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
