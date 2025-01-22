@@ -155,11 +155,14 @@ libsophon目前包含如下组件：
 编译：
 
 ::
-
+    如果没有进行区域设置（locale），请先设置区域：
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    再运行编译：
     cmake --build . --target doc
     或者：
     make doc
-    在doc/build下即可以看到html和pdf格式的文档。
+    在doc/reference/build下即可以看到bmlib开发html和pdf格式的文档。
 
 
 **如何从源码编译SoC版本：**
@@ -212,8 +215,8 @@ libsophon目前包含如下组件：
     mv aarch64-linux-gnu-* aarch64-bak
     ln -s /workspace/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-* .
 
-    假定前面拷贝的linux-headers安装包名叫linux-headers-5.4.207-bm1684-ga2f7484bf21a.deb：
-    header="linux-headers-5.4.207-bm1684-ga2f7484bf21a"
+    假定前面拷贝的linux-headers安装包名叫linux-headers-5.4.207-bm1684-ga2f7484bf21a.deb，设置环境变量：
+    export header="linux-headers-5.4.207-bm1684-ga2f7484bf21a"
 
     cd /workspace/libsophon
     mkdir build && cd build
@@ -241,15 +244,16 @@ libsophon目前包含如下组件：
 ::
 
   chmod +x temp_install.sh
-  ./temp_install.sh /path/to/libsophon-0.4.9
+  ./temp_install.sh {/path/to/libsophon-0.4.9}
 .. ./install_libsophon.sh
 
 模型运行:
 
 ::
 
-  bmodel模式下：
-  ./path/to/libsophon-0.4.9/bin/bmrt_test --context_dir /model to path/ --devid 0  &
+  bmodel模式下运行模型：
+  .{/path/to/libsophon-0.4.9}/bin/bmrt_test --context_dir {/model_to_path/} --devid 0  &
+  把/path/to/libsophon-0.4.9，替换成自己的安装路径；把model_to_path替换成自己的bmodel模型路径。
 
 
 
