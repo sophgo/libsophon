@@ -516,8 +516,8 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
     pmem->flags.u.gmem_heapid = alloc_data.heap_id;
   }
   bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG,
-  "alloc_data.paddr:%lx, alloc_data.fd:%d, alloc_size:%d\n", 
-  alloc_data.paddr, alloc_data.fd, alloc_data.len);
+  "alloc_data.paddr:%lx, alloc_data.fd:%d, alloc_size:%d, alloc_data.heap_id_mask:%d\n", 
+  alloc_data.paddr, alloc_data.fd, alloc_data.len, alloc_data.heap_id_mask);
 
   if (ret) {
     pmem->u.device.device_addr = BM_MEM_ADDR_NULL;

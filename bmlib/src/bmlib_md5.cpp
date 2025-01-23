@@ -219,7 +219,8 @@ void simple_hash(const char *input, unsigned char hash[16]) {
     memset(hash, 0, 16);
 
     // Simple hash calculation
-    for (size_t i = 0; i < strlen(input); ++i) {
+    size_t length = strlen(input);
+    for (size_t i = 0; i < length; ++i) {
         hash[i % 16] ^= static_cast<unsigned char>(input[i]) + static_cast<unsigned char>(i);
     }
 }

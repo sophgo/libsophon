@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-BMLIB开发参考手册
+bmlib开发参考手册
 ============================
 
 .. toctree::

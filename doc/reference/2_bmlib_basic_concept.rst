@@ -1,12 +1,12 @@
-Bmlib的基本概念和功能
+bmlib的基本概念和功能
 =====================
 
 基于算能神经网络加速芯片设计的SDK的简单功能框图如下：
 
-.. image:: ./images/image1_.png
+.. image:: ./images/image1_2.png
    :align: center
           
-Bmlib是在内核驱动之上封装的一层底层软件库，完成的主要功能有：
+bmlib是在内核驱动之上封装的一层底层软件库，完成的主要功能有：
 
 -  设备handle的创建和销毁
 
@@ -107,7 +107,28 @@ Host这端的软件如果想让tpu完成一个任务，需要向tpu发送一个�
 
 .. 我们提供了接口用于获取和设置tpu的工作频率，用户可以自己定义一些自己的功耗控制策略。
 
-杂项信息接口
+.. 杂项信息接口
+.. ------------
+
+.. 用于获取板卡的信息和运行过程中的统计信息。目前包括memory总量和使用量，tpu的利用率
+
+TPU驱动基本功能介绍
 ------------
 
-用于获取板卡的信息和运行过程中的统计信息。目前包括memory总量和使用量，tpu的利用率
+主要功能是为算子库执行提供环境支持，包含TPU硬件时钟使能、TPU寄存器地址范围的映射，TPU或GDMA各自clk的开启是通过在TPU_SYS 寄存器中将reg_clk_tpu_en和reg_clk_gdma_en各自置高来实现的。在使用tpu之前，需要通过tpu内部cfg_en信号对tpu进行使能，否则tpu的门控时钟不会被打开；配置tpu_reg的0x100地址为1后开始进行指令配置，
+举例说明：
+
+.. code-block:: C++
+
+  # 读写tpu寄存器地址，可以通过mmap接口进行地址映射，然后再进行读写操作
+  ioctl(fd, BMDEV_SET_IOMAP_TPYE, {type});
+  mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  # 其中type对应TPU_sys各个模块类型，如下：
+  enum {
+    MMAP_GDMA = 0,
+    MMAP_SYS,
+    MMAP_REG,
+    MMAP_SMEM,
+    MMAP_LMEM
+  };
+

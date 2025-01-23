@@ -10,6 +10,3 @@
 [submodule "tpu-common"]
 	path = tpu-common
 	url = ../tpu-common
-[submodule "libsophav"]
-	path = libsophav
-	url = ../libsophav.git

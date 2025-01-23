@@ -23,6 +23,34 @@ char g_library_file[100];
 
 jmp_buf jmp_env;
 
+
+typedef enum {
+	 DT_INT8  = (0 << 1) | 1,
+	 DT_UINT8 = (0 << 1) | 0,
+	 DT_INT16 = (3 << 1) | 1,
+	 DT_UINT16 = (3 << 1) | 0,
+	 DT_FP16  = (1 << 1) | 1,
+	 DT_BFP16 = (5 << 1) | 1,
+	 DT_INT32 = (4 << 1) | 1,
+	 DT_UINT32 = (4 << 1) | 0,
+	 DT_FP32  = (2 << 1) | 1,
+	 DT_INT4  = (6 << 1) | 1,
+	 DT_UINT4 = (6 << 1) | 0,
+	 DT_FP8E5M2 = (0 << 5) | (7 << 1) | 1,
+	 DT_FP8E4M3 = (1 << 5) | (7 << 1) | 1,
+	 DT_FP20  = (8 << 1) | 1,
+	 DT_TF32  = (9 << 1) | 1,
+} data_type_t;
+
+typedef struct sg_api_1d_memcpy {
+  unsigned long long src_global_offset;
+  unsigned long long dst_global_offset;
+  int w_bytes;
+  int stride_bytes_src;
+  int stride_bytes_dst;
+  data_type_t data_type;
+} __attribute__((packed)) sg_api_1d_memcpy_t;
+
 size_t virtual_to_physical(size_t addr)
 {
     int fd = open("/proc/self/pagemap", O_RDONLY);
@@ -175,7 +203,7 @@ bm_device_mem_t alloc_on_system(DeviceMemAllocator* allocator, size_t elem_size,
 
 bm_device_mem_t map_input_to_device(DeviceMemAllocator* allocator, const bm_device_mem_t* raw_mem, size_t elem_size) {
     if (bm_mem_get_type(*raw_mem) == BM_MEM_TYPE_SYSTEM) {
-        bm_device_mem_t new_mem = alloc_on_device(allocator, elem_size* sizeof(uint32_t), NULL);
+        bm_device_mem_t new_mem = alloc_on_device(allocator, elem_size, NULL);
 				#ifndef USING_CMODEL
 				bm_memcpy_s2d(allocator->handle, new_mem, bm_mem_get_system_addr(*raw_mem));
 				// int ret=bm_mem_write_data_to_ion(allocator->handle, &new_mem, bm_mem_get_system_addr(*raw_mem), elem_size* sizeof(uint32_t));
@@ -188,13 +216,13 @@ bm_device_mem_t map_input_to_device(DeviceMemAllocator* allocator, const bm_devi
 				// 	printf( "bm_mem_write_data_to_ion success! %lu\n",new_mem.u.device.device_addr);
 				// } 
 
-				uint32_t *read_buffer = (uint32_t *)malloc(elem_size * sizeof(uint32_t));
+				uint32_t *read_buffer = (uint32_t *)malloc(elem_size);
 				if (read_buffer == NULL) {
 						perror("malloc failed11");
 				}
 
 
-				bm_status_t read_status = bm_mem_read_data_from_ion(allocator->handle, &new_mem, read_buffer, elem_size * sizeof(uint32_t));
+				bm_status_t read_status = bm_mem_read_data_from_ion(allocator->handle, &new_mem, read_buffer, elem_size);
 				if (read_status != BM_SUCCESS) {
 						fprintf(stderr, "Failed to read data from device memory, error code: %d\n", read_status);
 				} else {
@@ -222,7 +250,7 @@ bm_device_mem_t map_input_to_device(DeviceMemAllocator* allocator, const bm_devi
 
 bm_device_mem_t map_output_to_device(DeviceMemAllocator* allocator, const bm_device_mem_t* raw_mem, size_t elem_size, int is_inplace) {
     if (bm_mem_get_type(*raw_mem) == BM_MEM_TYPE_SYSTEM) {
-        bm_device_mem_t new_mem = alloc_on_device(allocator, elem_size* sizeof(uint32_t), NULL);
+        bm_device_mem_t new_mem = alloc_on_device(allocator, elem_size, NULL);
         allocator->post_copy_map.keys = (bm_device_mem_t*)realloc(allocator->post_copy_map.keys, (allocator->post_copy_map.size + 1) * sizeof(bm_device_mem_t));
         allocator->post_copy_map.values = (bm_device_mem_t*)realloc(allocator->post_copy_map.values, (allocator->post_copy_map.size + 1) * sizeof(bm_device_mem_t));
         allocator->post_copy_map.keys[allocator->post_copy_map.size] = *raw_mem;
@@ -416,7 +444,7 @@ int main(int argc, char *argv[]) {
 		}
 
 
-		f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_memcpy");
+		f_id = tpu_kernel_get_function(handle, bm_module, "sg_api_1d_memcpy");
 		if (f_id==-1)
 		{
 			printf("tpu_kernel_get_function failed...");
@@ -427,31 +455,31 @@ int main(int argc, char *argv[]) {
 		}
 
 
-		sg_api_memcpy_t api_mem_param;
-    api_mem_param.count = 100;
-    size_t shape_cnt = api_mem_param.count;
-    size_t sg_dtype_len = sizeof(uint32_t);
-    uint32_t* input = (uint32_t*)malloc(shape_cnt * sg_dtype_len);
-    if (!input) {
-        fprintf(stderr, "Failed to allocate memory for input\n");
-				bm_dev_free(handle);
-        return 1;
-    }
-    init_input(input, shape_cnt);
-    uint32_t* output = (uint32_t*)malloc(shape_cnt * sg_dtype_len);
-    if (!output) {
-        fprintf(stderr, "Failed to allocate memory for output\n");
-        free(input);
-				bm_dev_free(handle);
-        return 1;
-    }
+		// sg_api_memcpy_t api_mem_param;
+    // api_mem_param.count = 100;
+    // size_t shape_cnt = api_mem_param.count;
+    // size_t sg_dtype_len = sizeof(uint32_t);
+    // uint32_t* input = (uint32_t*)malloc(shape_cnt * sg_dtype_len);
+    // if (!input) {
+    //     fprintf(stderr, "Failed to allocate memory for input\n");
+		// 		bm_dev_free(handle);
+    //     return 1;
+    // }
+    // init_input(input, shape_cnt);
+    // uint32_t* output = (uint32_t*)malloc(shape_cnt * sg_dtype_len);
+    // if (!output) {
+    //     fprintf(stderr, "Failed to allocate memory for output\n");
+    //     free(input);
+		// 		bm_dev_free(handle);
+    //     return 1;
+    // }
 
-    bm_device_mem_t input_mem = bm_mem_from_system(input);
-    bm_device_mem_t input_device_mem = map_input_to_device(&allocator, &input_mem, shape_cnt);
-    bm_device_mem_t output_mem = bm_mem_from_system(output);
-    bm_device_mem_t output_device_mem = map_output_to_device(&allocator, &output_mem, shape_cnt, 0);
-    api_mem_param.src_global_offset = bm_mem_get_device_addr(input_device_mem);
-    api_mem_param.dst_global_offset = bm_mem_get_device_addr(output_device_mem);
+    // bm_device_mem_t input_mem = bm_mem_from_system(input);
+    // bm_device_mem_t input_device_mem = map_input_to_device(&allocator, &input_mem, shape_cnt);
+    // bm_device_mem_t output_mem = bm_mem_from_system(output);
+    // bm_device_mem_t output_device_mem = map_output_to_device(&allocator, &output_mem, shape_cnt, 0);
+    // api_mem_param.src_global_offset = bm_mem_get_device_addr(input_device_mem);
+    // api_mem_param.dst_global_offset = bm_mem_get_device_addr(output_device_mem);
 
     // int status = bm_mem_write_data_to_sys_ion(allocator.handle, &output_device_mem, dtype, size, "output.dat");
 
@@ -476,6 +504,41 @@ int main(int argc, char *argv[]) {
 		// }else{
 		// 	printf( "bm_vAddr_to_pAddr success! %llu\n",api_mem_param.src_global_offset);
 		// }
+
+    size_t shape_cnt=100;
+    sg_api_1d_memcpy api_mem_param;
+    api_mem_param.data_type = DT_INT8;
+    api_mem_param.w_bytes = shape_cnt;
+    size_t sg_dtype_len = sizeof(uint8_t);
+
+    // init src data
+    uint8_t *input = (uint8_t *)malloc(shape_cnt * sg_dtype_len);
+    if (!input) {
+      fprintf(stderr, "Failed to allocate memory for input\n");
+      return BM_ERR_FAILURE;
+    }
+    // init src data value
+    for (size_t i = 0; i < shape_cnt * sg_dtype_len; i++) {
+      input[i] = 1;
+    }
+
+    // init dst data
+    uint32_t *output = (uint32_t *)malloc(shape_cnt * sg_dtype_len);
+    if (!output) {
+      fprintf(stderr, "Failed to allocate memory for output\n");
+      free(input);
+      bm_dev_free(handle);
+      return BM_ERR_FAILURE;
+    }
+
+    bm_device_mem_t input_mem = bm_mem_from_system(input);
+    bm_device_mem_t input_device_mem =
+        map_input_to_device(&allocator, &input_mem, shape_cnt * sg_dtype_len);
+    bm_device_mem_t output_mem = bm_mem_from_system(output);
+    bm_device_mem_t output_device_mem = map_output_to_device(
+        &allocator, &output_mem, shape_cnt * sg_dtype_len, 0);
+    api_mem_param.src_global_offset = bm_mem_get_device_addr(input_device_mem);
+    api_mem_param.dst_global_offset = bm_mem_get_device_addr(output_device_mem);
 
 
     ret = tpu_kernel_launch(handle, f_id, (void *)&api_mem_param, sizeof(sg_api_memcpy_t));

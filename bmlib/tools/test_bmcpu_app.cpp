@@ -489,7 +489,7 @@ void bmcpu_thread() {
 
         auto start = std::chrono::high_resolution_clock::now();
 
-        switch (bm_api->api_id) {
+        switch (static_cast<unsigned int>(bm_api->api_id)) {
         case API_ID_SGTPUV8_LOAD_LIB:
             std::cout << "load lib!" << std::endl;
             api=(bm_api_cpu_load_library_internal_t *)bm_api->api_data;
