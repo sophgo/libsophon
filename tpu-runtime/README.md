@@ -33,7 +33,7 @@ kernel_module ---->│  libbmrt.so   │
                    └───────────────┘
 ```
 
-## SOC平台编译(在A53上运行)：
+## SOC平台编译(以在ARM上运行为例)：
 ```shell
 #libsophon根目录创建build文件夹
 mkdir build
@@ -41,7 +41,8 @@ mkdir build
 cd build
 # 默认是Release版本， 通过EXTRA_CONFIG可以配置编译Debug版本
 # export EXTRA_CONFIG="-DCMAKE_BUILD_TYPE=Debug"
-cmake -DPLATFORM=soc -DCROSS_COMPILE_PATH=/path/to/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu -DCMAKE_TOOLCHAIN_FILE=/path/to/libsophon/toolchain-aarch64-linux.cmake -DLIB_DIR=/path/to/libsophon/3rdparty/arm64/soc -DBUILD_STATIC_LIB=ON -DCMAKE_INSTALL_PREFIX=$PWD/../install ..
+# 使用ARM交叉编译工具链，推荐下载链接https://github.com/sophgo/host-tools/tree/master/gcc/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu
+cmake -DPLATFORM=soc -DCROSS_COMPILE_PATH=/path/to/gcc-linaro-x.x.x-x.x-x86_64_aarch64-linux-gnu -DCMAKE_TOOLCHAIN_FILE=/path/to/libsophon/toolchain-aarch64-linux.cmake -DLIB_DIR=/path/to/libsophon/3rdparty/arm64/soc -DBUILD_STATIC_LIB=ON -DCMAKE_INSTALL_PREFIX=$PWD/../install ..
 #执行make编译
 make
 # 然后将编译好的文件,复制到目标机器工作目录中, 这里以'soc_device:work_dir'为例
@@ -208,7 +209,7 @@ input_loc_devices和output_loc_devices记录在分布式网络的情况下输入
 
 core_num记录网络所需的core数量。
 
-addr_mode记录网络的地址分配模式，0表示基础模式，1表示io_alone模式，2 表示 io_tag 模式，3 表示 io_tag_fuse 模式。
+addr_mode记录网络的地址分配模式，通常使用io_alone模式。
 
 bmrt_get_network_info根据网络名，得到某个网络的信息，接口声明如下：
 
