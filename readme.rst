@@ -1,6 +1,7 @@
 libsophon概述
 -------------
 
+
 **libsophon目前包含如下组件：**
 
 
@@ -251,7 +252,7 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
 .. code-block:: bash
 
   chmod +x libsophon_install.sh
-  ./temp_install.sh {/path/to/libsophon-0.4.9}
+  ./libsophon_install.sh {/path/to/libsophon-0.4.9}
 .. ./install_libsophon.sh
 
 
