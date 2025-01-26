@@ -203,7 +203,6 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
     /workspace
          |----gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu
          |----libsophon
-         |----soc_kernel
 .. |----linux-headers-*.deb
          
 
