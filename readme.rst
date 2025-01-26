@@ -172,16 +172,16 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
     # 在doc/reference/build下即可以看到bmlib开发html和pdf格式的文档。
 
 
-**如何从源码编译SoC版本：**
+**如何从源码编译运行时库：**
 
 
-首先您需要编译SoC BSP，请参考BSP的编译指导。
+.. 首先您需要编译SoC BSP，请参考BSP的编译指导。
 
 
 .. 我们提供2种方式编译soc版本
 
 
-**交叉编译环境方式：**
+.. **交叉编译环境方式：**
 
 
 1.环境准备：
@@ -196,11 +196,6 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
     # 拷贝libsophon源码：
     cp -r ${path_to_libsophon_repo}/libsophon ${path_to_local_workspace}/
 
-    # 从SoC BSP编译目录拷贝linux-headers安装包：
-    cp ${path_to_soc_bsp}/install/soc_*/bsp-debs/linux-headers-*.deb ${path_to_local_workspace}/
-    mkdir -p ${path_to_local_workspace}/soc_kernel
-    dpkg -x ${path_to_local_workspace}/linux-headers-*.deb ${path_to_local_workspace}/soc_kernel
-
     # 进入docker：
     docker pull ubuntu:focal
     sudo docker run -v ${path_to_local_workspace}:/workspace -it ubuntu:focal bash
@@ -208,11 +203,12 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
     /workspace
          |----gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu
          |----libsophon
-         |----linux-headers-*.deb
          |----soc_kernel
+.. |----linux-headers-*.deb
+         
 
 
-2.编译来libsophon：
+2.编译来libsophon运行时库：
 
 .. code-block:: bash
 
@@ -222,7 +218,7 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
     mv aarch64-linux-gnu-* aarch64-bak
     ln -s /workspace/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-* .
 
-    # 假定前面拷贝的linux-headers安装包名叫linux-headers-5.4.207-bm1684-ga2f7484bf21a.deb，设置环境变量：
+    # 下面是header是用来编译驱动的，需要编译kernel后再编译驱动，目前不提供编译驱动的方式，直接提供驱动包，路径libsophon/bmtpu.ko。
     export header="linux-headers-5.4.207-bm1684-ga2f7484bf21a"
 
     cd /workspace/libsophon
@@ -233,7 +229,6 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
           -DCMAKE_INSTALL_PREFIX=$PWD/../install ..
 
     make -j8
-    make driver -j8
     make install -j8
 .. make vpu_driver -j8
 .. make jpu_driver
