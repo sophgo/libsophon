@@ -14,7 +14,8 @@ sudo rmmod bmtpu
 
 # Install the bmtpu.ko module
 echo "Installing bmtpu.ko module..."
-sudo insmod "$LIBSOPHON_PATH/data/bmtpu.ko"
+sudo insmod "$LIBSOPHON_PATH/bmtpu.ko"
+sudo mdev -s
 
 # Copy all files from lib to /lib
 echo "Copying library files to /lib..."
