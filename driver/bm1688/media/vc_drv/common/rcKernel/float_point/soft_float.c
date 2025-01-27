@@ -1141,7 +1141,7 @@ sw_float float32_round_to_int(struct roundingData *roundData, sw_float a)
 
 void float32_extract_int_and_float(sw_float a, sw_float *int_a, sw_float *float_a)
 {
-    struct roundingData roundData;
+    struct roundingData roundData = {0};
     roundData.mode = float_round_to_zero;
     *int_a = float32_round_to_int(&roundData, a);
     *float_a = float32_sub(&roundData, a, *int_a);

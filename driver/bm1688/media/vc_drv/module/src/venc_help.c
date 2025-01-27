@@ -242,9 +242,9 @@ BOOL venc_help_h265_sps_add_vui(H265Vui *pVui, void **ppBuffer, Int32 *pBufferSi
 void venc_help_gen_qpmap_from_roiregion(RoiParam *roiParam, Uint32 picWidth, Uint32 picHeight, int initQp, Uint8 *roiCtuMap, CodStd bitstreamFormat) {
 
     Int32 i, blk_addr;
-    Uint32 mapWidth, mapHeight = 0;
+    Uint32 mapWidth = 0, mapHeight = 0;
     Uint32 roi_map_size;
-    int blkSize, operand;
+    int blkSize, operand = 0;
     VpuRect *region = NULL;
     VpuRect *rect;
     Uint32 x, y;

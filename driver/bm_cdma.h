@@ -105,9 +105,12 @@ void bm_cdma_free_irq(struct bm_device_info *bmdi);
 #endif
 #ifdef SOC_MODE
 #include <linux/irqreturn.h>
+irqreturn_t bmdrv_irq_handler_cdma0(int irq, void *data);
+irqreturn_t bmdrv_irq_handler_cdma1(int irq, void *data);
 irqreturn_t bmdrv_irq_handler_cdma(int irq, void *data);
 #endif
-void bmdrv_cdma_irq_handler(struct bm_device_info *bmdi);
+void bmdrv_cdma_irq_handler0(struct bm_device_info *bmdi);
+void bmdrv_cdma_irq_handler1(struct bm_device_info *bmdi);
 #include "bm1682_cdma.h"
 #include "bm1684_cdma.h"
 #include "bm1688_cdma.h"

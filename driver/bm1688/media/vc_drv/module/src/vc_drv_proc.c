@@ -494,7 +494,7 @@ vcodec_proc_write_helper(const char __user *user_buf, size_t count,
     uint8_t u8DgbStartFrmPrefixLen;
     uint8_t u8DgbEndFrmPrefixLen;
     uint8_t u8DgbDirPrefixLen;
-    uint8_t u8NoDataTimeoutPrefixLen;
+    uint8_t u8NoDataTimeoutPrefixLen = 0;
 
     if (!user_buf) {
         pr_err("no user buf input\n");

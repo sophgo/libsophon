@@ -7,6 +7,9 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/irqreturn.h>
+#include <linux/syscalls.h>
+#include <linux/fdtable.h>
+#include <linux/fs.h>
 #if KERNEL_VERSION(4, 11, 0) <= LINUX_VERSION_CODE
 #include <linux/sched/signal.h>
 #else
@@ -38,7 +41,7 @@ unsigned int vc_write_reg(unsigned int addr, unsigned int data)
 	return bm_write32(g_bmdi, addr, data);
 }
 
-uint64_t vc_ion_alloc(uint32_t len)
+uint64_t vc_ion_alloc(uint32_t len, int32_t *fd)
 {
 	struct ion_allocation_data alloc_data = {0};
 
@@ -47,11 +50,19 @@ uint64_t vc_ion_alloc(uint32_t len)
 
 	ion_alloc(g_bmdi, &alloc_data);
 
+	*fd = alloc_data.fd;
 	return alloc_data.paddr;
 }
 
-unsigned int vc_ion_free(uint64_t p_addr)
+unsigned int vc_ion_free(uint32_t fd)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+	close_fd(fd);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+	ksys_close(fd);
+#else
+	sys_close(fd);
+#endif
 	return 0;
 }
 
@@ -128,6 +139,15 @@ void drv_vc_free_irq(void)
 	bmdrv_submodule_free_irq(g_bmdi, s_vpu_irq[0]);
 	bmdrv_submodule_free_irq(g_bmdi, s_vpu_irq[1]);
 	bmdrv_submodule_free_irq(g_bmdi, s_vpu_irq[2]);
+}
+void drv_vc_enable_irq(int irq_num)
+{
+	bmdrv_enable_irq(g_bmdi, irq_num);
+}
+
+void drv_vc_disable_irq(int irq_num)
+{
+	bmdrv_disable_irq(g_bmdi, irq_num);
 }
 
 int vc_drv_init(struct bm_device_info *bmdi)

@@ -54,12 +54,15 @@
 struct bm_device_info;
 u32 bm1688_cdma_transfer(struct bm_device_info *bmdi, struct file *file,
 		pbm_cdma_arg parg, bool lock_cdma);
-void bm1688_clear_cdmairq(struct bm_device_info *bmdi);
+void bm1688_clear_cdmairq0(struct bm_device_info *bmdi);
+void bm1688_clear_cdmairq1(struct bm_device_info *bmdi);
 
 int bm1688_dual_cdma_init(struct bm_device_info *bmdi);
 int bm1688_dual_cdma_remove(struct bm_device_info *bmdi);
-u32 bm1688_dual_cdma_transfer(struct bm_device_info *bmdi, struct file *file,
+u32 bm1688_dual_cdma_transfer_for_test(struct bm_device_info *bmdi, struct file *file,
                         pbm_cdma_arg parg0, pbm_cdma_arg parg1, bool lock_cdma);
+u32 bm1688_dual_cdma_transfer(struct bm_device_info *bmdi, struct file *file,
+						pbm_cdma_arg parg, bool lock_cdma);
 
 #ifdef SOC_MODE
 void bm1688_cdma_reset(struct bm_device_info *bmdi);

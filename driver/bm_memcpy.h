@@ -42,7 +42,11 @@ struct bm_memcpy_info {
 	struct mmap_info mminfo;
 
 	struct completion cdma_done;
+	struct completion cdma_done0;
+	struct completion cdma_done1;
 	struct mutex cdma_mutex;
+	struct mutex cdma_mutex0;
+	struct mutex cdma_mutex1;
 	struct mutex p2p_mutex;
 	int cdma_max_payload;
 
@@ -50,7 +54,9 @@ struct bm_memcpy_info {
 	int (*bm_memcpy_init)(struct bm_device_info *);
 	void (*bm_memcpy_deinit)(struct bm_device_info *);
 	u32 (*bm_cdma_transfer)(struct bm_device_info *, struct file *, pbm_cdma_arg, bool);
-	u32 (*bm_dual_cdma_transfer)(struct bm_device_info *, struct file *, pbm_cdma_arg, pbm_cdma_arg, bool);
+	u32 (*bm_dual_cdma_transfer)(struct bm_device_info *bmdi, struct file *file, pbm_cdma_arg parg, bool lock_cdma);
+	u32 (*bm_dual_cdma_transfer_for_test)(struct bm_device_info *bmdi, struct file *file, pbm_cdma_arg parg0,
+		pbm_cdma_arg parg1, bool lock_cdma);
 	int (*bm_disable_smmu_transfer)(struct bm_memcpy_info *, struct iommu_region *, struct iommu_region *, struct bm_buffer_object **);
 	int (*bm_enable_smmu_transfer)(struct bm_memcpy_info *, struct iommu_region *, struct iommu_region *, struct bm_buffer_object **);
 };
@@ -104,4 +110,6 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,
 int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
+int bmdev_dual_cdma_memcpy_for_test(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
+
 #endif

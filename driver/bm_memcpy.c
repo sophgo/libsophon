@@ -22,7 +22,10 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 
 	init_completion(&memcpy_info->cdma_done);
-	mutex_init(&memcpy_info->cdma_mutex);
+	init_completion(&memcpy_info->cdma_done0);
+	init_completion(&memcpy_info->cdma_done1);
+	mutex_init(&memcpy_info->cdma_mutex0);
+	mutex_init(&memcpy_info->cdma_mutex1);
 	mutex_init(&memcpy_info->p2p_mutex);
 
 	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_s2d);
@@ -379,7 +382,7 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 			}
 			bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+			if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
 				bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 				return -EBUSY;
 			}
@@ -408,7 +411,7 @@ int bmdev_memcpy_2d_s2d(struct bm_device_info *bmdi, struct file *file, struct b
 	}
 	bmdev_construct_2d_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 		 memcpy_param->device_addr, memcpy_param, false);
-	if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
 		bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 		return -EBUSY;
 	}
@@ -442,7 +445,7 @@ int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *
 		memcpy(v_addr, src_cpy, size_step);
 		bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, false, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
 			bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 			return -EBUSY;
 		}
@@ -476,7 +479,7 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 		bmdev_construct_cdma_arg(&cdma_arg, src + cur_addr_inc,
 			p_addr & 0xffffffffff,
 			size_step, CHIP2HOST, false, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
 			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 			return -EBUSY;
 		}
@@ -549,7 +552,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 			bmdev_construct_cdma_arg(&cdma_arg, src + cur_addr_inc,
 				p_addr & 0xffffffffff,
 				size_step, CHIP2HOST, intr, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+			if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
 				bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 				return -EBUSY;
 			}
@@ -578,7 +581,7 @@ int bmdev_memcpy_2d_d2s(struct bm_device_info *bmdi, struct file *file, struct b
 	bmdev_construct_2d_cdma_arg(&cdma_arg, memcpy_param->device_addr,
 		p_addr & 0xffffffffff,
 		memcpy_param, false);
-	if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
 		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 		return -EBUSY;
 	}
@@ -601,7 +604,7 @@ int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u6
 
 	bmdev_construct_cdma_arg(&cdma_arg, src,
 			dst, size, CHIP2CHIP, intr, false);
-	if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true))
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true))
 		return -EBUSY;
 	return ret;
 }
@@ -613,7 +616,7 @@ int bmdev_memcpy_2d_c2c(struct bm_device_info *bmdi, struct file *file, struct b
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 
 	bmdev_construct_2d_cdma_arg(&cdma_arg, memcpy_param->src_device_addr, memcpy_param->device_addr, memcpy_param, false);
-	if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true))
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true))
 		return -EBUSY;
 	return ret;
 }
@@ -651,6 +654,7 @@ int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long a
 		else if (memcpy_param.dir == CHIP2CHIP)
 			ret = bmdev_memcpy_2d_c2c(bmdi, file, &memcpy_param);
 	}
+	//pr_err("%s:line %d, 1111\n", __func__, __LINE__);
 	return ret;
 }
 
@@ -725,7 +729,8 @@ void dual_cdma_post_transfer(struct bm_device_info *bmdi, struct bm_stagemem *st
 	}
 }
 
-int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg) {
+int bmdev_dual_cdma_memcpy_for_test(struct bm_device_info *bmdi, struct file *file, unsigned long arg)
+{
 	int ret = 0;
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 	struct bm_cdma_arg *cdma0_arg_ptr = NULL;
@@ -758,8 +763,8 @@ int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsig
 	if (!(cdma0_arg_ptr || cdma1_arg_ptr)) {
 		return -1;
 	} else {
-		if (memcpy_info->bm_dual_cdma_transfer) {
-			memcpy_info->bm_dual_cdma_transfer(bmdi, file, cdma0_arg_ptr, cdma1_arg_ptr, true);
+		if (memcpy_info->bm_dual_cdma_transfer_for_test) {
+			memcpy_info->bm_dual_cdma_transfer_for_test(bmdi, file, cdma0_arg_ptr, cdma1_arg_ptr, true);
 		}
 		if (NULL != cdma0_arg_ptr) {
 			dual_cdma_post_transfer(bmdi, &cdma_stagemem[0], &dual_param.cdma_param[0], &cdma0_arg);
@@ -813,8 +818,8 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 
 		bmdev_construct_cdma_arg(&cdma_arg, memcpy_param.src_device_addr + i*bar4_size,
 			bar4_addr, trans_size, CHIP2HOST, memcpy_param.intr, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, true)) {
-			pr_info("bm_cdma_transfer error\n");
+		if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
+			pr_info("bm_dual_cdma_transfer error\n");
 			return -EBUSY;
 		}
 	}

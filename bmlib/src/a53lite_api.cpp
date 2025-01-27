@@ -154,6 +154,7 @@ bm_status_t a53lite_load_file(bm_handle_t handle,
 		free(file_buffer);
 		return BM_ERR_FAILURE;
 	}
+
 	ret = bm_memcpy_d2s(handle, file_buffer_verify, *dev_mem_ptr);
 	if (ret != BM_SUCCESS)
 	{
@@ -169,8 +170,8 @@ bm_status_t a53lite_load_file(bm_handle_t handle,
 		free(file_buffer);
 		return BM_ERR_FAILURE;
 	}
-	if (0 != memcmp(file_buffer, file_buffer_verify, u32FileSize))
-	{
+
+	if (0 != memcmp(file_buffer, file_buffer_verify, u32FileSize)) {
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
 				  BMLIB_LOG_ERROR,
 				  "verify transfer file %s error\n",
@@ -370,8 +371,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 	else
 		tmp = (const char *)module_file;
 
-	if (strlen(tmp) > LIB_MAX_NAME_LEN - 1)
-	{
+	if (strlen(tmp) > LIB_MAX_NAME_LEN - 1) {
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
 				  BMLIB_LOG_ERROR,
 				  "%s send api error, ret %d, library name len %d too long\n",
@@ -379,6 +379,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 		free(p_module);
 		return NULL;
 	}
+
 	strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
 	api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
 	api_load_lib.size = file_size;

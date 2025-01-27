@@ -359,7 +359,6 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
 {
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb;
-    Uint32          offset;
     Uint32          i;
 
     jdi = &s_jdi_info;
@@ -392,10 +391,10 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
         return 0;
     }
 
-    offset = addr - (unsigned long)jdb.phys_addr;
-    if (data == NULL || (jdb.virt_addr+offset) == 0 ) {
+    if (data == NULL) {
         return 0;
     }
+
     swap_endian(data, len, endian);
     vc_memcpy_s2d(data, addr, len);
 

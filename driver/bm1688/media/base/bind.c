@@ -6,6 +6,7 @@
 #include <linux/comm_sys.h>
 #include <linux/comm_errno.h>
 #include <linux/base_uapi.h>
+#include <linux/uaccess.h>
 #include <queue.h>
 #include "base_debug.h"
 

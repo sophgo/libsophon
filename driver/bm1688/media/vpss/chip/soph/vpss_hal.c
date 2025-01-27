@@ -61,6 +61,7 @@ int avail_mask = 0xff;
 int sche_thread_enable = 1;
 unsigned short reset_time[VPSS_MAX];
 unsigned char core_last_sign[VPSS_MAX];
+static unsigned char g_is_init = false;
 
 module_param(work_mask, int, 0644);
 
@@ -305,6 +306,10 @@ static int job_try_schedule(struct vpss_job *job)
 		}
 
 	spin_lock_irqsave(&vpss_dev->lock, flags);
+	if (!g_is_init) {
+		vpss_hw_init();
+		g_is_init = true;
+	}
 	if (job->is_online)
 		dev_idx = 0;
 	else

@@ -334,7 +334,8 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->bmdrv_enable_irq =  bm1688_enable_intc_irq;
 		cinfo->bmdrv_get_irq_status =  bm1688_get_irq_status;
 		cinfo->bmdrv_unmaskall_intc_irq = bm1688_unmaskall_intc_irq;
-		cinfo->bmdrv_clear_cdmairq = bm1688_clear_cdmairq;
+		cinfo->bmdrv_clear_cdmairq0 = bm1688_clear_cdmairq0;
+		cinfo->bmdrv_clear_cdmairq0 = bm1688_clear_cdmairq1;
 		//cinfo->bmdrv_clear_msgirq = bm1684_clear_msgirq;
 		//cinfo->bmdrv_pending_msgirq_cnt = bm1684_pending_msgirq_cnt;
 		cinfo->bmdrv_config_iatu_for_function_x = bm1688_config_iatu_for_function_x;
@@ -1205,11 +1206,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	// 	goto err_ctrl_add_dev;
 	// }
 
-	rc = bm_monitor_thread_init(bmdi);
-	if (rc) {
-		dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
-		goto err_monitor_thread_init;
-	}
+	// rc = bm_monitor_thread_init(bmdi);
+	// if (rc) {
+	// 	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
+	// 	goto err_monitor_thread_init;
+	// }
 
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
@@ -1240,8 +1241,8 @@ err_card_init:
 	bmdrv_proc_file_deinit(bmdi);
 err_proc_file_init:
 //	bm_monitor_thread_deinit(bmdi);
-err_monitor_thread_init:
-	bmdrv_ctrl_del_dev(bmci, bmdi);
+//err_monitor_thread_init:
+	//bmdrv_ctrl_del_dev(bmci, bmdi);
 // err_ctrl_add_dev:
 	if (dev_count == 0)
 		bmdrv_remove_bmci();

@@ -168,14 +168,14 @@ int bmdrv_init_irq(struct platform_device *pdev)
 
 	if (cinfo->chip_id == 0x1686a200) {
 		cinfo->irq_id_cdma0 = irq_of_parse_and_map(pdev->dev.of_node, 0);
-		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma0, NULL, bmdrv_irq_handler_cdma,
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma0, NULL, bmdrv_irq_handler_cdma0,
 							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA0", bmdi);
 		if (ret)
 			return -EINVAL;
 		dev_info(&pdev->dev, "bmdrv: cdma0 irq is %d\n", cinfo->irq_id_cdma0);
 
 		cinfo->irq_id_cdma1 = irq_of_parse_and_map(pdev->dev.of_node, 1);
-		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma1, NULL, bmdrv_irq_handler_cdma,
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma1, NULL, bmdrv_irq_handler_cdma1,
 							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA1", bmdi);
 		if (ret)
 			return -EINVAL;

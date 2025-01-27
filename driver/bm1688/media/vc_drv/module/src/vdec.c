@@ -1077,7 +1077,7 @@ int drv_vdec_release_frame(vdec_chn VdChn,
 {
     int s32Ret = 0;
     vdec_chn_context *pChnHandle;
-    int fb_idx;
+    int fb_idx = -1;
     video_frame_s *pstVFrame;
 
     DRV_VDEC_API("\n");

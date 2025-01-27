@@ -106,7 +106,7 @@ int _sc_ext_set_rgn_cfg(const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
 	struct sclr_gop_odec_cfg *odec_cfg = &gop_cfg->odec_cfg;
 	struct rgn_lut_cfg *rgn_lut_cfg = (struct rgn_lut_cfg *)&rgn_cfg->rgn_lut_cfg;
 	struct sclr_gop_ow_cfg *ow_cfg;
-	u8 bpp, ow_idx;
+	u8 bpp = 0, ow_idx;
 
 	gop_cfg->gop_ctrl.raw &= ~0xfff;
 	gop_cfg->gop_ctrl.b.hscl_en = rgn_cfg->hscale_x2;

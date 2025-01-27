@@ -904,7 +904,7 @@ int vpu_op_open(int core_idx)
 
 long vpu_get_common_memory(vpudrv_buffer_t *vdb)
 {
-    long ret;
+    long ret = 0;
 
     if (vdb->core_idx >=  get_vpu_core_num(chip_id, video_cap)) {
         ret = -EFAULT;
@@ -1835,7 +1835,7 @@ int vpu_drv_platform_init(struct platform_device *pdev)
             s_vpu_register[i].phys_addr = s_vpu_reg_phy_base[i];
             s_vpu_register[i].size = VPU_REG_SIZE;
         }
-        s_vpu_register[i].virt_addr = (unsigned long)IOREMAP(s_vpu_register[i].phys_addr, s_vpu_register[i].size);
+        // s_vpu_register[i].virt_addr = (unsigned long)IOREMAP(s_vpu_register[i].phys_addr, s_vpu_register[i].size);
         DPRINTK("[VPUDRV] : vpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx, core idx = %d\n", s_vpu_register[i].phys_addr, s_vpu_register[i].virt_addr, i);
 
     }
@@ -1864,7 +1864,7 @@ int vpu_drv_platform_init(struct platform_device *pdev)
 
     DPRINTK("[VPUDRV] success to probe vpu device with non reserved video memory\n");
 
-    // entry = proc_create("soph/vpuinfo", 0666, NULL, &proc_info_operations);
+    entry = proc_create("bmsophon/vpuinfo", 0666, NULL, &proc_info_operations);
 
 #ifdef VPU_SUPPORT_CLOCK_CONTROL
     ret = vpu_register_clk(pdev);

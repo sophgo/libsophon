@@ -5,6 +5,8 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <asm/io.h>
+
 #include "jpuapi.h"
 #include "jpeg_api.h"
 #include "jpulog.h"
@@ -1443,6 +1445,7 @@ int jpeg_dec_send_stream(drv_jpg_handle handle, void *data, int length, int time
         return ret;
     }
 
+    pst_handle->handle->JpgInfo->decInfo.pBitStream = data;
     ret = _jpeg_register_framebuffer(pst_handle);
     if (ret != JPG_RET_SUCCESS) {
         JLOG(ERR, "_jpeg_register_framebuffer ret:%d\n", ret);

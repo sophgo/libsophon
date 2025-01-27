@@ -13,6 +13,7 @@
 #include <linux/delay.h>
 #include <linux/semaphore.h>
 #include <uapi/linux/sched/types.h>
+#include <asm/io.h>
 
 #include "linux/comm_vdec.h"
 #include "h265_interface.h"
@@ -120,9 +121,9 @@ static int thread_decode(void *param);
 int vdec_init_handle_pool(void)
 {
     int i;
-    struct sched_param param = {
-        .sched_priority = 95,
-    };
+    // struct sched_param param = {
+    //     .sched_priority = 95,
+    // };
 
     for (i=1; i<MAX_NUM_VPU_CORE; i++) {
         mutex_init(&vdec_handle_pool[i].handle_mutex);
@@ -131,8 +132,9 @@ int vdec_init_handle_pool(void)
         thread_handle[i] = kthread_run(thread_decode, &core_idx[i], "vdec_core%d", core_idx[i]);
         if (IS_ERR(thread_handle[i])) {
             thread_handle[i] = NULL;
-        } else
-            sched_setscheduler(thread_handle[i], SCHED_RR, &param);
+        }
+        //  else
+        //     sched_setscheduler(thread_handle[i], SCHED_RR, &param);
     }
 
     return 0;
@@ -1313,9 +1315,9 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
         pdfc->phyAddr[0] = pst_handle->pst_frame_buffer[index_frame].bufY;
         pdfc->phyAddr[1] = pst_handle->pst_frame_buffer[index_frame].bufCb;
         pdfc->phyAddr[2] = pst_handle->pst_frame_buffer[index_frame].bufCr;
-        pdfc->addr[0] = phys_to_virt(pdfc->phyAddr[0]);
-        pdfc->addr[1] = phys_to_virt(pdfc->phyAddr[1]);
-        pdfc->addr[2] = phys_to_virt(pdfc->phyAddr[2]);
+        pdfc->addr[0] = (void *)phys_to_virt(pdfc->phyAddr[0]);
+        pdfc->addr[1] = (void *)phys_to_virt(pdfc->phyAddr[1]);
+        pdfc->addr[2] = (void *)phys_to_virt(pdfc->phyAddr[2]);
         pdfc->length[0] = pdfc->strideY * pdfc->height;
         pdfc->length[1] = pdfc->strideC * pdfc->height >> 1;
         pdfc->length[2] = (!pdfc->cbcrInterleave) ? pdfc->length[1] : 0;
@@ -1333,10 +1335,10 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
         pdfc->phyAddr[1] = pst_handle->pst_frame_buffer[index_frame].bufCb;
         pdfc->phyAddr[2] = pst_handle->fb_info->vbFbcYTbl[index_frame].phys_addr;
         pdfc->phyAddr[3] = pst_handle->fb_info->vbFbcCTbl[index_frame].phys_addr;
-        pdfc->addr[0] = phys_to_virt(pdfc->phyAddr[0]);
-        pdfc->addr[1] = phys_to_virt(pdfc->phyAddr[1]);
-        pdfc->addr[2] = phys_to_virt(pdfc->phyAddr[2]);
-        pdfc->addr[3] = phys_to_virt(pdfc->phyAddr[3]);
+        pdfc->addr[0] = (void *)phys_to_virt(pdfc->phyAddr[0]);
+        pdfc->addr[1] = (void *)phys_to_virt(pdfc->phyAddr[1]);
+        pdfc->addr[2] = (void *)phys_to_virt(pdfc->phyAddr[2]);
+        pdfc->addr[3] = (void *)phys_to_virt(pdfc->phyAddr[3]);
         pdfc->length[0] = pdfc->strideY * pdfc->height;
         pdfc->length[1] = VPU_ALIGN16(pdfc->strideC)*pdfc->height;
         pdfc->length[2] = CalculateAuxBufferSize(AUX_BUF_TYPE_FBC_Y_OFFSET,
@@ -1518,9 +1520,9 @@ int enable_user_pic(void *pHandle, int instant)
 {
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
     void *thread_handle;
-    struct sched_param param = {
-        .sched_priority = 95,
-    };
+    // struct sched_param param = {
+    //     .sched_priority = 95,
+    // };
 
     pst_handle->user_pic_enable = 1;
     pst_handle->user_pic_mode = instant;
@@ -1533,7 +1535,7 @@ int enable_user_pic(void *pHandle, int instant)
                                 pst_handle->core_idx, pst_handle->channel_index);
     if (IS_ERR(thread_handle))
         return RETCODE_FAILURE;
-    sched_setscheduler(thread_handle, SCHED_RR, &param);
+    // sched_setscheduler(thread_handle, SCHED_RR, &param);
 
     return 0;
 }

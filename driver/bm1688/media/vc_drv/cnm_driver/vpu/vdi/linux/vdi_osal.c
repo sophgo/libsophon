@@ -233,7 +233,7 @@ osal_file_t osal_fopen(const char * file_name, const char * mode)
         return NULL;
     }
 
-    vdi_fp->old_fs = get_fs();
+    // vdi_fp->old_fs = get_fs();
     return vdi_fp;
 }
 size_t osal_fwrite(const void * p, int size, int count, osal_file_t fp)
@@ -242,9 +242,9 @@ size_t osal_fwrite(const void * p, int size, int count, osal_file_t fp)
     struct file *filep = vdi_fp->filep;
     size_t write_size;
 
-    set_fs(KERNEL_DS);
+    // set_fs(KERNEL_DS);
     write_size = kernel_write(filep, p, size * count, &filep->f_pos);
-    set_fs(vdi_fp->old_fs);
+    // set_fs(vdi_fp->old_fs);
 
     return write_size;
 }
@@ -254,9 +254,9 @@ size_t osal_fread(void *p, int size, int count, osal_file_t fp)
     struct file *filep = vdi_fp->filep;
     size_t read_size;
 
-    set_fs(KERNEL_DS);
+    // set_fs(KERNEL_DS);
     read_size = kernel_read(filep, p, size * count, &filep->f_pos);
-    set_fs(vdi_fp->old_fs);
+    // set_fs(vdi_fp->old_fs);
 
     return read_size;
 }
@@ -285,7 +285,7 @@ int osal_fclose(osal_file_t fp)
         return -1;
 
     filp_close(filep, 0);
-    set_fs(vdi_fp->old_fs);
+    // set_fs(vdi_fp->old_fs);
     vfree(vdi_fp);
     return 0;
 }
@@ -539,16 +539,16 @@ osal_thread_t osal_thread_create(int(*start_routine)(void*), void*arg)
 {
     osal_thread_t   handle = NULL;
     static int i = 0;
-    struct sched_param param = {
-        .sched_priority = 95,
-    };
+    // struct sched_param param = {
+    //     .sched_priority = 95,
+    // };
 
     handle = kthread_run(start_routine, arg, "vcodec_thread_%d", i++);
     if (IS_ERR(handle)) {
         VLOG(ERR, "<%s:%d> Failed to kthread_create\n", __FUNCTION__, __LINE__);
         return NULL;
     }
-    sched_setscheduler(handle, SCHED_RR, &param);
+    // sched_setscheduler(handle, SCHED_RR, &param);
 
     return handle;  //lint !e593
 }

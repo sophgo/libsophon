@@ -74,8 +74,6 @@ int main(int argc, char const *argv[])
         }
     }
 
-    if (bl1_print == 1)
-        printf("BL1 %s\n",  version.bl1_version);
     printf("BL2 %s\n",  bl2_str);
     printf("BL31 %s\n",  bl3_str);
     printf("%s\n",  version.uboot_version);

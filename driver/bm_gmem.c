@@ -368,6 +368,7 @@ int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
 	if (copy_from_user(&device_mem, (bm_device_mem_t __user *)arg, sizeof(device_mem))) {
 		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		pr_err("copy_from_user error\n");
 		return -EFAULT;
 	}
 

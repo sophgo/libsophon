@@ -2594,22 +2594,21 @@ static int _drv_process_result(venc_chn_context *pChnHandle,
         return s32Ret;
     }
 
-    if (pVencAttr->enType == PT_JPEG || pVencAttr->enType == PT_MJPEG) {
-        if (pstStream->u32PackCount > 0) {
-            venc_pack_s *ppack = &pstStream->pstPack[pstStream->u32PackCount -1];
-            int j;
+    // if (pVencAttr->enType == PT_JPEG || pVencAttr->enType == PT_MJPEG) {
+    //     if (pstStream->u32PackCount > 0) {
+    //         venc_pack_s *ppack = &pstStream->pstPack[pstStream->u32PackCount -1];
 
-            for (j = (ppack->u32Len - ppack->u32Offset - 1); j > 0;
-                 j--) {
-                unsigned char *tmp_ptr =
-                    ppack->pu8Addr + ppack->u32Offset + j;
-                if (tmp_ptr[0] == 0xd9 && tmp_ptr[-1] == 0xff) {
-                    break;
-                }
-            }
-            ppack->u32Len = ppack->u32Offset + j + 1;
-        }
-    }
+    //         int j;
+
+    //         for (j = (ppack->u32Len - ppack->u32Offset - 1); j > 0; j--) {
+    //             unsigned char *tmp_ptr = ppack->pu8Addr + ppack->u32Offset + j;
+    //             if (tmp_ptr[0] == 0xd9 && tmp_ptr[-1] == 0xff) {
+    //                 break;
+    //             }
+    //         }
+    //         ppack->u32Len = ppack->u32Offset + j + 1;
+    //     }
+    // }
 
     return s32Ret;
 }

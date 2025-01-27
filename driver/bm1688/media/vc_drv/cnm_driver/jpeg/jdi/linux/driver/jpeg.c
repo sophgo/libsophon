@@ -86,9 +86,9 @@ static struct file *g_filp;
 
 #ifdef JPU_SUPPORT_ISR
 #define JPU_IRQ_NUM                 (15+32)
-/* if the driver want to disable and enable IRQ whenever interrupt asserted. */
-// #define JPU_IRQ_CONTROL
 #endif
+/* if the driver want to disable and enable IRQ whenever interrupt asserted. */
+#define JPU_IRQ_CONTROL
 
 
 #ifndef VM_RESERVED	/*for kernel up to 3.7.0 version*/
@@ -151,9 +151,8 @@ static jpudrv_buffer_t s_instance_pool = {0};
 static jpu_drv_context_t s_jpu_drv_context;
 
 static int s_jpu_open_ref_count;
-#ifdef JPU_SUPPORT_ISR
-//static int s_jpu_irq = JPU_IRQ_NUM;
-static int s_jpu_irq[MAX_NUM_JPU_CORE] = {JPU_IRQ_NUM};
+#if 1//def JPU_SUPPORT_ISR
+static int s_jpu_irq[MAX_NUM_JPU_CORE] = {46, 47, 48, 49};
 int jpu_core_irq_count[MAX_NUM_JPU_CORE] = {0};
 int irq_status[MAX_NUM_JPU_CORE] = {0};
 #endif
@@ -213,6 +212,9 @@ extern int jpu_core_init_resources(unsigned int core_num);
 extern void jpu_core_cleanup_resources(void);
 extern unsigned int vc_read_reg(unsigned int addr);
 extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
+extern void drv_vc_enable_irq(int irq_num);
+extern void drv_vc_disable_irq(int irq_num);
+int jpu_enable_irq(int coreidx);
 
 uint32_t jpu_get_extension_address(int core_idx)
 {
@@ -378,8 +380,11 @@ irqreturn_t jpu_irq_handler(int core, void *dev_id)
     DPRINTK("[JPUDRV][+]%s, irq:%d\n", __func__, irq);
 
 #ifdef JPU_IRQ_CONTROL
-    disable_irq_nosync(irq);
+    drv_vc_disable_irq(s_jpu_irq[core]);
+    jpu_core_irq_count[core]++;
+    irq_status[core] = 0;
 #endif
+
     flag = 0;
     for (i=0; i< MAX_NUM_REGISTER_SET; i++) {
         flag = ReadJpuRegister(core, MJPEG_PIC_STATUS_REG(i));
@@ -389,12 +394,14 @@ irqreturn_t jpu_irq_handler(int core, void *dev_id)
     }
 
     if (i != 0) {
-        pr_err("%s,%d,invalid inst idx : %d\n", __func__,__LINE__, i);
+        WriteJpuRegister(core, MJPEG_PIC_STATUS_REG(i), flag);
+        jpu_enable_irq(core);
+        return IRQ_HANDLED;
     }
-    if (dev)
-        dev->interrupt_reason[core][i] = flag;
+
+    s_jpu_drv_context.interrupt_reason[core][i] = flag;
     s_interrupt_flag[core*MAX_JPEG_NUM_INSTANCE + i] = 1;
-    DPRINTK("[JPUDRV][%d] core:%d INTERRUPT FLAG: %08x, %08x\n", i, core, dev->interrupt_reason[core][i], MJPEG_PIC_STATUS_REG(i));
+    DPRINTK("[JPUDRV][%d] core:%d INTERRUPT FLAG: %08x, %08x\n", i, core, s_jpu_drv_context.interrupt_reason[core][i], MJPEG_PIC_STATUS_REG(i));
 
     if (dev && dev->async_queue)
         kill_fasync(&dev->async_queue, SIGIO, POLL_IN);    // notify the interrupt to userspace
@@ -425,7 +432,7 @@ int jpu_enable_irq(int core_idx)
         jpu_core_irq_count[core_idx] = 0;
         return 0;
     }
-    enable_irq(s_jpu_irq[core_idx]);
+    drv_vc_enable_irq(s_jpu_irq[core_idx]);
     jpu_core_irq_count[core_idx]--;
     irq_status[core_idx] = 1;
 #endif
@@ -459,8 +466,8 @@ int jpu_wait_interrupt(jpudrv_intr_info_t *arg)
     */
 
     DPRINTK("[JPUDRV] INST(%u) s_interrupt_flag(%d), reason(0x%08x)\n", instance_no, s_interrupt_flag[core_idx* MAX_JPEG_NUM_INSTANCE + instance_no],
-        dev->interrupt_reason[core_idx][instance_no]);
-    p_info->intr_reason = dev->interrupt_reason[core_idx][instance_no];
+        s_jpu_drv_context.interrupt_reason[core_idx][instance_no]);
+    p_info->intr_reason = s_jpu_drv_context.interrupt_reason[core_idx][instance_no];
     s_interrupt_flag[core_idx* MAX_JPEG_NUM_INSTANCE + instance_no] = 0;
     dev->interrupt_reason[core_idx][instance_no] = 0;
 #if 0
@@ -725,7 +732,7 @@ int jpeg_platform_init(struct platform_device *pdev)
             s_jpu_register[i].phys_addr = s_jpu_reg_phy_base[i];
             s_jpu_register[i].size      = JPU_REG_SIZE;
         }
-        s_jpu_register[i].virt_addr = (unsigned long)IOREMAP(s_jpu_register[i].phys_addr, s_jpu_register[i].size);
+        // s_jpu_register[i].virt_addr = (unsigned long)IOREMAP(s_jpu_register[i].phys_addr, s_jpu_register[i].size);
         DPRINTK("[JPUDRV] : jpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx\n", s_jpu_register[i].phys_addr, s_jpu_register[i].virt_addr);
     }
 
@@ -748,7 +755,7 @@ int jpeg_platform_init(struct platform_device *pdev)
         }
 #endif
 
-        virt_top_addr = (unsigned long)ioremap(JPEG_TOP_REG,4);
+        // virt_top_addr = (unsigned long)ioremap(JPEG_TOP_REG,4);
 #ifdef JPU_SUPPORT_CLOCK_CONTROL
         if (jpu_register_clk(pdev)) {
             DPRINTK("[JPUDRV] : jpeg clock init failed\n");

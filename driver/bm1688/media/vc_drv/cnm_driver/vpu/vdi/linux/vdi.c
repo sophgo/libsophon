@@ -18,6 +18,7 @@
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
 #include <linux/time.h>
+#include <asm/io.h>
 
 #include "../vdi.h"
 #include "../vdi_osal.h"
@@ -151,13 +152,13 @@ int vdi_init(unsigned long core_idx)
     }
     vdi->vdb_register.size = core_idx;
     memcpy(&vdi->vdb_register, &s_vpu_register[vdi->vdb_register.size], sizeof(vpudrv_buffer_t));
-    vdi->vdb_register.virt_addr = (unsigned long)ioremap(vdi->vdb_register.phys_addr, vdi->vdb_register.size);
+    // vdi->vdb_register.virt_addr = (unsigned long)ioremap(vdi->vdb_register.phys_addr, vdi->vdb_register.size);
 
-    if ((void *)vdi->vdb_register.virt_addr == NULL)
-    {
-        VLOG(ERR, "[VDI] fail to map vpu registers \n");
-        goto ERR_VDI_INIT;
-    }
+    // if ((void *)vdi->vdb_register.virt_addr == NULL)
+    // {
+    //     VLOG(ERR, "[VDI] fail to map vpu registers \n");
+    //     goto ERR_VDI_INIT;
+    // }
 
     VLOG(INFO, "[VDI] map vdb_register core_idx=%d, virtaddr=0x%x, size=%d\n", core_idx, (int)vdi->vdb_register.virt_addr, vdi->vdb_register.size);
 
@@ -209,11 +210,7 @@ int vdi_set_bit_firmware_to_pm(unsigned long core_idx, const unsigned short *cod
     bit_firmware_info = vzalloc(sizeof(bit_firmware_info));
     bit_firmware_info->size = sizeof(vpu_bit_firmware_info_t);
     bit_firmware_info->core_idx = core_idx;
-#if 0//def SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    bit_firmware_info.reg_base_offset = (core_idx*VPU_CORE_BASE_OFFSET);
-#else
     bit_firmware_info->reg_base_offset = 0;
-#endif
     if (PRODUCT_CODE_CODA_SERIES(vdi->product_code)) {
         for (i=0; i<512; i++) {
             bit_firmware_info->bit_code[i] = code[i];

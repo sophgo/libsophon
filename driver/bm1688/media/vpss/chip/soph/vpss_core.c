@@ -131,6 +131,16 @@ irqreturn_t vpss_isr(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+void vpss_hw_init(void)
+{
+	u8 i = 0;
+	for (i = VPSS_V0; i < VPSS_MAX; ++i)
+		if (hw_mask & BIT(i)) {
+			sclr_ctrl_init(i, false);
+			TRACE_VPSS(DBG_INFO, "vpss-%d init done\n", i);
+		}
+}
+
 void vpss_dev_init(struct vpss_device *dev)
 {
 	u8 i;
@@ -153,13 +163,10 @@ void vpss_dev_init(struct vpss_device *dev)
 		if (core->clk_vpss)
 			clk_prepare_enable(core->clk_vpss);
 
-		if (hw_mask & BIT(i)) {
+		if (hw_mask & BIT(i))
 			atomic_set(&core->state, VIP_IDLE);
-			sclr_ctrl_init(i, false);
-			TRACE_VPSS(DBG_INFO, "vpss-%d init done\n", i);
-		} else {
+		else
 			atomic_set(&core->state, VIP_RUNNING);
-		}
 
 		if (core->clk_apb)
 			clk_disable(core->clk_apb);

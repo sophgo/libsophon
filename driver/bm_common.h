@@ -223,6 +223,8 @@ struct chip_info {
 	void (*bmdrv_stop_arm9)(struct bm_device_info *);
 
 	void (*bmdrv_clear_cdmairq)(struct bm_device_info *bmdi);
+	void (*bmdrv_clear_cdmairq0)(struct bm_device_info *bmdi);
+	void (*bmdrv_clear_cdmairq1)(struct bm_device_info *bmdi);
 	int (*bmdrv_clear_msgirq)(struct bm_device_info *bmdi);
 	int (*bmdrv_clear_msgirq_by_core)(struct bm_device_info *bmdi, int core_id);
 	int (*bmdrv_clear_cpu_msgirq)(struct bm_device_info *bmdi);

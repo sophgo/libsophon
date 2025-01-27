@@ -817,7 +817,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 {
 	int ret = 0;
 	struct bm_thread_info *thd_info;
-	struct api_fifo_entry *api_entry;
+	struct api_fifo_entry *api_entry = NULL;
 	struct api_list_entry *api_entry_list = NULL;
 	struct bm_api_info *apinfo, *apinfo_core0, *apinfo_core1;
 	pid_t api_pid;
@@ -831,7 +831,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	u32 channel;
 	int core_id = 0;
 	unsigned int param_num;
-	bm_api_ext_t *bm_api_list;
+	bm_api_ext_t *bm_api_list = NULL;
 	int i;
 	int is_pm_enable = 0;
 

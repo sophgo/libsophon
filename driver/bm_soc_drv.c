@@ -183,7 +183,8 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct platform_device 
 #ifdef PLATFORM_FPGA
 		cinfo->platform = FPGA;
 #endif
-		cinfo->bmdrv_clear_cdmairq = bm1688_clear_cdmairq;
+		cinfo->bmdrv_clear_cdmairq0 = bm1688_clear_cdmairq0;
+		cinfo->bmdrv_clear_cdmairq1 = bm1688_clear_cdmairq1;
 		cinfo->bmdrv_clear_msgirq_by_core = bm1688_clear_msgirq;
 		cinfo->bmdrv_pending_msgirq_cnt = bm1688_pending_msgirq_cnt;
 		cinfo->tpu_core_num = 2;

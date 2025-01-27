@@ -85,6 +85,7 @@ unsigned long vpss_dmabuf_fd_to_paddr(int dmabuf_fd);
 long vpss_get_diff_in_us(struct timespec64 start, struct timespec64 end);
 void vpss_dev_init(struct vpss_device *dev);
 void vpss_dev_deinit(struct vpss_device *dev);
+void vpss_hw_init(void);
 irqreturn_t vpss_isr(int irq, void *data);
 
 #endif /* _VPSS_CORE_H_ */

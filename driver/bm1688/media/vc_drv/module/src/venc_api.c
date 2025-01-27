@@ -9,6 +9,7 @@
 #include <uapi/linux/sched/types.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <asm/io.h>
 
 #include "vpuapi.h"
 #include "debug.h"
@@ -470,14 +471,12 @@ Int32 set_open_param(EncOpenParam *pst_open_param, InitEncConfig *pst_init_cfg)
 
 int set_vb_flag(PhysicalAddress addr)
 {
-    vb_blk blk;
     struct vb_s *vb;
 
-    blk = vb_phys_addr2handle(addr);
-    if (blk == VB_INVALID_HANDLE)
+    vb = (struct vb_s *)vb_phys_addr2handle(addr);
+    if (vb == (struct vb_s *)VB_INVALID_HANDLE)
         return 0;
 
-    vb = (struct vb_s *)&blk;
     atomic_fetch_add(1, &vb->usr_cnt);
     atomic_long_fetch_or(BIT(ID_VENC), &vb->mod_ids);
 
@@ -486,16 +485,14 @@ int set_vb_flag(PhysicalAddress addr)
 
 int clr_vb_flag(PhysicalAddress addr)
 {
-    vb_blk blk;
     struct vb_s *vb;
 
-    blk = vb_phys_addr2handle(addr);
-    if (blk == VB_INVALID_HANDLE)
+    vb = (struct vb_s *)vb_phys_addr2handle(addr);
+    if (vb == (struct vb_s *)VB_INVALID_HANDLE)
         return 0;
 
-    vb = (struct vb_s *)&blk;
     atomic_long_fetch_and(~BIT(ID_VENC), &vb->mod_ids);
-    vb_release_block(blk);
+    vb_release_block((vb_blk)vb);
 
     return 0;
 }
@@ -1610,9 +1607,9 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
     // 2. bind_mode is true and is_isolate_send is true
     if ((!pst_handle->is_bind_mode || (pst_handle->is_bind_mode && pst_handle->is_isolate_send))
         && (pst_handle->thread_handle == NULL || pst_handle->stop_thread == 1)) {
-        struct sched_param param = {
-            .sched_priority = 95,
-        };
+        // struct sched_param param = {
+        //     .sched_priority = 95,
+        // };
         VLOG(INFO, "internal_venc_enc_one_pic create venc wait thread, chn:%d\n", pst_handle->channel_index);
 
         pst_handle->stop_thread = 0;
@@ -1621,7 +1618,7 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
             pst_handle->thread_handle = NULL;
             return RETCODE_FAILURE;
         }
-        sched_setscheduler(pst_handle->thread_handle, SCHED_RR, &param);
+        // sched_setscheduler(pst_handle->thread_handle, SCHED_RR, &param);
     }
 
     // alloc bit stream buf

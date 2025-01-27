@@ -209,7 +209,7 @@ typedef enum _pixel_format_e {
 
 	PIXEL_FORMAT_8BIT_MODE = 50, //50
 
-	PIXEL_FORMAT_MAX
+	PIXEL_FORMAT_BUTT
 } pixel_format_e;
 // -------- If you want to change these interfaces, please contact the isp team. --------
 
