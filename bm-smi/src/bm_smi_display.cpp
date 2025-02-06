@@ -103,6 +103,8 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
         g_attr[dev_id].mem_used          = 0;
         g_attr[dev_id].mem_total         = 0;
         g_attr[dev_id].tpu_util          = ATTR_FAULT_VALUE;
+		g_attr[dev_id].tpu_util0         = ATTR_FAULT_VALUE;
+		g_attr[dev_id].tpu_util1         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_temp        = ATTR_FAULT_VALUE;
         g_attr[dev_id].chip_temp         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_power       = ATTR_FAULT_VALUE;
@@ -499,6 +501,28 @@ static void bm_smi_tpu_util_to_str(int dev_id, char *s) {
     }
 }
 
+/* convert tpu util0 to string*/
+static void bm_smi_tpu_util0_to_str(int dev_id, char *s) {
+    if (g_attr[dev_id].tpu_util0 == ATTR_NOTSUPPORTED_VALUE) {
+        snprintf(s, 6, "%s", " N/A ");
+    } else if (g_attr[dev_id].tpu_util0 == 100) {
+        snprintf(s, 6, "%s", "100% ");
+    } else {
+        snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util0);
+    }
+}
+
+/* convert tpu util1 to string*/
+static void bm_smi_tpu_util1_to_str(int dev_id, char *s) {
+    if (g_attr[dev_id].tpu_util1 == ATTR_NOTSUPPORTED_VALUE) {
+        snprintf(s, 6, "%s", " N/A ");
+    } else if (g_attr[dev_id].tpu_util1 == 100) {
+        snprintf(s, 6, "%s", "100% ");
+    } else {
+        snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util1);
+    }
+}
+
 /* convert card index to string*/
 static void bm_smi_card_index_to_str(int dev_id, char *s) {
     if (g_attr[dev_id].card_index == ATTR_NOTSUPPORTED_VALUE) {
@@ -554,6 +578,8 @@ static void bm_smi_display_attr(int            dev_id,
     char tpuc_s[6];
     char fan_s[4];
     char tpu_util_s[6];
+	char tpu_util0_s[6];
+	char tpu_util1_s[6];
     char board_type_s[7];
 
     bm_smi_card_index_to_str(dev_id, card_index_s);
@@ -577,6 +603,8 @@ static void bm_smi_display_attr(int            dev_id,
     bm_smi_tpuc_to_str(dev_id, tpuc_s);
     bm_smi_fan_to_str(dev_id, fan_s);
     bm_smi_tpu_util_to_str(dev_id, tpu_util_s);
+	bm_smi_tpu_util0_to_str(dev_id, tpu_util0_s);
+	bm_smi_tpu_util1_to_str(dev_id, tpu_util1_s);
     bm_smi_board_type_to_str(dev_id, board_type_s);
 
     attr_y = dis_slot * BM_SMI_DEVATTR_HEIGHT;

@@ -292,6 +292,8 @@ struct bm_smi_attr {
 	int mem_used;
 	int mem_total;
 	int tpu_util;
+	int tpu_util0;
+	int tpu_util1;
 
 	int board_temp;
 	int chip_temp;

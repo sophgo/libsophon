@@ -33,6 +33,7 @@ class bm_smi_cmdline {
   std::string m_op;
   std::string m_value;
   std::string m_file;
+  bool m_core_util;
   bool m_loop;
 };
 

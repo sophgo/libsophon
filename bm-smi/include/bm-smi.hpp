@@ -38,6 +38,8 @@
 #define BM_SMI_FORMAT_HEIGHT_MEM 8 //lines of attributes display format header for memory info
 #define BM_SMI_DEVATTR_HEIGHT_UTIL 5
 #define BM_SMI_DEVATTR_HEIGHT_MEM 4
+#define BM_SMI_CORE_UTIL_MEM 1
+#define BM_SMI_CORE_UTIL_HEIGHT 1
 
 #define BUFFER_LEN 120  // columns of the text
 
@@ -61,6 +63,8 @@ typedef struct bm_smi_attr {
   int mem_used;
   int mem_total;
   int tpu_util;
+  int tpu_util0;
+  int tpu_util1;
 
   int board_temp;
   int chip_temp;

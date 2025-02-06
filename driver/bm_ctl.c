@@ -167,10 +167,13 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	pattr->mem_used = pattr->mem_total - (int)(bmdrv_gmem_avail_size(bmdi)/1024/1024);
 	bmdrv_heap_mem_used(bmdi, &pattr->stat);
 
-	if ((bmdi->cinfo.chip_id == 0x1686a200) && (bmdi->cinfo.tpu_core_num == 2))
+	if ((bmdi->cinfo.chip_id == 0x1686a200) && (bmdi->cinfo.tpu_core_num == 2)) {
 		pattr->tpu_util = (c_attr->bm_get_npu_util(bmdi) + c_attr->bm_get_npu_util1(bmdi)) / 2;
-	else
+		pattr->tpu_util0 = c_attr->bm_get_npu_util(bmdi);
+		pattr->tpu_util1 = c_attr->bm_get_npu_util1(bmdi);
+	} else {
 		pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
+	}
 
 	if (c_attr->bm_get_chip_temp != NULL)
 		pattr->chip_temp =c_attr->chip_temp;

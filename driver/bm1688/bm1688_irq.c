@@ -151,12 +151,16 @@ void bm1688_enable_intc_irq(struct bm_device_info *bmdi, int irq_num, bool irq_e
 		intc_reg_write(bmdi, BM1688_INTC0_BASE_OFFSET + BM1688_INTC_INTEN_H_OFFSET, value);
 	}
 
+	spin_lock_irsave(&irq_lock);
+
 	value = intc_reg_read(bmdi, irq_enable_offset);
 	if (irq_enable == true)
 		value |= (0x1 << (irq_num % 32));
 	else
 		value &= (~(0x1 << (irq_num % 32)));
 	intc_reg_write(bmdi, irq_enable_offset, value);
+
+	spin_unlock_irqrestore(&irq_lock);
 }
 
 void bm1688_unmaskall_intc_irq(struct bm_device_info *bmdi)
