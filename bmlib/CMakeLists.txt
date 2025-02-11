@@ -38,7 +38,6 @@ add_custom_command(OUTPUT ${DEB_SCRIPT_TARGET}
     # post-install
     COMMAND echo "rm -f /opt/sophon/libsophon-current" > postinst
     COMMAND echo "ln -s ${CPACK_PACKAGING_INSTALL_PREFIX} /opt/sophon/libsophon-current" >> postinst
-    #COMMAND echo "ln -s ${CPACK_PACKAGING_INSTALL_PREFIX} /opt/sophon/libsophon-0.4.10" >> postinst
     COMMAND echo >> postinst
     COMMAND echo "cp /opt/sophon/libsophon-current/data/libsophon.conf /etc/ld.so.conf.d/" >> postinst
     COMMAND echo "ldconfig" >> postinst
@@ -49,7 +48,7 @@ add_custom_command(OUTPUT ${DEB_SCRIPT_TARGET}
     COMMAND echo "rm -f /etc/profile.d/libsophon-bin-path.sh" >> prerm
     # post-remove
     COMMAND echo "rm -f /opt/sophon/libsophon-current" > postrm
-    COMMAND echo "rm -rf /opt/sophon/libsophon-0.4.10" >> postrm
+    COMMAND echo "rm -rf /opt/sophon/libsophon-0.4.11" >> postrm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/debian-lib
 )
 add_custom_target(libsophon_deb_script ALL DEPENDS ${DEB_SCRIPT_TARGET})
