@@ -329,8 +329,11 @@ static void bm_smi_fetch_all(bm_handle_t handle,
 							int         start_dev)
 #endif
 {
+
 	for (int i = start_dev; i < start_dev + dev_cnt; i++) {
+#ifdef SOC_MODE
 		bm_smi_get_util(handle, fd, i);
+#endif
 		bm_smi_get_proc_gmem(fd, i);
 		g_attr[i].board_endline = 1;
 		g_attr[i].board_attr    = 1;
