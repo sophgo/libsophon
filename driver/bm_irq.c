@@ -107,6 +107,7 @@ int bmdrv_init_irq(struct pci_dev *pdev)
 	struct bm_device_info *bmdi = pci_get_drvdata(pdev);
 
 	bmdi->cinfo.has_msi = false;
+	spin_lock_init(&bmdi->irq_lock);
 
 	/* Request MSI IRQ */
 	dev_info(bmdi->cinfo.device, "Hard IRQ line number: %d\n", pdev->irq);

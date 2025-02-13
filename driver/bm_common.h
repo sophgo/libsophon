@@ -325,6 +325,7 @@ struct bm_device_info {
 	jpu_drv_context_t jpudrvctx;
 	atomic_t dev_recovery;
 	spacc_drv_context_t spaccdrvctx;
+	spinlock_t irq_lock;
 	struct mutex efuse_mutex;
 	bool eth_state;
 	struct eth_dev_info vir_eth;
