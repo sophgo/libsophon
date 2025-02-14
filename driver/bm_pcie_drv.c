@@ -1200,11 +1200,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		module_init = 1;
 	}
 
-	// rc = bmdrv_ctrl_add_dev(bmci, bmdi);
-	// if (rc) {
-	// 	dev_err(&pdev->dev, "bmdrv_ctrl_add_dev failed!\n");
-	// 	goto err_ctrl_add_dev;
-	// }
+	rc = bmdrv_ctrl_add_dev(bmci, bmdi);
+	if (rc) {
+		dev_err(&pdev->dev, "bmdrv_ctrl_add_dev failed!\n");
+		goto err_ctrl_add_dev;
+	}
 
 	// rc = bm_monitor_thread_init(bmdi);
 	// if (rc) {
@@ -1242,8 +1242,8 @@ err_card_init:
 err_proc_file_init:
 //	bm_monitor_thread_deinit(bmdi);
 //err_monitor_thread_init:
-	//bmdrv_ctrl_del_dev(bmci, bmdi);
-// err_ctrl_add_dev:
+	bmdrv_ctrl_del_dev(bmci, bmdi);
+err_ctrl_add_dev:
 	if (dev_count == 0)
 		bmdrv_remove_bmci();
 err_chip_specific:
