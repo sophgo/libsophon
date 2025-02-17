@@ -1,5 +1,6 @@
 #include<unistd.h>
 #include<termios.h>
+#include "bmlib_runtime.h"
 #include "../include/bm-smi.hpp"
 #include "../include/bm_smi_cmdline.hpp"
 #include "../include/bm_smi_test.hpp"
@@ -7,6 +8,7 @@
 
 int main(int argc, char *argv[]) {
   int ret;
+  bmcpu_app_live.fetch_add(1);
   struct termios stTermCfg;
   bm_smi_cmdline cmdline(argc, argv);
   ret = cmdline.validate_flags();

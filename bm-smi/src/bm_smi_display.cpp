@@ -22,7 +22,6 @@ static int         err_count = 0;
 #endif
 
 #ifdef __linux__
-#ifdef SOC_MODE
 static int bm_smi_dev_request(bm_handle_t *handle) {
     bm_context_t *ctx = new bm_context_t{};
     if (!ctx)
@@ -57,18 +56,10 @@ static void bm_smi_dev_free(bm_handle_t ctx) {
     delete ctx;
 }
 #endif
-#endif
+
 
 /* get attibutes for the specified device*/
-#ifndef SOC_MODE
-#ifdef __linux__
-static void bm_smi_get_attr(int bmctl_fd, int dev_id) {
-#else
-static void bm_smi_get_attr(HANDLE bmctl_device, int dev_id) {
-#endif
-#else
 static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
-#endif
     g_attr[dev_id].dev_id = dev_id;
 #ifdef __linux__
     if (ioctl(bmctl_fd, BMCTL_GET_SMI_ATTR, &g_attr[dev_id]) < 0) {
@@ -113,22 +104,20 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
         g_attr[dev_id].atx12v_curr       = ATTR_FAULT_VALUE;
         g_attr[dev_id].tpu_min_clock     = ATTR_FAULT_VALUE;
         g_attr[dev_id].tpu_max_clock     = ATTR_FAULT_VALUE;
-        g_attr[dev_id].tpu_current_clock = ATTR_FAULT_VALUE;
+        // g_attr[dev_id].tpu_current_clock = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_max_power   = ATTR_FAULT_VALUE;
         g_attr[dev_id].ecc_enable        = ATTR_FAULT_VALUE;
         g_attr[dev_id].ecc_correct_num   = ATTR_FAULT_VALUE;
         g_attr[dev_id].card_index        = ATTR_FAULT_VALUE;
     }
 
-#ifdef SOC_MODE
     u64 mem_total, mem_avail;
     if (handle->ion_fd > 0) {
         bm_total_gmem(handle, &mem_total);
         bm_avail_gmem(handle, &mem_avail);
         g_attr[dev_id].mem_total = mem_total / 1024 / 1024;
-        g_attr[dev_id].mem_used  = (mem_total - mem_avail) / 1024 / 1024;
+        g_attr[dev_id].mem_used  = ceil(mem_avail / 1024 / 1024);
     }
-#endif
 }
 
 #ifdef __linux__
@@ -963,6 +952,7 @@ static void bm_smi_display_proc_gmem(int            dev_id,
 /* ncurses init screen before display */
 static void bm_smi_init_scr() {
     initscr();
+    resize_term(24, 100);
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
@@ -985,46 +975,16 @@ static void bm_smi_init_scr() {
 }
 
 /* fetch all the attributes info from kernel */
-#ifndef SOC_MODE
-#ifdef __linux__
-static void bm_smi_fetch_all(int fd, int dev_cnt, int start_dev)
-#else
-static void bm_smi_fetch_all(HANDLE bmctl_device, int dev_cnt, int start_dev)
-#endif
-#else
 static void bm_smi_fetch_all(bm_handle_t handle,
                              int         fd,
                              int         dev_cnt,
                              int         start_dev)
-#endif
 {
     for (int i = start_dev; i < start_dev + dev_cnt; i++) {
-#ifndef SOC_MODE
-#ifdef __linux__
-        bm_smi_get_attr(fd, i);
-        bm_smi_get_proc_gmem(fd, i);
-#else
-        bm_smi_get_attr(bmctl_device, i);
-        bm_smi_get_proc_gmem(bmctl_device, i);
-#endif
-        if (dev_cnt == 1) {
-            g_attr[i].board_endline = 1;
-            g_attr[i].board_attr    = 1;
-        } else if ((i > start_dev) &&
-                   (g_attr[i - 1].card_index) == (g_attr[i].card_index)) {
-            g_attr[i].board_endline     = 1;
-            g_attr[i].board_attr        = 0;
-            g_attr[i - 1].board_endline = 0;
-        } else {
-            g_attr[i].board_endline = 1;
-            g_attr[i].board_attr    = 1;
-        }
-#else
         bm_smi_get_attr(handle, fd, i);
         bm_smi_get_proc_gmem(fd, i);
         g_attr[i].board_endline = 1;
         g_attr[i].board_attr    = 1;
-#endif
     }
 }
 /* display all the information: attributes and proc gmem */
@@ -1059,83 +1019,7 @@ static void bm_smi_display_all(std::ofstream &target_file,
     refresh();
 }
 
-#ifndef SOC_MODE
-#ifdef __linux__
-static void bm_smi_print_text_info(int fd, int start_dev, int last_dev) {
-#else
-static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_dev) {
-#endif
-    int  i              = 0;
-    int  board_max_temp = 0;
-    int  board_avg_temp = 0;
-    char status_s[7];
-    char boardt_s[5];
-    char chipt_s[5];
-    char tpup_s[6];
-    char tpuv_s[7];
-    char ecc_s[4];
-    char cnum_s[5];
-    char busid_s[12];
-    char mode_s[5];
-    char minclk_s[5];
-    char maxclk_s[6];
-    char currclk_s[6];
-    char tpuc_s[6];
-    char tpu_util_s[6];
-    char board_type_s[7];
 
-#ifdef __linux__
-    bm_smi_fetch_all(fd, last_dev - start_dev + 1, start_dev);
-#else
-    bm_smi_fetch_all(bmctl_device, last_dev - start_dev + 1, start_dev);
-#endif
-
-    for (i = start_dev; i < (last_dev + 1); i++) {
-        board_avg_temp += g_attr[i].board_temp;
-        if (g_attr[i].board_temp > board_max_temp) {
-            board_max_temp = g_attr[i].board_temp;
-        }
-
-        bm_smi_status_to_str(i, status_s);
-        bm_smi_boardt_to_str(i, boardt_s);
-        bm_smi_chipt_to_str(i, chipt_s);
-        bm_smi_tpup_to_str(i, tpup_s);
-        bm_smi_tpuv_to_str(i, tpuv_s);
-        bm_smi_ecc_to_str(i, ecc_s);
-        bm_smi_cnum_to_str(i, cnum_s);
-
-        bm_smi_busid_to_str(i, busid_s);
-        bm_smi_mode_to_str(i, mode_s);
-        bm_smi_minclk_to_str(i, minclk_s);
-        bm_smi_maxclk_to_str(i, maxclk_s);
-        bm_smi_currclk_to_str(i, currclk_s);
-        bm_smi_tpuc_to_str(i, tpuc_s);
-        bm_smi_tpu_util_to_str(i, tpu_util_s);
-        bm_smi_board_type_to_str(i, board_type_s);
-
-        printf("%s ", board_name);
-        printf("%s ", mode_s);
-        printf("chip%d: %d ", i - start_dev, g_attr[i].dev_id);
-        printf("%s ", busid_s);
-        printf("%s ", status_s);
-
-        printf("%s ", boardt_s);
-        printf("%s ", chipt_s);
-        printf("%s ", tpup_s);
-        printf("%s ", tpuv_s);
-        printf("%s ", ecc_s);
-        printf("%s ", cnum_s);
-        printf("%s ", tpu_util_s);
-
-        printf("%s ", minclk_s);
-        printf("%s ", maxclk_s);
-        printf("%s ", currclk_s);
-        printf("%s ", tpuc_s);
-        printf("%dMB ", g_attr[i].mem_used);
-        printf("%dMB \n", g_attr[i].mem_total);
-    }
-}
-#endif
 
 bm_smi_display::bm_smi_display(bm_smi_cmdline &cmdline) : bm_smi_test(cmdline) {
     if (bm_dev_getcount(&dev_cnt) != BM_SUCCESS) {
@@ -1177,36 +1061,7 @@ bm_smi_display::bm_smi_display(bm_smi_cmdline &cmdline) : bm_smi_test(cmdline) {
 bm_smi_display::~bm_smi_display() {}
 
 int bm_smi_display::validate_input_para() {
-#ifndef SOC_MODE
-    if ((g_cmdline.m_dev != 0xff) &&
-        ((g_cmdline.m_dev < 0) || (g_cmdline.m_dev >= dev_cnt))) {
-        printf("error dev = %d\n", g_cmdline.m_dev);
-        return -EINVAL;
-    }
 
-    /* get start dev and true dev_cnt; Use of FLAGS_dev ended */
-    if ((g_cmdline.m_start_dev == 0xff) && (g_cmdline.m_last_dev == 0xff)) {
-        if (g_cmdline.m_dev == 0xff) {
-            start_dev = 0;
-        } else {
-            start_dev = g_cmdline.m_dev;
-            dev_cnt   = 1;
-        }
-    } else {
-        if ((g_cmdline.m_start_dev >= dev_cnt) ||
-            (g_cmdline.m_last_dev >= dev_cnt) || (g_cmdline.m_start_dev < 0) ||
-            (g_cmdline.m_last_dev < 0) ||
-            (g_cmdline.m_start_dev > g_cmdline.m_last_dev)) {
-            printf("error input arg: start_dev=%d, last_dev=%d\n",
-                   g_cmdline.m_start_dev,
-                   g_cmdline.m_last_dev);
-            return -EINVAL;
-        }
-
-        start_dev = g_cmdline.m_start_dev;
-        dev_cnt   = g_cmdline.m_last_dev - g_cmdline.m_start_dev + 1;
-    }
-#endif
 
     /* check lms value */
     if (g_cmdline.m_lms < 300) {
@@ -1249,51 +1104,14 @@ int bm_smi_display::run_opmode() {
     }
 #endif
 
-#ifndef SOC_MODE
-    int chip_mode;
-    /* check board mode */
-    struct bm_misc_info misc_info;
-    bm_handle_t         handle1;
-    bm_status_t         ret1 = BM_SUCCESS;
-    ret1                     = bm_dev_request(&handle1, start_dev);
-    if (ret1 != BM_SUCCESS)
-        return -EINVAL;
-    ret1 = bm_get_misc_info(handle1, &misc_info);
-    if (ret1 != BM_SUCCESS)
-        return -EINVAL;
-    chip_mode = misc_info.pcie_soc_mode;
-    bm_dev_free(handle1);
-  if (g_cmdline.m_text_format) {
-        if (chip_mode == 1) {
-            printf("text_format failed!\n");
-            printf("this parameter is not support on SOC mode\n");
-            return -1;
-        } else {
-            if ((g_cmdline.m_start_dev == 0xff) &&
-                (g_cmdline.m_last_dev == 0xff)) {
-                printf("error dev!please input start_dev and last_dev.\n");
-                return -EINVAL;
-            } else {
-#ifdef __linux__
-                bm_smi_print_text_info(
-                    fd, g_cmdline.m_start_dev, g_cmdline.m_last_dev);
-#else
-                bm_smi_print_text_info(bmctl_device, g_cmdline.m_start_dev,
-                                       g_cmdline.m_last_dev);
-#endif
-                return 0;
-            }
-        }
-    }
-#endif
     // init screen here; or need handle exception
     bm_smi_init_scr();
 
-#ifdef SOC_MODE
+
     bm_handle_t handle;
     bm_smi_dev_request(&handle);
     bm_smi_get_board_name();
-#endif
+
 
     // loop getting chars until an invalid char is got;
     // if no char is get, display all information.ch = getch();
@@ -1309,15 +1127,7 @@ int bm_smi_display::run_opmode() {
             case ERR:  // no input char
                 if (sleep_cnt++ == 0) {
                     // fetch attributes only at certain loops
-#ifndef SOC_MODE
-#ifdef __linux__
-                    bm_smi_fetch_all(fd, dev_cnt, start_dev);
-#else
-                    bm_smi_fetch_all(bmctl_device, dev_cnt, start_dev);
-#endif
-#else
                     bm_smi_fetch_all(handle, fd, dev_cnt, start_dev);
-#endif
                     // save file if attributes are fetched
                     save_file = true;
                 }
@@ -1387,9 +1197,7 @@ int bm_smi_display::run_opmode() {
     close(fd);
 #else
     CloseHandle(bmctl_device);
-#ifdef SOC_MODE
     bm_smi_dev_free(handle);
-#endif
 #endif
     endwin();
 

@@ -14,16 +14,10 @@ else()
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../bmlib/include)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../bmlib/src)
 
-    if("${PLATFORM}" STREQUAL "soc")
-        link_directories(${LIB_DIR}/lib/)
-        include_directories(${LIB_DIR}/include)
-        add_definitions(-DSOC_MODE=1)
-    else()
-        find_package(Curses REQUIRED)
-        include_directories(${CURSES_INCLUDE_DIR})
-        find_package(gflags COMPONENTS nothreads_static)
-        include_directories(${GFLAGS_INCLUDE_DIR})
-    endif()
+
+    link_directories(${LIB_DIR}/lib/)
+    include_directories(${LIB_DIR}/include)
+    add_definitions(-DSOC_MODE=1)
 
     SET(SRCS
         src/bm-smi.cpp
