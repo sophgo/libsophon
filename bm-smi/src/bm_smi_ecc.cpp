@@ -3,28 +3,7 @@
 #ifdef __linux__
 /* set ecc on/off */
 static int bm_smi_set_ecc(int bmctl_fd, int dev_id, std::string flags_ecc) {
-#ifndef SOC_MODE
-  int ecc_op;
-  unsigned long ecc_arg = 0UL;
 
-  if (!flags_ecc.compare("on")) {
-    ecc_op = 1;
-  } else if (!flags_ecc.compare("off")) {
-    ecc_op = 0;
-  } else {
-    printf("invalid ecc arg %s!\n", flags_ecc.c_str());
-    return -EINVAL;
-  }
-
-  ecc_arg = ecc_op << 8 | dev_id;
-  if (ioctl(bmctl_fd, BMCTL_SET_ECC, ecc_arg) < 0) {
-    perror("bm-smi set ECC failed!\n");
-    return -1;
-  } else {
-    printf("set sophon%d ddr ecc to %s, please reboot PC/Server\n",
-      dev_id, flags_ecc.c_str());
-  }
-#endif
   return 0;
 }
 #else
@@ -83,19 +62,7 @@ bm_smi_ecc::bm_smi_ecc(bm_smi_cmdline &cmdline) : bm_smi_test(cmdline) {
 bm_smi_ecc::~bm_smi_ecc() {}
 
 int bm_smi_ecc::validate_input_para() {
-#ifndef SOC_MODE
-  if ((g_cmdline.m_dev != 0xff) && ((g_cmdline.m_dev < 0) || (g_cmdline.m_dev >= dev_cnt))) {
-    printf("error dev = %d\n", g_cmdline.m_dev);
-    return -EINVAL;
-  }
 
-  if (g_cmdline.m_dev == 0xff) {
-    start_dev = 0;
-  } else {
-    start_dev = g_cmdline.m_dev;
-    dev_cnt = 1;
-  }
-#endif
   return 0;
 }
 

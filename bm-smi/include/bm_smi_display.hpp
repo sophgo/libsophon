@@ -4,6 +4,7 @@
 #include "bm_smi_test.hpp"
 #include "bm_smi_cmdline.hpp"
 #include <stdlib.h>
+#include <math.h>
 #ifdef _WIN32
 #pragma comment(lib, "libbmlib-static.lib")
 #endif

@@ -99,19 +99,7 @@ bm_smi_led::bm_smi_led(bm_smi_cmdline &cmdline) : bm_smi_test(cmdline) {
 bm_smi_led::~bm_smi_led() {}
 
 int bm_smi_led::validate_input_para() {
-#ifndef SOC_MODE
-  if ((g_cmdline.m_dev != 0xff) && ((g_cmdline.m_dev < 0) || (g_cmdline.m_dev >= dev_cnt))) {
-    printf("error dev = %d\n", g_cmdline.m_dev);
-    return -EINVAL;
-  }
 
-  if (g_cmdline.m_dev == 0xff) {
-    start_dev = 0;
-  } else {
-    start_dev = g_cmdline.m_dev;
-    dev_cnt = 1;
-  }
-#endif
   return 0;
 }
 
