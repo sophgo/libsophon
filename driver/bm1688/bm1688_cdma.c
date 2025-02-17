@@ -963,7 +963,7 @@ u32 bm1688_dual_cdma_transfer(struct bm_device_info *bmdi, struct file *file, pb
 	u32 ret;
 
 	//cdma_id = get_cdma_id(bmdi);
-	ret = bm1688_single_cdma_transfer(bmdi, file, parg, lock_cdma, 0);
+	ret = bm1688_single_cdma_transfer(bmdi, file, parg, lock_cdma, 1);
 
 	return ret;
 }
