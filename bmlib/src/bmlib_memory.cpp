@@ -43,7 +43,6 @@ bm_basic_func_t g_basic_func[] = {
 	{.func_name = (char*)"sg_api_memcpy_wstride", 0, 0},
 	{.func_name = (char*)"sg_api_memcpy_byte", 0, 0},
 };
-int g_init_basic_func_flag = 0;
 
 #define BMLIB_MEM_GUARD_SIZE 1024
 static unsigned char guard_data[BMLIB_MEM_GUARD_SIZE] = {0};
@@ -93,11 +92,11 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	bm_get_tpu_scalar_num(handle, &core_num);
 	pthread_mutex_lock(&mutex);
 
-	if (g_init_basic_func_flag == 0x5a) {
+	if (handle->g_init_basic_func_flag == 0x5a) {
 		pthread_mutex_unlock(&mutex);
 		return BM_SUCCESS;
 	}
-	g_init_basic_func_flag = 0x5a;
+	handle->g_init_basic_func_flag = 0x5a;
 
 	#ifdef __linux__
 	char key[64] = {0};
@@ -150,7 +149,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 
 tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_name, int core_id)
 {
-	if (g_init_basic_func_flag != 0x5a) {
+	if (handle->g_init_basic_func_flag != 0x5a) {
 		printf("error g_basic_func not init\n");
 		return -1;
 	}
