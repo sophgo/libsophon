@@ -26,14 +26,18 @@ target_compile_options(bmrt_static PRIVATE -fPIC)
 add_dependencies(bmrt kernel_header)
 add_dependencies(bmrt_static kernel_header)
 
+if("${PLATFORM}" STREQUAL "soc")
+    add_definitions(-DSOC_MODE=1)
+endif()
+
 target_link_libraries(bmrt PUBLIC
     bmodel::bmodel bmlib::bmlib
     ${CMAKE_DL_LIBS}
-    Threads::Threads)
+    Threads::Threads -lrt)
 target_link_libraries(bmrt_static PUBLIC
     bmodel::bmodel bmlib::bmlib
     ${CMAKE_DL_LIBS}
-    Threads::Threads)
+    Threads::Threads -lrt)
 target_include_directories(bmrt PUBLIC
     ${common_dir}/base/
     ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
@@ -57,7 +61,7 @@ set(app_srcs
     app/bmrt_test.cpp
     app/bmrt_test_case.cpp)
 add_executable(bmrt_test ${app_srcs})
-target_link_libraries(bmrt_test bmrt  bmrt_static)
+target_link_libraries(bmrt_test bmrt  bmrt_static -lrt)
 target_compile_definitions(bmrt_test PRIVATE
     VER="${revision}")
 
@@ -69,13 +73,13 @@ add_executable(model_runner ${runner_srcs})
 if("${ARCH}" STREQUAL "arm64")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
-    target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so)
+    target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so -lrt)
 elseif("${ARCH}" STREQUAL "loongarch64")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
-    target_link_libraries(model_runner bmrt bmrt_static ${LIB_DIR}/lib/libz.so)
+    target_link_libraries(model_runner bmrt bmrt_static ${LIB_DIR}/lib/libz.so -lrt)
 else()
-    target_link_libraries(model_runner bmrt bmrt_static z)
+    target_link_libraries(model_runner bmrt bmrt_static z -lrt)
 endif()
 
 target_compile_definitions(model_runner PRIVATE

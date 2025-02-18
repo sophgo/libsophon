@@ -173,8 +173,10 @@ static std::string chip_name_by_id(unsigned int chipid) {
     chip_name = "BM1690";
   } else if (chipid == 0x2380) {
     chip_name = "SG2380";
-  } else if (chipid == 0x3000) {
+  } else if (chipid == 0x184) {
     chip_name = "MARS3";
+  } else if (chipid == 0x8000) {
+    chip_name = "SGTPUV8";
   }
   return chip_name;
 }
@@ -385,6 +387,10 @@ bool bmrt_update_bmodel_weight_with_decrypt(void* p_bmrt, const char* bmodel_pat
 
   try {
     return ((Bmruntime *)p_bmrt)->update_bmodel_weight_with_decrypt(bmodel_dir, update_dir, net_idx_str, mem_idx_str, weight_idx_vec, f);
+  } catch (const std::out_of_range& e) {
+    ((Bmruntime *)p_bmrt)->empty_bmodel_weight_with_decrypt(bmodel_dir, net_idx_str, mem_idx_str, weight_idx_vec, f);
+    BMRT_LOG(WRONG, "An unexpected error occurred: %s", e.what());
+    return false;
   } catch (const std::exception &e) {
     BMRT_LOG(WRONG, "An unexpected error occurred: %s", e.what());
     return false;

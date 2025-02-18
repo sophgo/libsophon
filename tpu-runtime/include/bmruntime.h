@@ -241,7 +241,9 @@ struct net_stage_t {
 /* Record post dynamic alloc neuron usage info
    detailed to each stage and core permutations
 */
+
 struct dyn_neuron_stage_t {
+  std::mutex mutex;
   vector<tensor_attr_t> input_v;
   vector<tensor_attr_t> output_v;
   vector<u64> ctx_offset;
@@ -563,11 +565,12 @@ protected:
       net_ctx_t* net_ctx, const Vector<Offset<NetParameter>>* params,
       vector<vector<u64>> &stage_ctx_sizes, net_stage_t *stages);
   void fill_subnet_dyn_neuron_tensor(
-      net_ctx_t* net_ctx, const size_t dyn_core_mask,
+      net_ctx_t* net_ctx, dyn_neuron_stage_t* dyn_neuron,
       const net_stage_t *common_stage_info);
   void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
       const net_stage_t *common_stage_info, bool use_multi_subnet);
-  void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask);
+  void __net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask);
+  std::shared_ptr<dyn_neuron_stage_t> net_ctx_get_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask);
   void update_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const net_stage_t *common_stage_info);
   void fill_net_info(net_ctx_t* net_ctx);
   void free_net_info(net_ctx_t* net_ctx);

@@ -28,6 +28,8 @@ bmfunc::bmfunc(const string &arch_name) {
     bmdnn_fn = new bmdnn_func_2380();
   } else if (arch == MARS3) {
     bmdnn_fn = new bmdnn_func_mars3();
+  } else if (arch == SGTPUV8) {
+    bmdnn_fn = new bmdnn_func_sgtpuv8();
   } else {
     BMRT_LOG(FATAL, "Error: unkown architecture [%d]", arch);
   }

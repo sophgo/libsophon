@@ -233,7 +233,9 @@ static void update_coeff_data(ModelCtx *model_ctx,
       // file_data.size() == 0 -> empty
       if (file_data.size() != 0) {
         if (start_position + loc_size > file_data.size()) {
-          throw std::runtime_error("File data does not contain enough data for the requested operation.");
+          // out_of_range only for lora update
+          // if you want to throw exception, please use runtime_error, logic_error
+          throw std::out_of_range("File data does not contain enough data for the requested operation.");
         }
         buffer.assign(file_data.begin() + start_position, file_data.begin() + start_position + loc_size);
         start_position += loc_size;
@@ -260,6 +262,7 @@ static uint32_t get_bdc_cmd_len(const u8 *bdc_buffer, u64 start_offset,
   case BM1690:
   case BM1688:
   case MARS3:
+  case SGTPUV8:
   case BM1684X: {
     u32 cmd_buf[2];
     memcpy(cmd_buf, bdc_buffer + start_offset, sizeof(cmd_buf));
@@ -301,7 +304,7 @@ static uint32_t get_gdma_cmd_len(const u8 *gdma_buffer, u64 start_offset,
   uint32_t len = 96; // default: common gdma instrution size
 
   bmtpu_arch_t arch = bmrt_arch_info::get_bmtpu_arch();
-  if (BM1688 == arch || BM1690 == arch || MARS3 == arch || SG2380 == arch) {
+  if (BM1688 == arch || BM1690 == arch || MARS3 == arch || SGTPUV8 == arch || SG2380 == arch) {
     u32 cmd_head[2] = {0};
     memcpy(cmd_head, gdma_buffer + start_offset, sizeof(cmd_head));
     u32 tsk_type = cmd_head[1] & 0xf;
@@ -326,38 +329,51 @@ static uint32_t get_gdma_cmd_len(const u8 *gdma_buffer, u64 start_offset,
 /* Read BDC/GDMA cmd context from file, alloc device memory,
  * S2D download to DDR, save CMD_TENSOR in dev_mem_info_v.
  */
+template<typename T>
+static void visit_fbvector(const T* fb_values, std::function<void(decltype(fb_values->Get(0)))> func) {
+  if(!fb_values) return;
+  for (u32 i = 0; i < fb_values->size(); i++) {
+    func(fb_values->Get(i));
+  }
+}
+
+template<typename T>
+static void push_back_fbvector_to_vector(const T* fb_values, std::vector<decltype(fb_values->Get(0))>& values) {
+  visit_fbvector(fb_values, [&values](decltype(fb_values->Get(0)) v){ values.push_back(v); });
+}
+
 bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
                                   const bmodel::NetParameter* param,
                                   net_stage_t* stage, uint32_t devid)
 {
   u32 cmd_word_num;
-  u32 *cmd_buf, *p_cmd_buf;
   bm_device_mem_t pmem;
 
   const auto core_num = stage->core_commands.size();
   for (uint32_t core_idx = 0; core_idx < core_num; core_idx++) {
       u32 bdc_total_id = 0, gdma_total_id = 0;
-      u32 bdc_total_cmd_byte = 0, gdam_total_cmd_byte = 0;
-      // TODO: Here is a huge problem, if have one more subnets in 1688 or sg2260
-      auto subnet = param->sub_net();
-      auto cmd_group = param->cmd_group();
-      if (subnet) {
-        auto core_commands = param->sub_net()->Get(0)->core_commands();
-        if (core_commands) {
-          cmd_group = core_commands->Get(core_idx)->gdma_tiu_commands();
-        }
+      u32 bdc_total_cmd_byte = 0, gdma_total_cmd_byte = 0;
+      std::vector<decltype(param->cmd_group()->Get(0))> cmd_groups;
+      visit_fbvector(param->sub_net(), [&cmd_groups, core_idx](decltype(param->sub_net()->Get(0)) subnet){
+        auto core_commands = subnet->core_commands();
+        if (!core_commands) return;
+        push_back_fbvector_to_vector(core_commands->Get(core_idx)->gdma_tiu_commands(), cmd_groups);
+      });
+
+      if(cmd_groups.size() == 0){
+        push_back_fbvector_to_vector(param->cmd_group(), cmd_groups);
       }
-      if (!cmd_group || cmd_group->size() == 0)
-        continue;
-      for (u32 i = 0; i < cmd_group->size(); i++) {
-        stage->core_commands[core_idx].bdc_id.push_back(cmd_group->Get(i)->bdc_num());
-        stage->core_commands[core_idx].gdma_id.push_back(cmd_group->Get(i)->gdma_num());
-        stage->core_commands[core_idx].bdc_cmd_byte.push_back(cmd_group->Get(i)->bdc_cmd_byte());
-        stage->core_commands[core_idx].gdma_cmd_byte.push_back(cmd_group->Get(i)->gdma_cmd_byte());
-        bdc_total_id += cmd_group->Get(i)->bdc_num();
-        gdma_total_id += cmd_group->Get(i)->gdma_num();
-        bdc_total_cmd_byte += cmd_group->Get(i)->bdc_cmd_byte();
-        gdam_total_cmd_byte += cmd_group->Get(i)->gdma_cmd_byte();
+
+      if (cmd_groups.size() == 0) continue;
+      for (auto cmd_group: cmd_groups) {
+        stage->core_commands[core_idx].bdc_id.push_back(cmd_group->bdc_num());
+        stage->core_commands[core_idx].gdma_id.push_back(cmd_group->gdma_num());
+        stage->core_commands[core_idx].bdc_cmd_byte.push_back(cmd_group->bdc_cmd_byte());
+        stage->core_commands[core_idx].gdma_cmd_byte.push_back(cmd_group->gdma_cmd_byte());
+        bdc_total_id += cmd_group->bdc_num();
+        gdma_total_id += cmd_group->gdma_num();
+        bdc_total_cmd_byte += cmd_group->bdc_cmd_byte();
+        gdma_total_cmd_byte += cmd_group->gdma_cmd_byte();
       }
 
       // ENGINE_BD
@@ -368,71 +384,62 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
       }
       if (cmd_word_num != 0) {
         u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
-        cmd_buf = new u32[cmd_word_num];
-        auto cmd_buf_sp = SP(cmd_buf, u32);
-        p_cmd_buf = cmd_buf;
-        for (u32 group_idx = 0; group_idx < cmd_group->size(); group_idx++) {
+        std::vector<u32> cmd_buf(cmd_word_num);
+        auto p_cmd_buf = cmd_buf.data();
+        for(auto cmd_group: cmd_groups){
           u64 bdc_offset = 0;
-          auto cur_cmd_group = cmd_group->Get(group_idx);
-          if (0 == cur_cmd_group->bdc_num()) {
-            continue;
-          }
-          u8 *bdc_buffer = new u8[cur_cmd_group->binary_bdc()->size()];
-          model_ctx->read_binary(cur_cmd_group->binary_bdc(), bdc_buffer);
-          for (u32 cmd_idx = 0; cmd_idx < cur_cmd_group->bdc_num(); cmd_idx++) {
+          if (0 == cmd_group->bdc_num()) continue;
+          u8 *bdc_buffer = new u8[cmd_group->binary_bdc()->size()];
+          model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
+          for (u32 cmd_idx = 0; cmd_idx < cmd_group->bdc_num(); cmd_idx++) {
             uint32_t read_size =
                 get_bdc_cmd_len(bdc_buffer, bdc_offset,
-                                (cmd_idx == cur_cmd_group->bdc_num() - 1));
+                                (cmd_idx == cmd_group->bdc_num() - 1));
             memcpy(p_cmd_buf, bdc_buffer + bdc_offset, read_size);
             convert_cmd(p_cmd_buf, ENGINE_BD,
-                        cmd_idx == (cur_cmd_group->bdc_num() - 1),
+                        cmd_idx == (cmd_group->bdc_num() - 1),
                         cmd_buf_addr + GLOBAL_MEM_CMD_START_OFFSET, stage);
             p_cmd_buf += read_size / sizeof(uint32_t);
             bdc_offset += read_size;
           }
           delete[] bdc_buffer;
         }
-        m_profile->record_cmd_data(core_idx, ENGINE_BD, cmd_buf, cmd_word_num * 4,
-                                   cmd_buf_addr);
-        stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem, cmd_buf, m_flags&BM_RUNTIME_CHECK_MEM);
+        m_profile->record_cmd_data(core_idx, ENGINE_BD, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
+        stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
       }
 
       // ENGINE_GDMA
-      if (gdam_total_cmd_byte > 0) {
-        cmd_word_num = gdam_total_cmd_byte / sizeof(u32);
+      if (gdma_total_cmd_byte > 0) {
+        cmd_word_num = gdma_total_cmd_byte / sizeof(u32);
       } else {
         cmd_word_num = gdma_total_id * GDMA_ENGINE_COMMAND_NUM_aligned;
       }
       if (cmd_word_num != 0) {
         u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "gdma_cmd_mem", 4);
-        cmd_buf = new u32[cmd_word_num];
-        auto cmd_buf_sp = SP(cmd_buf, u32);
-        p_cmd_buf = cmd_buf;
-        for (u32 group_idx = 0; group_idx < cmd_group->size(); group_idx++) {
+        std::vector<u32> cmd_buf(cmd_word_num);
+        auto p_cmd_buf = cmd_buf.data();
+        for (auto cmd_group: cmd_groups) {
           u64 gdma_offset = 0;
-          auto cur_cmd_group = cmd_group->Get(group_idx);
-          if (0 == cur_cmd_group->gdma_num()) {
+          if (0 == cmd_group->gdma_num()) {
             continue;
           }
-          u8 *gdma_buffer = new u8[cur_cmd_group->binary_gdma()->size()];
-          model_ctx->read_binary(cur_cmd_group->binary_gdma(), gdma_buffer);
-          for (u32 cmd_idx = 0; cmd_idx < cur_cmd_group->gdma_num();
-               cmd_idx++) {
+          u8 *gdma_buffer = new u8[cmd_group->binary_gdma()->size()];
+          model_ctx->read_binary(cmd_group->binary_gdma(), gdma_buffer);
+          for (u32 cmd_idx = 0; cmd_idx < cmd_group->gdma_num(); cmd_idx++) {
             u32 gdma_size =
                 get_gdma_cmd_len(gdma_buffer, gdma_offset,
-                                 (cmd_idx == cur_cmd_group->gdma_num() - 1));
+                                 (cmd_idx == cmd_group->gdma_num() - 1));
             memcpy(p_cmd_buf, gdma_buffer + gdma_offset, gdma_size);
             convert_cmd(p_cmd_buf, ENGINE_GDMA,
-                        cmd_idx == cur_cmd_group->gdma_num() - 1,
+                        cmd_idx == cmd_group->gdma_num() - 1,
                         cmd_buf_addr + GLOBAL_MEM_CMD_START_OFFSET, stage);
             p_cmd_buf += gdma_size / sizeof(u32);
             gdma_offset += gdma_size;
           }
           delete[] gdma_buffer;
         }
-        m_profile->record_cmd_data(core_idx, ENGINE_GDMA, cmd_buf, cmd_word_num * 4,
-                                   cmd_buf_addr);
-        stage->core_commands[core_idx].gdma_mem.Init("gdma", m_handles[devid], pmem, cmd_buf, m_flags&BM_RUNTIME_CHECK_MEM);
+        m_profile->record_cmd_data(core_idx, ENGINE_GDMA, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
+        stage->core_commands[core_idx].gdma_mem.Init("gdma", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
       }
   }
 
@@ -451,28 +458,22 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
     if (hau_total_cmd_byte) {
       cmd_word_num = hau_total_cmd_byte / sizeof(u32);
       u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "hau_cmd_mem", 4);
-        cmd_buf = new u32[cmd_word_num];
-        auto cmd_buf_sp = SP(cmd_buf, u32);
-        p_cmd_buf = cmd_buf;
-
+        std::vector<u32> cmd_buf(cmd_word_num);
+        auto p_cmd_buf = cmd_buf.data();
         model_ctx->read_binary(hau_commands->Get(0), (u8 *)p_cmd_buf);
-        m_profile->record_cmd_data(core_idx, ENGINE_HAU, cmd_buf, cmd_word_num * 4,
-                                   cmd_buf_addr);
-        stage->core_commands[core_idx].hau_mem.Init("hau", m_handles[devid], pmem, cmd_buf, m_flags&BM_RUNTIME_CHECK_MEM);
+        m_profile->record_cmd_data(core_idx, ENGINE_HAU, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
+        stage->core_commands[core_idx].hau_mem.Init("hau", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
     }
 
     // ENGINE_SDMA
     if (sdma_total_cmd_byte) {
       cmd_word_num = sdma_total_cmd_byte / sizeof(u32);
       u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "sdma_cmd_mem", 4);
-        cmd_buf = new u32[cmd_word_num];
-        auto cmd_buf_sp = SP(cmd_buf, u32);
-        p_cmd_buf = cmd_buf;
-
+        std::vector<u32> cmd_buf(cmd_word_num);
+        auto p_cmd_buf = cmd_buf.data();
         model_ctx->read_binary(sdma_commands->Get(0), (u8 *)p_cmd_buf);
-        m_profile->record_cmd_data(core_idx, ENGINE_SDMA, cmd_buf, cmd_word_num * 4,
-                                   cmd_buf_addr);
-        stage->core_commands[core_idx].sdma_mem.Init("sdma", m_handles[devid], pmem, cmd_buf, m_flags&BM_RUNTIME_CHECK_MEM);
+        m_profile->record_cmd_data(core_idx, ENGINE_SDMA, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
+        stage->core_commands[core_idx].sdma_mem.Init("sdma", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
     }
   }
 
@@ -799,53 +800,42 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
         subnet->tpu_info.core_commands[0].ir_offset = sub_net->ir_offset();
         subnet->tpu_info.core_commands[0].ir_len = sub_net->ir_len();
       } else {
-        auto core_num =
-            sub_net->core_commands() ? sub_net->core_commands()->size() : 1;
+        auto core_num = sub_net->core_commands() ? sub_net->core_commands()->size() : 1;
         subnet->tpu_info.core_commands.resize(core_num);
         for (uint32_t core_idx = 0; core_idx < core_num; core_idx++) {
-          auto cmd_groups =
-              sub_net->core_commands()
+          auto cmd_groups = sub_net->core_commands()
                   ? sub_net->core_commands()->Get(core_idx)->gdma_tiu_commands()
                   : sub_net->cmd_group();
           int group_num = cmd_groups->size();
           subnet->tpu_info.core_commands[core_idx].bdc_id.resize(group_num);
           subnet->tpu_info.core_commands[core_idx].gdma_id.resize(group_num);
-          subnet->tpu_info.core_commands[core_idx].bdc_cmd_byte.resize(
-              group_num);
-          subnet->tpu_info.core_commands[core_idx].gdma_cmd_byte.resize(
-              group_num);
+          subnet->tpu_info.core_commands[core_idx].bdc_cmd_byte.resize(group_num);
+          subnet->tpu_info.core_commands[core_idx].gdma_cmd_byte.resize(group_num);
 
-          subnet->tpu_info.core_commands[core_idx].bdc_offset =
-              subnet_bdc_offset[core_idx];
-          subnet->tpu_info.core_commands[core_idx].gdma_offset =
-              subnet_gdma_offset[core_idx];
+          subnet->tpu_info.core_commands[core_idx].bdc_offset = subnet_bdc_offset[core_idx];
+          subnet->tpu_info.core_commands[core_idx].gdma_offset = subnet_gdma_offset[core_idx];
 
           for (int group_idx = 0; group_idx < group_num; group_idx++) {
             auto cmd_group = cmd_groups->Get(group_idx);
             u32 group_bdc_num = cmd_group->bdc_num();
             u32 group_gdma_num = cmd_group->gdma_num();
+            subnet->tpu_info.core_commands[core_idx].bdc_id[group_idx] = group_bdc_num;
+            subnet->tpu_info.core_commands[core_idx].gdma_id[group_idx] = group_gdma_num;
 
-            subnet->tpu_info.core_commands[core_idx].bdc_id[group_idx] =
-                group_bdc_num;
-            subnet->tpu_info.core_commands[core_idx].gdma_id[group_idx] =
-                group_gdma_num;
             u32 bdc_cmd_byte = cmd_group->bdc_cmd_byte();
             u32 gdma_cmd_byte = cmd_group->gdma_cmd_byte();
-            subnet->tpu_info.core_commands[core_idx].bdc_cmd_byte[group_idx] =
-                bdc_cmd_byte;
-            subnet->tpu_info.core_commands[core_idx].gdma_cmd_byte[group_idx] =
-                gdma_cmd_byte;
+            subnet->tpu_info.core_commands[core_idx].bdc_cmd_byte[group_idx] = bdc_cmd_byte;
+            subnet->tpu_info.core_commands[core_idx].gdma_cmd_byte[group_idx] = gdma_cmd_byte;
+
             if (bdc_cmd_byte > 0) {
               subnet_bdc_offset[core_idx] += bdc_cmd_byte;
             } else {
-              subnet_bdc_offset[core_idx] +=
-                  group_bdc_num * (1 << BDC_ENGINE_CMD_ALIGNED_BIT);
+              subnet_bdc_offset[core_idx] += group_bdc_num * (1 << BDC_ENGINE_CMD_ALIGNED_BIT);
             }
             if (gdma_cmd_byte > 0) {
               subnet_gdma_offset[core_idx] += gdma_cmd_byte;
             } else {
-              subnet_gdma_offset[core_idx] +=
-                  group_gdma_num * (1 << GDMA_ENGINE_CMD_ALIGNED_BIT);
+              subnet_gdma_offset[core_idx] += group_gdma_num * (1 << GDMA_ENGINE_CMD_ALIGNED_BIT);
             }
           }
         }
@@ -1881,6 +1871,7 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
       if(model_chip == "BM1686" && bmrt_arch_info::get_bmtpu_name() == "BM1684X") {
       } else if(model_chip == "CV186X" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
       } else if(model_chip == "MARS3"){
+      } else if(model_chip == "SGTPUV8"){
       } else if(model_chip == "BM1686" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
       } else if(model_chip == "SG2380" && bmrt_arch_info::get_bmtpu_name() == "SG2380") {
       } else {
@@ -1972,14 +1963,26 @@ bool Bmruntime::update_bmodel_coeff (
     BMRT_LOG(WRONG, "Error: decrypt data failed");
     return false;
   }
+
+  // the header only for lora update
   uint64_t header_size = 64;
   if (decrypted_size <= header_size) {
     free(decrypted_data);
     BMRT_LOG(WRONG, "Error: decrypt data too small");
     return false;
   }
-  // 64 zeros to check
-  for (uint64_t i = 0; i < header_size; ++i) {
+
+
+  uint64_t file_size = *reinterpret_cast<uint64_t *>(decrypted_data);
+  if (decrypted_size != file_size) {
+    free(decrypted_data);
+    BMRT_LOG(WRONG, "Error: decrypted_size is not equal to file_size in header");
+    return false;
+  }
+
+  // check header
+  uint64_t reserved_start_pos = 1 * sizeof(uint64_t) / sizeof(uint8_t);
+  for (uint64_t i = reserved_start_pos; i < header_size; ++i) {
     if (decrypted_data[i] != 0) {
       free(decrypted_data);
       BMRT_LOG(WRONG, "Error: decrypt data format error");
@@ -2003,8 +2006,9 @@ bool Bmruntime::update_bmodel_coeff (
   }
 
   if (start_position != decrypted_size - header_size) {
-    BMRT_LOG(WRONG, "Error: start_position is not equal to decrypted_size");
-    return false;
+    // out_of_range only for lora update
+    // if you want to throw exception, please use runtime_error, logic_error
+    throw std::out_of_range("Error: start_position is not equal to decrypted_size");
   }
   return ret;
 }
@@ -2100,7 +2104,7 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
   // kernel in kernel_module.h should be update manually:
   // 1: replace lib/libbm1684x_kernel_module_*.so by the latest.
   // 2: remake tpu_runtime
-  if (bmrt_arch_info::get_bmtpu_arch() != BM1684X && bmrt_arch_info::get_bmtpu_arch() != BM1688) {
+  if (bmrt_arch_info::get_bmtpu_arch() != BM1684X && bmrt_arch_info::get_bmtpu_arch() != BM1688 && bmrt_arch_info::get_bmtpu_arch() != MARS3 && bmrt_arch_info::get_bmtpu_arch() != SGTPUV8) {
     for (int i = 0; i < MAX_DEVICE_NUM; i++) {
       kernel_modules[i] = nullptr;
     }
@@ -2702,7 +2706,6 @@ void KernelModule::preload_funcs(int core_id) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-
   if(bmrt_arch_info::get_bmtpu_arch() == BM1688 || bmrt_arch_info::get_bmtpu_arch() == SG2380){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }

@@ -522,9 +522,14 @@ inline void update_addr_1684x(uint32_t *cmd, uint64_t coeff_limit, const int64_t
 
 inline void update_addr_1688(uint32_t *cmd, uint64_t coeff_limit, const int64_t ctx_offset, std::vector<addr_update_t>& addr_v) {
   uint64_t addr = ((uint64_t)(cmd[1] & 0xff) << 32) | ((uint64_t)cmd[0]);
-  if (((addr >> 39) & 0x1) && (((addr >> 36) & 0x7) == 0)) {
-    uint64_t fix_addr = update_addr(coeff_limit, ctx_offset, addr & ((1ull << 35) - 1), addr_v);
-    fix_addr |= (1ull << 39);
+  if (((addr >> 39) & 0x1) && (((addr >> 36) & 0x7) == 1)) {  // tag == 1, coeff addr
+    uint64_t fix_addr = addr & ((1ull << 36) - 1);
+    for (int i = 0; i < addr_v.size(); ++i) {
+      if (fix_addr >= addr_v[i].addr && fix_addr < addr_v[i].addr + addr_v[i].size) {
+        fix_addr += addr_v[i].offset;
+      }
+    }
+    fix_addr |= (9ull << 36);
     if (fix_addr != addr) {
       cmd[0] = fix_addr & 0xffffffff;
       cmd[1] = ((uint32_t)((fix_addr >> 32) & 0xff)) | (cmd[1] & 0xffffff00);
@@ -727,7 +732,9 @@ uint64_t coeff_combine(
         addr_update.size = location->size();
         // TODO: coeff base addr
         addr_update.offset = location_base.offset - location->offset();
-        addr_update_v->push_back(addr_update);
+        if (addr_update.offset != 0) {
+          addr_update_v->push_back(addr_update);
+        }
         is_same = true;
         break;
       }
@@ -950,11 +957,11 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
   std::vector<location_t> loc_v;
   std::vector<std::vector<addr_update_t>> addr_update_v(model_vec.size());
   uint64_t coeff_addr;
+  // first loop: generate combined coeff & location
   for (uint32_t model_idx = 0; model_idx < model_vec.size(); model_idx++) {
     auto &model_info = model_vec[model_idx];
     auto model = model_info->model_ctx->model();
     auto param = model->net()->Get(0)->parameter()->Get(0);
-    coeff_addr = param->coeff_mem()->address();
     // check model is signal net, signal stage. or combined model
     assert(model->net()->size() == 1 && model->net()->Get(0)->parameter()->size() == 1 ||
            model->bmodel_type() == 1);
@@ -970,6 +977,7 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
           assert(size == parameter->coeff_mem()->binary_coeff()->size());
         }
         assert(parameter->is_dynamic() == 0);
+        coeff_addr = parameter->coeff_mem()->address();
       }
     }
     // combine coeff
@@ -989,10 +997,19 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
     dynamic_buffer.resize(dynamic_base_size + dynamic_coeff_size);
     memcpy(dynamic_buffer.data() + dynamic_base_size, new_buffer.get() + param->dynamic_combined_coeff_offset(), dynamic_coeff_size);
     dynamic_base_size += dynamic_coeff_size;
+    // update addr_v
+    if (model->chip()->str() == "BM1684X") {
+      // BM1684X save real address. addr = base_addr + offset;
+      auto cur_coeff_addr = param->coeff_mem()->address();
+      for (int i = 0; i < addr_update_v[model_idx].size(); ++i) {
+        addr_update_v[model_idx][i].addr += cur_coeff_addr;
+      }
+    }
   }
   base_buffer.resize(base_size + dynamic_base_size);
   memcpy(base_buffer.data() + base_size, dynamic_buffer.data(), dynamic_base_size);
   // dynamic coeff location
+
   for (uint32_t model_idx = 0; model_idx < model_vec.size(); model_idx++) {
     auto &model_info = model_vec[model_idx];
     auto model = model_info->model_ctx->model();
@@ -1012,6 +1029,7 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
   uint64_t dynamic_offset = base_size;
   base_size += dynamic_base_size;
 
+  // second loop: update net param, update instruction
   Binary new_binary;
   new_binary = model_gen.WriteBinary(base_size, base_buffer.data());
   std::vector<uint8_t> crc32(bmodel::SHA256_LEN);
@@ -1041,6 +1059,7 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
                                 model_info->output_f, netidx.get());
         }
         auto param = net->parameter()->Get(idx)->UnPack();
+        auto cur_coeff_addr = param->coeff_mem->address;
         // update coeff mem
         param->coeff_mem->binary_coeff->mutate_start(new_binary.start());
         param->coeff_mem->binary_coeff->mutate_size(new_binary.size());
@@ -1060,6 +1079,11 @@ size_t combine_bmodels_coeff(ModelGen &model_gen, vector<shared_ptr<MODEL_CTX_T>
           param->coeff_mem->location.push_back(std::move(loc));
         }
         param->coeff_mem->address = coeff_addr;
+        if (cur_coeff_addr != coeff_addr) {
+          std::cout << "[BMODEL][" << __func__ << ":" << __LINE__ << "] " << "Failed to combine coeff. Coeff base addr is not same." << ": " << std::endl;
+          exit(-1);
+          return 0;
+        }
         int64_t ctx_offset = coeff_addr + base_size - (param->io_size > 0 ? param->io_addr : param->ctx_addr);
         ctx_offset = ctx_offset > 0 ? ctx_offset : 0;
         // update static cmd
