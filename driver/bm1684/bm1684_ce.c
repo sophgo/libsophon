@@ -692,12 +692,12 @@ int ce_dmacpy(void *dev, void *dst, void *src, unsigned long len)
 	return 0;
 }
 
-void spacc_clear_int(struct bm_device_info *bmdi)
+static void spacc_clear_int(struct bm_device_info *bmdi)
 {
 	ce_int_clear(bmdi->cinfo.bar_info.io_bar_vaddr.spacc_bar_vaddr);
 }
 
-void spacc_irq_handler(struct bm_device_info *bmdi)
+static void spacc_irq_handler(struct bm_device_info *bmdi)
 {
 	bmdi->spaccdrvctx.got_event_spacc = 1;
 	wake_up(&bmdi->spaccdrvctx.wq_spacc);
@@ -731,7 +731,7 @@ void bm_spacc_free_irq(struct bm_device_info *bmdi)
 	bmdrv_submodule_free_irq(bmdi, SPACC_IRQ_ID);
 }
 
-int spacc_handle_setup(struct bm_device_info *bmdi, struct spacc_batch *batch)
+static int spacc_handle_setup(struct bm_device_info *bmdi, struct spacc_batch *batch)
 {
 	int ret = 0;
 	struct cipher_info const *info;

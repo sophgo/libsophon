@@ -738,7 +738,7 @@ int bm1684_disable_iommu(struct iommu_ctrl *ctrl)
  * 3. kernel driver write SMMU_ICR
  * 4. device iommu continue work(should be reset in current implementation)
  */
-int bm1684_iommu_irq(struct iommu_ctrl *ctrl)
+static int bm1684_iommu_irq(struct iommu_ctrl *ctrl)
 {
 	struct bm_memcpy_info *memcpy_info = container_of(ctrl, struct bm_memcpy_info, iommuctl);
 	struct bm_device_info *bmdi = container_of(memcpy_info, struct bm_device_info, memcpy_info);

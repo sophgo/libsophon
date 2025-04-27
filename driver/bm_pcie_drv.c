@@ -60,6 +60,9 @@ typedef struct bm_api_reset_cpu {
 } __attribute__((packed)) bm_api_reset_cpu_t;
 #endif
 
+void bmdrv_modules_request_irq(struct bm_device_info *bmdi);
+int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
+
 static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *cinfo)
 {
 	int rc;
@@ -601,7 +604,7 @@ void bmdrv_modules_request_irq(struct bm_device_info *bmdi)
 	}
 }
 
-void bmdrv_modules_free_irq(struct bm_device_info *bmdi)
+static void bmdrv_modules_free_irq(struct bm_device_info *bmdi)
 {
 	bm_cdma_free_irq(bmdi);
 	if (bmdi->cinfo.chip_id == 0x1682)
@@ -659,7 +662,7 @@ static u32 bmdrv_get_a53_boot_args(struct bm_device_info *bmdi)
 	return flag;
 }
 
-int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
+static int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	int                  ret = 0;
 	u32                  flag  = 0xabcdabcd;
 	int                  retry = 3;
@@ -741,7 +744,7 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	return ret;
 }
 
-int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
+static int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
 	int                  ret = 0;
 	u32                  flag  = 0xabcdabcd;
 	int                  retry = 3;
@@ -781,7 +784,7 @@ int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
 	return ret;
 }
 
-void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
+static void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
 {
 	// u32 ctrl_word;
 	int value = 0x0;
@@ -925,7 +928,7 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 }
 #endif
 
-void bmdrv_init_devid_array(void)
+static void bmdrv_init_devid_array(void)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -939,7 +942,7 @@ void bmdrv_init_devid_array(void)
 	}
 }
 
-int bmdrv_check_domain_bdf(int domain_bdf)
+static int bmdrv_check_domain_bdf(int domain_bdf)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -954,7 +957,7 @@ int bmdrv_check_domain_bdf(int domain_bdf)
 	return -1;
 }
 
-void bmdrv_dump_pcie_record(void)
+static void bmdrv_dump_pcie_record(void)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -967,7 +970,7 @@ void bmdrv_dump_pcie_record(void)
 	}
 }
 
-int bmdrv_alloc_dev_index(struct pci_dev *pdev)
+static int bmdrv_alloc_dev_index(struct pci_dev *pdev)
 {
 	int dev_index = 0;
 	int i = 0;

@@ -7,6 +7,7 @@
 #include "bm_common.h"
 #include "bm_io.h"
 #include "bm1684_reg.h"
+#include "bm_wdt.h"
 
 #define WDOG_CONTROL_REG_OFFSET		    0x00
 #define WDOG_CONTROL_REG_WDT_EN_MASK	    0x01

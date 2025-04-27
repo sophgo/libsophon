@@ -87,7 +87,7 @@ int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64
 	return 0;
 }
 /*bit_n == 0, slot n is free, bit_n == 1, slot n is used*/
-int caculate_stage_index(int *bitmap, int *index)
+static int caculate_stage_index(int *bitmap, int *index)
 {
 	int i = 0;
 
@@ -101,7 +101,7 @@ int caculate_stage_index(int *bitmap, int *index)
 	return -1;
 }
 
-int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
+static int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 
 	if (dir == HOST2CHIP) {
@@ -119,7 +119,7 @@ int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) 
 	return 0;
 }
 
-int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
+static int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
 		void **pvaddr, MEMCPY_DIR dir, int *index)
 {
 
@@ -267,7 +267,7 @@ void bmdev_construct_cdma_arg(pbm_cdma_arg parg,
 	parg->use_iommu = use_iommu;
 }
 
-void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
+static void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
 		u64 user_start,
 		u64 user_size,
 		u32 is_dst,
@@ -502,7 +502,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 	return ret;
 }
 
-int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
+static int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode)
 {
 	int ret = 0;
@@ -595,7 +595,7 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 	return ret;
 }
 
-int bmdev_memcpy_p2p_test(struct bm_device_info *bmdi_src, struct bm_device_info *bmdi_dst)
+static int bmdev_memcpy_p2p_test(struct bm_device_info *bmdi_src, struct bm_device_info *bmdi_dst)
 {
 	int size = 0x1000;
 	void *vaddr_src = NULL, *vaddr_dst = NULL;

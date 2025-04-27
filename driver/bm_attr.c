@@ -222,7 +222,7 @@ int bmdrv_get_tpu_target_freq(struct bm_device_info *bmdi, enum bm_freq_scaling_
 }
 #endif
 
-void bmdrv_thermal_init(struct bm_device_info *bmdi)
+static void bmdrv_thermal_init(struct bm_device_info *bmdi)
 {
 	int i = 0;
 
@@ -259,7 +259,7 @@ static void  calculate_board_status(struct bm_device_info *bmdi)
 	}
 }
 
-void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
+static void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
 {
 	int fusing_tmp = 95;
 	int support_tmp = 90;
@@ -363,7 +363,7 @@ extreme:
 }
 #endif
 
-void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp)
+static void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp)
 {
 	int avg_tmp = 0;
 	int cur_tpu_clk = 0;
@@ -894,7 +894,7 @@ int set_ecc(struct bm_device_info *bmdi, int ecc_enable)
 }
 
 #ifndef SOC_MODE
-int board_type_sc5_rev_to_duty(u16 fan_rev)
+static int board_type_sc5_rev_to_duty(u16 fan_rev)
 {
 	u32 fan_duty = 0;
 
@@ -919,7 +919,7 @@ int board_type_sc5_rev_to_duty(u16 fan_rev)
 	return fan_duty;
 }
 
-int board_type_sc5h_rev_to_duty(u16 fan_rev)
+static int board_type_sc5h_rev_to_duty(u16 fan_rev)
 {
 	u32 fan_duty = 0;
 
@@ -940,7 +940,7 @@ int board_type_sc5h_rev_to_duty(u16 fan_rev)
 	return fan_duty;
 }
 
-int bm_get_fixed_fan_speed(struct bm_device_info *bmdi, u32 temp)
+static int bm_get_fixed_fan_speed(struct bm_device_info *bmdi, u32 temp)
 {
 	u16 fan_spd = 100;
 
@@ -1443,38 +1443,38 @@ static int bm_read_1331_temp(struct bm_device_info *bmdi, int id, u32 *temp)
 	return ret;
 }
 
-int bm_read_sc5_pro_tpu_voltage(struct bm_device_info *bmdi, u32 *volt)
+static int bm_read_sc5_pro_tpu_voltage(struct bm_device_info *bmdi, u32 *volt)
 {
 	*volt = mcu_info_reg_read(bmdi, 0xc);
 	return 0;
 }
 
-int bm_read_sc5_pro_tpu_current(struct bm_device_info *bmdi, u32 *cur)
+static int bm_read_sc5_pro_tpu_current(struct bm_device_info *bmdi, u32 *cur)
 {
 	*cur = mcu_info_reg_read(bmdi, 0x10);
 	return 0;
 }
 
-int bm_read_sc5_pro_tpu_power(struct bm_device_info *bmdi, u32 *power)
+static int bm_read_sc5_pro_tpu_power(struct bm_device_info *bmdi, u32 *power)
 {
 	*power = mcu_info_reg_read(bmdi, 0x14);
 	*power = *power / 1000;
 	return 0;
 }
 
-int bm_read_sc7_pro_vddc_voltage(struct bm_device_info *bmdi, u32 *volt)
+static int bm_read_sc7_pro_vddc_voltage(struct bm_device_info *bmdi, u32 *volt)
 {
 	*volt = mcu_info_reg_read(bmdi, 0x18);
 	return 0;
 }
-int bm_read_sc7_pro_vddc_power(struct bm_device_info *bmdi, u32 *power)
+static int bm_read_sc7_pro_vddc_power(struct bm_device_info *bmdi, u32 *power)
 {
 	*power = mcu_info_reg_read(bmdi, 0x20);
 	*power = *power / 1000;
 	return 0;
 }
 
-int bm_read_sc7_pro_vddphy_power(struct bm_device_info *bmdi, u32 *power)
+static int bm_read_sc7_pro_vddphy_power(struct bm_device_info *bmdi, u32 *power)
 {
 	*power = mcu_info_reg_read(bmdi, 0x2c);
 	*power = *power / 1000;
@@ -1906,7 +1906,7 @@ int bm_read_mcu_voltage(struct bm_device_info *bmdi, u8 lo, u32 *volt)
 	return 0;
 }
 
-int bm_read_board_current(struct bm_device_info *bmdi, u32 *cur)
+static int bm_read_board_current(struct bm_device_info *bmdi, u32 *cur)
 {
 
 	int ret = 0;
@@ -2692,7 +2692,7 @@ int bm_get_name(struct bm_device_info *bmdi, unsigned long arg) {
 }
 
 #ifndef SOC_MODE
-int bmdrv_find_first_chip_logic_chip_id(struct bm_device_info *bmdi)
+static int bmdrv_find_first_chip_logic_chip_id(struct bm_device_info *bmdi)
 {
 	u32 chip_num = 0;
 	u32 value = 0;
@@ -3228,7 +3228,7 @@ int bmdrv_volt_freq_scaling(struct bm_device_info *bmdi)
 	return 0;
 }
 
-int bmdev_get_smi_attr(struct bm_device_info *bmdi, struct bm_smi_attr *pattr)
+static int bmdev_get_smi_attr(struct bm_device_info *bmdi, struct bm_smi_attr *pattr)
 {
 	struct chip_info *cinfo;
 	int i;

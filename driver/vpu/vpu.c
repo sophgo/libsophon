@@ -437,7 +437,7 @@ static void release_vpu_create_inst_flag(struct bm_device_info *bmdi, int core_i
 }
 
 #ifdef VPU_SUPPORT_CLOSE_COMMAND
-int CodaCloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
+static int CodaCloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
 {
 	int ret = 0;
 	unsigned long timeout = jiffies + HZ; /* vpu wait timeout to 1sec */
@@ -599,7 +599,7 @@ static int FlushEncResult(struct bm_device_info *bmdi, u32 core, u32 instanceInd
     return 0;
 }
 
-int Wave5CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
+static int Wave5CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
 {
 	int ret = 0;
 	int regVal;
@@ -640,7 +640,7 @@ DONE_CMD:
 	return ret;
 }
 
-int CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
+static int CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
 {
 	int product_code;
 	int ret = 0;
@@ -1243,16 +1243,17 @@ static int polling_interrupt_work(void *data)
 	return 0;
 }
 
-void create_irq_poll_thread(void)
+static void create_irq_poll_thread(void)
 {
 	irq_task = kthread_run(polling_interrupt_work, NULL, "IrqPoll");
-	if (IS_ERR(irq_task))
+	if (IS_ERR(irq_task)) {
 		DPRINTK(KERN_ERR "[VPUDRV] : %s failed!\n", __func__);
-	else
+	} else {
 		DPRINTK("[VPUDRV] : %s sucess!\n", __func__);
+	}
 }
 
-void destory_irq_poll_thread(void)
+static void destory_irq_poll_thread(void)
 {
 	if (irq_task) {
 		kthread_stop(irq_task);
@@ -2708,23 +2709,25 @@ static int bm_vpu_reset_core(struct bm_device_info *bmdi, int core_idx, int rese
 
     if (bmdi->cinfo.chip_id == 0x1684) {
 		value = bm_read32(bmdi, bm_vpu_rst[core_idx].reg);
-		if (reset == 0)
+		if (reset == 0) {
 			value &= ~(0x1 << bm_vpu_rst[core_idx].bit_n);
-		else if (reset == 1)
+		} else if (reset == 1) {
 			value |= (0x1 << bm_vpu_rst[core_idx].bit_n);
-		else
+		} else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst[core_idx].reg);
 	}
     if (bmdi->cinfo.chip_id == 0x1686) {
 		value = bm_read32(bmdi, bm_vpu_rst_1686[core_idx].reg);
-		if (reset == 0)
+		if (reset == 0) {
 			value &= ~(0x1 << bm_vpu_rst_1686[core_idx].bit_n);
-		else if (reset == 1)
+		} else if (reset == 1) {
 			value |= (0x1 << bm_vpu_rst_1686[core_idx].bit_n);
-		else
+		} else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst_1686[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst_1686[core_idx].reg);
 	}
