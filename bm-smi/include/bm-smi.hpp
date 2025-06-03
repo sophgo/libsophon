@@ -31,8 +31,9 @@
 #define ATTR_FAULT_VALUE         (int)0xFFFFFC00
 #define ATTR_NOTSUPPORTED_VALUE  (int)0xFFFFFC01
 
-#define BM_SMI_FORMAT_HEIGHT 7  // lines of attributes display format header
-#define BM_SMI_DEVATTR_HEIGHT 3  // lines of one device's attributes
+#define BM_SMI_FORMAT_HEIGHT 8  // lines of attributes display format header
+#define BM_SMI_DEVATTR_HEIGHT 4  // lines of one device's attributes
+#define BM_SMI_MEM_HEIGHT 3  // lines of mem attributes
 #define BM_SMI_PROCHEADER_HEIGHT 5  // lines of proc_mem display header
 #define BM_SMI_FORMAT_HEIGHT_UTIL 9 //lines of attributes display format header for util info
 #define BM_SMI_FORMAT_HEIGHT_MEM 8 //lines of attributes display format header for memory info
@@ -47,6 +48,11 @@
 #define MAX_NUM_VPU_CORE_BM1686         3               /* four wave cores */
 #define MAX_NUM_JPU_CORE                4
 #define VPP_CORE_MAX                    2
+#define NPU_TOTAL_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/total_mem"
+#define NPU_ALLOC_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/alloc_mem"
+#define VPP_TOTAL_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/total_mem"
+#define VPP_ALLOC_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/alloc_mem"
+#define SYSTEM_MEM_SIZE 19
 
 /* bm_smi_attr defines all the attributes fetched from kernel;
  * it will be displayed by bm-smi and saved in files if needed.
@@ -60,8 +66,18 @@ typedef struct bm_smi_attr {
   int card_index;
   int chip_index_of_card;
 
+  int ion_mem_used;
+  int ion_mem_total;
+  int npu_mem_used;
+  int npu_mem_total;
+  int vpp_mem_used;
+  int vpp_mem_total;
   int mem_used;
   int mem_total;
+  int cma_mem_used;
+  int cma_mem_total;
+  int system_mem;
+  int ddr_size;
   int tpu_util;
   int tpu_util0;
   int tpu_util1;

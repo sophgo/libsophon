@@ -256,7 +256,7 @@ extern int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file,
 		void __user *dst, u64 src, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 extern int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file,
-		uint64_t dst, void __user *src, u32 size,
+		uint64_t dst, void __user *src, u64 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 
 extern void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base);

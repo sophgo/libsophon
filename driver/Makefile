@@ -42,7 +42,7 @@ ifeq ($(SOC_MODE), 1)
 else
 BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o  bm1688_vcodec.o
 endif
-BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_smmu.o bm1688_clkrst.o bm1688_card.o \
+BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_clkrst.o bm1688_card.o \
 			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
 BM1688_OBJ := $(addprefix $(BM1688_DIR)/, $(BM1688_OBJ))
 

@@ -174,7 +174,7 @@ tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_
     }
 #endif
 
-u32 bm_mem_get_size(struct bm_mem_desc mem) { return mem.size; }
+u64 bm_mem_get_size(struct bm_mem_desc mem) { return mem.size; }
 
 u64 sg_mem_get_size(struct sg_mem_desc mem) { return mem.size; }
 
@@ -660,7 +660,7 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 			ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
 
 			if (ret == 0) {
-				ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION, pmem);
+				ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION_U64, pmem);
 				break;
 			}
 			}
@@ -747,7 +747,7 @@ static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) 
   	}
 #endif
 	bm_profile_record_mem_begin(ctx);
-	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem);
+	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM_U64, pmem);
 	if (ret != 0) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
 		"bm free gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
@@ -890,7 +890,7 @@ static bm_status_t __alloc_bm_device_mem_raw_u64(bm_handle_t ctx,
 bm_status_t bm_malloc_neuron_device(bm_handle_t handle, bm_device_mem_t *pmem,
                                     int n, int c, int h, int w)
 {
-	u32 size = 0;
+	//u32 size = 0;
 	u64 size_tmp = 0ULL;
 	int any_heap_mask = 0;
 	any_heap_mask = (2 << (ION_MAX_HEAP_CNT - 1)) - 1;
@@ -903,15 +903,15 @@ bm_status_t bm_malloc_neuron_device(bm_handle_t handle, bm_device_mem_t *pmem,
 	}
 
 	size_tmp = bm_get_neuron_size(n, c, h, w);
-	if (size_tmp > 0xffffffff) {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-			"%s, malloc device size >= 4G\n", __func__);
-		return BM_NOT_SUPPORTED;
-	}
+	//if (size_tmp > 0xffffffff) {
+	//	bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+	//		"%s, malloc device size >= 4G\n", __func__);
+	//	return BM_NOT_SUPPORTED;
+	//}
 
-	size = (u32)size_tmp;
+	//size = (u32)size_tmp;
 	pmem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
-	pmem->size = size;
+	pmem->size = size_tmp;
 	BM_CHECK_RET(__alloc_device_mem_raw(handle, pmem, any_heap_mask));
 
 #ifdef MM_DEBUG
@@ -4376,6 +4376,7 @@ bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handle,
 		return BM_ERR_FAILURE;
 	}
 
+	printf("device_neuron sys_addr:%llx\n", (u64)bm_mem_get_system_addr(sys_mem));
 	if (need_copy) {
 		if (BM_SUCCESS != bm_memcpy_s2d(handle, *dev_mem, bm_mem_get_system_addr(sys_mem))) {
 			bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,

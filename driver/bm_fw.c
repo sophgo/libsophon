@@ -219,8 +219,8 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 {
 	int ret;
 	u64 a53lite_park = 0x100000000;
-	u64 c906_0_park = 0x104000000;
-	u64 c906_1_park = 0x10C000000; // 128M
+	u64 c906_0_park = C906_0_PARK;
+	u64 c906_1_park = C906_1_PARK;
 	const char *bm1684x_dyn_fw = "bm1684x_firmware.bin";
 	const char *bm1684_itcm_fw = "bm1684_tcm_firmware.bin";
 	const char *bm1684x_ddr_fw = "bm1684_ddr_firmware.bin";

@@ -116,5 +116,4 @@ void bmdrv_cdma_irq_handler1(struct bm_device_info *bmdi);
 #include "bm1688_cdma.h"
 #include "bm1682_smmu.h"
 #include "bm1684_smmu.h"
-#include "bm1688_smmu.h"
 #endif

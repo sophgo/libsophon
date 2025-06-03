@@ -100,10 +100,10 @@ bm-smi介绍
      - 支持
 
    * - 物理板卡id号
-     - 支持       
+     - 支持
      - 支持
 
-   * - tpu的设备号              
+   * - tpu的设备号
      - 支持
      - 支持
 
@@ -268,9 +268,13 @@ bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/li
 
 -  TPU_C: tpu模块的工作电流
 
--  Memory-Usage:gmem总数和已使用数量；默认106M表示VPU的固件占用的内存大小。板卡上的memory有可能分布在不同的地址空间，我们分配的内存都是地址连续的内存，而且由于每次分配的大小不一样，会导致内存的碎片化，所以有可能出现利用率达不到100%的情况。
+-  Ion-Usage:gmem总数和已使用数量。板卡上的memory有可能分布在不同的地址空间，我们分配的内存都是地址连续的内存，而且由于每次分配的大小不一样，会导致内存的碎片化，所以有可能出现利用率达不到100%的情况。
 
-下面显示的是每个设备上每个进程（或者线程）占用的gmem的数量。
+-  Vpp-Usage:Vpp heap总数和已使用数量。
+
+-  Npu-Usage:Npu heap总数和已使用数量。
+
+下面显示的是每个设备上每个进程（或者线程）通过bmlib handle申请的gmem的数量。
 
 .. image:: ./images/bmsmid006.png
 
@@ -278,7 +282,7 @@ bm-smi是一个可执行文件，不依赖其他动态库，位于/opt/sophon/li
 
 1、因为我们的板卡是支持多任务多用户同时使用的，理论上可以有无限个进程创建无限个handle申请global memory，可以使用上下方向键以及翻页键去查看所有的process占用gmem的信息，通过标记保存成文件，也是包含所有process信息的。
 
-2、process占用的gmem信息，每一行显示的是这个process创建的一个handle对应的gmem，如果这个process创建了多个handle，那么每个handle占用的gmem信息是单独一行显示的。
+2、process占用的gmem信息，每一行显示的是这个process创建的一个bmlib handle对应的gmem，如果这个process创建了多个handle，那么每个handle占用的gmem信息是单独一行显示的。
 
 具体使用方法和参数
 -----------------------
@@ -315,7 +319,7 @@ bm-smi支持的参数有：
    令只会执行ecc相关的动作。
 
   如果不指定dev参数，默认对所有设备做操作。
-   
+
   该功能SOC模式不支持。
 
 -  file (target file to save smi log.)
@@ -587,7 +591,7 @@ SOC模式bm-smi使用方法：登录soc后，直接运行bm-smi即可，
 ::
 
   bm-smi or bm-smi --opmode=display
-  
+
 .. image:: ./images/bmsmid005.png
    :width: 5.76042in
    :height: 1.95764in

@@ -129,7 +129,7 @@ typedef struct bm_mem_desc {
   } u;
 
   bm_mem_flags_t flags;
-  unsigned int size;
+  unsigned long size;
 } bm_mem_desc_t;
 
 typedef struct bm_mem_desc bm_device_mem_t;

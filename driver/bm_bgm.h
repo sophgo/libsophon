@@ -45,8 +45,28 @@ typedef struct bm_mem_desc {
 	} u;
 
 	bm_mem_flags_t         flags;
-	unsigned int                    size;
+	unsigned long                    size;
 } bm_mem_desc_t;
+
+typedef struct bm_mem_desc_u64 {
+	union {
+		struct {
+			unsigned long device_addr;
+			unsigned int reserved0;
+			int dmabuf_fd;
+		} device;
+		struct {
+			void *system_addr;
+			unsigned int reserved;
+			int reserved1;
+		} system;
+	} u;
+
+	bm_mem_flags_t flags;
+	unsigned long long size;
+} bm_mem_desc_u64_t;
+
+typedef struct bm_mem_desc_u64 bm_device_mem_u64_t;
 
 typedef struct bm_mem_desc   bm_device_mem_t;
 

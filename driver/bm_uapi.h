@@ -155,6 +155,8 @@ struct bm_reg {
 #define BMDEV_FLUSH_GMEM		_IOWR('p', 0x18, unsigned long)
 #define BMDEV_ALLOC_GMEM_ION		_IOW('p', 0x19, unsigned long)
 #define BMDEV_GMEM_ADDR		        _IOW('p', 0x1a, unsigned long)
+#define BMDEV_ALLOC_GMEM_ION_U64        _IOW('p', 0x1b, unsigned long)
+#define BMDEV_FREE_GMEM_U64             _IOW('p', 0x1c, unsigned long)
 
 #define BMDEV_SEND_API			_IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API		_IOW('p', 0x21, unsigned long)
@@ -289,8 +291,18 @@ struct bm_smi_attr {
 	int card_index;
 	int chip_index_of_card;
 
+	int ion_mem_used;
+	int ion_mem_total;
+	int npu_mem_used;
+	int npu_mem_total;
+	int vpp_mem_used;
+	int vpp_mem_total;
 	int mem_used;
 	int mem_total;
+	int cma_mem_used;
+	int cma_mem_total;
+	int system_mem;
+	int ddr_size;
 	int tpu_util;
 	int tpu_util0;
 	int tpu_util1;

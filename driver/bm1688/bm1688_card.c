@@ -2,6 +2,7 @@
 #include "bm_common.h"
 #include "bm_pcie.h"
 #include "bm_card.h"
+#include "bm_fw.h"
 #include "bm1688_reg.h"
 #include "bm1688_irq.h"
 
@@ -299,8 +300,8 @@ void bm1688_stop_c906(struct bm_device_info *bmdi)
 
 void bm1688_start_c906(struct bm_device_info *bmdi)
 {
-	u64 c906_park_0 = 0x104000000;
-	u64 c906_park_1 = 0x10C000000;
+	u64 c906_park_0 = C906_0_PARK;
+	u64 c906_park_1 = C906_1_PARK;
 	u32 c906_reset_base_l_0 = c906_park_0 & 0xffffffff;
 	u32 c906_reset_base_h_0 = c906_park_0 >> 32;
 	u32 c906_reset_base_l_1 = c906_park_1 & 0xffffffff;

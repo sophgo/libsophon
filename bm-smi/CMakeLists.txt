@@ -35,6 +35,7 @@ else()
         src/bm-smi.cpp
         src/bm_smi_cmdline.cpp
 		src/bm_smi_core_util.cpp
+		src/bm_smi_mem_info.cpp
         src/bm_smi_test.cpp
         src/bm_smi_creator.cpp
         src/bm_smi_display.cpp

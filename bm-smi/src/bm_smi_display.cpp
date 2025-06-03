@@ -1,5 +1,7 @@
 #include "../include/bm_smi_display.hpp"
 #include "version.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 static int                     dev_cnt;
 static int                     start_dev;
@@ -58,6 +60,24 @@ static void bm_smi_dev_free(bm_handle_t ctx) {
 }
 #endif
 #endif
+
+static int read_ionmem_info(const char *path, u64 *value) {
+	int fd, ret;
+	char mem_info[16];
+	fd = open(path, O_RDONLY);
+	if (fd < 0) {
+		printf("open %s failed\n", path);
+		return -1;
+	}
+	ret = read(fd, mem_info, 10);
+	if (ret < 0) {
+		printf("read %s failed\n", path);
+		return -1;
+	}
+	close(fd);
+	*value = atol(mem_info);
+	return 0;
+}
 
 /* get attibutes for the specified device*/
 #ifndef SOC_MODE
@@ -123,12 +143,38 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
     }
 
 #ifdef SOC_MODE
-    u64 mem_total, mem_avail;
+    u64 ion_mem_total, ion_mem_used;
+	u64 vpp_mem_total, vpp_mem_used, npu_mem_total, npu_mem_used;
+	const char *npu_total_path = NPU_TOTAL_PATH;
+    const char *vpp_total_path = VPP_TOTAL_PATH;
+    const char *npu_alloc_path = NPU_ALLOC_PATH;
+	const char *vpp_alloc_path = VPP_ALLOC_PATH;
+	int ret = 0;
     if (handle->ion_fd > 0) {
-        bm_total_gmem(handle, &mem_total);
-        bm_avail_gmem(handle, &mem_avail);
-        g_attr[dev_id].mem_total = mem_total / 1024 / 1024;
-        g_attr[dev_id].mem_used  = (mem_total - mem_avail) / 1024 / 1024;
+		ret = read_ionmem_info(npu_total_path, &npu_mem_total);
+		if (ret < 0) {
+			printf("read npu_mem_total failed\n");
+		}
+		ret = read_ionmem_info(vpp_total_path, &vpp_mem_total);
+		if (ret < 0) {
+			printf("read npu_mem_total failed\n");
+		}
+		ret = read_ionmem_info(npu_alloc_path, &npu_mem_used);
+		if (ret < 0) {
+			printf("read npu_mem_total failed\n");
+		}
+		ret = read_ionmem_info(vpp_alloc_path, &vpp_mem_used);
+		if (ret < 0) {
+			printf("read npu_mem_total failed\n");
+		}
+		ion_mem_total = vpp_mem_total + npu_mem_total;
+		ion_mem_used = vpp_mem_used + npu_mem_used;
+        g_attr[dev_id].ion_mem_total = ion_mem_total / 1024 / 1024;
+        g_attr[dev_id].ion_mem_used  = ion_mem_used / 1024 / 1024;
+		g_attr[dev_id].vpp_mem_total = vpp_mem_total / 1024 / 1024;
+        g_attr[dev_id].vpp_mem_used  = vpp_mem_used / 1024 / 1024;
+		g_attr[dev_id].npu_mem_total = npu_mem_total / 1024 / 1024;
+        g_attr[dev_id].npu_mem_used  = npu_mem_used / 1024 / 1024;
     }
 #endif
 }
@@ -207,7 +253,7 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                     line_str,
                     BUFFER_LEN,
                     "| SDK Version:%9s             Driver Version:  "
-                    "%1d.%1d.%1d                                         |\n",
+                    "%1d.%1d.%2d                                        |\n",
                     bm_smi_version,
                     g_driver_version >> 16,
                     (g_driver_version >> 8) & 0xff,
@@ -229,9 +275,15 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                 snprintf(line_str,
                          BUFFER_LEN,
                          "|12V_ATX  MaxP boardP Minclk Maxclk  Fan|Bus-ID      "
-                         "Status   Currclk   TPU_C   Memory-Usage       |\n");
+                         "Status   Currclk   TPU_C   Ion-Usage          |\n");
                 break;
-            case 6:
+			case 6:
+				snprintf(line_str,
+                         BUFFER_LEN,
+                         "|                                       |        "
+						 "Vpp-Usage             Npu-Usage                   |\n");
+                break;
+            case 7:
                 snprintf(line_str,
                          BUFFER_LEN,
                          "|=======================================+============"
@@ -612,171 +664,214 @@ static void bm_smi_display_attr(int            dev_id,
 
     for (int i = 0; i < BM_SMI_DEVATTR_HEIGHT; i++, attr_y++) {
         switch (i) {
-            case 0: {
-                if (g_attr[dev_id].board_attr) {
-                    snprintf(line_str,
-                             BUFFER_LEN,
-                             "|%2s %10s %5s %17s |%2d   %4s    %4s",
-                             card_index_s,
-                             board_name,
-                             mode_s,
-                             sn_s,
-                             dev_id,
-                             boardt_s,
-                             chipt_s);
-                    str_length = snprintf(color_str, BUFFER_LEN, " ");
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "%5s   %5s  %3s    %3s       %5s |\n",
-                             tpup_s,
-                             tpuv_s,
-                             ecc_s,
-                             cnum_s,
-                             tpu_util_s);
-                    snprintf(whole_str,
-                             BUFFER_LEN,
-                             "|%2s %10s %5s %17s |%2d   %4s    %4s   %5s  "
-                             " %5s  %3s    %3s       %5s |\n",
-                             card_index_s,
-                             board_name,
-                             mode_s,
-                             sn_s,
-                             dev_id,
-                             boardt_s,
-                             chipt_s,
-                             tpup_s,
-                             tpuv_s,
-                             ecc_s,
-                             cnum_s,
-                             tpu_util_s);
-                } else {
-                    snprintf(line_str,
-                             BUFFER_LEN,
-                             "|                                       |%2d   "
-                             "%4s    %4s",
-                             dev_id,
-                             boardt_s,
-                             chipt_s);
-                    str_length = snprintf(color_str, BUFFER_LEN, " ");
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "%5s   %5s  %3s    %3s       %5s |\n",
-                             tpup_s,
-                             tpuv_s,
-                             ecc_s,
-                             cnum_s,
-                             tpu_util_s);
-                    snprintf(whole_str,
-                             BUFFER_LEN,
-                             "|                                       |%2d   "
-                             "%4s    %4s   %5s   %5s  %3s    %3s       %5s |\n",
-                             dev_id,
-                             boardt_s,
-                             chipt_s,
-                             tpup_s,
-                             tpuv_s,
-                             ecc_s,
-                             cnum_s,
-                             tpu_util_s);
-                }
-            } break;
-            case 1:
-                if (g_attr[dev_id].board_attr) {
-            snprintf(line_str,
-                             BUFFER_LEN,
-                             "|%6s %5s  %4s  %4s  %7s %5s|%11s%7s ",
-                             c12v_s,
-                             maxp_s,
-                             boardp_s,
-                             minclk_s,
-                             maxclk_s,
-                             fan_s,
-                             busid_s,
-                             status_s);
-                    str_length =
-                        snprintf(color_str, BUFFER_LEN, "%7s", currclk_s);
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "   %7s %5dMB/%5dMB      |\n",
-                             tpuc_s,
-                             g_attr[dev_id].mem_used,
-                             g_attr[dev_id].mem_total);
-                    snprintf(whole_str,
-                             BUFFER_LEN,
-                             "|%6s %5s  %4s  %4s  %7s %5s|%11s%7s %7s   "
-                             "%7s %5dMB/%5dMB      |\n",
-                             c12v_s,
-                             maxp_s,
-                             boardp_s,
-                             minclk_s,
-                             maxclk_s,
-                             fan_s,
-                             busid_s,
-                             status_s,
-                             currclk_s,
-                             tpuc_s,
-                             g_attr[dev_id].mem_used,
-                             g_attr[dev_id].mem_total);
-                } else {
-                    snprintf(
-                        line_str,
-                        BUFFER_LEN,
-                        "|                                       |%11s%7s ",
-                        busid_s,
-                        status_s);
-                    str_length =
-                        snprintf(color_str, BUFFER_LEN, "%7s", currclk_s);
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "   %7s %5dMB/%5dMB      |\n",
-                             tpuc_s,
-                             g_attr[dev_id].mem_used,
-                             g_attr[dev_id].mem_total);
-                    snprintf(whole_str,
-                             BUFFER_LEN,
-                             "|                                       |%11s%7s "
-                             "%7s   %7s %5dMB/%5dMB      |\n",
-                             busid_s,
-                             status_s,
-                             currclk_s,
-                             tpuc_s,
-                             g_attr[dev_id].mem_used,
-                             g_attr[dev_id].mem_total);
-                }
-                break;
-            case 2: {
-                if (g_attr[dev_id].board_endline) {
-            snprintf(line_str,
-                             BUFFER_LEN,
-                             "+=======================================+========"
-                             "===========");
-                    str_length = snprintf(color_str, BUFFER_LEN, "=");
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "======================================+\n");
-                    snprintf(
-                        whole_str,
-                        BUFFER_LEN,
-                        "+=======================================+============="
-                        "=============================================+\n");
-                } else {
-                    snprintf(line_str,
-                             BUFFER_LEN,
-                             "|                                       "
-                             "|---------------------------------");
-                    str_length = snprintf(color_str, BUFFER_LEN, "-");
-                    snprintf(after_color_str,
-                             BUFFER_LEN,
-                             "--------------------------------------|\n");
-                    snprintf(whole_str,
-                             BUFFER_LEN,
-                             "|                                       "
-                             "|------------------------------------------------"
-                             "----------|\n");
-                }
-            } break;
-            default:
-                break;
+		case 0:
+			if (g_attr[dev_id].board_attr) {
+				snprintf(line_str,
+							BUFFER_LEN,
+							"|%2s %10s %5s %17s |%2d   %4s    %4s",
+							card_index_s,
+							board_name,
+							mode_s,
+							sn_s,
+							dev_id,
+							boardt_s,
+							chipt_s);
+				str_length = snprintf(color_str, BUFFER_LEN, " ");
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"%5s   %5s  %3s    %3s       %5s |\n",
+							tpup_s,
+							tpuv_s,
+							ecc_s,
+							cnum_s,
+							tpu_util_s);
+				snprintf(whole_str,
+							BUFFER_LEN,
+							"|%2s %10s %5s %17s |%2d   %4s    %4s   %5s  "
+							" %5s  %3s    %3s       %5s |\n",
+							card_index_s,
+							board_name,
+							mode_s,
+							sn_s,
+							dev_id,
+							boardt_s,
+							chipt_s,
+							tpup_s,
+							tpuv_s,
+							ecc_s,
+							cnum_s,
+							tpu_util_s);
+			} else {
+				snprintf(line_str,
+							BUFFER_LEN,
+							"|                                       |%2d   "
+							"%4s    %4s",
+							dev_id,
+							boardt_s,
+							chipt_s);
+				str_length = snprintf(color_str, BUFFER_LEN, " ");
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"%5s   %5s  %3s    %3s       %5s |\n",
+							tpup_s,
+							tpuv_s,
+							ecc_s,
+							cnum_s,
+							tpu_util_s);
+				snprintf(whole_str,
+							BUFFER_LEN,
+							"|                                       |%2d   "
+							"%4s    %4s   %5s   %5s  %3s    %3s       %5s |\n",
+							dev_id,
+							boardt_s,
+							chipt_s,
+							tpup_s,
+							tpuv_s,
+							ecc_s,
+							cnum_s,
+							tpu_util_s);
+			}
+			break;
+		case 1:
+			if (g_attr[dev_id].board_attr) {
+				snprintf(line_str,
+							BUFFER_LEN,
+							"|%6s %5s  %4s  %4s  %7s %5s|%11s%7s ",
+							c12v_s,
+							maxp_s,
+							boardp_s,
+							minclk_s,
+							maxclk_s,
+							fan_s,
+							busid_s,
+							status_s);
+				str_length = snprintf(color_str, BUFFER_LEN, "%7s", currclk_s);
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"   %7s %5dMB/%5dMB      |\n",
+							tpuc_s,
+							g_attr[dev_id].ion_mem_used,
+							g_attr[dev_id].ion_mem_total);
+				snprintf(whole_str,
+							BUFFER_LEN,
+							"|%6s %5s  %4s  %4s  %7s %5s|%11s%7s %7s   "
+							"%7s %5dMB/%5dMB      |\n",
+							c12v_s,
+							maxp_s,
+							boardp_s,
+							minclk_s,
+							maxclk_s,
+							fan_s,
+							busid_s,
+							status_s,
+							currclk_s,
+							tpuc_s,
+							g_attr[dev_id].ion_mem_used,
+							g_attr[dev_id].ion_mem_total);
+			} else {
+				snprintf(
+					line_str,
+					BUFFER_LEN,
+					"|                                       |%11s%7s ",
+					busid_s,
+					status_s);
+				str_length = snprintf(color_str, BUFFER_LEN, "%7s", currclk_s);
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"   %7s %5dMB/%5dMB      |\n",
+							tpuc_s,
+							g_attr[dev_id].ion_mem_used,
+							g_attr[dev_id].ion_mem_total);
+				snprintf(whole_str,
+							BUFFER_LEN,
+							"|                                       |%11s%7s "
+							"%7s   %7s %5dMB/%5dMB      |\n",
+							busid_s,
+							status_s,
+							currclk_s,
+							tpuc_s,
+							g_attr[dev_id].ion_mem_used,
+							g_attr[dev_id].ion_mem_total);
+			}
+			break;
+		case 2:
+			if (g_attr[dev_id].board_attr) {
+				snprintf(line_str,
+						BUFFER_LEN,
+						"|                                       |    %5dMB/%5dMB",
+						g_attr[dev_id].vpp_mem_used,
+						g_attr[dev_id].vpp_mem_total);
+				str_length = snprintf(color_str, BUFFER_LEN, " ");
+				snprintf(after_color_str,
+						BUFFER_LEN,
+						"      %5dMB/%5dMB                 |\n",
+
+						g_attr[dev_id].npu_mem_used,
+						g_attr[dev_id].npu_mem_total);
+				snprintf(whole_str,
+						BUFFER_LEN,
+						"|                                       |       "
+						"%5dMB/%5dMB        %5dMB/%5dMB               |\n",
+						g_attr[dev_id].vpp_mem_used,
+						g_attr[dev_id].vpp_mem_total,
+						g_attr[dev_id].npu_mem_used,
+						g_attr[dev_id].npu_mem_total);
+			} else {
+				snprintf(line_str,
+						BUFFER_LEN,
+						"|                                       |    %5dMB/%5dMB",
+						g_attr[dev_id].vpp_mem_used,
+						g_attr[dev_id].vpp_mem_total);
+				str_length = snprintf(color_str, BUFFER_LEN, " ");
+				snprintf(after_color_str,
+						BUFFER_LEN,
+						"      %5dMB/%5dMB                 |\n",
+
+						g_attr[dev_id].npu_mem_used,
+						g_attr[dev_id].npu_mem_total);
+				snprintf(whole_str,
+						BUFFER_LEN,
+						"|                                       |       "
+						"%5dMB/%5dMB        %5dMB/%5dMB               |\n",
+						g_attr[dev_id].vpp_mem_used,
+						g_attr[dev_id].vpp_mem_total,
+						g_attr[dev_id].npu_mem_used,
+						g_attr[dev_id].npu_mem_total);
+			}
+			break;
+		case 3: {
+			if (g_attr[dev_id].board_endline) {
+				snprintf(line_str,
+							BUFFER_LEN,
+							"+=======================================+========"
+							"===========");
+				str_length = snprintf(color_str, BUFFER_LEN, "=");
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"======================================+\n");
+				snprintf(
+					whole_str,
+					BUFFER_LEN,
+					"+=======================================+============="
+					"=============================================+\n");
+			} else {
+				snprintf(line_str,
+							BUFFER_LEN,
+							"|                                       "
+							"|---------------------------------");
+				str_length = snprintf(color_str, BUFFER_LEN, "-");
+				snprintf(after_color_str,
+							BUFFER_LEN,
+							"--------------------------------------|\n");
+				snprintf(whole_str,
+							BUFFER_LEN,
+							"|                                       "
+							"|------------------------------------------------"
+							"----------|\n");
+			}
+		} break;
+		default:
+			break;
         }
         if (file.is_open() && save_file) {
             file << whole_str;
@@ -891,13 +986,13 @@ static void bm_smi_display_proc_gmem_header(int            dev_cnt,
                 snprintf(line_str,
                          BUFFER_LEN,
                          "| Processes:                                         "
-                         "                                   TPU Memory |\n");
+                         "                                 Handle Memory|\n");
                 break;
             case 3:
                 snprintf(line_str,
                          BUFFER_LEN,
                          "|  TPU-ID       PID   Process name                   "
-                         "                                   Usage      |\n");
+                         "                                         Usage|\n");
                 break;
             case 4:
                 snprintf(line_str,
@@ -1159,8 +1254,8 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
         printf("%s ", maxclk_s);
         printf("%s ", currclk_s);
         printf("%s ", tpuc_s);
-        printf("%dMB ", g_attr[i].mem_used);
-        printf("%dMB \n", g_attr[i].mem_total);
+        printf("%dMB ", g_attr[i].ion_mem_used);
+        printf("%dMB \n", g_attr[i].ion_mem_total);
     }
 }
 #endif

@@ -624,8 +624,16 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = bmdrv_gmem_ioctl_alloc_mem_ion(bmdi, file, arg);
 		break;
 
+	case BMDEV_ALLOC_GMEM_ION_U64:
+		ret = bmdrv_gmem_ioctl_alloc_mem_ion_u64(bmdi, file, arg);
+		break;
+
 	case BMDEV_FREE_GMEM:
 		ret = bmdrv_gmem_ioctl_free_mem(bmdi, file, arg);
+		break;
+
+	case BMDEV_FREE_GMEM_U64:
+		ret = bmdrv_gmem_ioctl_free_mem_u64(bmdi, file, arg);
 		break;
 
 	case BMDEV_TOTAL_GMEM:

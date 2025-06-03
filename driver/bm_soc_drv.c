@@ -528,16 +528,16 @@ static int reg_proc_show(struct seq_file *m, void *v)
 	int addr = 0;
 	int value = 0;
 	int core_num = 0;
-	int core_offset = 0x10000;
-	int tiu_reg_base_addr = 0x26000000;
-	int gdma_reg_base_addr = 0x26020000;
+	int core_offset = BD_ENGINE_TPU1_OFFSET;
+	void *tiu_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr;
+	void *gdma_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr;
 	int read_count = 128;
 	int i, j;
 
 	core_num = base_get_core_num(bmdi);
 	for (i = 0; i < core_num; i++) {
 		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + tiu_reg_base_addr;
+			addr = (i * core_offset) + (j * 4) + *(u32 *)tiu_reg_base_addr;
 			value = bm_read32(bmdi, addr);
 			seq_printf(m, "tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
 		}
@@ -545,7 +545,7 @@ static int reg_proc_show(struct seq_file *m, void *v)
 
 	for (i = 0; i < core_num; i++) {
 		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + gdma_reg_base_addr;
+			addr = (i * core_offset) + (j * 4) + *(u32 *)gdma_reg_base_addr;
 			value = bm_read32(bmdi, addr);
 			seq_printf(m, "gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
 		}

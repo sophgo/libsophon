@@ -20,6 +20,8 @@
 #define BMDEV_FLUSH_GMEM              _IOWR('p', 0x18, unsigned long)
 #define BMDEV_ALLOC_GMEM_ION          _IOW('p', 0x19, unsigned long)
 #define BMDEV_GMEM_ADDR               _IOW('p', 0x1a, unsigned long)
+#define BMDEV_ALLOC_GMEM_ION_U64      _IOW('p', 0x1b, unsigned long)
+#define BMDEV_FREE_GMEM_U64           _IOW('p', 0x1c, unsigned long)
 
 #define BMDEV_SEND_API                _IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API         _IOW('p', 0x21, unsigned long)
