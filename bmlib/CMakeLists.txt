@@ -70,6 +70,8 @@ if("${PLATFORM}" STREQUAL "cmodel")
     target_link_libraries(${TARGET_NAME} dl pthread)
 endif()
 
+target_link_libraries(${TARGET_NAME} PRIVATE dl)
+
 if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "riscv64")
     add_definitions(-DSMMU_MODE=1)
 endif()

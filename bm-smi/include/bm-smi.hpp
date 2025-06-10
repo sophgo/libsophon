@@ -48,11 +48,14 @@
 #define MAX_NUM_VPU_CORE_BM1686         3               /* four wave cores */
 #define MAX_NUM_JPU_CORE                4
 #define VPP_CORE_MAX                    2
-#define NPU_TOTAL_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/total_mem"
-#define NPU_ALLOC_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/alloc_mem"
-#define VPP_TOTAL_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/total_mem"
-#define VPP_ALLOC_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/alloc_mem"
+//#define NPU_TOTAL_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/total_mem"
+//#define NPU_ALLOC_PATH "/sys/kernel/debug/ion/cvi_npu_heap_dump/alloc_mem"
+//#define VPP_TOTAL_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/total_mem"
+//#define VPP_ALLOC_PATH "/sys/kernel/debug/ion/cvi_vpp_heap_dump/alloc_mem"
+#define NPU_HEAP_ID 0
+#define VPP_HEAP_ID 1
 #define SYSTEM_MEM_SIZE 19
+
 
 /* bm_smi_attr defines all the attributes fetched from kernel;
  * it will be displayed by bm-smi and saved in files if needed.

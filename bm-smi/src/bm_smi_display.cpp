@@ -2,6 +2,7 @@
 #include "version.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "../../bmlib/src/ion.h"
 
 static int                     dev_cnt;
 static int                     start_dev;
@@ -90,6 +91,8 @@ static void bm_smi_get_attr(HANDLE bmctl_device, int dev_id) {
 static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 #endif
     g_attr[dev_id].dev_id = dev_id;
+    unsigned long ion_mem_total, ion_mem_alloc;
+	unsigned long vpp_mem_total, vpp_mem_alloc, npu_mem_total, npu_mem_alloc;
 #ifdef __linux__
     if (ioctl(bmctl_fd, BMCTL_GET_SMI_ATTR, &g_attr[dev_id]) < 0) {
 #else
@@ -143,38 +146,40 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
     }
 
 #ifdef SOC_MODE
-    u64 ion_mem_total, ion_mem_used;
-	u64 vpp_mem_total, vpp_mem_used, npu_mem_total, npu_mem_used;
-	const char *npu_total_path = NPU_TOTAL_PATH;
-    const char *vpp_total_path = VPP_TOTAL_PATH;
-    const char *npu_alloc_path = NPU_ALLOC_PATH;
-	const char *vpp_alloc_path = VPP_ALLOC_PATH;
 	int ret = 0;
+	struct bitmain_heap_info heap_info;
+	struct ion_custom_data custom_data;
     if (handle->ion_fd > 0) {
-		ret = read_ionmem_info(npu_total_path, &npu_mem_total);
+		heap_info.id = NPU_HEAP_ID;
+		custom_data.cmd = ION_IOC_CVITEK_GET_HEAP_INFO;
+		custom_data.arg = (unsigned long)&heap_info;
+		ret = ioctl(handle->ion_fd, ION_IOC_CUSTOM, &custom_data);
 		if (ret < 0) {
-			printf("read npu_mem_total failed\n");
+			printf("ioctl CVITEK_ION_GET_HEAP_INFO failed\n");
+		} else {
+			npu_mem_total = heap_info.total_size;
+			npu_mem_alloc = npu_mem_total - heap_info.avail_size;
 		}
-		ret = read_ionmem_info(vpp_total_path, &vpp_mem_total);
+
+		heap_info.id = VPP_HEAP_ID;
+		custom_data.cmd = ION_IOC_CVITEK_GET_HEAP_INFO;
+		custom_data.arg = (unsigned long)&heap_info;
+		ret = ioctl(handle->ion_fd, ION_IOC_CUSTOM, &custom_data);
 		if (ret < 0) {
-			printf("read npu_mem_total failed\n");
-		}
-		ret = read_ionmem_info(npu_alloc_path, &npu_mem_used);
-		if (ret < 0) {
-			printf("read npu_mem_total failed\n");
-		}
-		ret = read_ionmem_info(vpp_alloc_path, &vpp_mem_used);
-		if (ret < 0) {
-			printf("read npu_mem_total failed\n");
+			printf("ioctl CVITEK_ION_GET_HEAP_INFO failed\n");
+		} else {
+			vpp_mem_total = heap_info.total_size;
+			vpp_mem_alloc = vpp_mem_total - heap_info.avail_size;
 		}
 		ion_mem_total = vpp_mem_total + npu_mem_total;
-		ion_mem_used = vpp_mem_used + npu_mem_used;
+		ion_mem_alloc = vpp_mem_alloc + npu_mem_alloc;
+
         g_attr[dev_id].ion_mem_total = ion_mem_total / 1024 / 1024;
-        g_attr[dev_id].ion_mem_used  = ion_mem_used / 1024 / 1024;
+        g_attr[dev_id].ion_mem_used  = ion_mem_alloc / 1024 / 1024;
+        g_attr[dev_id].npu_mem_total = npu_mem_total / 1024 / 1024;
+        g_attr[dev_id].npu_mem_used  = npu_mem_alloc / 1024 / 1024;
 		g_attr[dev_id].vpp_mem_total = vpp_mem_total / 1024 / 1024;
-        g_attr[dev_id].vpp_mem_used  = vpp_mem_used / 1024 / 1024;
-		g_attr[dev_id].npu_mem_total = npu_mem_total / 1024 / 1024;
-        g_attr[dev_id].npu_mem_used  = npu_mem_used / 1024 / 1024;
+        g_attr[dev_id].vpp_mem_used  = vpp_mem_alloc / 1024 / 1024;
     }
 #endif
 }

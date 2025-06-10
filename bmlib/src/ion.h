@@ -169,4 +169,11 @@ struct bitmain_heap_info {
 #define ION_IOC_HEAP_QUERY     _IOWR(ION_IOC_MAGIC, 8, \
           struct ion_heap_query)
 
+
+#define ION_IOC_CVITEK_FLUSH_RANGE		1
+#define ION_IOC_CVITEK_GET_HEAP_INFO		2
+#define ION_IOC_CVITEK_INVALIDATE_RANGE		3
+#define ION_IOC_CVITEK_FLUSH_PHY_RANGE		4
+#define ION_IOC_CVITEK_INVALIDATE_PHY_RANGE	5
+
 #endif /* _UAPI_LINUX_ION_H */

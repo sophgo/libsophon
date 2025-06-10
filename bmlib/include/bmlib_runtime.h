@@ -129,7 +129,7 @@ typedef struct bm_mem_desc {
   } u;
 
   bm_mem_flags_t flags;
-  unsigned long size;
+  unsigned int size;
 } bm_mem_desc_t;
 
 typedef struct bm_mem_desc bm_device_mem_t;
@@ -859,6 +859,8 @@ DECL_EXPORT void bm_mem_set_system_addr_u64(struct bm_mem_desc_u64* pmem, void *
  * @retval  bm_system_mem_t  The system memory descriptor created
  */
 DECL_EXPORT bm_system_mem_t bm_mem_from_system(void *system_addr);
+DECL_EXPORT bm_system_mem_u64_t bm_mem_from_system_u64(void *system_addr);
+
 
 /*******************memory alloc and free functions ***************************/
 /**
@@ -1785,6 +1787,11 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handl
                                                    struct bm_mem_desc sys_mem,
                                                    bool need_copy, int n, int c,
                                                    int h, int w);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_u64(bm_handle_t handle,
+                                                   struct bm_mem_desc_u64 *dev_mem,
+                                                   struct bm_mem_desc_u64 sys_mem,
+                                                   bool need_copy, int n, int c,
+                                                   int h, int w);
 
 /**
  * @name    bm_mem_convert_system_to_device_neuron_byte
@@ -1805,6 +1812,12 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handl
 DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_byte(
     bm_handle_t handle, struct bm_mem_desc *dev_mem, struct bm_mem_desc sys_mem,
     bool need_copy, int n, int c, int h, int w);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy,
+														int n, int c, int h, int w);
+
 
 /**
  * @name    bm_mem_convert_system_to_device_coeff
@@ -1827,6 +1840,12 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff(bm_handle_t handle
                                                   struct bm_mem_desc sys_mem,
                                                   bool need_copy,
                                                   int coeff_count);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_u64(bm_handle_t handle,
+                                                  struct bm_mem_desc_u64 *dev_mem,
+                                                  struct bm_mem_desc_u64 sys_mem,
+                                                  bool need_copy,
+                                                  int coeff_count);
+
 /**
  * @name    bm_mem_convert_system_to_device_coeff_byte
  * @brief   To malloc a piece of device memory according to the size of
@@ -1846,6 +1865,11 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff(bm_handle_t handle
 DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_byte(
     bm_handle_t handle, struct bm_mem_desc *dev_mem, struct bm_mem_desc sys_mem,
     bool need_copy, int coeff_count);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy, int coeff_count);
+
 
 /*******************memory map functions *************************************/
 /**

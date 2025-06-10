@@ -263,24 +263,26 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
      return status;
 }
 
-bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable){
+bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable_bits){
      BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
      u32 api_buffer_size = sizeof(u32);
-     u32 profile_enable = enable;
-     bm_status_t status = bm_send_api(handle, (bm_api_id_t)BM_API_ID_SET_PROFILE_ENABLE, (u8*)&profile_enable, api_buffer_size);
+     u32 profile_enable = enable_bits;
+     bm_status_t status = tpu_kernel_launch_async_from_core(handle, func_id, (u8*)&profile_enable, api_buffer_size, core);
      if (BM_SUCCESS != status) {
-       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", BM_API_ID_SET_PROFILE_ENABLE, status);
+       BMRT_LOG(WRONG, "launch kernel failed: core_id:%d, func id:%d, status:%d", core, func_id, status);
      }
      return status;
 }
 bm_status_t bmdnn_func_mars3::_bmdnn_get_profile_data_(
         bm_handle_t handle,
+        int core,
+        tpu_kernel_function_t func_id,
         unsigned long long output_global_addr,
         unsigned int output_max_size,
         unsigned int byte_offset,
         unsigned int data_category //0: profile time records, 1: extra data
         ){
-      BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
+  BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 #pragma pack(1)
      struct {
       u64 arm_reserved_addr;
@@ -299,18 +301,33 @@ bm_status_t bmdnn_func_mars3::_bmdnn_get_profile_data_(
      api_data.byte_offset = byte_offset;
      api_data.data_category = data_category;
 
-     bm_api_id_t api_code = (bm_api_id_t)BM_API_ID_GET_PROFILE_DATA;
-     bm_status_t status =
-         bm_send_api(handle, api_code, (u8*)&api_data, api_buffer_size);
+     bm_status_t status = tpu_kernel_launch_async_from_core(handle, func_id, (u8*)&api_data, api_buffer_size, core);
      if (BM_SUCCESS != status) {
-       BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d", api_code, status);
+       BMRT_LOG(WRONG, "tpu_kernel_launch_async_from_core failed, cor_id:%d, api id:%d, status:%d", core, func_id, status);
      } else {
-       status = bm_sync_api(handle);
+       status = bm_thread_sync_from_core(handle, core);
        if (BM_SUCCESS != status) {
-         BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d", api_code, status);
+         BMRT_LOG(WRONG, "bm_sync_api failed, core_id:%d, api id:%d, status:%d", core, func_id, status);
        }
      }
      return status;
+}
+
+#pragma pack(1)
+typedef struct {
+    int engine;
+    unsigned long long addr;
+    unsigned long long size;
+} bm_api_engine_profile_param_t;
+#pragma pack()
+
+bm_status_t bmdnn_func_mars3::_bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size){
+  bm_api_engine_profile_param_t param;
+  param.engine = engine_type;
+  param.addr = addr;
+  param.size = size;
+  bm_status_t core_status =  tpu_kernel_launch_async_from_core(handle, func_id, (u8*)&param, sizeof(param), core);
+  return core_status;
 }
 
 }

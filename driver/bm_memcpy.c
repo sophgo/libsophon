@@ -316,13 +316,13 @@ void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
 	iommu_rgn->dir = dir;
 }
 
-int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t dst, void __user *src, u64 size,
+int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t dst, void __user *src, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode)
 {
 	u32 pass_idx = 0;
-	u64 cur_addr_inc = 0;
+	u32 cur_addr_inc = 0;
 	unsigned long size_step;
-	u64 realmem_size = CONFIG_HOST_REALMEM_SIZE / STAGEMEM_SLOT_NUM;
+	u32 realmem_size = CONFIG_HOST_REALMEM_SIZE / STAGEMEM_SLOT_NUM;
 	void __user *src_cpy;
 	bm_cdma_arg cdma_arg;
 	int ret = 0;
@@ -331,7 +331,7 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 	u64 p_addr = 0;
 	int index = 0;
 
-	PR_DEBUG("[%s] params:dst=%llx, src=%p, size=%llu, inter=%d\n", __func__, dst, src, size, intr);
+	PR_DEBUG("[%s] params:dst=%lld, src=%p, size=%d, inter=%d\n", __func__, dst, src, size, intr);
 
 	if (cdma_iommu_mode == KERNEL_USER_SETUP_IOMMU) {
 		struct bm_buffer_object *bo_src = NULL;
@@ -376,7 +376,7 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 
 			bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
 			if (copy_from_user(v_addr, src_cpy, size_step)) {
-				pr_err("bmdev_memcpy_s2d copy_from_user fail pass_idx:%d \n", pass_idx);
+				pr_err("bmdev_memcpy_s2d copy_from_user fail\n");
 				bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 				return -EFAULT;
 			}
@@ -752,14 +752,14 @@ int bmdev_dual_cdma_memcpy_for_test(struct bm_device_info *bmdi, struct file *fi
 		return ret;
 	}
 	if (0 != dual_param.cdma_param[0].size) {
-		pr_info("dual_cdma_transfer_prepare: size=%llx\n", dual_param.cdma_param[0].size);
+		pr_info("dual_cdma_transfer_prepare: size=%x\n", dual_param.cdma_param[0].size);
 		ret = dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[0], &dual_param.cdma_param[0], &cdma0_arg);
 		if(!ret) {
 			cdma0_arg_ptr = &cdma0_arg;
 		}
 	}
 	if (0 != dual_param.cdma_param[1].size) {
-		pr_info("dual_cdma_transfer_prepare: size=%llx\n", dual_param.cdma_param[1].size);
+		pr_info("dual_cdma_transfer_prepare: size=%x\n", dual_param.cdma_param[1].size);
 		ret = dual_cdma_transfer_prepare(bmdi, &cdma_stagemem[1], &dual_param.cdma_param[1], &cdma1_arg);
 		if(!ret) {
 			cdma1_arg_ptr = &cdma1_arg;

@@ -348,7 +348,7 @@ int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *fil
 	}
 	h_info->gmem_used += BGM_4K_ALIGN(device_mem.size);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
-	PR_TRACE("bmdrv: gmem ion alloc %lx\n", device_mem.size);
+	PR_TRACE("bmdrv: gmem ion alloc %x\n", device_mem.size);
 
 	return ret;
 }
@@ -398,7 +398,7 @@ int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	h_info->gmem_used -= BGM_4K_ALIGN(device_mem.size);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	PR_TRACE("%s 0x%lx, size 0x%lx\n", __func__, device_mem.u.device.device_addr, device_mem.size);
+	PR_TRACE("%s 0x%lx, size 0x%x\n", __func__, device_mem.u.device.device_addr, device_mem.size);
 	return ret;
 }
 

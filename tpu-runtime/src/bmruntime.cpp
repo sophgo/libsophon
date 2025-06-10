@@ -1316,6 +1316,12 @@ Bmruntime::fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
     fill_tpu_tensor_info(input_info, dyn_neuron.get(), input_tensors, true);
     fill_tpu_tensor_info(output_info, dyn_neuron.get(), output_tensors, false);
   }
+  std::vector<u64> reloc_base_addrs;
+  if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC) {
+    fix_io_tensor_info_for_io_reloc(input_info);
+    fix_io_tensor_info_for_io_reloc(output_info);
+    update_base_addrs_for_io_reloc(&reloc_base_addrs, input_tensors, input_num, output_tensors, output_num);
+  }
 
   std::vector<tpu_single_core_cmd_t> core_command(core_list.size());
   for (size_t core_idx = 0; core_idx < core_list.size(); core_idx++) {
@@ -1335,11 +1341,15 @@ Bmruntime::fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
     core_command[core_idx].sdma_cmd_addr =
         stage->core_commands[core_idx].sdma_mem.addr +
         GLOBAL_MEM_CMD_START_OFFSET;
+    // use reloc entries in subnet-0
+    core_command[core_idx].gdma_reloc_entries =
+        stage->subnet_v[0]->tpu_info.core_commands[core_idx].gdma_reloc_entries;
   }
 
   memset(&net_info, 0x0, sizeof(tpu_net_info_t));
   net_info.input_info = std::move(input_info);
   net_info.output_info = std::move(output_info);
+  net_info.reloc_base_addrs = reloc_base_addrs;   // io-reloc base addrs, empty in non-io-reloc mode.
   net_info.core_commands = std::move(core_command);
   net_info.core_list = core_list;
   net_info.coeff_start_addr = stage->coeff_offset;
@@ -1737,6 +1747,54 @@ void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_co
   __net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
   if(common_stage_info){
       update_dyn_neuron(net_ctx, dyn_core_mask, common_stage_info);
+  }
+}
+
+void Bmruntime::update_base_addrs_for_io_reloc(std::vector<u64>* user_io_addrs, 
+    const bm_tensor_t* input_tensors, int input_num, const bm_tensor_t* output_tensors, int output_num) const {
+  /// user io addrs are used as reloc base addrs.
+  BMRT_ASSERT(user_io_addrs != nullptr);
+  user_io_addrs->resize(input_num + output_num);
+  for (int i = 0; i < input_num; ++i) {
+    user_io_addrs->at(i) = bm_mem_get_device_addr(input_tensors[i].device_mem)
+                              + GLOBAL_MEM_CMD_START_OFFSET;
+  }
+  for (int i = 0; i < output_num; ++i) {
+    user_io_addrs->at(i + input_num) = bm_mem_get_device_addr(output_tensors[i].device_mem)
+                                          + GLOBAL_MEM_CMD_START_OFFSET;
+  }
+}
+
+void Bmruntime::update_subnet_tensor_addrs_for_io_reloc(std::map<string, tensor_ext_t>* subnet_tensor_v, 
+    const std::vector<u64>* user_io_addrs, int input_num, int output_num) const {
+  BMRT_ASSERT(subnet_tensor_v != nullptr);
+  BMRT_ASSERT(user_io_addrs != nullptr);
+  for (auto &subnet_tensor : *subnet_tensor_v) {
+    auto &tensor_ext = subnet_tensor.second;
+    switch (tensor_ext.io_type) {
+      case TENSOR_TYPE_IMM_IO:
+        // do nothing.
+        break;
+      case TENSOR_TYPE_NET_INPUT:
+        tensor_ext.tensor_info.device_mem = bm_mem_from_device( 
+            user_io_addrs->at(tensor_ext.io_index), tensor_ext.tensor_info.device_mem.size);
+        break;
+      case TENSOR_TYPE_NET_OUTPUT:
+        tensor_ext.tensor_info.device_mem = bm_mem_from_device(
+            user_io_addrs->at(tensor_ext.io_index + input_num), tensor_ext.tensor_info.device_mem.size);
+        break;
+      case TENSOR_TYPE_IMM_RELOC:
+        tensor_ext.tensor_info.device_mem = bm_mem_from_device(
+            user_io_addrs->at(tensor_ext.reloc_info[0]) + tensor_ext.reloc_info[1],
+            tensor_ext.tensor_info.device_mem.size);
+        break;
+    }
+  }
+}
+
+void Bmruntime::fix_io_tensor_info_for_io_reloc(std::vector<tpu_tensor_info_t>& tensor_infos) const {
+  for (auto &info : tensor_infos) {
+    info.compiled_global_addr = info.user_global_addr;
   }
 }
 
@@ -2163,21 +2221,22 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
     dst.emplace_back(mem_cascade_t{net_c->output_names[i], devid, output_tensors[i]});
   }
 
-  // multi cards allreduce use bm_memcpy_p2p
+  // only 8-chips cards support using_fast_allreduce
+  // 3/6-chips cards or multi-cards allreduce use bm_memcpy_p2p
   // set using_fast_allreduce = false
   unsigned int card_id = 0;
+  unsigned int chip_num = 0;
+  unsigned int card_start_devid = 0;
+  const char *allreduce_env_str = nullptr;
   bm_get_card_id(m_handles[0], &card_id);
-  for (auto handle : m_handles) {
-    unsigned int cur_card_id = 0;
-    bm_get_card_id(handle, &cur_card_id);
-    if (cur_card_id != card_id) {
-      using_fast_allreduce = false;
-      break;
-    }
+  bm_get_chip_num_from_card(card_id, &chip_num, &card_start_devid);
+  if (chip_num != 8) {
+    using_fast_allreduce = false;
+  } else if ((allreduce_env_str = getenv("BMRT_ENABLE_ALLREDUCE")) != nullptr) {
+    using_fast_allreduce = (bool)atoi(allreduce_env_str);
   }
 
   for (size_t s = 0; s < net_c->step_ids.size(); s++) {
-    // TODO: device_num = 2 fast_allreduce still have bug
     if (using_fast_allreduce &&
         net_c->step_ids[0].size() == m_device_num &&
         net_c->step_ids.size() > 1 &&
@@ -2289,12 +2348,6 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
           } else {
             BMRT_LOG(WRONG, "Allreduce only support float32/float16/bfloat16 now");
           }
-
-          unsigned int chip_num = 0;
-          unsigned int card_start_devid = 0;
-          bm_get_chip_num_from_card(card_id, &chip_num, &card_start_devid);
-          BMRT_ASSERT_INFO((chip_num == 8),
-              "Error: Only support [8]chip card allreduce, now is [%d]", chip_num);
 
           tpu_kernel_allreduce_1684x_t param;
           memset(&param, 0, sizeof(param));
