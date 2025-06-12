@@ -8,8 +8,8 @@ if command -v git >/dev/null 2>&1 ; then
     SO_NAME=${SO_VERSION%%.*}
 fi
 
-rm -f version.mak
 if [ -n "${SO_VERSION}" ] ; then
+    rm -f version.mak
     echo "SO_VERSION=\".$SO_VERSION\"" > version.mak
     echo "SO_NAME=\".$SO_NAME\"" >> version.mak
 fi
