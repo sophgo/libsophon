@@ -625,7 +625,7 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 			PR_TRACE("the fifo is empty.\n");
 		} else {
 			while (new_rp != wp) {
-				pr_err("bm-sophon%d message in xpu fifo : %d\n", bmdi->dev_index,
+				pr_err("bm-sophon%d message in xpu fifo : 0x%x\n", bmdi->dev_index,
 				shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0));
 				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
 			}
