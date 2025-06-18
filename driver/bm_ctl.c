@@ -12,7 +12,7 @@
 #include "bm_drv.h"
 #include "bm_wdt.h"
 #include "bm1684_card.h"
-
+#include "bm1688_clkrst.h"
 #ifndef SOC_MODE
 #include "bm_card.h"
 #endif
@@ -291,7 +291,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_min_clock = 25;
 			pattr->tpu_max_clock = 1000;
 		}
-		pattr->tpu_current_clock = c_attr->tpu_current_clock;
+		pattr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
 		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
 	default:

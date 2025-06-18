@@ -43,10 +43,13 @@
 #include "bm1684/bm1684_ce.h"
 #include "bm1688/bm1688_irq.h"
 #include "bm1688/bm1688_card.h"
+#include "bm1688/bm1688_msgfifo.h"
+#include "bm1688/bm1688_base64.h"
 //#include "bm1688/ddr/ddr.h"
 #include "bm_card.h"
 #include "bm_napi.h"
 #include "sg_comm.h"
+#include "bm_io.h"
 
 #define IOMMU_ADDR_BIT_NUM (40)
 extern int vc_drv_init(struct bm_device_info *bmdi);
@@ -319,7 +322,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->bmdrv_stop_arm9 = bm1688_stop_c906;
 
 		cinfo->bm_reg = &bm_reg_bm1688;
-		//cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
+		cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
 		cinfo->chip_type = "bm1688";
 #ifdef PLATFORM_PALLADIUM
 		cinfo->platform = PALLADIUM;
@@ -339,6 +342,9 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		//cinfo->bmdrv_clear_msgirq = bm1684_clear_msgirq;
 		//cinfo->bmdrv_pending_msgirq_cnt = bm1684_pending_msgirq_cnt;
 		cinfo->bmdrv_config_iatu_for_function_x = bm1688_config_iatu_for_function_x;
+
+		cinfo->bmdrv_clear_msgirq_by_core = bm1688_clear_msgirq;
+		cinfo->bmdrv_pending_msgirq_cnt = bm1688_pending_msgirq_cnt;
 
 		//cinfo->dev_info.chip_temp_reg = 0x00;
 		//cinfo->dev_info.board_temp_reg = 0x01;
@@ -406,7 +412,7 @@ static int bmdrv_pci_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	cinfo->bmdrv_map_bar(bmdi, pdev);
 
 	io_init(bmdi);
-
+	cinfo->tpu_core_num = base_get_core_num(bmdi);
 	/* init pci DMA attributes */
 	/* set pci card as DMA master */
 	pci_set_master(pdev);
@@ -555,6 +561,12 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		// 	spacc_init(bmdi);
 		// 	mutex_init(&bmdi->efuse_mutex);
 		}
+
+		top_reg_write( bmdi, 0x2198,0);
+		top_reg_write( bmdi, 0x219c,0);
+		top_reg_write( bmdi, 0x21a0,0);
+		top_reg_write( bmdi, 0x21a4,0);
+		top_reg_write( bmdi, 0x21a8,0);
 		//gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
 		break;
 	default:
@@ -752,9 +764,9 @@ static void bmdrv_set_a53_boot_args(struct bm_device_info *bmdi)
 
 	if (bmdi->cinfo.chip_id == BM1684_DEVICE_ID) {
 		flag = SKIP_PCIEI;
-		(void)bmdev_memcpy_s2d_internal(bmdi, BOOT_ARGS_REG_1684, (const void *)&flag, sizeof(flag));
+		(void)bmdev_memcpy_s2d_internal(bmdi, BOOT_ARGS_REG_1684, (const void *)&flag, sizeof(flag), false);
 		flag = FIP_SRC_SPIF;
-		(void)bmdev_memcpy_s2d_internal(bmdi, FIP_SOURCE_REG_1684, (const void *)&flag, sizeof(flag));
+		(void)bmdev_memcpy_s2d_internal(bmdi, FIP_SOURCE_REG_1684, (const void *)&flag, sizeof(flag), false);
 	} else if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
 		flag = top_reg_read(bmdi, TOP_BOOT_ARGS_REG_1684X);
 		flag &= ~FIP_LOADED;
@@ -772,7 +784,7 @@ static u32 bmdrv_get_a53_boot_args(struct bm_device_info *bmdi)
 	u32 flag;
 
 	if (bmdi->cinfo.chip_id == BM1684_DEVICE_ID) {
-		if (0 != bmdev_memcpy_d2s_internal(bmdi, &flag, BOOT_ARGS_REG_1684, sizeof(flag))) {
+		if (0 != bmdev_memcpy_d2s_internal(bmdi, &flag, BOOT_ARGS_REG_1684, sizeof(flag), false)) {
 			pr_err("bmdrv: reset bcmcpu read flag 0x%x fail!\n", flag);
 		}
 	} else if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
@@ -1065,12 +1077,12 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 	int ret;
 
 	bmdi->cinfo.version.bl1_version = kmalloc(BL1_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, BL1_VERSION_BASE, BL1_VERSION_SIZE);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, BL1_VERSION_BASE, BL1_VERSION_SIZE, false);
 	if(ret)
 		return -EBUSY;
 
 	bmdi->cinfo.version.bl2_version = kmalloc(BL2_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE, false);
 	if(ret)
 		return -EBUSY;
 
@@ -1080,9 +1092,9 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 static void bmdrv_record_boot_loader_version(struct bm_device_info *bmdi)
 {
 	if(bmdi->cinfo.version.bl1_version[0] == 'v')
-		bmdev_memcpy_s2d_internal(bmdi, BL1_VERSION_BASE, (void *)bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE);
+		bmdev_memcpy_s2d_internal(bmdi, BL1_VERSION_BASE, (void *)bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE, false);
 	if(bmdi->cinfo.version.bl2_version[0] == 'v')
-		bmdev_memcpy_s2d_internal(bmdi, BL2_VERSION_BASE, (void *)bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
+		bmdev_memcpy_s2d_internal(bmdi, BL2_VERSION_BASE, (void *)bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE, false);
 
 	kfree(bmdi->cinfo.version.bl1_version);
 	kfree(bmdi->cinfo.version.bl2_version);
@@ -1161,11 +1173,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_irq;
 	}
 
-	//rc = bmdrv_fw_load(bmdi, NULL, NULL);
-	//if (rc) {
-	//	pr_err("bmdrv: firmware load failed!\n");
-	//	goto err_enable_attr;
-	//}
+	rc = bmdrv_fw_load(bmdi, NULL, NULL);
+	if (rc) {
+		pr_err("bmdrv: firmware load failed! continue run\n");
+		// goto err_enable_attr;
+	}
 
 	bmdrv_smbus_set_default_value(pdev, bmdi);
 
@@ -1305,7 +1317,7 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	pm_runtime_dont_use_autosuspend(cinfo->device);
 	pm_runtime_set_autosuspend_delay(cinfo->device, -1);
 #endif
-	// bmdrv_ctrl_del_dev(bmci, bmdi);
+	bmdrv_ctrl_del_dev(bmci, bmdi);
 
 	if ((dev_count == 0) && (module_exit == 1))
 		bmdrv_remove_bmci();

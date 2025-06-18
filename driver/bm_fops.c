@@ -5,6 +5,7 @@
 #include <linux/uaccess.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/moduleparam.h>
 #include "bm_common.h"
 #include "bm_uapi.h"
 #include "bm_thread.h"
@@ -32,6 +33,10 @@
 #include "bm_pt.h"
 #include "efuse.h"
 #endif
+
+uint32_t tpu_log_lv = 0;
+
+module_param(tpu_log_lv, int, 0644);
 
 extern dev_t bm_devno_base;
 extern dev_t bm_ctl_devno_base;
@@ -330,12 +335,12 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				}
 
 				mutex_lock(&bmdi->c_attr.attr_mutex);
-				bmdev_memcpy_d2s_internal(bmdi, (void *)buffer_r, 0x10000FF4,sizeof(buffer_r));
+				bmdev_memcpy_d2s_internal(bmdi, (void *)buffer_r, 0x10000FF4,sizeof(buffer_r), false);
 				buffer_w[0] = buffer_r[0]|(1<<0);
-				ret = bmdev_memcpy_s2d_internal(bmdi, 0x10000FF4, (void *)buffer_w, sizeof(buffer_w));
+				ret = bmdev_memcpy_s2d_internal(bmdi, 0x10000FF4, (void *)buffer_w, sizeof(buffer_w), false);
 				msleep(delay);
 				mutex_unlock(&bmdi->c_attr.attr_mutex);
-				bmdev_memcpy_s2d_internal(bmdi, 0x10000FF4, (void *)buffer_r, sizeof(buffer_r));
+				bmdev_memcpy_s2d_internal(bmdi, 0x10000FF4, (void *)buffer_r, sizeof(buffer_r), false);
 
 				bmdi->status_reset = A53_RESET_STATUS_FALSE;
 				break;
@@ -620,8 +625,16 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = bmdrv_gmem_ioctl_alloc_mem_ion(bmdi, file, arg);
 		break;
 
+	case BMDEV_ALLOC_GMEM_ION_U64:
+		ret = bmdrv_gmem_ioctl_alloc_mem_ion_u64(bmdi, file, arg);
+		break;
+
 	case BMDEV_FREE_GMEM:
 		ret = bmdrv_gmem_ioctl_free_mem(bmdi, file, arg);
+		break;
+
+	case BMDEV_FREE_GMEM_U64:
+		ret = bmdrv_gmem_ioctl_free_mem_u64(bmdi, file, arg);
 		break;
 
 	case BMDEV_TOTAL_GMEM:
@@ -1165,17 +1178,19 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 	case BMDEV_GET_VERSION:
 		{
+#ifdef SOC_MODE
 			ret = copy_to_user(((struct bootloader_version __user *)arg)->bl1_version, bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl2_version, bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl31_version, bmdi->cinfo.version.bl31_version, BL31_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->uboot_version, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_SIZE);
 			ret |= copy_to_user(((struct bootloader_version __user *)arg)->chip_version, bmdi->cinfo.version.chip_version, CHIP_VERSION_SIZE);
+#endif
 			break;
 		}
 	case BMDEV_LOADED_LIB:
 		{
 			loaded_lib_t loaded_lib;
-			struct bmcpu_lib *lib_temp, *lib_next, *lib_info = bmdi->lib_dyn_info;;
+			struct bmcpu_lib *lib_temp, *lib_next, *lib_info = bmdi->lib_dyn_info;
 
 			ret = copy_from_user(&loaded_lib, (loaded_lib_t __user *)arg, sizeof(loaded_lib_t));
 			if (ret) {
@@ -1196,6 +1211,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			mutex_unlock(&lib_info->bmcpu_lib_mutex);
 			ret = copy_to_user((loaded_lib_t __user *)arg, &loaded_lib, sizeof(loaded_lib_t));
+			break;
+		}
+	case BMDEV_GET_LIB_INFO:
+		{
+			print_dny_lib_info(bmdi);
 			break;
 		}
 	case BMDEV_GET_DEV_STAT:

@@ -353,6 +353,29 @@ int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *fil
 	return ret;
 }
 
+int bmdrv_gmem_ioctl_alloc_mem_ion_u64(struct bm_device_info *bmdi, struct file *file,
+	unsigned long arg)
+{
+	int ret = 0;
+	bm_device_mem_u64_t device_mem;
+	struct bm_handle_info *h_info;
+
+	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
+		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
+		return -EINVAL;
+	}
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	if (copy_from_user(&device_mem, (bm_device_mem_u64_t __user *)arg, sizeof(device_mem))) {
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		return -EFAULT;
+	}
+	h_info->gmem_used += BGM_4K_ALIGN(device_mem.size);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+	PR_TRACE("bmdrv: gmem ion alloc %llx\n", device_mem.size);
+
+	return ret;
+}
+
 int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	unsigned long arg)
 {
@@ -376,6 +399,31 @@ int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	PR_TRACE("%s 0x%lx, size 0x%x\n", __func__, device_mem.u.device.device_addr, device_mem.size);
+	return ret;
+}
+
+int bmdrv_gmem_ioctl_free_mem_u64(struct bm_device_info *bmdi, struct file *file,
+	unsigned long arg)
+{
+	int ret = 0;
+	bm_device_mem_u64_t device_mem;
+	struct bm_handle_info *h_info;
+
+	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
+		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
+		return -EINVAL;
+	}
+
+	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	if (copy_from_user(&device_mem, (bm_device_mem_u64_t __user *)arg, sizeof(device_mem))) {
+		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+		return -EFAULT;
+	}
+
+	h_info->gmem_used -= BGM_4K_ALIGN(device_mem.size);
+	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
+
+	PR_TRACE("%s 0x%lx, size 0x%llx\n", __func__, device_mem.u.device.device_addr, device_mem.size);
 	return ret;
 }
 

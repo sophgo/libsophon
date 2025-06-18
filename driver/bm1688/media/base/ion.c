@@ -27,6 +27,7 @@ struct mem_mapping {
 	void *dmabuf;
 	pid_t fd_pid;
 	struct hlist_node node;
+	void *ion_handle;
 };
 
 static int ion_debug_alloc_free;
@@ -35,8 +36,8 @@ module_param(ion_debug_alloc_free, int, 0644);
 static DEFINE_SPINLOCK(ion_lock);
 static DEFINE_HASHTABLE(ion_hash, 8);
 
-extern uint64_t vc_ion_alloc(uint32_t len, int32_t *fd);
-extern unsigned int vc_ion_free(uint32_t fd);
+extern uint64_t vc_ion_alloc(uint32_t len, void** ion_handle);
+extern unsigned int vc_ion_free(void* ion_handle);
 
 int32_t mem_put(struct mem_mapping *mem_info)
 {
@@ -106,7 +107,7 @@ static int32_t _base_ion_alloc(uint64_t *addr_p, void **addr_v, uint32_t len,
 	mem_info.dmabuf = NULL;
 	mem_info.dmabuf_fd = 0;
 	mem_info.vir_addr = NULL;
-	mem_info.phy_addr = vc_ion_alloc(len, &mem_info.dmabuf_fd);
+	mem_info.phy_addr = vc_ion_alloc(len, &mem_info.ion_handle);
 	mem_info.size = len;
 	mem_info.fd_pid = current->pid;
 	if (mem_put(&mem_info)) {
@@ -142,7 +143,7 @@ static int32_t _base_ion_free(uint64_t addr_p, int32_t *size)
 			mem_info.fd_pid, ionbuf->name, mem_info.phy_addr, mem_info.size);
 	}
 
-	vc_ion_free(mem_info.dmabuf_fd);
+	vc_ion_free(mem_info.ion_handle);
 
 	if (size)
 		*size = mem_info.size;

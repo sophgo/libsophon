@@ -9,7 +9,7 @@ extern "C" bm_status_t bm_send_api_to_core(
   u32          size,
   int          core_id);
 
-void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
+void bmdnn_func_sgtpuv8::fill_api_info(const tpu_net_info_t &net_info,
                                     api_info_t &api_info) {
   BMRT_ASSERT_INFO(net_info.neuron_start_addr.size() == 1,
                    "only support one neuron addr");
@@ -32,11 +32,10 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
         sizeof(u64) * 2 +
         (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() + sizeof(int) +
         2 * sizeof(u64) + sizeof(int); // base message id
-
+    api_info.api_id.push_back(BM_API_ID_MULTI_FULLNET);
     api_info.api_data[core_idx].assign(api_buffer_size, 0);
     api_info.input_addr_offset.assign(input_info.size(), 0);
     api_info.output_addr_offset.assign(output_info.size(), 0);
-    api_info.api_id.emplace_back(net_info.kernel_func_ids[0]);
 
     void *p_api = api_info.api_data[core_idx].data();
     // input global offset process
@@ -111,10 +110,9 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
   }
 }
 bm_status_t
-bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
-                                        const tpu_net_info_t &net_info)
-{
-  BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
+bmdnn_func_sgtpuv8::_bmdnn_multi_fullnet_(bm_handle_t handle,
+                                       const tpu_net_info_t &net_info) {
+BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
   api_info_t api_info;
   fill_api_info(net_info, api_info);
@@ -129,7 +127,7 @@ bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
   return status;
 }
 
-bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
+bm_status_t bmdnn_func_sgtpuv8::_bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
         unsigned long long compiled_ir_global_addr,
         unsigned int compiled_ir_length, //unit dword
@@ -263,7 +261,7 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
      return status;
 }
 
-bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable){
+bm_status_t  bmdnn_func_sgtpuv8::_bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable){
      BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
      u32 api_buffer_size = sizeof(u32);
      u32 profile_enable = enable;
@@ -273,7 +271,7 @@ bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, un
      }
      return status;
 }
-bm_status_t bmdnn_func_mars3::_bmdnn_get_profile_data_(
+bm_status_t bmdnn_func_sgtpuv8::_bmdnn_get_profile_data_(
         bm_handle_t handle,
         unsigned long long output_global_addr,
         unsigned int output_max_size,

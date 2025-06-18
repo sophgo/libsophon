@@ -204,11 +204,9 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 {
 	int ret = 0;
 	struct chip_info *cinfo = &bmdi->cinfo;
-#ifdef SOC_MODE
 	u32 channel = 0;
 	u32 core = 0;
 	u32 core_num = cinfo->tpu_core_num;
-#endif
 
 	INIT_LIST_HEAD(&bmdi->handle_list);
 	bmdrv_sw_register_init(bmdi);
@@ -218,7 +216,6 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	if (bmdi->gmem_info.bm_gmem_init &&
 		bmdi->gmem_info.bm_gmem_init(bmdi))
 		return -EFAULT;
-#ifdef SOC_MODE
 	for (core = 0; core < core_num; core++) {
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
 			if (bmdi->api_info[core][channel].bm_api_init &&
@@ -226,7 +223,6 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 				return -EFAULT;
 		}
 	}
-#endif
 
 	if (bmdi->c_attr.bm_card_attr_init &&
 		bmdi->c_attr.bm_card_attr_init(bmdi)) {

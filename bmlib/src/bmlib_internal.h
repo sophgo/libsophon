@@ -114,6 +114,7 @@ typedef struct bm_context {
 	  vpp_fd_t vpp_fd;
 	#endif
   	int dev_id;
+	int g_init_basic_func_flag;
  #else
     u32 dev_id;
 	HDEVINFO                         hDevInfo;

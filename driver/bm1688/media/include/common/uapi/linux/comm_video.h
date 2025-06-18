@@ -75,7 +75,8 @@ typedef enum _mirror_type_e {
     MIRDIR_TYPE_NONE,   /**< No mirroring */
     MIRDIR_TYPE_VER,    /**< Vertical mirroring */
     MIRDIR_TYPE_HOR,    /**< Horizontal mirroring */
-    MIRDIR_TYPE_HOR_VER /**< Horizontal and vertical mirroring */
+    MIRDIR_TYPE_HOR_VER, /**< Horizontal and vertical mirroring */
+	MIRDIR_TYPE_BUTT
 } mirror_type_e;
 
 typedef enum _vb_source_e {
@@ -512,6 +513,8 @@ typedef struct _grid_info_attr_s {
 	unsigned char is_blending;
 	unsigned char eis_enable; /* enable eis */
 	unsigned char homorgn_num;
+	void * buf;
+	unsigned int len;
 } grid_info_attr_s;
 
 typedef struct _ldc_attr_s {
@@ -576,10 +579,11 @@ typedef struct _vcodec_perf_fps_s {
 typedef enum {
 	SEQ_INIT_NON,
 	SEQ_INIT_START,
+	SEQ_DECODE_WRONG_RESOLUTION,
+	SEQ_DECODE_FRAMEBUFFER_NOTENOUGH,
 	SEQ_CHANGE,
 	SEQ_DECODE_START,
 	SEQ_DECODE_FINISH,
-	SEQ_DECODE_WRONG_RESOLUTION,
 }seq_status;
 
 #ifdef __cplusplus

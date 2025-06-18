@@ -62,7 +62,7 @@ typedef struct jpu_buffer_t {
 } jpu_buffer_t;
 
 typedef struct jpu_instance_pool_t {
-    unsigned char   jpgInstPool[MAX_JPEG_NUM_INSTANCE][MAX_INST_HANDLE_SIZE];
+    unsigned char   jpgInstPool[MAX_JPEG_NUM_INSTANCE][MAX_JPEG_INST_HANDLE_SIZE];
     Int32           jpu_instance_num;
     BOOL            instance_pool_inited;
     void*           instPendingInst[MAX_JPEG_NUM_INSTANCE];

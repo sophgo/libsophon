@@ -443,10 +443,9 @@ int ion_alloc(struct bm_device_info *bmdi, struct ion_allocation_data *alloc_dat
 #endif
 	int fd = 0;
 	unsigned long len = alloc_data->len;
-        int heap_id_mask = alloc_data->heap_id_mask;
+    int heap_id_mask = alloc_data->heap_id_mask;
 	struct dma_buf *dmabuf = NULL;
 	unsigned long flags = alloc_data->flags;
-
 
 	len = BGM_4K_ALIGN(len);
 	if (!len)
@@ -493,6 +492,50 @@ int ion_alloc(struct bm_device_info *bmdi, struct ion_allocation_data *alloc_dat
 	alloc_data->paddr = buffer->sg_table->sgl->dma_address;
 	alloc_data->fd = fd;
 	return fd;
+}
+
+struct ion_buffer *ion_alloc_nofd(struct bm_device_info *bmdi, struct ion_allocation_data *alloc_data)
+{
+	struct ion_device *dev = &bmdi->gmem_info.idev;
+	struct ion_buffer *buffer = NULL;
+	struct ion_heap *heap;
+
+	unsigned long len = alloc_data->len;
+    int heap_id_mask = alloc_data->heap_id_mask;
+	unsigned long flags = alloc_data->flags;
+
+	len = BGM_4K_ALIGN(len);
+	if (!len)
+		return NULL;
+
+	down_read(&dev->lock);
+	list_for_each_entry(heap, &dev->heaps, node) {
+		/* if the caller didn't specify this heap id */
+		if (!((1 << heap->id) & heap_id_mask))
+			continue;
+		buffer = ion_buffer_create(heap, dev, len, flags);
+		if (!IS_ERR(buffer)) {
+			alloc_data->heap_id = heap->id;
+			break;
+		}
+	}
+
+	up_read(&dev->lock);
+
+	if (!buffer)
+		return NULL;
+
+	if (IS_ERR(buffer))
+		return NULL;
+
+	alloc_data->paddr = buffer->sg_table->sgl->dma_address;
+
+	return buffer;
+}
+
+void ion_free_nofd(struct ion_buffer *buffer)
+{
+	_ion_buffer_destroy(buffer);
 }
 
 void ion_device_add_heap(struct bm_device_info *bmdi, struct ion_heap *heap)

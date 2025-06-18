@@ -259,6 +259,13 @@ signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg){
 		chn_hw_cfg->rgn_coverex_cfg = vpss_cfg->coverex_cfg.rgn_coverex_cfg;
 	}
 
+	// borrowing unused structures to maintain compatibility with the previous ioctl
+	chn_hw_cfg->circle_cfg.cfg0.raw = vpss_cfg->chn_attr.chn_attr.frame_rate.src_frame_rate;
+	if (chn_hw_cfg->circle_cfg.cfg0.b.enable) {
+		chn_hw_cfg->circle_cfg.cfg1.raw = vpss_cfg->chn_attr.chn_attr.frame_rate.dst_frame_rate;
+		chn_hw_cfg->circle_cfg.radius = vpss_cfg->chn_attr.chn_attr.video_format;
+	}
+
 	for(i = 0; i < RGN_MAX_LAYER_VPSS; i++)
 		if(vpss_cfg->rgn_cfg[i].num_of_rgn > 0)
 			chn_hw_cfg->rgn_cfg[i] = vpss_cfg->rgn_cfg[i];

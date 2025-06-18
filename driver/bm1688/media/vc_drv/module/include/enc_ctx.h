@@ -83,7 +83,6 @@ typedef struct _venc_enc_ctx {
 
 #define DEF_IQP 32
 #define DEF_PQP 32
-#define ENC_TIMEOUT (-2)
 #define DEAULT_QP_MAP_BITRATE 6000
 
 #define MAX_VENC_QUEUE_DEPTH 4

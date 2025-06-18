@@ -2,6 +2,10 @@
 #define _BM_FW_H_
 
 #define LAST_INI_REG_VAL	 0x76125438
+#define C906_0_PARK      0x104000000
+#define C906_1_PARK      0x10c000000   // 128M
+
+struct file;
 
 struct bm_device_info;
 

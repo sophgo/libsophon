@@ -84,8 +84,12 @@ int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 #else
 	resmem_info->npureserved_addr[0] = 0x124000000;
 	resmem_info->npureserved_size[0] = 0xDC000000;
-	resmem_info->npureserved_addr[1] = 0x200000000;
-	resmem_info->npureserved_size[1] = 0x100000000;
+	/**
+	 * The reason for changing 0x200000000 to 0x200400000 is to avoid the hw exception of VPU.
+	 *  If you need to modify it, please contact VPU owner
+	 */
+	resmem_info->npureserved_addr[1] = 0x200400000;
+	resmem_info->npureserved_size[1] = 0xFFC00000;
 	resmem_info->vpu_vmem_addr = 0;
 	resmem_info->vpu_vmem_size = 0;
 	resmem_info->vpp_addr = 0;

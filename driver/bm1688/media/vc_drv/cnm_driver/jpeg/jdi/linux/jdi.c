@@ -20,6 +20,7 @@
 #include "driver/jpu.h"
 #include "../jdi.h"
 #include "jpulog.h"
+#include "jpuapifunc.h"
 #include "jputypes.h"
 #include "regdefine.h"
 
@@ -220,6 +221,11 @@ jpu_instance_pool_t *jdi_get_instance_pool(void)
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00 )
         return NULL;
+
+    if (sizeof(JpgInst) > MAX_JPEG_INST_HANDLE_SIZE) {
+        JLOG(ERR, "[JDI] JpgInst = %d, MAX_JPEG_INST_HANDLE_SIZE = %d\n",
+                (int)sizeof(JpgInst), MAX_JPEG_INST_HANDLE_SIZE);
+    }
 
     memset(&jdb, 0x00, sizeof(jpudrv_buffer_t));
     if (!jdi->pjip) {

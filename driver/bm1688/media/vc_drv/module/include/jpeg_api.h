@@ -56,6 +56,7 @@ typedef enum {
 #define DRV_JPEG_OP_BASE 0x10000
 #define DRV_JPEG_OP_MASK 0xFF0000
 #define DRV_JPEG_OP_SHIFT 16
+#define ENC_TIMEOUT (-2)
 
 enum JPG_OP_NUM {
     JPGE_OP_NONE = 0,

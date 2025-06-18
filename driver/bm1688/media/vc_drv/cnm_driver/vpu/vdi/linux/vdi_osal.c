@@ -34,8 +34,8 @@
 static unsigned log_decor = LOG_HAS_TIME | LOG_HAS_FILE | LOG_HAS_MICRO_SEC |
                             LOG_HAS_NEWLINE |
                             LOG_HAS_SPACE | LOG_HAS_COLOR;
-int VPU_LOG_LEVEL = ERR;
-module_param(VPU_LOG_LEVEL, int, 0644);
+int vpu_log_level = ERR;
+module_param(vpu_log_level, int, 0644);
 static osal_file_t fpLog  = NULL;
 
 #if defined(SUPPORT_SW_UART) || defined(SUPPORT_SW_UART_V2)
@@ -70,12 +70,12 @@ void DeInitLog()
 
 void SetMaxLogLevel(int level)
 {
-    VPU_LOG_LEVEL = level;
+    vpu_log_level = level;
 }
 
 int GetMaxLogLevel()
 {
-    return VPU_LOG_LEVEL;
+    return vpu_log_level;
 }
 
 void LogMsg(int level, const char *format, ...)
@@ -86,7 +86,7 @@ void LogMsg(int level, const char *format, ...)
     char*   postfix= "";
     char    logMsg[MAX_PRINT_LENGTH+32] = {0};
 
-    if (level > VPU_LOG_LEVEL)
+    if (level > vpu_log_level)
         return;
 #if defined(SUPPORT_SW_UART) || defined(SUPPORT_SW_UART_V2)
     osal_mutex_lock(s_log_mutex);

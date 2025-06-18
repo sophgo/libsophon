@@ -11,7 +11,33 @@
 #include "jpeg_api.h"
 #include "float_point.h"
 
-#define VENC_MEMSET memset
+#define DRV_VENC_MASK_ERR		0x1
+#define DRV_VENC_MASK_WARN		0x2
+#define DRV_VENC_MASK_INFO		0x3
+#define DRV_VENC_MASK_DBG		0x4
+
+extern unsigned int venc_log_lv;
+
+#define DRV_VENC_ERR(msg, ...)		\
+    do { \
+        if (venc_log_lv >= DRV_VENC_MASK_ERR) \
+        pr_err("[ERR] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
+    } while (0)
+#define DRV_VENC_WARN(msg, ...)		\
+    do { \
+        if (venc_log_lv >= DRV_VENC_MASK_WARN) \
+        pr_warn("[WARN] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
+    } while (0)
+#define DRV_VENC_DBG(msg, ...)	\
+    do { \
+        if (venc_log_lv >= DRV_VENC_MASK_DBG) \
+        pr_notice("[CFG] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
+    } while (0)
+#define DRV_VENC_INFO(msg, ...)		\
+    do { \
+        if (venc_log_lv >= DRV_VENC_MASK_INFO) \
+        pr_info("[INFO] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
+    } while (0)
 
 typedef enum _venc_chn_STATE_ {
     venc_chn_STATE_NONE = 0,

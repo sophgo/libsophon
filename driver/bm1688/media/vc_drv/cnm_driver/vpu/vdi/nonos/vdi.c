@@ -37,15 +37,11 @@ static int vpu_irq_handler(void *context);
 #endif
 
 #define VPU_BIT_REG_SIZE                    (0x4000*MAX_NUM_VPU_CORE)
-#    define VPU_BIT_REG_BASE                0x40000000
+#define VPU_BIT_REG_BASE                    0x40000000
 
 #define VDI_SRAM_BASE_ADDR                  0x00
 #define VPU_DRAM_PHYSICAL_BASE              0x00
 #define VPU_DRAM_SIZE                       (128*1024*1024)
-
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-#define VPU_CORE_BASE_OFFSET                0x4000
-#endif
 
 #define VDI_SYSTEM_ENDIAN                   VDI_LITTLE_ENDIAN
 #define VDI_128BIT_BUS_SYSTEM_ENDIAN        VDI_128BIT_LITTLE_ENDIAN
@@ -76,11 +72,7 @@ typedef struct  {
 } vdi_info_t;
 
 static vdi_info_t s_vdi_info[MAX_VPU_CORE_NUM];
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-static vpu_instance_pool_t s_vip[MAX_VPU_CORE_NUM];	// it can be used for a buffer space to save context for app process. to support running VPU in multiple process. this space should be a shared buffer.
-#else
 static vpu_instance_pool_t s_vip;	// it can be used for a buffer space to save context for app process. to support running VPU in multiple process. this space should be a shared buffer.
-#endif
 static int swap_endian(unsigned long coreIdx, unsigned char *data, int len, int endian);
 
 #ifdef SUPPORT_MULTI_INST_INTR_WITH_THREAD
@@ -207,13 +199,8 @@ int vdi_init(unsigned long coreIdx)
         vdi->pvip->instance_pool_inited = 1;
     }
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    ret = vmem_init(&vdi->pvip->vmem, vdi->vdb_video_memory.phys_addr + (vdi->pvip->vpu_common_buffer.size*MAX_VPU_CORE_NUM),
-            vdi->vdb_video_memory.size - (vdi->pvip->vpu_common_buffer.size*MAX_VPU_CORE_NUM));
-#else
     ret = vmem_init(&vdi->pvip->vmem, vdi->vdb_video_memory.phys_addr + vdi->pvip->vpu_common_buffer.size,
             vdi->vdb_video_memory.size - vdi->pvip->vpu_common_buffer.size);
-#endif
 
     if (ret < 0)
     {
@@ -356,17 +343,10 @@ int vdi_allocate_common_memory(unsigned long core_idx)
         vdb.base = vdi->vdb_video_memory.base;
 
         // convert os driver buffer type to vpu buffer type
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-        vdi->pvip->vpu_common_buffer.size = SIZE_COMMON;
-        vdi->pvip->vpu_common_buffer.phys_addr = (PhysicalAddress)(vdb.phys_addr + (core_idx*SIZE_COMMON));
-        vdi->pvip->vpu_common_buffer.base = (unsigned long)(vdb.base + (core_idx*SIZE_COMMON));
-        vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr + (core_idx*SIZE_COMMON));
-#else
         vdi->pvip->vpu_common_buffer.size = SIZE_COMMON;
         vdi->pvip->vpu_common_buffer.phys_addr = (PhysicalAddress)(vdb.phys_addr);
         vdi->pvip->vpu_common_buffer.base = (unsigned long)(vdb.base);
         vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr);
-#endif
 
         osal_memcpy(&vdi->vpu_common_memory, &vdi->pvip->vpu_common_buffer, sizeof(vpudrv_buffer_t));
 
@@ -377,12 +357,8 @@ int vdi_allocate_common_memory(unsigned long core_idx)
         vdb.phys_addr = vdi->vdb_video_memory.phys_addr; // set at the beginning of base address
         vdb.base =  vdi->vdb_video_memory.base;
         vdb.virt_addr = vdi->vdb_video_memory.phys_addr;
-
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-        vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr + (core_idx*SIZE_COMMON));
-#else
         vdi->pvip->vpu_common_buffer.virt_addr = vdb.virt_addr;
-#endif
+
         osal_memcpy(&vdi->vpu_common_memory, &vdi->pvip->vpu_common_buffer, sizeof(vpudrv_buffer_t));
 
         VLOG(INFO, "[VDI] vdi_allocate_common_memory, physaddr=0x%x, virtaddr=0x%x\n", (int)vdi->pvip->vpu_common_buffer.phys_addr, (int)vdi->pvip->vpu_common_buffer.virt_addr);
@@ -418,11 +394,7 @@ vpu_instance_pool_t *vdi_get_instance_pool(unsigned long coreIdx)
 
     if (!vdi->pvip)
     {
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-        vdi->pvip = &s_vip[coreIdx];
-#else
         vdi->pvip = &s_vip;
-#endif
         osal_memset(vdi->pvip, 0, sizeof(vpu_instance_pool_t));
     }
 
@@ -536,10 +508,6 @@ void vdi_write_register(unsigned long coreIdx, unsigned int addr, unsigned int d
     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
         return;
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    offset_addr = coreIdx * VPU_CORE_BASE_OFFSET;
-#endif
-
     reg_addr = (unsigned long *)(addr + (unsigned long)vdi->vdb_register.virt_addr + offset_addr);
     *(volatile unsigned int *)reg_addr = data;
 }
@@ -557,10 +525,6 @@ unsigned int vdi_read_register(unsigned long coreIdx, unsigned int addr)
 
     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
         return (unsigned int)-1;
-
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    offset_addr = coreIdx * VPU_CORE_BASE_OFFSET;
-#endif
 
     reg_addr = (unsigned long *)(addr + (unsigned long)vdi->vdb_register.virt_addr + offset_addr);
     return *(volatile unsigned int *)reg_addr;
@@ -615,12 +579,8 @@ int vdi_clear_memory(unsigned long coreIdx, PhysicalAddress addr, int len, int e
     int i;
     Uint8*  zero;
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
 
     vdi = &s_vdi_info[coreIdx];
 
@@ -663,12 +623,9 @@ int vdi_write_memory(unsigned long coreIdx, PhysicalAddress addr, unsigned char 
     unsigned long offset;
     int i;
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
@@ -705,12 +662,9 @@ int vdi_read_memory(unsigned long coreIdx, PhysicalAddress addr, unsigned char *
     unsigned long offset;
     int i;
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
@@ -744,12 +698,9 @@ int vdi_allocate_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb, int memType
     unsigned long offset;
     vpudrv_buffer_t vdb = {0};
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
@@ -790,19 +741,16 @@ int vdi_allocate_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb, int memType
     return 0;
 }
 
-int vdi_attach_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb)
+int vdi_attach_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb, unsigned char is_cached)
 {
     vdi_info_t *vdi;
     int i;
     unsigned long offset;
     vpudrv_buffer_t vdb = {0};
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vb || !vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
@@ -842,12 +790,9 @@ int vdi_dettach_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb)
     vdi_info_t *vdi;
     int i;
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return -1;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vb || !vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)
@@ -875,12 +820,9 @@ void vdi_free_dma_memory(unsigned long coreIdx, vpu_buffer_t *vb, int memTypes, 
     int i;
     vpudrv_buffer_t vdb = {0};
 
-#ifdef SUPPORT_MULTI_CORE_IN_ONE_DRIVER
-    coreIdx = 0;
-#else
     if (coreIdx >= MAX_NUM_VPU_CORE)
         return;
-#endif
+
     vdi = &s_vdi_info[coreIdx];
 
     if(!vb || !vdi || vdi->vpu_fd==-1 || vdi->vpu_fd == 0x00)

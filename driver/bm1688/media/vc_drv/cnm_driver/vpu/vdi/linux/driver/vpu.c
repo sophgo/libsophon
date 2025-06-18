@@ -35,6 +35,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/proc_fs.h>
 #include <linux/clk-provider.h>
+
 #include "vpuconfig.h"
 #include "vpuerror.h"
 #include "jpuconfig.h"
@@ -45,15 +46,10 @@
 #endif
 
 #include "vpu.h"
-//#define ENABLE_DEBUG_MSG
-#ifdef ENABLE_DEBUG_MSG
-#define DPRINTK(args...)		printk(KERN_INFO args);
-#else
-#define DPRINTK(args...)
-#endif
 #include "wave/wave5_regdefine.h"
 #include "wave/wave6_regdefine.h"
 #include "coda9/coda9_regdefine.h"
+#include "vdi_osal.h"
 
 #define VPU_PRODUCT_CODE_REGISTER                 (0x1044)
 #define VPU_STAT_CYCLES                           (575000000)
@@ -196,7 +192,9 @@ static vpu_power_ctrl vpu_pw_ctl = {0};
 static int s_vpu_reg_phy_base[MAX_NUM_VPU_CORE] = {0x21010000, 0x23010000, 0x24010000};
 
 static int video_cap = 0;
-
+static osal_mutex_t core_mutex[MAX_NUM_VPU_CORE];
+static osal_mutex_t disp_mutex[MAX_NUM_VPU_CORE];
+static osal_mutex_t mem_mutex[MAX_NUM_VPU_CORE];
 static int vpuapi_close(u32 core, u32 inst);
 static int vpuapi_dec_set_stream_end(u32 core, u32 inst);
 static int vpuapi_dec_clr_all_disp_flag(u32 core, u32 inst);
@@ -220,6 +218,7 @@ extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
 static vpudrv_buffer_t s_instance_pool[MAX_NUM_VPU_CORE] = {0};
 static vpudrv_buffer_t s_common_memory[MAX_NUM_VPU_CORE] = {0};
 static vpu_drv_context_t s_vpu_drv_context[MAX_NUM_VPU_CORE] = {0};
+static int vpu_drv_want_to_suspend = 0;
 #ifdef VPU_SUPPORT_CLOCK_CONTROL
 struct clk *s_vpu_clk;
 #endif
@@ -399,13 +398,13 @@ void vpu_clear_stat_info(int coreIdx)
 
 int device_hw_reset(void)
 {
-    DPRINTK("[VPUDRV] request device hw reset from application. \n");
+    VLOG(TRACE, "[VPUDRV] request device hw reset from application. \n");
     return 0;
 }
 
 int vpu_hw_reset(int core_idx)
 {
-    DPRINTK("[VPUDRV] request device vpu reset from application. \n");
+    VLOG(TRACE, "[VPUDRV] request device vpu reset from application. \n");
     vpu_top_reset(core_idx);
     return 0;
 }
@@ -458,6 +457,7 @@ int vpu_monitor_thread(void *data)
         msleep(VPU_INFO_STAT_INTERVAL);
     }
 
+    s_vpu_monitor_task = NULL;
     return ret;
 }
 
@@ -491,7 +491,7 @@ static int vpu_alloc_dma_buffer(vpudrv_buffer_t *vb)
 #ifdef VPU_SUPPORT_RESERVED_VIDEO_MEMORY
     vb->phys_addr = (unsigned long)vmem_alloc(&s_vmem, vb->size, 0);
     if ((unsigned long)vb->phys_addr  == (unsigned long)-1) {
-        printk(KERN_ERR "[VPUDRV] Physical memory allocation error size=%ld\n", vb->size);
+        VLOG(ERR, "[VPUDRV] Physical memory allocation error size=%ld\n", vb->size);
         return -1;
     }
 
@@ -499,14 +499,14 @@ static int vpu_alloc_dma_buffer(vpudrv_buffer_t *vb)
 #elif defined(VPU_SUPPORT_ION_MEMORY)
     sprintf(ion_name, "vcodec_%d_ion", vb->core_idx);
     if (base_ion_alloc((uint64_t *)&vb->phys_addr, (void **)&vb->virt_addr, ion_name, vb->size, vb->is_cached) != 0) {
-        printk(KERN_ERR"[VDI] fail to allocate ion memory. size=%ld\n", vb->size);
+        VLOG(ERR,"[VDI] fail to allocate ion memory. size=%ld\n", vb->size);
         return -1;
     }
     vb->base = vb->phys_addr;
 #else
     vb->base = (unsigned long)dma_alloc_coherent(vpu_dev, PAGE_ALIGN(vb->size), (dma_addr_t *) (&vb->phys_addr), GFP_DMA | GFP_KERNEL);
     if ((void *)(vb->base) == NULL)    {
-        printk(KERN_ERR "[VPUDRV] Physical memory allocation error size=%ld\n", vb->size);
+        VLOG(ERR, "[VPUDRV] Physical memory allocation error size=%ld\n", vb->size);
         return -1;
     }
 #endif
@@ -564,13 +564,13 @@ static int vpu_free_instances(struct file *filp)
     vpudrv_instance_pool_t *vip;
     void *vip_base;
 
-    DPRINTK("[VPUDRV]+%s\n", __FUNCTION__);
+    VLOG(INFO, "[VPUDRV][+] \n");
 
     list_for_each_entry_safe(vil, n, &s_inst_list_head, list)
     {
         if (vil->filp == filp) {
             vip_base = (void *)(s_instance_pool[vil->core_idx].base);
-            DPRINTK("[VPUDRV] vpu_free_instances detect instance crash instIdx=%d, coreIdx=%d, vip_base=%p, instance_pool_size_per_core=%d\n", (int)vil->inst_idx, (int)vil->core_idx, vip_base, (int)instance_pool_size_per_core);
+            VLOG(TRACE, "[VPUDRV] vpu_free_instances detect instance crash instIdx=%d, coreIdx=%d, vip_base=%p\n", (int)vil->inst_idx, (int)vil->core_idx, vip_base);
             vip = (vpudrv_instance_pool_t *)vip_base;
             if (vip) {
                 vpu_close_instance_internal((u32)vil->core_idx, (u32)vil->inst_idx);
@@ -582,7 +582,7 @@ static int vpu_free_instances(struct file *filp)
             kfree(vil);
         }
     }
-    DPRINTK("[VPUDRV]-%s\n", __FUNCTION__);
+    VLOG(INFO, "[VPUDRV][-] \n");
     return 1;
 }
 
@@ -591,7 +591,7 @@ static int vpu_free_buffers(int core_idx)
     vpudrv_buffer_pool_t *pool, *n;
     vpudrv_buffer_t vb;
 
-    DPRINTK("[VPUDRV] vpu_free_buffers\n");
+    VLOG(INFO, "[VPUDRV][+]\n");
 
     list_for_each_entry_safe(pool, n, &s_vbp_head, list)
     {
@@ -628,15 +628,14 @@ static s32 get_vpu_inst_idx(vpu_drv_context_t *dev, u32 *reason, u32 empty_inst,
     u32 int_reason;
 
     int_reason = *reason;
-    DPRINTK("[VPUDRV][+]%s, int_reason=0x%x, empty_inst=0x%x, done_inst=0x%x, product_code=0x%\n", __func__, int_reason, empty_inst, done_inst);
-    //printk(KERN_ERR "[VPUDRV][+]%s, int_reason=0x%x, empty_inst=0x%x, done_inst=0x%x\n", __func__, int_reason, empty_inst, done_inst);
+    VLOG(TRACE, "[VPUDRV][+], int_reason=0x%x, empty_inst=0x%x, done_inst=0x%x\n", int_reason, empty_inst, done_inst);
 
     if (int_reason & (1 << INT_WAVE5_DEC_PIC))
     {
         reg_val = done_inst;
         inst_idx = get_inst_idx(reg_val);
         *reason  = (1 << INT_WAVE5_DEC_PIC);
-        DPRINTK("[VPUDRV]    %s, W5_RET_QUEUE_CMD_DONE_INST DEC_PIC reg_val=0x%x, inst_idx=%d\n", __func__, reg_val, inst_idx);
+        VLOG(TRACE, "[VPUDRV], W5_RET_QUEUE_CMD_DONE_INST DEC_PIC reg_val=0x%x, inst_idx=%d\n", reg_val, inst_idx);
         goto GET_VPU_INST_IDX_HANDLED;
     }
 
@@ -645,7 +644,7 @@ static s32 get_vpu_inst_idx(vpu_drv_context_t *dev, u32 *reason, u32 empty_inst,
         reg_val = empty_inst;
         inst_idx = get_inst_idx(reg_val);
         *reason = (1 << INT_WAVE5_BSBUF_EMPTY);
-        DPRINTK("[VPUDRV]    %s, W5_RET_BS_EMPTY_INST reg_val=0x%x, inst_idx=%d\n", __func__, reg_val, inst_idx);
+        VLOG(TRACE, "[VPUDRV], W5_RET_BS_EMPTY_INST reg_val=0x%x, inst_idx=%d\n", reg_val, inst_idx);
         goto GET_VPU_INST_IDX_HANDLED;
     }
 
@@ -654,7 +653,7 @@ static s32 get_vpu_inst_idx(vpu_drv_context_t *dev, u32 *reason, u32 empty_inst,
         reg_val = seq_inst;
         inst_idx = get_inst_idx(reg_val);
         *reason  = (1 << INT_WAVE5_INIT_SEQ);
-        DPRINTK("[VPUDRV]    %s, RET_SEQ_DONE_INSTANCE_INFO INIT_SEQ reg_val=0x%x, inst_idx=%d\n", __func__, reg_val, inst_idx);
+        VLOG(TRACE, "[VPUDRV], RET_SEQ_DONE_INSTANCE_INFO INIT_SEQ reg_val=0x%x, inst_idx=%d\n", reg_val, inst_idx);
         goto GET_VPU_INST_IDX_HANDLED;
     }
 
@@ -663,7 +662,7 @@ static s32 get_vpu_inst_idx(vpu_drv_context_t *dev, u32 *reason, u32 empty_inst,
         reg_val = seq_inst;
         inst_idx = get_inst_idx(reg_val);
         *reason  = (1 << INT_WAVE5_ENC_SET_PARAM);
-        DPRINTK("[VPUDRV]    %s, RET_SEQ_DONE_INSTANCE_INFO ENC_SET_PARAM reg_val=0x%x, inst_idx=%d\n", __func__, reg_val, inst_idx);
+        VLOG(TRACE, "[VPUDRV], RET_SEQ_DONE_INSTANCE_INFO ENC_SET_PARAM reg_val=0x%x, inst_idx=%d\n", reg_val, inst_idx);
         goto GET_VPU_INST_IDX_HANDLED;
     }
 
@@ -673,18 +672,18 @@ static s32 get_vpu_inst_idx(vpu_drv_context_t *dev, u32 *reason, u32 empty_inst,
         reg_val = done_inst;
         inst_idx = get_inst_idx(reg_val);
         *reason  = (1 << INT_WAVE5_ENC_SRC_RELEASE);
-        DPRINTK("[VPUDRV]    %s, W5_RET_QUEUE_CMD_DONE_INST ENC_SET_PARAM reg_val=0x%x, inst_idx=%d\n", __func__, reg_val, inst_idx);
+        VLOG(TRACE, "[VPUDRV], W5_RET_QUEUE_CMD_DONE_INST ENC_SET_PARAM reg_val=0x%x, inst_idx=%d\n", reg_val, inst_idx);
         goto GET_VPU_INST_IDX_HANDLED;
     }
 #endif
 
     inst_idx = -1;
     *reason  = 0;
-    DPRINTK("[VPUDRV]    %s, UNKNOWN INTERRUPT REASON: %08x\n", __func__, int_reason);
+    VLOG(TRACE, "[VPUDRV], UNKNOWN INTERRUPT REASON: %08x\n", int_reason);
 
 GET_VPU_INST_IDX_HANDLED:
 
-    DPRINTK("[VPUDRV][-]%s, inst_idx=%d. *reason=0x%x\n", __func__, inst_idx, *reason);
+    VLOG(TRACE, "[VPUDRV][-], inst_idx=%d. *reason=0x%x\n", inst_idx, *reason);
 
     return inst_idx;
 }
@@ -697,14 +696,14 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
     int product_code;
     u32 intr_reason = 0;
     s32 intr_inst_index = 0;
-    DPRINTK("[VPUDRV][+]%s\n", __func__);
+    VLOG(TRACE, "[VPUDRV][+]%s\n", __func__);
 
 #ifdef VPU_IRQ_CONTROL
     disable_irq_nosync(s_vpu_irq);
 #endif
     {
         if (s_bit_firmware_info[core].size == 0) {/* it means that we didn't get an information the current core from API layer. No core activated.*/
-            DPRINTK("[VPUDRV] :  s_bit_firmware_info[%d].size is zero\n", core);
+            VLOG(TRACE, "[VPUDRV] :  s_bit_firmware_info[%d].size is zero\n", core);
             return IRQ_HANDLED;
         }
         product_code = ReadVpuRegister(VPU_PRODUCT_CODE_REGISTER);
@@ -719,7 +718,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                     kfifo_in_spinlocked(&s_interrupt_pending_q[intr_inst_index], &intr_reason, sizeof(u32), &s_kfifo_lock);
                     WriteVpuRegister(W6_VPU_VINT_REASON_CLR, intr_reason);
                     WriteVpuRegister(W6_VPU_VINT_CLEAR, 1);
-                    DPRINTK("[VPUDRV] vpu_irq_handler reason=0x%x\n", intr_reason);
+                    VLOG(TRACE, "[VPUDRV] vpu_irq_handler reason=0x%x\n", intr_reason);
                 }
             } else {
                 if (ReadVpuRegister(W6_VPU_VPU_INT_STS) > 0) {
@@ -729,7 +728,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                     done_inst = ReadVpuRegister(W6_CMD_DONE_INST);
                     reason_clr = reason;
 
-                    DPRINTK("[VPUDRV] vpu_irq_handler reason=0x%x, done_inst=0x%x\n", reason, done_inst);
+                    VLOG(TRACE, "[VPUDRV] vpu_irq_handler reason=0x%x, done_inst=0x%x\n", reason, done_inst);
                     for (i=0; i<MAX_NUM_INSTANCE; i++) {
                         if (0 == done_inst) {
                             break;
@@ -747,11 +746,11 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                                 kfifo_in_spinlocked(&s_interrupt_pending_q[intr_inst_index], &intr_reason, sizeof(u32), &s_kfifo_lock);
                             }
                             else {
-                                printk(KERN_ERR "[VPUDRV] :  kfifo_is_full kfifo_count=%d \n", kfifo_len(&s_interrupt_pending_q[intr_inst_index]));
+                                VLOG(ERR, "[VPUDRV] :  kfifo_is_full kfifo_count=%d \n", kfifo_len(&s_interrupt_pending_q[intr_inst_index]));
                             }
                         }
                         else {
-                            printk(KERN_ERR "[VPUDRV] :  intr_inst_index is wrong intr_inst_index=%d \n", intr_inst_index);
+                            VLOG(ERR, "[VPUDRV] :  intr_inst_index is wrong intr_inst_index=%d \n", intr_inst_index);
                         }
                     }
 
@@ -772,12 +771,12 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                 seq_inst   = ReadVpuRegister(W5_RET_SEQ_DONE_INSTANCE_INFO);
                 reason_clr = reason;
 
-                DPRINTK("[VPUDRV] vpu_irq_handler reason=0x%x, empty_inst=0x%x, done_inst=0x%x, seq_inst=0x%x \n", reason, empty_inst, done_inst, seq_inst);
+                VLOG(TRACE, "[VPUDRV] vpu_irq_handler reason=0x%x, empty_inst=0x%x, done_inst=0x%x, seq_inst=0x%x \n", reason, empty_inst, done_inst, seq_inst);
                 for (i=0; i<MAX_NUM_INSTANCE; i++) {
                     if (0 == empty_inst && 0 == done_inst && 0 == seq_inst) break;
                     intr_reason = reason;
                     intr_inst_index = get_vpu_inst_idx(dev, &intr_reason, empty_inst, done_inst, seq_inst);
-                    DPRINTK("[VPUDRV]     > instance_index: %d, intr_reason: %08x empty_inst: %08x done_inst: %08x seq_inst: %08x\n", intr_inst_index, intr_reason, empty_inst, done_inst, seq_inst);
+                    VLOG(TRACE, "[VPUDRV]     > instance_index: %d, intr_reason: %08x empty_inst: %08x done_inst: %08x seq_inst: %08x\n", intr_inst_index, intr_reason, empty_inst, done_inst, seq_inst);
                     if (intr_inst_index >= 0 && intr_inst_index < MAX_NUM_INSTANCE) {
                         if (intr_reason == (1 << INT_WAVE5_BSBUF_EMPTY)) {
                             empty_inst = empty_inst & ~(1 << intr_inst_index);
@@ -785,7 +784,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                             if (0 == empty_inst) {
                                 reason &= ~(1<<INT_WAVE5_BSBUF_EMPTY);
                             }
-                            DPRINTK("[VPUDRV]    %s, W5_RET_BS_EMPTY_INST Clear empty_inst=0x%x, intr_inst_index=%d\n", __func__, empty_inst, intr_inst_index);
+                            VLOG(TRACE, "[VPUDRV], W5_RET_BS_EMPTY_INST Clear empty_inst=0x%x, intr_inst_index=%d\n", empty_inst, intr_inst_index);
                         }
                         if (intr_reason == (1 << INT_WAVE5_DEC_PIC))
                         {
@@ -794,7 +793,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                             if (0 == done_inst) {
                                 reason &= ~(1<<INT_WAVE5_DEC_PIC);
                             }
-                            DPRINTK("[VPUDRV]    %s, W5_RET_QUEUE_CMD_DONE_INST Clear done_inst=0x%x, intr_inst_index=%d\n", __func__, done_inst, intr_inst_index);
+                            VLOG(TRACE, "[VPUDRV], W5_RET_QUEUE_CMD_DONE_INST Clear done_inst=0x%x, intr_inst_index=%d\n", done_inst, intr_inst_index);
                         }
                         if ((intr_reason == (1 << INT_WAVE5_INIT_SEQ)) || (intr_reason == (1 << INT_WAVE5_ENC_SET_PARAM)))
                         {
@@ -803,7 +802,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                             if (0 == seq_inst) {
                                 reason &= ~(1<<INT_WAVE5_INIT_SEQ | 1<<INT_WAVE5_ENC_SET_PARAM);
                             }
-                            DPRINTK("[VPUDRV]    %s, W5_RET_SEQ_DONE_INSTANCE_INFO Clear done_inst=0x%x, intr_inst_index=%d\n", __func__, done_inst, intr_inst_index);
+                            VLOG(TRACE, "[VPUDRV], W5_RET_SEQ_DONE_INSTANCE_INFO Clear done_inst=0x%x, intr_inst_index=%d\n", done_inst, intr_inst_index);
                         }
                         if (!kfifo_is_full(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index])) {
                             if (intr_reason == (1 << INT_WAVE5_ENC_PIC)) {
@@ -814,16 +813,16 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
                                 kfifo_in_spinlocked(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason, sizeof(u32), &s_kfifo_lock);
                         }
                         else {
-                            printk(KERN_ERR "[VPUDRV] :  kfifo_is_full kfifo_count=%d \n", kfifo_len(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index]));
+                            VLOG(ERR, "[VPUDRV] :  kfifo_is_full kfifo_count=%d \n", kfifo_len(&s_interrupt_pending_q[core*MAX_NUM_INSTANCE+intr_inst_index]));
                         }
                     }
 //                    else {
-//                        printk(KERN_ERR "[VPUDRV] :  intr_inst_index is wrong intr_inst_index=%d \n", intr_inst_index);
+//                        VLOG(ERR, "[VPUDRV] :  intr_inst_index is wrong intr_inst_index=%d \n", intr_inst_index);
 //                    }
                 }
 
                 if (0 != reason)
-                    printk(KERN_ERR "INTERRUPT REASON REMAINED: %08x\n", reason);
+                    VLOG(ERR, "INTERRUPT REASON REMAINED: %08x\n", reason);
                 WriteVpuRegister(W5_VPU_VINT_REASON_CLR, reason_clr);
 
                 WriteVpuRegister(W5_VPU_VINT_CLEAR, 0x1);
@@ -838,10 +837,10 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
             }
         }
         else {
-            DPRINTK("[VPUDRV] Unknown product id : %08x\n", product_code);
+            VLOG(TRACE, "[VPUDRV] Unknown product id : %08x\n", product_code);
             return IRQ_HANDLED;
         }
-        DPRINTK("[VPUDRV] product: 0x%08x intr_reason: 0x%08x\n", product_code, intr_reason);
+        VLOG(TRACE, "[VPUDRV] product: 0x%08x intr_reason: 0x%08x\n", product_code, intr_reason);
 
     #if 0
         if (dev->async_queue)
@@ -856,7 +855,7 @@ irqreturn_t vpu_irq_handler(int core, void *dev_id)
         }
     }
 
-    DPRINTK("[VPUDRV][-]%s\n\n", __func__);
+    VLOG(TRACE, "[VPUDRV][-]%s\n\n", __func__);
 
     return IRQ_HANDLED;
 }
@@ -865,7 +864,7 @@ int vpu_op_open(int core_idx)
 {
     int ret = 0;
     vpu_drv_context_all_t *p_drv_context = NULL;
-    DPRINTK("[VPUDRV][+] %s\n", __func__);
+    VLOG(INFO, "[VPUDRV][+] core:%d\n", core_idx);
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
@@ -878,7 +877,7 @@ int vpu_op_open(int core_idx)
         p_drv_context = vmalloc(sizeof(vpu_drv_context_all_t));//(void *)(&s_vpu_drv_context);
         gfilp[core_idx]->private_data = p_drv_context;
         if(gfilp[core_idx]->private_data == NULL) {
-            pr_err("can not allocate memory for private data.\n");
+            VLOG(ERR, "can not allocate memory for private data.\n");
             mutex_unlock(&s_vpu_lock);
             return -1;
         }
@@ -897,7 +896,7 @@ int vpu_op_open(int core_idx)
         mutex_unlock(&s_vpu_lock);
     }
 
-    DPRINTK("[VPUDRV][-] %s\n", __func__);
+    VLOG(INFO, "[VPUDRV][-]\n");
 
     return ret;
 }
@@ -908,7 +907,7 @@ long vpu_get_common_memory(vpudrv_buffer_t *vdb)
 
     if (vdb->core_idx >=  get_vpu_core_num(chip_id, video_cap)) {
         ret = -EFAULT;
-        pr_err("[%s,%d] core_idx incorrect!\n", __func__, __LINE__);
+        VLOG(ERR, "core_idx:%d incorrect!\n", vdb->core_idx);
         return ret;
     }
 
@@ -996,14 +995,15 @@ long vpu_open_instance(vpudrv_inst_info_t *inst_info)
     /* launch vpu monitor thread */
     if (s_vpu_monitor_task == NULL){
         s_vpu_monitor_task = kthread_run(vpu_monitor_thread, &s_vpu_usage_info, "soph_vpu_monitor");
-        if (s_vpu_monitor_task == NULL){
-            pr_err("create vpu monitor thread failed\n");
+        if (IS_ERR(s_vpu_monitor_task)) {
+            VLOG(ERR, "create vpu monitor thread failed\n");
+            s_vpu_monitor_task = NULL;
         } else
-            pr_info("create vpu monitor thread done\n");
+            VLOG(INFO, "create vpu monitor thread done\n");
     }
     mutex_unlock(&s_vpu_lock);
 
-    DPRINTK("[VPUDRV] VDI_IOCTL_OPEN_INSTANCE core_idx=%d, inst_idx=%d, vpu_open_ref_count=%d, inst_open_count=%d\n", \
+    VLOG(INFO, "[VPUDRV] VDI_IOCTL_OPEN_INSTANCE core_idx=%d, inst_idx=%d, vpu_open_ref_count=%d, inst_open_count=%d\n", \
             (int)inst_info->core_idx, (int)inst_info->inst_idx, s_vpu_usage_info.vpu_open_ref_count[inst_info->core_idx], inst_info->inst_open_count);
 
     return 0;
@@ -1013,7 +1013,7 @@ long vpu_close_instance(vpudrv_inst_info_t *inst_info)
 {
     vpudrv_instanace_list_t *vil, *n;
 
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_CLOSE_INSTANCE\n");
+    VLOG(INFO, "[VPUDRV][+]VDI_IOCTL_CLOSE_INSTANCE\n");
 
     mutex_lock(&s_vpu_lock);
     list_for_each_entry_safe(vil, n, &s_inst_list_head, list)
@@ -1033,7 +1033,7 @@ long vpu_close_instance(vpudrv_inst_info_t *inst_info)
     }
     mutex_unlock(&s_vpu_lock);
 
-    DPRINTK("[VPUDRV][-] VDI_IOCTL_CLOSE_INSTANCE core_idx=%d, inst_idx=%d, vpu_open_ref_count=%d, inst_open_count=%d\n", \
+    VLOG(INFO, "[VPUDRV][-] VDI_IOCTL_CLOSE_INSTANCE core_idx=%d, inst_idx=%d, vpu_open_ref_count=%d, inst_open_count=%d\n", \
             (int)inst_info->core_idx, (int)inst_info->inst_idx, s_vpu_usage_info.vpu_open_ref_count[inst_info->core_idx], inst_info->inst_open_count);
 
     return 0;
@@ -1062,7 +1062,7 @@ long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb)
     vpudrv_buffer_pool_t *vbp;
     int retry_cnt = 0;
 
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY\n");
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY\n");
 
     vbp = kzalloc(sizeof(*vbp), GFP_KERNEL);
     if (!vbp) {
@@ -1074,7 +1074,7 @@ long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb)
 
     do {
         if (retry_cnt >= MAX_ALLOC_RETRY_CNT) {
-            pr_err("[%s,%d] fail !\n", __func__, __LINE__);
+            VLOG(ERR, " fail max retry, no mem!\n");
             ret = -ENOMEM;
             kfree(vbp);
             return ret;
@@ -1111,7 +1111,7 @@ long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb)
 
     memcpy(vdb, &(vbp->vb), sizeof(vpudrv_buffer_t));
 
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY\n");
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY\n");
 
     return 0;
 }
@@ -1119,7 +1119,7 @@ long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb)
 long vpu_free_physical_memory(vpudrv_buffer_t *vdb)
 {
     vpudrv_buffer_pool_t *vbp, *n;
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
 
     mutex_lock(&s_vpu_lock);
     if (vdb->base) {
@@ -1140,7 +1140,7 @@ long vpu_free_physical_memory(vpudrv_buffer_t *vdb)
     }
     mutex_unlock(&s_vpu_lock);
 
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
     return 0;
 }
 
@@ -1148,6 +1148,7 @@ long vpu_allocate_extern_memory(vpudrv_buffer_t *vdb)
 {
     long ret;
     vpudrv_buffer_pool_t *vbp;
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_ALLOC_EXTERNMEMORY\n");
 
     vbp = kzalloc(sizeof(*vbp), GFP_KERNEL);
     if (!vbp) {
@@ -1169,10 +1170,8 @@ long vpu_allocate_extern_memory(vpudrv_buffer_t *vdb)
 
     memcpy(vdb, &(vbp->vb), sizeof(vpudrv_buffer_t));
 
-    DPRINTK("alloc vbp:0x%lx,0x%lx vdb:0x%lx,0x%lx"
+    VLOG(TRACE, "[VPUDRV][-] alloc extern vbp:0x%lx,0x%lx vdb:0x%lx,0x%lx"
         , vbp->vb.base, vbp->vb.phys_addr, vdb->base, vdb->phys_addr);
-
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_ALLOCATE_PHYSICAL_MEMORY\n");
 
     return 0;
 }
@@ -1181,7 +1180,7 @@ long vpu_free_extern_memory(vpudrv_buffer_t *vdb)
 {
     vpudrv_buffer_pool_t *vbp, *n;
     int find_buffer = 0;
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_FREE_EXTERNMEMORY\n");
 
     // Check if the buffer has been released
     mutex_lock(&s_extern_buffer_lock);
@@ -1197,7 +1196,7 @@ long vpu_free_extern_memory(vpudrv_buffer_t *vdb)
     }
     mutex_unlock(&s_extern_buffer_lock);
 
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_FREE_PHYSICALMEMORY\n");
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_FREE_EXTERNMEMORY\n");
     return 0;
 }
 
@@ -1206,7 +1205,7 @@ int vpu_free_extern_buffers(int core_idx)
     vpudrv_buffer_pool_t *pool, *n;
     vpudrv_buffer_t vb;
 
-    DPRINTK("[VPUDRV] vpu_free_extern_buffers\n");
+    VLOG(TRACE, "[VPUDRV][+] vpu_free_extern_buffers\n");
     if (s_vpu_usage_info.vpu_open_ref_count[core_idx]) {
         return 0;
     }
@@ -1225,6 +1224,7 @@ int vpu_free_extern_buffers(int core_idx)
     }
     mutex_unlock(&s_extern_buffer_lock);
 
+    VLOG(TRACE, "[VPUDRV][-] vpu_free_extern_buffers\n");
     return 0;
 }
 
@@ -1233,19 +1233,19 @@ long vpu_get_free_mem_size(unsigned long *size)
 #ifdef VPU_SUPPORT_RESERVED_VIDEO_MEMORY
     vmem_info_t vinfo;
     // unsigned long size;
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_GET_FREE_MEM_SIZE\n");
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_GET_FREE_MEM_SIZE\n");
     vmem_get_info(&s_vmem, &vinfo);
 
     *size = vinfo.free_pages * vinfo.page_size;
 
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_GET_FREE_MEM_SIZE\n");
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_GET_FREE_MEM_SIZE\n");
 #endif
     return 0;
 }
 
 long vpu_set_clock_gate(int core_idx, unsigned int *clkgate)
 {
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_SET_CLOCK_GATE\n");
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_SET_CLOCK_GATE\n");
 
 #ifdef VPU_SUPPORT_CLOCK_CONTROL
     if (*clkgate)
@@ -1253,7 +1253,7 @@ long vpu_set_clock_gate(int core_idx, unsigned int *clkgate)
     else
         vpu_clk_disable(core_idx);
 #endif
-    DPRINTK("[VPUDRV][-]VDI_IOCTL_SET_CLOCK_GATE\n");
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_SET_CLOCK_GATE\n");
     return 0;
 }
 
@@ -1281,21 +1281,10 @@ long vpu_wait_interrupt(vpudrv_intr_info_t *info)
     vpu_drv_context_all_t *p_drv_context = (vpu_drv_context_all_t *)gfilp[info->core_idx]->private_data;
     struct vpu_drv_context_t *dev = p_drv_context->p_vpu_context;
 
-    DPRINTK("[VPUDRV][+]VDI_IOCTL_WAIT_INTERRUPT\n");
-
     core_idx = info->core_idx;
-    DPRINTK("[VPUDRV]--core index: %d\n", core_idx);
+    VLOG(TRACE, "[VPUDRV][+]VDI_IOCTL_WAIT_INTERRUPT, core:%d\n", core_idx);
 
     atomic_inc(&s_vpu_usage_info.vpu_busy_status[core_idx]);
-
-    intr_reason_in_q = 0;
-    interrupt_flag_in_q = kfifo_out_spinlocked(&s_interrupt_pending_q[core_idx*MAX_NUM_INSTANCE+intr_inst_index], &intr_reason_in_q, sizeof(u32), &s_kfifo_lock);
-    if (interrupt_flag_in_q > 0)
-    {
-        dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = intr_reason_in_q;
-        DPRINTK("[VPUDRV] Interrupt Remain : core=%d, intr_inst_index=%d, intr_reason_in_q=0x%x, interrupt_flag_in_q=%d\n", core_idx, intr_inst_index, intr_reason_in_q, interrupt_flag_in_q);
-        goto INTERRUPT_REMAIN_IN_QUEUE;
-    }
 
 #ifdef SUPPORT_MULTI_INST_INTR
 #ifdef SUPPORT_TIMEOUT_RESOLUTION
@@ -1309,7 +1298,7 @@ long vpu_wait_interrupt(vpudrv_intr_info_t *info)
 #endif
 #ifdef SUPPORT_TIMEOUT_RESOLUTION
     if (ret == -ETIME) {
-        //DPRINTK("[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT timeout = %d \n", info.timeout);
+        //VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT timeout = %d \n", info.timeout);
         atomic_dec(&s_vpu_usage_info.vpu_busy_status[core_idx]);
         return ret;
     }
@@ -1317,12 +1306,12 @@ long vpu_wait_interrupt(vpudrv_intr_info_t *info)
     if (!ret) {
         ret = -ETIME;
         atomic_dec(&s_vpu_usage_info.vpu_busy_status[core_idx]);
-        //DPRINTK("[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT timeout = %d \n", info.timeout);
+        //VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT timeout = %d \n", info.timeout);
         return ret;
     }
 #endif
     if (signal_pending(current)) {
-        printk(KERN_ERR "[VPUDRV] signal_pending failed\n");
+        VLOG(ERR, "[VPUDRV] signal_pending failed\n");
         ret = -ERESTARTSYS;
         atomic_dec(&s_vpu_usage_info.vpu_busy_status[core_idx]);
         return ret;
@@ -1340,12 +1329,11 @@ long vpu_wait_interrupt(vpudrv_intr_info_t *info)
 #endif
 
 #ifdef SUPPORT_MULTI_INST_INTR
-    DPRINTK("[VPUDRV] inst_index(%d), s_interrupt_flag(%d), reason(0x%08lx)\n", intr_inst_index, s_interrupt_flag[core_idx*MAX_NUM_INSTANCE+intr_inst_index], dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index]);
+    VLOG(TRACE, "[VPUDRV] inst_index(%d), s_interrupt_flag(%d), reason(0x%08lx)\n", intr_inst_index, s_interrupt_flag[core_idx*MAX_NUM_INSTANCE+intr_inst_index], dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index]);
 #else
-    DPRINTK("[VPUDRV]    s_interrupt_flag(%d), reason(0x%08lx)\n", s_interrupt_flag[core_idx], dev->interrupt_reason[core_idx]);
+    VLOG(TRACE, "[VPUDRV]    s_interrupt_flag(%d), reason(0x%08lx)\n", s_interrupt_flag[core_idx], dev->interrupt_reason[core_idx]);
 #endif
 
-INTERRUPT_REMAIN_IN_QUEUE:
 #ifdef SUPPORT_MULTI_INST_INTR
     info->intr_reason = dev->interrupt_reason[core_idx*MAX_NUM_INSTANCE+intr_inst_index];
     s_interrupt_flag[core_idx*MAX_NUM_INSTANCE+intr_inst_index] = 0;
@@ -1366,7 +1354,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 
     if (s_vpu_usage_info.vpu_stat_lasttime[core_idx] && (vpu_gettime() - s_vpu_usage_info.vpu_stat_lasttime[core_idx] >= 1000)) {
         if (vpu_show_fps)
-            pr_info("perf stat core:%d, fps:%d \n", core_idx, s_vpu_usage_info.vpu_stat_fps[core_idx]);
+            VLOG(TRACE, "perf stat core:%d, fps:%d \n", core_idx, s_vpu_usage_info.vpu_stat_fps[core_idx]);
         s_vpu_usage_info.vpu_stat_lasttime[core_idx] = vpu_gettime();
         s_vpu_usage_info.vpu_realtime_fps[core_idx] = s_vpu_usage_info.vpu_stat_fps[core_idx];
         s_vpu_usage_info.vpu_stat_fps[core_idx] = 0;
@@ -1374,6 +1362,7 @@ INTERRUPT_REMAIN_IN_QUEUE:
 
     atomic_dec(&s_vpu_usage_info.vpu_busy_status[core_idx]);
 
+    VLOG(TRACE, "[VPUDRV][-]VDI_IOCTL_WAIT_INTERRUPT\n");
     return 0;
 }
 
@@ -1383,7 +1372,7 @@ ssize_t vpu_op_write(const char *buf, size_t len)
     vpu_bit_firmware_info_t *bit_firmware_info;
 
     if (!buf) {
-        printk(KERN_ERR "[VPUDRV] vpu_write buf = NULL error \n");
+        VLOG(ERR, "[VPUDRV] vpu_write buf = NULL error \n");
         return -EFAULT;
     }
 
@@ -1392,12 +1381,12 @@ ssize_t vpu_op_write(const char *buf, size_t len)
         bit_firmware_info = (vpu_bit_firmware_info_t *)buf;
 
         if (bit_firmware_info->size == sizeof(vpu_bit_firmware_info_t)) {
-            DPRINTK("[VPUDRV] vpu_write set bit_firmware_info coreIdx=0x%x, reg_base_offset=0x%x size=0x%x, bit_code[0]=0x%x\n",
+            VLOG(TRACE, "[VPUDRV] vpu_write set bit_firmware_info coreIdx=0x%x, reg_base_offset=0x%x size=0x%x, bit_code[0]=0x%x\n",
             bit_firmware_info->core_idx, (int)bit_firmware_info->reg_base_offset, bit_firmware_info->size, bit_firmware_info->bit_code[0]);
 
             if (bit_firmware_info->core_idx >  get_vpu_core_num(chip_id, video_cap)) {
                 mutex_unlock(&s_vpu_lock);
-                printk(KERN_ERR "[VPUDRV] vpu_write coreIdx[%d] is exceeded than  MAX_NUM_VPU_CORE[%d]\n", bit_firmware_info->core_idx, get_vpu_core_num(chip_id, video_cap));
+                VLOG(ERR, "[VPUDRV] vpu_write coreIdx[%d] is exceeded than  MAX_NUM_VPU_CORE[%d]\n", bit_firmware_info->core_idx, get_vpu_core_num(chip_id, video_cap));
                 return -ENODEV;
             }
             if(s_bit_firmware_info[bit_firmware_info->core_idx].size != bit_firmware_info->size)
@@ -1441,7 +1430,7 @@ int vpu_op_close(int core_idx)
     u32 open_count;
     int i;
     struct file *filp = gfilp[core_idx];
-    DPRINTK("[VPUDRV] +%s\n", __FUNCTION__);
+    VLOG(TRACE, "[VPUDRV][+] core:%d\n", core_idx);
 
     mutex_lock(&s_vpu_lock);
 
@@ -1486,17 +1475,17 @@ int vpu_op_close(int core_idx)
         vfree(gfilp[core_idx]);
 
     gfilp[core_idx]= NULL;
-    DPRINTK("[VPUDRV] -%s\n", __FUNCTION__);
 
     // when all core idle, stop vpuinfo thread
     if (!gfilp[0] && !gfilp[1] && !gfilp[2] && s_vpu_monitor_task) {
         kthread_stop(s_vpu_monitor_task);
         s_vpu_monitor_task = NULL;
-        pr_info("vpu monitor thread released\n");
+        VLOG(INFO, "vpu monitor thread released\n");
     }
 
     mutex_unlock(&s_vpu_lock);
 
+    VLOG(TRACE, "[VPUDRV][-]\n");
     return 0;
 }
 
@@ -1507,8 +1496,9 @@ int vpu_drv_suspend(struct platform_device *pdev, pm_message_t state)
     int core;
     int ret = VPUAPI_RET_SUCCESS;
 
-    DPRINTK("[VPUDRV] vpu_suspend\n");
+    VLOG(TRACE, "[VPUDRV][+] vpu_suspend\n");
 
+    vpu_drv_want_to_suspend = 1;
     for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
         if (s_vpu_drv_context[core].open_count == 0)
             continue;
@@ -1524,6 +1514,7 @@ int vpu_drv_suspend(struct platform_device *pdev, pm_message_t state)
         }
     }
 
+    VLOG(TRACE, "[VPUDRV][-] vpu_suspend\n");
     return 0;
 }
 
@@ -1532,7 +1523,7 @@ int vpu_drv_resume(struct platform_device *pdev)
     int core;
     int ret = VPUAPI_RET_SUCCESS;
 
-    DPRINTK("[VPUDRV] vpu_resume\n");
+    VLOG(TRACE, "[VPUDRV][+] vpu_resume\n");
 
     for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
         if (s_vpu_drv_context[core].open_count == 0) {
@@ -1550,6 +1541,9 @@ int vpu_drv_resume(struct platform_device *pdev)
             return -EAGAIN;
         }
     }
+
+    vpu_drv_want_to_suspend = 0;
+    VLOG(TRACE, "[VPUDRV][-] vpu_resume\n");
 
     return 0;
 }
@@ -1607,7 +1601,7 @@ static void printf_inst_info(void *mem, int size)
             sprintf(temp, "{\"id\" : \"%pU\", \"time\" : %lu, \"status\" : %lu, \"url\" : \"%s\"},\n", s_vpu_inst_info[i].uuid, s_vpu_inst_info[i].time, s_vpu_inst_info[i].status, s_vpu_inst_info[i].url);
             single_list_len = strlen(temp);
             if(single_list_len + total_len > size - 1 ){
-                pr_err("maybe overflow the memory, please check..\n");
+                VLOG(ERR, "maybe overflow the memory, please check..\n");
                 break;
             }
             sprintf(mem + total_len, "%s",temp);
@@ -1659,7 +1653,7 @@ static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_
     // }
     len = strlen(dat) + 1;
     if (size < len) {
-        printk("read buf too small\n");
+        VLOG(TRACE, "read buf too small\n");
         err = -EIO;
         goto info_read_error;
     }
@@ -1704,7 +1698,6 @@ static ssize_t info_write(struct file *file, const char __user *buf, size_t size
     if (err) return -EINVAL;
 
     sscanf(data, "%ld ", &flag);
-    //pr_info("flag : %ld\n", flag);
 
     if(flag >  get_vpu_core_num(chip_id, video_cap)) {
         unsigned long __time;
@@ -1713,7 +1706,7 @@ static ssize_t info_write(struct file *file, const char __user *buf, size_t size
         __url = (unsigned char *)vmalloc(1024);
         __url[0]='\0'; //if in sscanf No URL scanned There may be no '\0' terminator
         if(__url == NULL){
-            pr_info("vmalloc url memory failed\n");
+            VLOG(ERR, "vmalloc url memory failed\n");
             return -ENOMEM;
         }
 
@@ -1802,7 +1795,7 @@ int vpu_drv_platform_init(struct platform_device *pdev)
     struct device_node *target = NULL;
     struct resource rmem;
 #endif
-    DPRINTK("[VPUDRV] begin vpu_init\n");
+    VLOG(INFO, "[VPUDRV][+] vpu_drv_platform_init\n");
 
     // todo: get chip_id
     chip_id = 0x1866;
@@ -1815,7 +1808,7 @@ int vpu_drv_platform_init(struct platform_device *pdev)
 #define MAX_INTERRUPT_QUEUE (16*MAX_NUM_INSTANCE)
         ret = kfifo_alloc(&s_interrupt_pending_q[i], MAX_INTERRUPT_QUEUE*sizeof(u32), GFP_KERNEL);
         if (ret) {
-            DPRINTK("[VPUDRV] kfifo_alloc failed 0x%x\n", res);
+            VLOG(TRACE, "[VPUDRV] kfifo_alloc failed 0x%x\n", res);
         }
     }
     mutex_lock(&s_vpu_lock);
@@ -1831,13 +1824,13 @@ int vpu_drv_platform_init(struct platform_device *pdev)
         if (res) {/* if platform driver is implemented */
             s_vpu_register[i].phys_addr = res->start;
             s_vpu_register[i].size = resource_size(res);
+            VLOG(TRACE, "[VPUDRV] : vpu base address get from platform driver physical base addr==0x%lx, virtual base=0x%lx, core idx = %d\n", s_vpu_register[i].phys_addr , s_vpu_register[i].virt_addr, i);
         } else {
             s_vpu_register[i].phys_addr = s_vpu_reg_phy_base[i];
             s_vpu_register[i].size = VPU_REG_SIZE;
+            VLOG(TRACE, "[VPUDRV] : vpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx, core idx = %d\n", s_vpu_register[i].phys_addr, s_vpu_register[i].virt_addr, i);
         }
         // s_vpu_register[i].virt_addr = (unsigned long)IOREMAP(s_vpu_register[i].phys_addr, s_vpu_register[i].size);
-        DPRINTK("[VPUDRV] : vpu base address get from defined value physical base addr==0x%lx, virtual base=0x%lx, core idx = %d\n", s_vpu_register[i].phys_addr, s_vpu_register[i].virt_addr, i);
-
     }
 
 #ifdef VPU_SUPPORT_ISR
@@ -1848,30 +1841,37 @@ int vpu_drv_platform_init(struct platform_device *pdev)
 
         if (res) {/* if platform driver is implemented */
             s_vpu_irq[i] = res->start;
-            printk(KERN_INFO "[VPUDRV] : vpu irq number get from platform driver %d irq=0x%x\n", i, s_vpu_irq[i]);
+            VLOG(INFO, "[VPUDRV] : vpu irq number get from platform driver %d irq=0x%x\n", i, s_vpu_irq[i]);
         } else {
-            printk(KERN_ERR "[VPUDRV] : vpu irq number get from defined value irq=0x%x\n", s_vpu_irq[i]);
+            VLOG(ERR, "[VPUDRV] : vpu irq number get from defined value irq=0x%x\n", s_vpu_irq[i]);
         }
 
         err = request_irq(s_vpu_irq[i], vpu_irq_handler, IRQF_TRIGGER_NONE, "VPU_CODEC_IRQ", (void *)(&s_vpu_drv_context[i]));
         if (err) {
-            printk(KERN_ERR "[VPUDRV] :    fail to register interrupt handler, err:%d\n", err);
+            VLOG(ERR, "[VPUDRV] :    fail to register interrupt handler, err:%d\n", err);
             goto ERROR_PROVE_DEVICE;
         }
     }
 
 #endif
 
-    DPRINTK("[VPUDRV] success to probe vpu device with non reserved video memory\n");
+    VLOG(TRACE, "[VPUDRV] success to probe vpu device with non reserved video memory\n");
 
     entry = proc_create("bmsophon/vpuinfo", 0666, NULL, &proc_info_operations);
 
 #ifdef VPU_SUPPORT_CLOCK_CONTROL
     ret = vpu_register_clk(pdev);
     if (ret != 0) {
-        DPRINTK("[VPUDRV] vpu register clk error\n");
+        VLOG(TRACE, "[VPUDRV] vpu register clk error\n");
     }
 #endif
+
+    for(i=0; i< get_vpu_core_num(chip_id,video_cap); i++) {
+        core_mutex[i] = osal_mutex_create();
+        disp_mutex[i] = osal_mutex_create();
+        mem_mutex[i] = osal_mutex_create();
+    }
+    VLOG(INFO, "[VPUDRV][-] vpu_drv_platform_init success\n");
     return 0;
 #ifdef VPU_SUPPORT_ISR
 ERROR_PROVE_DEVICE:
@@ -1881,7 +1881,7 @@ ERROR_PROVE_DEVICE:
             iounmap((void *)s_vpu_register[i].virt_addr);
     }
 
-    printk("[VPUDRV]  parse reserved mem end\n");
+    VLOG(ERR, "[VPUDRV][-] vpu_drv_platform_init fail\n");
     return err;
 }
 
@@ -1889,7 +1889,7 @@ ERROR_PROVE_DEVICE:
 int vpu_drv_platform_exit(void)
 {
     int i;
-    DPRINTK("[VPUDRV] vpu_remove\n");
+    VLOG(INFO, "[VPUDRV][+]\n");
 
     mutex_lock(&s_vpu_lock);
     for (i=0; i< get_vpu_core_num(chip_id, video_cap); i++) {
@@ -1923,16 +1923,23 @@ int vpu_drv_platform_exit(void)
     }
 
     /* stop vpu monitor thread */
-    if (s_vpu_monitor_task != NULL){
+    if (s_vpu_monitor_task) {
         kthread_stop(s_vpu_monitor_task);
         s_vpu_monitor_task = NULL;
-        pr_info("vpu monitor thread released\n");
+        VLOG(TRACE, "vpu monitor thread released\n");
     }
 
     if (entry) {
         proc_remove(entry);
         entry = NULL;
     }
+
+    for(i=0; i< get_vpu_core_num(chip_id,video_cap); i++) {
+        osal_mutex_destroy(core_mutex[i]);
+        osal_mutex_destroy(disp_mutex[i]);
+        osal_mutex_destroy(mem_mutex[i]);
+    }
+    VLOG(INFO, "[VPUDRV][-]\n");
     return 0;
 }
 
@@ -1988,6 +1995,11 @@ void vpu_clk_disable(int core_idx)
                 clk_disable_unprepare(vpu_pw_ctl.vd_core1_clk[i]);
         }
     }
+}
+
+int vpu_get_suspend_state(void)
+{
+    return vpu_drv_want_to_suspend;
 }
 #endif
 
@@ -2050,11 +2062,11 @@ static int vpuapi_wait_reset_busy(u32 core)
         }
 
         if (time_after(jiffies, timeout)) {
-            DPRINTK("vpuapi_wait_reset_busy after BUSY timeout");
+            VLOG(TRACE, "vpuapi_wait_reset_busy after BUSY timeout");
             ret = VPUAPI_RET_TIMEOUT;
             break;
         }
-        udelay(0);    // delay more to give idle time to OS;
+        usleep_range(5, 10);   // delay more to give idle time to OS;
     }
 
     return ret;
@@ -2092,11 +2104,11 @@ static int vpuapi_wait_vpu_busy(u32 core, u32 reg)
         }
 
         if (time_after(jiffies, timeout)) {
-            printk(KERN_ERR "%s timeout cmd=0x%x, pc=0x%x\n", __FUNCTION__, cmd, pc);
+            VLOG(ERR, "%s timeout cmd=0x%x, pc=0x%x\n", __FUNCTION__, cmd, pc);
             ret = VPUAPI_RET_TIMEOUT;
             break;
         }
-        udelay(0);    // delay more to give idle time to OS;
+        usleep_range(5, 10);    // delay more to give idle time to OS;
     }
 
     return ret;
@@ -2122,11 +2134,11 @@ static int vpuapi_wait_bus_busy(u32 core, u32 bus_busy_reg_addr)
         }
 
         if (time_after(jiffies, timeout)) {
-            printk(KERN_ERR "%s timeout \n", __FUNCTION__);
+            VLOG(ERR, "%s timeout \n", __FUNCTION__);
             ret = VPUAPI_RET_TIMEOUT;
             break;
         }
-        udelay(0);    // delay more to give idle time to OS;
+        usleep_range(5, 10);    // delay more to give idle time to OS;
     }
 
     return ret;
@@ -2358,7 +2370,7 @@ static int coda_close_instance(u32 core, u32 inst)
 {
     int ret = 0;
 
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
     if (vpu_check_is_decoder(core, inst) == 1) {
         vpuapi_dec_set_stream_end(core, inst);
     }
@@ -2373,10 +2385,10 @@ static int coda_close_instance(u32 core, u32 inst)
         goto HANDLE_ERROR;
     }
 
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 1;
 HANDLE_ERROR:
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 0;
 }
 
@@ -2386,14 +2398,14 @@ static int wave_close_instance(u32 core, u32 inst)
     u32 error_reason = 0;
     unsigned long timeout = jiffies + VPU_DEC_TIMEOUT;
 
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
     if (vpu_check_is_decoder(core, inst) == 1) {
         ret = vpuapi_dec_set_stream_end(core, inst);
         ret = vpuapi_dec_clr_all_disp_flag(core, inst);
     }
     while ((ret = vpuapi_close(core, inst)) == VPUAPI_RET_STILL_RUNNING) {
         ret = vpuapi_get_output_info(core, inst, &error_reason);
-        DPRINTK("[VPUDRV]%s core=%d, inst=%d, ret=%d, error_reason=0x%x\n", __FUNCTION__, core, inst, ret, error_reason);
+        VLOG(TRACE, "[VPUDRV]%s core=%d, inst=%d, ret=%d, error_reason=0x%x\n", __FUNCTION__, core, inst, ret, error_reason);
         if (ret == VPUAPI_RET_SUCCESS) {
             if ((error_reason & 0xf0000000)) {
                 if (vpu_do_sw_reset(core, inst, error_reason) == VPUAPI_RET_TIMEOUT) {
@@ -2410,16 +2422,16 @@ static int wave_close_instance(u32 core, u32 inst)
         msleep(10);    // delay for vpuapi_close
 
         if (time_after(jiffies, timeout)) {
-            printk(KERN_ERR "[VPUDRV]%s vpuapi_close flow timeout ret=%d, inst=%d\n", __FUNCTION__, ret, inst);
+            VLOG(ERR, "[VPUDRV]%s vpuapi_close flow timeout ret=%d, inst=%d\n", __FUNCTION__, ret, inst);
             goto HANDLE_ERROR;
         }
     }
 
 
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 1;
 HANDLE_ERROR:
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 0;
 }
 
@@ -2427,7 +2439,7 @@ static int wave6_close_instance(u32 core, u32 inst)
 {
     int ret = 0;
 
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d\n", __FUNCTION__, core, inst);
     if (vpu_check_is_decoder(core, inst) == 1) {
         vpuapi_dec_set_stream_end(core, inst);
     }
@@ -2442,10 +2454,10 @@ static int wave6_close_instance(u32 core, u32 inst)
         goto HANDLE_ERROR;
     }
 
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 1;
 HANDLE_ERROR:
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     return 0;
 }
 
@@ -2454,7 +2466,7 @@ int vpu_check_is_decoder(u32 core, u32 inst)
     u32 is_decoder;
     unsigned char *codec_inst;
     vpudrv_instance_pool_t *vip = get_instance_pool_handle(core);
-    DPRINTK("[VPUDRV]+%s\n", __FUNCTION__);
+    VLOG(TRACE, "[VPUDRV][+]%s\n", __FUNCTION__);
 
     if (vip == NULL) {
         return 0;
@@ -2464,7 +2476,7 @@ int vpu_check_is_decoder(u32 core, u32 inst)
     codec_inst = codec_inst + (sizeof(u32) * 7); // indicates isDecoder in CodecInst structure in vpuapifunc.h
     memcpy(&is_decoder, codec_inst, 4);
 
-    DPRINTK("[VPUDRV]-%s is_decoder=0x%x\n", __FUNCTION__, is_decoder);
+    VLOG(TRACE, "[VPUDRV][-]%s is_decoder=0x%x\n", __FUNCTION__, is_decoder);
     return (is_decoder == 1)?1:0;
 }
 
@@ -2473,7 +2485,7 @@ int vpu_close_instance_internal(u32 core, u32 inst)
     u32 product_code;
     int success;
     product_code = ReadVpuRegister(VPU_PRODUCT_CODE_REGISTER);
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d, product_code=0x%x\n", __FUNCTION__, core, inst, product_code);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d, product_code=0x%x\n", __FUNCTION__, core, inst, product_code);
 
     if (PRODUCT_CODE_W6_SERIES(product_code)) {
         success = wave6_close_instance(core, inst);
@@ -2482,11 +2494,11 @@ int vpu_close_instance_internal(u32 core, u32 inst)
     } else if(PRODUCT_CODE_CODA_SERIES(product_code)){
         success = coda_close_instance(core, inst);
     } else {
-        printk(KERN_ERR "[VPUDRV]vpu_close_instance Unknown product id : %08x\n", product_code);
+        VLOG(ERR, "[VPUDRV]vpu_close_instance Unknown product id : %08x\n", product_code);
         success = 0;
     }
 
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, success);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, success);
     return success;
 }
 
@@ -2556,10 +2568,10 @@ int vpuapi_sw_reset(u32 core, u32 inst, int reset_mode)
     product_code = ReadVpuRegister(VPU_PRODUCT_CODE_REGISTER);
     if (PRODUCT_CODE_W5_SERIES(product_code)) {
         WriteVpuRegister(W5_VPU_BUSY_STATUS, 0);
-        DPRINTK("[VPUDRV]%s mode=%d\n", __FUNCTION__, reset_mode);
+        VLOG(TRACE, "[VPUDRV][+]%s mode=%d\n", __FUNCTION__, reset_mode);
         if (reset_mode == 0) {
             ret = wave_sleep_wake(core, VPU_SLEEP_MODE);
-            DPRINTK("[VPUDRV]%s Sleep done ret=%d\n", __FUNCTION__, ret);
+            VLOG(TRACE, "[VPUDRV]%s Sleep done ret=%d\n", __FUNCTION__, ret);
             if (ret != VPUAPI_RET_SUCCESS) {
                 return ret;
             }
@@ -2668,7 +2680,7 @@ int vpuapi_sw_reset(u32 core, u32 inst, int reset_mode)
         WriteVpuRegister(W5_SW_UART_STATUS, regSwUartStatus); // enable SW UART.
 #endif
 
-        DPRINTK("[VPUDRV]%s VPU_RESET done RESET_REQ=0x%x\n", __FUNCTION__, val);
+        VLOG(TRACE, "[VPUDRV]%s VPU_RESET done RESET_REQ=0x%x\n", __FUNCTION__, val);
 
         // Step3 : must clear GDI_BUS_CTRL after done SW_RESET
         if (supportBackbone == 1) {
@@ -2689,19 +2701,19 @@ int vpuapi_sw_reset(u32 core, u32 inst, int reset_mode)
             WriteVpuFIORegister(core, W5_GDI_BUS_CTRL, 0x00);
         }
     } else if (PRODUCT_CODE_CODA_SERIES(product_code)) {
-        DPRINTK("[VPUDRV] %s doesn't support swreset for coda \n", __FUNCTION__);
+        VLOG(TRACE, "[VPUDRV] %s doesn't support swreset for coda \n", __FUNCTION__);
         return VPUAPI_RET_INVALID_PARAM;
     } else if (PRODUCT_CODE_W6_SERIES(product_code)) {
-        DPRINTK("[VPUDRV] %s doesn't support swreset for wave6 \n", __FUNCTION__);
+        VLOG(TRACE, "[VPUDRV] %s doesn't support swreset for wave6 \n", __FUNCTION__);
         return VPUAPI_RET_INVALID_PARAM;
     } else {
-        printk(KERN_ERR "[VPUDRV] Unknown product code : %08x\n", product_code);
+        VLOG(ERR, "[VPUDRV] Unknown product code : %08x\n", product_code);
         return -1;
     }
 
     ret = wave_sleep_wake(core, VPU_WAKE_MODE);
 
-    DPRINTK("[VPUDRV]%s Wake done ret = %d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s Wake done ret = %d\n", __FUNCTION__, ret);
 
     return ret;
 }
@@ -2780,12 +2792,12 @@ static int wave_send_query_command(unsigned long core, unsigned long inst, u32 q
     WriteVpuRegister(W5_VPU_BUSY_STATUS, 1);
     ret = wave_issue_command(core, inst, W5_QUERY);
     if (ret != VPUAPI_RET_SUCCESS) {
-        printk(KERN_ERR "[VPUDRV]%s fail1 ret=%d\n", __FUNCTION__, ret);
+        VLOG(ERR, "[VPUDRV]%s fail1 ret=%d\n", __FUNCTION__, ret);
         return ret;
     }
 
     if (ReadVpuRegister(W5_RET_SUCCESS) == 0) {
-        printk(KERN_ERR "[VPUDRV]%s success=%d\n", __FUNCTION__, ReadVpuRegister(W5_RET_SUCCESS));
+        VLOG(ERR, "[VPUDRV]%s success=%d\n", __FUNCTION__, ReadVpuRegister(W5_RET_SUCCESS));
         return VPUAPI_RET_FAILURE;
     }
 
@@ -2801,7 +2813,9 @@ int vpuapi_get_output_info(u32 core, u32 inst, u32 *error_reason)
         goto HANDLE_ERROR;
     }
 
-    DPRINTK("[VPUDRV]+%s success=%d, fail_reason=0x%x, error_reason=0x%x\n", __FUNCTION__, ReadVpuRegister(W5_RET_DEC_DECODING_SUCCESS),ReadVpuRegister(W5_RET_FAIL_REASON), ReadVpuRegister(W5_RET_DEC_ERR_INFO));
+    VLOG(TRACE, "[VPUDRV][+]%s success=%d, fail_reason=0x%x, error_reason=0x%x\n"
+            , __FUNCTION__, ReadVpuRegister(W5_RET_DEC_DECODING_SUCCESS)
+            , ReadVpuRegister(W5_RET_FAIL_REASON), ReadVpuRegister(W5_RET_DEC_ERR_INFO));
     val = ReadVpuRegister(W5_RET_DEC_DECODING_SUCCESS);
     if ((val & 0x01) == 0) {
 #ifdef SUPPORT_SW_UART
@@ -2816,7 +2830,7 @@ int vpuapi_get_output_info(u32 core, u32 inst, u32 *error_reason)
 
 HANDLE_ERROR:
     if (ret != VPUAPI_RET_SUCCESS) {
-        printk(KERN_ERR "[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+        VLOG(ERR, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     }
 
     return ret;
@@ -2841,7 +2855,7 @@ int vpuapi_dec_clr_all_disp_flag(u32 core, u32 inst)
 
 HANDLE_ERROR:
     if (ret != VPUAPI_RET_SUCCESS) {
-        printk(KERN_ERR "[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+        VLOG(ERR, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     }
 
     return ret;
@@ -2856,7 +2870,7 @@ int vpuapi_dec_set_stream_end(u32 core, u32 inst)
 
     if (PRODUCT_CODE_W6_SERIES(product_code)) {
         // nothing to do
-        printk(KERN_INFO "vpuapi_dec_set_stream_end(): Please implement vpuapi_dec_set_stream_end for wave6 decoder.\n");
+        VLOG(TRACE, "vpuapi_dec_set_stream_end(): Please implement vpuapi_dec_set_stream_end for wave6 decoder.\n");
     } else if (PRODUCT_CODE_W5_SERIES(product_code)) {
         WriteVpuRegister(W5_BS_OPTION, (1/*STREAM END*/<<1) | (1/*explictEnd*/));
         // WriteVpuRegister(core, W5_BS_WR_PTR, pDecInfo->streamWrPtr); // keep not to be changed
@@ -2879,7 +2893,7 @@ int vpuapi_dec_set_stream_end(u32 core, u32 inst)
     }
 HANDLE_ERROR:
     if (ret != VPUAPI_RET_SUCCESS) {
-        printk(KERN_ERR "[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+        VLOG(ERR, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
     }
 
     return ret;
@@ -2891,7 +2905,7 @@ int vpuapi_close(u32 core, u32 inst)
     int product_code;
 
     product_code = ReadVpuRegister(VPU_PRODUCT_CODE_REGISTER);
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d, product_code=0x%x\n", __FUNCTION__, core, inst, product_code);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d, product_code=0x%x\n", __FUNCTION__, core, inst, product_code);
 
     if (PRODUCT_CODE_W6_SERIES(product_code)) {
         ret = wave6_issue_command(core, inst, W6_DESTROY_INSTANCE);
@@ -2926,9 +2940,9 @@ int vpuapi_close(u32 core, u32 inst)
 
 HANDLE_ERROR:
     if (ret != VPUAPI_RET_SUCCESS) {
-        printk(KERN_ERR "[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+        VLOG(ERR, "[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
     }
-    DPRINTK("[VPUDRV]-%s ret=%d\n", __FUNCTION__, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s ret=%d\n", __FUNCTION__, ret);
 
     return ret;
 }
@@ -2938,7 +2952,7 @@ int vpu_do_sw_reset(u32 core, u32 inst, u32 error_reason)
     vpudrv_instance_pool_t *vip = get_instance_pool_handle(core);
     int doSwResetInstIdx;
 
-    DPRINTK("[VPUDRV]+%s core=%d, inst=%d, error_reason=0x%x\n", __FUNCTION__, core, inst, error_reason);
+    VLOG(TRACE, "[VPUDRV][+]%s core=%d, inst=%d, error_reason=0x%x\n", __FUNCTION__, core, inst, error_reason);
     if (vip == NULL)
         return VPUAPI_RET_FAILURE;
 
@@ -2947,20 +2961,70 @@ int vpu_do_sw_reset(u32 core, u32 inst, u32 error_reason)
     if (doSwResetInstIdx == inst || (error_reason & 0xf0000000)) {
         ret = vpuapi_sw_reset(core, inst, 0);
         if (ret == VPUAPI_RET_STILL_RUNNING) {
-            DPRINTK("[VPUDRV] %s VPU is still running\n", __FUNCTION__);
+            VLOG(TRACE, "[VPUDRV] %s VPU is still running\n", __FUNCTION__);
             vip->doSwResetInstIdxPlus1 = (inst+1);
         }
         else if (ret == VPUAPI_RET_SUCCESS) {
-            DPRINTK("[VPUDRV] %s success\n", __FUNCTION__);
+            VLOG(TRACE, "[VPUDRV] %s success\n", __FUNCTION__);
             vip->doSwResetInstIdxPlus1 = 0;
         }
         else {
-            DPRINTK("[VPUDRV] %s Fail result=0x%x\n", __FUNCTION__, ret);
+            VLOG(TRACE, "[VPUDRV] %s Fail result=0x%x\n", __FUNCTION__, ret);
             vip->doSwResetInstIdxPlus1 = 0;
         }
     }
-    DPRINTK("[VPUDRV]-%s vip->doSwResetInstIdx=%d, ret=%d\n", __FUNCTION__, vip->doSwResetInstIdxPlus1, ret);
+    VLOG(TRACE, "[VPUDRV][-]%s vip->doSwResetInstIdx=%d, ret=%d\n", __FUNCTION__, vip->doSwResetInstIdxPlus1, ret);
     msleep(10);
     return ret;
 }
 
+int vpu_core_lock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    osal_mutex_lock(core_mutex[core_idx]);
+    return 0;
+}
+
+void vpu_core_unlock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    osal_mutex_unlock(core_mutex[core_idx]);
+}
+
+int vpu_disp_lock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    osal_mutex_lock(disp_mutex[core_idx]);
+    return 0;
+}
+
+void vpu_disp_unlock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    osal_mutex_unlock(disp_mutex[core_idx]);
+}
+
+int vpu_mem_lock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    osal_mutex_lock(mem_mutex[core_idx]);
+    return 0;
+}
+
+void vpu_mem_unlock(unsigned long core_idx)
+{
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    osal_mutex_unlock(mem_mutex[core_idx]);
+}

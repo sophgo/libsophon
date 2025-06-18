@@ -513,7 +513,7 @@ void bm1684x_start_a53lite(struct bm_device_info *bmdi)
 int bm1684_l2_sram_init(struct bm_device_info *bmdi)
 {
 	bmdev_memcpy_s2d_internal(bmdi, L2_SRAM_START_ADDR + L2_SRAM_TPU_TABLE_OFFSET,
-			l2_sram_table, sizeof(l2_sram_table));
+			l2_sram_table, sizeof(l2_sram_table), false);
 	return 0;
 }
 

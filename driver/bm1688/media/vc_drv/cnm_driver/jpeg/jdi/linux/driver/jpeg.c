@@ -120,7 +120,7 @@ typedef struct jpudrv_instance_list_t {
 
 
 typedef struct jpudrv_instance_pool_t {
-    unsigned char codecInstPool[MAX_JPEG_NUM_INSTANCE][MAX_INST_HANDLE_SIZE];
+    unsigned char codecInstPool[MAX_JPEG_NUM_INSTANCE][MAX_JPEG_INST_HANDLE_SIZE];
 } jpudrv_instance_pool_t;
 
 
@@ -314,7 +314,7 @@ static int jpu_alloc_dma_buffer(jpudrv_buffer_t *jb)
         JLOG(ERR, "[JPUDRV] Physical memory allocation error size=%lu\n", jb->size);
         return -1;
     }
-    jb->base = jb->virt_addr;
+    jb->base = jb->phys_addr;
 
 #else
     jb->base = (unsigned long)dma_alloc_coherent(jpu_dev, PAGE_ALIGN(jb->size), (dma_addr_t *) (&jb->phys_addr), GFP_DMA | GFP_KERNEL);

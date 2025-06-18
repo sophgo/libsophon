@@ -151,8 +151,7 @@ void venc_rc_open(stRcInfo *pRcInfo, EncOpenParam *pOpenParam)
     VLOG(INFO, "resolution wxh = %dx%d\n", pOpenParam->picWidth, pOpenParam->picHeight);
     VLOG(INFO, "rcEnable = %d\n", pRcInfo->rcEnable);
     VLOG(INFO, "rc mode = %d\n", pRcInfo->rcMode);
-    VLOG(INFO, "targetBitrate = %dk\n", pRcInfo->targetBitrate);
-    VLOG(INFO, "frame rate = %d\n", pOpenParam->frameRateInfo);
+    VLOG(INFO, "targetBitrate = %dk, frame rate = %d\n", pRcInfo->targetBitrate, pOpenParam->frameRateInfo);
     VLOG(INFO, "picAvgBit = %d\n", pRcInfo->picAvgBit);
     VLOG(INFO, "convergStateBufThr = %d\n", pRcInfo->convergStateBufThr);
     if (pRcInfo->rcMode == RC_MODE_AVBR) {
@@ -174,8 +173,6 @@ void venc_rc_open(stRcInfo *pRcInfo, EncOpenParam *pOpenParam)
 
     VLOG(INFO, "maxIprop = %d, gopSize = %d, maxIPicBit = %d\n",
             pOpenParam->maxIprop, param->intraPeriod, pRcInfo->maxIPicBit);
-
-    VLOG(INFO, "RcEn = %d\n", pRcInfo->RcEn);
 }
 
 void venc_rc_update_frame_skip_setting(stRcInfo *pRcInfo, int frmLostOpen, int encFrmGaps, int frmLostBpsThr)

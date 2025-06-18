@@ -709,6 +709,23 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 	} else {
 		cir_cfg.mode = SCL_CIR_DISABLE;
 	}
+
+	/*edge circle*/
+	if (chn_cfg->circle_cfg.cfg0.b.enable) {
+		cir_bypass = false;
+		cir_cfg.mode = chn_cfg->circle_cfg.cfg0.b.mode;
+		cir_cfg.rect.x = 0;
+		cir_cfg.rect.y = 0;
+		cir_cfg.rect.w = chn_cfg->dst_rect.width;
+		cir_cfg.rect.h = chn_cfg->dst_rect.height;
+		cir_cfg.line_width = chn_cfg->circle_cfg.cfg0.b.line_width;
+		cir_cfg.center.x = chn_cfg->circle_cfg.cfg1.b.center_x;
+		cir_cfg.center.y = chn_cfg->circle_cfg.cfg1.b.center_y;
+		cir_cfg.radius = chn_cfg->circle_cfg.radius;
+		cir_cfg.color_r = chn_cfg->circle_cfg.cfg0.b.value_r;
+		cir_cfg.color_g = chn_cfg->circle_cfg.cfg0.b.value_g;
+		cir_cfg.color_b = chn_cfg->circle_cfg.cfg0.b.value_b;
+	}
 	sclr_cir_set_cfg(dev_idx, &cir_cfg);
 
 	/*border*/

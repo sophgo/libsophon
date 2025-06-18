@@ -234,35 +234,6 @@ int drv_venc_get_search_window(venc_chn VeChn, venc_search_window_s *pstVencSear
 
 int drv_venc_set_extern_buf(venc_chn VeChn, const venc_extern_buf_s *pstExternBuf);
 
-#define DRV_VENC_MASK_ERR		0x1
-#define DRV_VENC_MASK_WARN		0x2
-#define DRV_VENC_MASK_INFO		0x3
-#define DRV_VENC_MASK_DBG		0x4
-
-extern unsigned int VENC_LOG_LV;
-
-#define DRV_VENC_ERR(msg, ...)		\
-    do { \
-        if (VENC_LOG_LV >= DRV_VENC_MASK_ERR) \
-        pr_err("[ERR] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
-    } while (0)
-#define DRV_VENC_WARN(msg, ...)		\
-    do { \
-        if (VENC_LOG_LV >= DRV_VENC_MASK_WARN) \
-        pr_warn("[WARN] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
-    } while (0)
-#define DRV_VENC_DBG(msg, ...)	\
-    do { \
-        if (VENC_LOG_LV >= DRV_VENC_MASK_DBG) \
-        pr_notice("[CFG] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
-    } while (0)
-#define DRV_VENC_INFO(msg, ...)		\
-    do { \
-        if (VENC_LOG_LV >= DRV_VENC_MASK_INFO) \
-        pr_info("[INFO] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
-    } while (0)
-
-
 #define DRV_H264_PROFILE_DEFAULT H264E_PROFILE_HIGH
 #define DRV_H264_PROFILE_MIN 0
 #define DRV_H264_PROFILE_MAX (H264E_PROFILE_BUTT - 1)

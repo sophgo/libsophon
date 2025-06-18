@@ -145,6 +145,12 @@ void bmdnn_func_1688::fill_api_info(const tpu_net_info_t &net_info,
     for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
       BMRT_LOG(DEBUG, "core[%d], tiu_cmd_addr=0x%llx, gdma_cmd_addr=0x%llx", core_idx,
                net_info.core_commands[core_idx].bdc_cmd_addr, net_info.core_commands[core_idx].gdma_cmd_addr);
+      const auto &cmd_info = net_info.core_commands[core_idx].cmd_info;
+      for(u32 g=0; g<cmd_info.size(); g++){
+        BMRT_LOG(DEBUG, "  --> group[%d], tiu_cmd_num=%d, tiu_cmd_size=%d, gdma_cmd_num=%d, gdma_cmd_size=%d", g,
+                 cmd_info[g].bdc_cmd_num, cmd_info[g].bdc_cmd_byte_size,
+                 cmd_info[g].gdma_cmd_num, cmd_info[g].gdma_cmd_byte_size);
+      }
     }
     BMRT_LOG(DEBUG, "coeff_addr=0x%llx, neuron_addr=0x%llx , base_message_id=%d", net_info.coeff_start_addr, net_info.neuron_start_addr[0], base_message_id);
   });

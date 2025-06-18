@@ -103,8 +103,8 @@ int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppad
 int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size);
 int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
-int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size);
-int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size);
+int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size, bool intr);
+int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size, bool intr);
 int bmdev_memcpy_s2d(struct bm_device_info *bmdi,  struct file *file,
 		uint64_t dst, void __user *src, u32 size, bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 int bmdev_dual_cdma_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
@@ -112,4 +112,5 @@ int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u6
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 int bmdev_dual_cdma_memcpy_for_test(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 
+int bmdrv_compare_fw_stage(struct bm_device_info *bmdi, u64 src, u32 size, const unsigned int *firmware);
 #endif

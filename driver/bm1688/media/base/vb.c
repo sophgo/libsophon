@@ -687,8 +687,8 @@ int32_t vb_release_block(vb_blk blk)
 		if (vb->poolid == VB_STATIC_POOLID) {
 			int32_t ret = 0;
 
-			ret = base_ion_free(vb->phy_addr);
 			_vb_hash_del(vb->phy_addr);
+			ret = base_ion_free(vb->phy_addr);
 			vfree(vb);
 			return ret;
 		}

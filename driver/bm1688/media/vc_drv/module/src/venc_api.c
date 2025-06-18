@@ -14,19 +14,16 @@
 #include "vpuapi.h"
 #include "debug.h"
 #include "chagall.h"
-#include "h265_interface.h"
-#include "linux/mutex.h"
-#include "module_common.h"
-#include "base_ctx.h"
-#include "vb.h"
-#include "venc_help.h"
-#include "venc_rc.h"
 #include "datastructure.h"
 
-extern vb_blk vb_phys_addr2handle(uint64_t u64PhyAddr);
+#include "base_ctx.h"
+#include "vb.h"
+#include "h265_interface.h"
+#include "venc_help.h"
+#include "venc_rc.h"
+
 extern wait_queue_head_t tVencWaitQueue[];
 static DEFINE_MUTEX(__venc_init_mutex);
-extern int32_t base_ion_cache_flush(uint64_t addr_p, void *addr_v, uint32_t u32Len);
 extern int vc_memcpy_c2c(uint64_t dst, uint64_t src, uint32_t size);
 
 #define MAX_SRC_BUFFER_NUM 32
@@ -204,7 +201,7 @@ static int get_avc_profile(int profile)
     return vpu_avc_profile;
 }
 
-Int32 set_open_param(EncOpenParam *pst_open_param, InitEncConfig *pst_init_cfg)
+void set_open_param(EncOpenParam *pst_open_param, InitEncConfig *pst_init_cfg)
 {
     EncWave5Param *param = &pst_open_param->EncStdParam.waveParam;
     int frameRateDiv = 0, frameRateRes = 0;
@@ -465,36 +462,6 @@ Int32 set_open_param(EncOpenParam *pst_open_param, InitEncConfig *pst_init_cfg)
     param->mbLevelRcEnable = 1;
     param->entropyCodingMode = 1;
     param->disableDeblk = 0;
-
-    return 0;
-}
-
-int set_vb_flag(PhysicalAddress addr)
-{
-    struct vb_s *vb;
-
-    vb = (struct vb_s *)vb_phys_addr2handle(addr);
-    if (vb == (struct vb_s *)VB_INVALID_HANDLE)
-        return 0;
-
-    atomic_fetch_add(1, &vb->usr_cnt);
-    atomic_long_fetch_or(BIT(ID_VENC), &vb->mod_ids);
-
-    return 0;
-}
-
-int clr_vb_flag(PhysicalAddress addr)
-{
-    struct vb_s *vb;
-
-    vb = (struct vb_s *)vb_phys_addr2handle(addr);
-    if (vb == (struct vb_s *)VB_INVALID_HANDLE)
-        return 0;
-
-    atomic_long_fetch_and(~BIT(ID_VENC), &vb->mod_ids);
-    vb_release_block((vb_blk)vb);
-
-    return 0;
 }
 
 static int get_frame_idx(void * handle, PhysicalAddress addr)
@@ -524,9 +491,11 @@ static void release_frame_idx(void * handle, int srcIdx)
 
     // sanity check
     if (!pst_handle || srcIdx >= MAX_SRC_BUFFER_NUM) {
+        VLOG(ERR, "invalid param, handle:%p srcIdx:%d\n", pst_handle, srcIdx);
         return;
     }
 
+    VLOG(INFO, "release srcIdx:%d\n", srcIdx);
     pst_handle->input_frame[srcIdx].buffer_addr = 0;
 }
 
@@ -628,7 +597,7 @@ static int alloc_bitstream_buf(void *handle)
         for (i = 0; i < pst_handle->min_src_frame_count; i++) {
             ret = vdi_allocate_dma_memory(pst_handle->core_idx, &vb_buffer, ENC_BS, 0);
             if (ret != RETCODE_SUCCESS) {
-                VLOG(ERR, "<%s:%d> Failed to alloc bitstream_buffer\n", __FUNCTION__, __LINE__);
+                VLOG(ERR, "Failed to alloc bitstream_buffer, size:%d\n", vb_buffer.size);
                 return -1;
             }
             pst_handle->bitstream_buffer[i] = vb_buffer.phys_addr;
@@ -1164,7 +1133,7 @@ static int thread_wait_interrupt(void *param)
             if (ret & (1 << INT_WAVE5_ENC_SET_PARAM)) {
                 ret = VPU_EncCompleteSeqInit(pst_handle->handle, &init_info);
                 if (ret == RETCODE_VPU_RESPONSE_TIMEOUT) {
-                    VLOG(ERR, "<%s:%d> Failed to VPU_EncCompleteSeqInit()\n", __FUNCTION__, __LINE__);
+                    VLOG(ERR, "Failed to VPU_EncCompleteSeqInit()\n");
                     break;
                 }
             }
@@ -1195,7 +1164,7 @@ void internal_venc_init(void)
     mutex_lock(&__venc_init_mutex);
     if (VPU_GetProductId(0) != PRODUCT_ID_521) {
         mutex_unlock(&__venc_init_mutex);
-        VLOG(ERR, "<%s:%d> Failed to VPU_GetProductId()\n", __FUNCTION__, __LINE__);
+        VLOG(ERR, "Failed to VPU_GetProductId()\n");
         return;
     }
     mutex_unlock(&__venc_init_mutex);
@@ -1217,7 +1186,7 @@ reinit:
         reinit_count++;
         goto reinit;
     } else if ((ret != RETCODE_SUCCESS) && (ret != RETCODE_CALLED_BEFORE)) {
-        VLOG(ERR, "<%s:%d> Failed to VPU_InitWithBitcode()\n", __func__, __LINE__);
+        VLOG(ERR, "Failed to VPU_InitWithBitcode()\n");
         return NULL;
     }
 
@@ -1234,8 +1203,8 @@ reinit:
     init_completion(&pst_handle->semEncDoneCmd);
     pst_handle->virtualIPeriod = pInitEncCfg->virtualIPeriod;
 
-    VLOG(INFO, "<%s:%d> cmd_queue_depth:%d, isolate_send:%d, virtualIPeriod:%d\n"
-        , __func__, __LINE__, pst_handle->cmd_queue_depth, pst_handle->is_isolate_send
+    VLOG(INFO, "cmd_queue_depth:%d, isolate_send:%d, virtualIPeriod:%d\n"
+        , pst_handle->cmd_queue_depth, pst_handle->is_isolate_send
         , pst_handle->virtualIPeriod);
     // for insertUserData
     pst_handle->enc_param.userDataBufSize = pInitEncCfg->userDataMaxLength;
@@ -1392,13 +1361,14 @@ int build_encode_header(void *handle, EncHeaderParam *pst_enc_param, BOOL is_wai
     if (is_wait) {
         do {
             if (retry_times >= MAX_RETRY_TIMES) {
+                VLOG(ERR, "Failed retry max times for wait interrupt\n");
+                ret = RETCODE_FAILURE;
                 break;
             }
             retry_times++;
             int_reason = VPU_WaitInterruptEx(pst_handle->handle, 100*1000);
             if (int_reason < INTERRUPT_TIMEOUT_VALUE) {
-                VLOG(ERR, "<%s:%d> Failed to VPU_WaitInterruptEx int_reason(%d)\n"
-                    , __FUNCTION__, __LINE__, int_reason);
+                VLOG(ERR, "Failed to VPU_WaitInterruptEx int_reason(%d)\n", int_reason);
                 ret = RETCODE_FAILURE;
                 break;
             }
@@ -1512,7 +1482,7 @@ static int venc_build_enc_param(ENCODER_HANDLE *pst_handle, EncOnePicCfg *pPicCf
             src_idx = get_frame_idx(pst_handle, pst_fb->bufY);
             if  (src_idx < 0) {
                 Queue_Enqueue(pst_handle->free_stream_buffer, addr);
-                VLOG(ERR, "Failed get_frame_idx idx:%d, bufY:0x%lx\n", src_idx, pst_fb->bufY);
+                VLOG(ERR, "Failed get_frame_idx srcIdx:%d, bufY:0x%lx\n", src_idx, pst_fb->bufY);
                 return RETCODE_FAILURE;
             }
         } else {
@@ -1656,8 +1626,6 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
         is_header_update = TRUE;
     }
 
-    VLOG(INFO, "chn:%d frameidx:%d idr:%d header_update:%d\n"
-        , pst_handle->channel_index, pst_handle->frame_idx, enc_param.is_idr_frame, is_header_update);
     if (enc_param.is_idr_frame && is_header_update && !pst_handle->header_encoded) {
         osal_memset(&header_vb_buffer, 0, sizeof(vpu_buffer_t));
         header_vb_buffer.size = VENC_HEADER_BUF_SIZE;
@@ -1692,6 +1660,10 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
         VLOG(ERR, "Failed venc_build_enc_param(ret:%d)\n", ret);
         return ret;
     }
+
+    VLOG(INFO, "chn:%d frameidx:%d idr:%d header_update:%d, srcidx:%d, srcEnd:%d\n"
+        , pst_handle->channel_index, pst_handle->frame_idx, enc_param.is_idr_frame
+        , is_header_update, enc_param.srcIdx, enc_param.srcEndFlag);
 
     ret = VPU_EncStartOneFrame(pst_handle->handle, &enc_param);
     if (ret == RETCODE_QUEUEING_FAILURE) {
@@ -1745,7 +1717,7 @@ static int venc_get_encoded_info(void *handle, int s32MilliSec)
             if (int_reason & (1 << INT_WAVE5_ENC_SET_PARAM)) {
                 ret = VPU_EncCompleteSeqInit(pst_handle->handle, &init_info);
                 if (ret == RETCODE_VPU_RESPONSE_TIMEOUT) {
-                    VLOG(ERR, "<%s:%d> Failed to VPU_EncCompleteSeqInit()\n", __FUNCTION__, __LINE__);
+                    VLOG(ERR, "Failed to VPU_EncCompleteSeqInit()\n");
                     return -1;
                 }
                 continue;
@@ -1775,6 +1747,7 @@ int internal_venc_get_stream(void *handle, VEncStreamInfo *pStreamInfo, int s32M
     ENCODER_HANDLE *pst_handle = handle;
     int ret = RETCODE_SUCCESS;
     unsigned long timeout = 0;
+    Uint32 packs_cnt = 0;
 
     if (!pst_handle->is_bind_mode || pst_handle->is_isolate_send) {
         if (s32MilliSec > 0) {
@@ -1806,9 +1779,12 @@ int internal_venc_get_stream(void *handle, VEncStreamInfo *pStreamInfo, int s32M
             return ret;
         }
     }
-    VLOG(INFO, "chn:%d iso:%d, ret:%d\n"
-            , pst_handle->channel_index, pst_handle->is_isolate_send, ret);
-    if (Queue_Get_Cnt(pst_handle->stream_packs) == 0) {
+
+    packs_cnt = Queue_Get_Cnt(pst_handle->stream_packs);
+    VLOG(INFO, "chn:%d isolate_send:%d, ret:%d, packs_cnt:%d\n"
+            , pst_handle->channel_index, pst_handle->is_isolate_send, ret, packs_cnt);
+
+    if (packs_cnt == 0) {
         if (pst_handle->ouput_end == 1) {
             return 0;
         }
@@ -1961,8 +1937,7 @@ int venc_op_start(void *handle, void *arg)
     } while (ret == RETCODE_QUEUEING_FAILURE);
 
     if (ret != RETCODE_SUCCESS) {
-        VLOG(ERR, "<%s:%d> Failed to VPU_EncIssueSeqInit() ret(%d)\n"
-            , __FUNCTION__, __LINE__, ret);
+        VLOG(ERR, "Failed to VPU_EncIssueSeqInit() ret(%d)\n", ret);
         return ret;
     }
 
@@ -1971,8 +1946,7 @@ int venc_op_start(void *handle, void *arg)
     } while (int_reason == INTERRUPT_TIMEOUT_VALUE);
 
     if (int_reason < 0) {
-        VLOG(ERR, "<%s:%d> Failed to VPU_WaitInterruptEx int_reason(%d)\n"
-            , __FUNCTION__, __LINE__, int_reason);
+        VLOG(ERR, "Failed to VPU_WaitInterruptEx int_reason(%d)\n", int_reason);
         goto ERR_VPU_ENC_OPEN;
     }
 
@@ -1982,7 +1956,7 @@ int venc_op_start(void *handle, void *arg)
     if (int_reason & (1 << INT_WAVE5_ENC_SET_PARAM)) {
         ret = VPU_EncCompleteSeqInit(pst_handle->handle, &init_info);
         if (ret == RETCODE_VPU_RESPONSE_TIMEOUT) {
-            VLOG(ERR, "<%s:%d> Failed to VPU_EncCompleteSeqInit()\n", __FUNCTION__, __LINE__);
+            VLOG(ERR, "Failed to VPU_EncCompleteSeqInit()\n");
             goto ERR_VPU_ENC_OPEN;
         }
 
@@ -1995,7 +1969,7 @@ int venc_op_start(void *handle, void *arg)
 
         ret = alloc_framebuffer(pst_handle);
         if ( ret != RETCODE_SUCCESS) {
-            VLOG(ERR, "<%s:%d> Failed to alloc_framebuffer\n", __FUNCTION__, __LINE__);
+            VLOG(ERR, "Failed to alloc_framebuffer\n");
             goto ERR_VPU_ENC_OPEN;
         }
 
@@ -2179,7 +2153,7 @@ int venc_op_set_roi(void *handle, void *arg)
         }
     }
     if (index < 0 || index > MAX_NUM_ROI) {
-        VLOG(ERR, "<%s:%d> roi index is invalid\n", __FUNCTION__, __LINE__);
+        VLOG(ERR, "roi index:%d is invalid\n", index);
         return -1;
     }
     memcpy(&pst_handle->roi_rect[index],roiParam,sizeof(RoiParam));
@@ -2195,7 +2169,7 @@ int venc_op_get_roi(void *handle, void *arg)
     const RoiParam *pRoiParam = NULL;
 
     if (index > MAX_NUM_ROI || index < 0) {
-        VLOG(ERR, "<%s:%d> roi index is invalid\n", __FUNCTION__, __LINE__);
+        VLOG(ERR, "roi index:%d is invalid\n", index);
         return -1;
     }
 

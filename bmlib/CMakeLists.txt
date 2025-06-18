@@ -92,6 +92,10 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
         FILES_MATCHING
             PATTERN "*.hpp"
             PATTERN "*.h")
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/tpu_kernel_module/libbm1688_kernel_module.so
+        DESTINATION lib/tpu_module/
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        COMPONENT libsophon)
 
 if(BUILD_STATIC_LIB)
     set(STATIC_LIB_NAME ${TARGET_NAME}-static)

@@ -17,6 +17,21 @@ char *base_get_chip_id(struct bm_device_info *bmdi)
 	return ret;
 }
 
+int base_get_core_num(struct bm_device_info *bmdi)
+{
+	uint32_t val = 0;
+	int ret = 0;
+
+	val	= (otp_reg_read(bmdi, 0x00002014) & 0x7);
+	if (val == 0 || val == 7) {
+		ret = 2;
+	} else {
+		ret = 1;
+	}
+
+	return ret;
+}
+
 #ifndef SOC_MODE
 static unsigned long int base64_compute_dstlen(uint64_t len, bool enc)
 {

@@ -18,11 +18,11 @@ typedef struct _vdec_dbg_ {
     char dbgDir[DRV_VDEC_STR_LEN];
 } vdec_dbg;
 
-extern uint32_t VDEC_LOG_LV;
+extern uint32_t vdec_log_lv;
 
 #define DRV_VDEC_FUNC_COND(FLAG, FUNC)			\
     do {                                    \
-        if (VDEC_LOG_LV & (FLAG)) {    \
+        if (vdec_log_lv & (FLAG)) {    \
             FUNC;                            \
         }                                    \
     } while (0)
@@ -33,42 +33,42 @@ extern uint32_t VDEC_LOG_LV;
 
 #define DRV_VDEC_ERR(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_ERR) \
+        if (vdec_log_lv & DRV_VDEC_MASK_ERR) \
         pr_err("[ERR] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_WARN(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_WARN) \
+        if (vdec_log_lv & DRV_VDEC_MASK_WARN) \
         pr_warn("[WARN] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_DISP(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_DISP) \
+        if (vdec_log_lv & DRV_VDEC_MASK_DISP) \
         pr_notice("[DISP] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_INFO(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_INFO) \
+        if (vdec_log_lv & DRV_VDEC_MASK_INFO) \
         pr_info("[INFO] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_MEM(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_MEM) \
+        if (vdec_log_lv & DRV_VDEC_MASK_MEM) \
         pr_info("[MEM] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_API(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_API) \
+        if (vdec_log_lv & DRV_VDEC_MASK_API) \
         pr_info("[API] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_TRACE(msg, ...)	\
     do {    \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_TRACE) \
+        if (vdec_log_lv & DRV_VDEC_MASK_TRACE) \
         pr_debug("[TRACE] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 #define DRV_VDEC_PERF(msg, ...)		\
     do { \
-        if (VDEC_LOG_LV & DRV_VDEC_MASK_PERF) \
+        if (vdec_log_lv & DRV_VDEC_MASK_PERF) \
         pr_notice("[PERF] %s = %d, "msg, __func__, __LINE__, ## __VA_ARGS__); \
     } while (0)
 

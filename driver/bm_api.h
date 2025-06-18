@@ -157,4 +157,5 @@ int bmdrv_device_sync_api(struct bm_device_info *bmdi);
 void bmdrv_api_clear_lib(struct bm_device_info *bmdi, struct file *file);
 void bmdrv_clear_lib_list(struct bm_device_info *bmdi);
 void bmdrv_clear_func_list(struct bm_device_info *bmdi);
+void print_dny_lib_info(struct bm_device_info *bmdi);
 #endif

@@ -17,7 +17,7 @@
 #define MAX_NUM_JPU_CORE                4
 #define MAX_JPEG_NUM_INSTANCE           512
 #define MAX_NUM_REGISTER_SET            4 //fixed value(do not modified)
-#define MAX_INST_HANDLE_SIZE            48
+#define MAX_JPEG_INST_HANDLE_SIZE       64
 
 #define JPU_FRAME_ENDIAN                JDI_LITTLE_ENDIAN
 #define JPU_STREAM_ENDIAN               JDI_LITTLE_ENDIAN

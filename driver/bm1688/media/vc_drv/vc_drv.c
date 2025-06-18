@@ -7,8 +7,6 @@
 #include "h265_interface.h"
 #include "jpuconfig.h"
 
-unsigned int VENC_LOG_LV = 1;
-
 static const struct of_device_id cvi_vc_drv_match_table[] = {
     { .compatible = "cvitek,cvi_vc_drv" },
     {},
@@ -18,17 +16,12 @@ MODULE_DEVICE_TABLE(of, cvi_vc_drv_match_table);
 wait_queue_head_t tVencWaitQueue[VENC_MAX_CHN_NUM];
 static DEFINE_SPINLOCK(vc_spinlock);
 
-
-module_param(VENC_LOG_LV, int, 0644);
-
 uint32_t MaxVencChnNum = VENC_MAX_CHN_NUM;
 module_param(MaxVencChnNum, uint, 0644);
 #ifdef ENABLE_DEC
 uint32_t MaxVdecChnNum = VDEC_MAX_CHN_NUM;
 module_param(MaxVdecChnNum, uint, 0644);
 #endif
-bool RcEn = 1;
-module_param(RcEn, bool, 0644);
 
 struct drv_vc_chn_info
 {
@@ -2186,6 +2179,7 @@ static int vc_drv_plat_probe(struct platform_device *pdev)
     vdec_proc_init(&pdev->dev);
     codecinst_proc_init(&pdev->dev);
 
+    pr_info("%s ok\n", __FUNCTION__);
     return ret;
 }
 
@@ -2205,6 +2199,7 @@ static int vc_drv_plat_remove(struct platform_device *pdev)
     vdec_proc_deinit();
     codecinst_proc_deinit();
 
+    pr_info("%s ok\n", __FUNCTION__);
     return ret;
 }
 
@@ -2260,7 +2255,6 @@ static int __init _vc_drv_init(void)
         jpu_clk_disable(core);
 #endif
     }
-
     pr_info("_vc_drv_init result = 0x%x\n", ret);
 
     return ret;

@@ -22,8 +22,8 @@
 vdec_dbg vdecDbg;
 vdec_context *vdec_handle;
 
-uint32_t VDEC_LOG_LV = DRV_VDEC_MASK_ERR;
-module_param(VDEC_LOG_LV, int, 0644);
+uint32_t vdec_log_lv = DRV_VDEC_MASK_ERR;
+module_param(vdec_log_lv, int, 0644);
 extern wait_queue_head_t tVdecWaitQueue[];
 
 static DEFINE_MUTEX(g_vdec_handle_mutex);
@@ -351,7 +351,7 @@ int vdec_drv_init(void)
 
     s32Ret = vdec_init_handle();
     if (s32Ret != 0) {
-        DRV_VENC_ERR("venc_context\n");
+        DRV_VDEC_ERR("vdec_context\n");
         s32Ret = DRV_ERR_VDEC_NOMEM;
     }
 

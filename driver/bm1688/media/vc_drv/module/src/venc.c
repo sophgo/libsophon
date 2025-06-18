@@ -11,12 +11,11 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <uapi/linux/sched/types.h>
+#include <linux/module.h>
 
 #include "vc_drv_proc.h"
 #include "venc_rc.h"
 
-
-venc_context *handle;
 
 extern wait_queue_head_t tVencWaitQueue[];
 
@@ -30,10 +29,14 @@ extern vb_blk vb_physAddr2Handle(uint64_t u64PhyAddr);
 extern int32_t vb_release_block(vb_blk blk);
 #endif
 
+unsigned int venc_log_lv = 1;
+module_param(venc_log_lv, int, 0644);
+
+venc_context *handle;
+venc_vb_ctx vencVbCtx[VENC_MAX_CHN_NUM];
+
 static int _drv_process_result(venc_chn_context *pChnHandle,
                         venc_stream_s *pstStream);
-
-venc_vb_ctx	vencVbCtx[VENC_MAX_CHN_NUM];
 
 static inline unsigned int _drv_get_num_packs(payload_type_e enType)
 {

@@ -614,6 +614,7 @@ bm_status_t bm_create_ctx(bm_context_t *ctx, int devid)
 	}
 	ctx->dev_fd = fd;
 	ctx->vpp_fd.dev_fd = -1;
+	ctx->g_init_basic_func_flag = 0;
 	// fd = open("/dev/bm-vpp", O_RDWR);
 	// ctx->vpp_fd.dev_fd = fd;
 	// if (fd > 0) {

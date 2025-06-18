@@ -295,6 +295,59 @@ class bmdnn_func_1684x : public bmdnn_func {
     u32 MAX_API_MSG_SIZE;
 };
 
+class bmdnn_func_sgtpuv8 : public bmdnn_func {
+  public:
+
+    bmdnn_func_sgtpuv8() {
+        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
+        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
+        BM_API_ID_SET_PROFILE_ENABLE  = 986;
+        BM_API_ID_GET_PROFILE_DATA    = 987;
+        MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
+    };
+    virtual bm_status_t _bmdnn_multi_fullnet_(
+        bm_handle_t handle,
+        const tpu_net_info_t &net_info);
+    virtual void fill_api_info(
+        const tpu_net_info_t &net_info,
+        api_info_t &api_info);
+
+    bm_status_t _bmdnn_dynamic_fullnet_(
+        bm_handle_t handle,
+        unsigned long long compiled_ir_global_addr,
+        unsigned int compiled_ir_length, //unit dword
+        unsigned int input_num,
+        const unsigned long long *input_addrs,
+        const int * const * input_shapes,
+        const int * input_elem_nums,
+        const int * input_dtype_and_dims,
+        unsigned int output_num,
+        const unsigned long long *output_addrs,
+        unsigned long long apd_ctx_start,
+        std::vector<unsigned long long> apd_ctx_mem_borders,
+        std::vector<unsigned long long> apd_ctx_mem_offset,
+        unsigned long long apd_coeff_mem_offset,
+        unsigned long long apd_io_start,
+        unsigned long long apd_io_mem_offset,
+        bool get_output_shape,
+        unsigned long long output_shape_global_addr,
+        const std::vector<int32_t> &core_list);
+
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable);
+    bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         unsigned long long output_global_addr,
+                                         unsigned int output_max_size,
+                                         unsigned int offset,
+                                         unsigned int data_category //0: profile time records, 1: extra data
+                                         );
+  private:
+    u32 BM_API_ID_MULTI_FULLNET;
+    u32 BM_API_ID_DYNAMIC_FULLNET;
+    u32 BM_API_ID_SET_PROFILE_ENABLE;
+    u32 BM_API_ID_GET_PROFILE_DATA;
+    u32 MAX_API_MSG_SIZE;
+};
+
 class bmdnn_func_1688 : public bmdnn_func {
   public:
 

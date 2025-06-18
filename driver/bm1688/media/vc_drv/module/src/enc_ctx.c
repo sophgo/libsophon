@@ -339,7 +339,9 @@ static int jpege_enc_one_pic(void *ctx,
     if (status == ENC_TIMEOUT) {
         //jpeg_enc_one_pic TimeOut..dont close
         //otherwise parallel / multiple jpg encode will failure
-        return DRV_ERR_VENC_BUSY;
+        status = jpeg_enc_send_frame(pHandle, &srcInfo, s32MIlliSec);
+        if (status == ENC_TIMEOUT)
+            return DRV_ERR_VENC_BUSY;
     }
 
     if (status != 0) {
@@ -993,34 +995,32 @@ static int vid_enc_release_stream(void *ctx, venc_stream_s *pstStream)
 {
     int status = 0;
     venc_enc_ctx *pEncCtx = (venc_enc_ctx *)ctx;
-    stPack *pVencPack;
-    stPack *ptr;
+    stPack *vencPack;
     int idx = 0;
 
-    pVencPack = vmalloc(sizeof(stPack)*MAX_NUM_PACKS);
+    vencPack = vzalloc(sizeof(stPack)*MAX_NUM_PACKS);
     for (idx = 0; (idx < pstStream->u32PackCount) && (idx < MAX_NUM_PACKS); idx++) {
-        ptr = pVencPack +idx*sizeof(stPack);
-        ptr->u64PhyAddr = pstStream->pstPack[idx].u64PhyAddr;
-        ptr->addr = pstStream->pstPack[idx].pu8Addr;
-        ptr->len = pstStream->pstPack[idx].u32Len;
+        vencPack[idx].u64PhyAddr = pstStream->pstPack[idx].u64PhyAddr;
+        vencPack[idx].addr = pstStream->pstPack[idx].pu8Addr;
+        vencPack[idx].len = pstStream->pstPack[idx].u32Len;
         if ( pstStream->pstPack[idx].DataType.enH264EType == H264E_NALU_SEI
             || pstStream->pstPack[idx].DataType.enH265EType == H265E_NALU_SEI) {
-            ptr->NalType = NAL_SEI;
+            vencPack[idx].NalType = NAL_SEI;
         } else if (pstStream->pstPack[idx].DataType.enH264EType == H264E_NALU_SPS) {
-            ptr->NalType = NAL_SPS;
+            vencPack[idx].NalType = NAL_SPS;
         } else if (pstStream->pstPack[idx].DataType.enH265EType == H265E_NALU_VPS) {
-            ptr->NalType = NAL_VPS;
+            vencPack[idx].NalType = NAL_VPS;
         }
     }
 
-    status = internal_venc_release_stream(pEncCtx->ext.vid.pHandle, pVencPack, pstStream->u32PackCount);
+    status = internal_venc_release_stream(pEncCtx->ext.vid.pHandle, vencPack, pstStream->u32PackCount);
     if (status != 0) {
         DRV_VENC_ERR("internal_venc_release_stream, status = %d\n", status);
-        vfree(pVencPack);
+        vfree(vencPack);
         return status;
     }
 
-    vfree(pVencPack);
+    vfree(vencPack);
     return status;
 }
 
@@ -1055,7 +1055,7 @@ int venc_create_enc_ctx(venc_enc_ctx *pEncCtx, void *pchnctx)
     venc_rc_attr_s *prcatt = &pChnAttr->stRcAttr;
     int status = 0;
 
-    VENC_MEMSET(pEncCtx, 0, sizeof(venc_enc_ctx));
+    memset(pEncCtx, 0, sizeof(venc_enc_ctx));
 
     switch (pVencAttr->enType) {
     case PT_JPEG:

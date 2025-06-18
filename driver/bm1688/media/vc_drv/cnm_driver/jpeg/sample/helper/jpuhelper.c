@@ -1637,4 +1637,12 @@ char* jpuGetFileExtension(const char* filename)
     return NULL;
 }
 
+Uint64 jpgGetCurrentTime(void)
+{
+    struct timespec64 ts;
+
+    ktime_get_ts64(&ts);
+
+    return ts.tv_sec * 1000000 + ts.tv_nsec / 1000; // in us
+}
 

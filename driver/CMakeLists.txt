@@ -52,10 +52,10 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     # setup DEB scripts
     # post-install
     COMMAND echo "if [ ! -d \"/lib/firmware\" ]; then mkdir -p /lib/firmware; fi" > postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0.bin /lib/firmware/bm1688_firmware0.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1.bin /lib/firmware/bm1688_firmware1.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0_os.bin /lib/firmware/bm1688_firmware0_os.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1_os.bin /lib/firmware/bm1688_firmware1_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0.bin /lib/firmware/bm1688_firmware0.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1.bin /lib/firmware/bm1688_firmware1.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0_os.bin /lib/firmware/bm1688_firmware0_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1_os.bin /lib/firmware/bm1688_firmware1_os.bin" >> postinst
     COMMAND echo >> postinst
 
     COMMAND echo "if [ -e \"/usr/share/misc/pci.ids\" ]; then" >> postinst
@@ -132,6 +132,10 @@ if(${SOC_MODE} EQUAL 1)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${DRIVER_BIN_TARGET}
         DESTINATION ./data
         COMPONENT libsophon)
+else()
+install(FILES ${CMAKE_SOURCE_DIR}/driver/spi_flash_bmsophon.bin 
+    DESTINATION ./data 
+    COMPONENT libsophon)
 endif()
 file(GLOB firmware_files ${CMAKE_SOURCE_DIR}/driver/bm1684*.bin_*)
 foreach(file ${firmware_files})
@@ -153,9 +157,12 @@ foreach(file ${driver_files})
                  DESTINATION ../driver-${CPACK_PACKAGE_VERSION}
                  COMPONENT driver)
     else()
-        install(FILES ${file}
-                 DESTINATION ../driver-${CPACK_PACKAGE_VERSION}
-                 COMPONENT driver)
+    get_filename_component(_filename ${file} NAME)
+        if(NOT _filename STREQUAL "spi_flash_bmsophon.bin")
+            install(FILES ${file}
+                    DESTINATION ../driver-${CPACK_PACKAGE_VERSION}
+                    COMPONENT driver)
+        endif()
     endif()
 endforeach()
 

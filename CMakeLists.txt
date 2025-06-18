@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 cmake_policy(SET CMP0048 NEW)
 
 project("libsophon"
-    VERSION 0.4.11)
+    VERSION 0.4.12)
 
 set(CMAKE_CXX_STANDARD 11)
 
@@ -21,6 +21,32 @@ message(STATUS "SOC_KERNEL_PATH............. " ${SOC_LINUX_DIR})
 
 string(TIMESTAMP COMPILE_TIME %Y%m%d-%H%M%S)
 set(BUILD_DATE ${COMPILE_TIME})
+
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_SHORT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+execute_process(
+    COMMAND bash -c "git diff-index --name-only HEAD | grep -v \"$(git submodule foreach --quiet 'echo $path')\" "
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_DIRTY_STATUS
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(GIT_DIRTY_STATUS)
+    set(GIT_DIRTY_FLAG "-dirty")
+else()
+    set(GIT_DIRTY_FLAG "")
+endif()
+
+set(GIT_VER_STRING "${GIT_SHORT_HASH}${GIT_DIRTY_FLAG}")
+
+message(STATUS "Git Version: " ${GIT_VER_STRING})
 
 configure_file("${CMAKE_SOURCE_DIR}/bmlib/include/version.h.in"
     "${CMAKE_SOURCE_DIR}/bm-smi/include/version.h")
@@ -141,18 +167,16 @@ else()
 
     # subdirectories may depend on former settings
     add_subdirectory(bmlib)
-    if("${PLATFORM}" STREQUAL "soc")
-        optional_add_subdirectory(tpu-cpuop)
-        if(EXISTS "${CMAKE_SOURCE_DIR}/tpu-bmodel/CMakeLists.txt")
-            add_subdirectory(tpu-bmodel)
-        else()
-            message(FATAL_ERROR "The tpu-bmodel directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
-        endif()
-        if(EXISTS "${CMAKE_SOURCE_DIR}/tpu-runtime/CMakeLists.txt")
-            add_subdirectory(tpu-runtime)
-        else()
-            message(FATAL_ERROR "The tpu-runtime directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
-        endif()
+    optional_add_subdirectory(tpu-cpuop)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tpu-bmodel/CMakeLists.txt")
+        add_subdirectory(tpu-bmodel)
+    else()
+        message(FATAL_ERROR "The tpu-bmodel directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
+    endif()
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tpu-runtime/CMakeLists.txt")
+        add_subdirectory(tpu-runtime)
+    else()
+        message(FATAL_ERROR "The tpu-runtime directory does not contain a valid CMakeLists.txt file.\nPlease run 'git submodule update --init' in libsophon")
     endif()
     if(EXISTS "${CMAKE_SOURCE_DIR}/libsophav/CMakeLists.txt")
         add_subdirectory(libsophav)

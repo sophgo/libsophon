@@ -912,6 +912,8 @@ void Bmruntime::convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_ad
       break;
     case MARS3:
       break;
+    case SGTPUV8:
+      break;
     default:
       BMRT_LOG(FATAL, "Unkown BM TPU");
   }
@@ -1116,9 +1118,6 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
   // u64 output_shape_global_addr =  must_alloc_device_mem(devid, &output_shape_mem, output_num*sizeof(bm_shape_ex_t));
   std::string suffix = (m_flags & BM_RUNTIME_SHARE_MEM) ? "" : "_" + std::to_string(dyn_core_mask);
   u64 output_shape_global_addr = alloc_device_mem(devid, output_shape_mem, output_num*sizeof(bm_shape_ex_t), "dynamic_out"+suffix, 1, false);
-  if (alloc_mem) {
-    bm_device_mem_ext_t output_shape_mem_ext(output_shape_mem, this, devid);
-  }
 
   #ifdef __linux__
   int input_elem_num[input_num];
@@ -1166,21 +1165,35 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
         output_shape_global_addr,
         net_ctx->do_allreduce == 1 ? &(net_ctx->allreduce_param) : NULL);
   } else if (arch == BM1688) {
+    std::vector<u64> dyn_offset;
+    if (m_flags & BM_RUNTIME_SHARE_MEM) {
+      dyn_offset = stage->dynamic_ctx_offset;
+    } else {
+      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+      dyn_offset = dyn_neuron->dynamic_ctx_offset;
+    }
     auto func_id = net_ctx->kernel_module_->get_dynamic_fullnet_func_id(core_list);
     status = bmfunc::bmdnn_1688()->_bmdnn_dynamic_fullnet_(
         m_handles[devid], func_id, stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, (m_flags & BM_RUNTIME_SHARE_MEM) ? stage->dynamic_ctx_offset : net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->dynamic_ctx_offset,
+        stage->ctx_borders, dyn_offset,
         stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
   } else if (arch == BM1690) {
+    std::vector<u64> dyn_offset;
+    if (m_flags & BM_RUNTIME_SHARE_MEM) {
+      dyn_offset = stage->dynamic_ctx_offset;
+    } else {
+      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+      dyn_offset = dyn_neuron->dynamic_ctx_offset;
+    }
     status = bmfunc::bmdnn_2260()->_bmdnn_dynamic_fullnet_(
         m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, (m_flags & BM_RUNTIME_SHARE_MEM) ? stage->dynamic_ctx_offset : net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->dynamic_ctx_offset,
+        stage->ctx_borders, dyn_offset,
         stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
@@ -1194,11 +1207,18 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
         output_shape_global_addr,
         core_list);
   } else if (arch == SG2380) {
+    std::vector<u64> dyn_offset;
+    if (m_flags & BM_RUNTIME_SHARE_MEM) {
+      dyn_offset = stage->dynamic_ctx_offset;
+    } else {
+      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+      dyn_offset = dyn_neuron->dynamic_ctx_offset;
+    }
     status = bmfunc::bmdnn_2380()->_bmdnn_dynamic_fullnet_(
         m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, (m_flags & BM_RUNTIME_SHARE_MEM) ? stage->dynamic_ctx_offset : net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->dynamic_ctx_offset,
+        stage->ctx_borders, dyn_offset,
         stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
@@ -1223,6 +1243,9 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
     for (int idx = 0; idx < output_num; idx++) {
       output_tensors[idx].shape = output_shape_v[idx].shape;
     }
+  }
+  if (alloc_mem) {
+    free_device_mem(devid, output_shape_mem);
   }
 
   return BM_SUCCESS == status;
@@ -1268,7 +1291,7 @@ Bmruntime::get_api_info(int net_idx, const bm_tensor_t *input_tensors,
 
 template <typename T_stage>
 void Bmruntime::fill_tpu_tensor_info(
-    std::vector<tpu_tensor_info_t> &tensor_info, const T_stage *stage,
+    std::vector<tpu_tensor_info_t> &tensor_info, const T_stage* stage,
     const bm_tensor_t *user_tensors, bool is_input) {
   auto ref_tensors = is_input ? stage->input_v : stage->output_v;
   return fill_tpu_tensor_info(tensor_info, ref_tensors, user_tensors, is_input);
@@ -1283,12 +1306,15 @@ Bmruntime::fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
                              const size_t dyn_core_mask) {
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
+  std::shared_ptr<dyn_neuron_stage_t> dyn_neuron = nullptr;
+
   if (m_flags & BM_RUNTIME_SHARE_MEM) {
     fill_tpu_tensor_info(input_info, stage, input_tensors, true);
     fill_tpu_tensor_info(output_info, stage, output_tensors, false);
   } else {
-    fill_tpu_tensor_info(input_info, net_ctx->dyn_neuron_stage_dict[dyn_core_mask], input_tensors, true);
-    fill_tpu_tensor_info(output_info, net_ctx->dyn_neuron_stage_dict[dyn_core_mask], output_tensors, false);
+    dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+    fill_tpu_tensor_info(input_info, dyn_neuron.get(), input_tensors, true);
+    fill_tpu_tensor_info(output_info, dyn_neuron.get(), output_tensors, false);
   }
 
   std::vector<tpu_single_core_cmd_t> core_command(core_list.size());
@@ -1321,12 +1347,11 @@ Bmruntime::fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
     net_info.neuron_start_addr.assign(stage->ctx_offset.begin(),
                                     stage->ctx_offset.end());
   } else {
-    net_info.neuron_start_addr.assign(net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->ctx_offset.begin(),
-                                      net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->ctx_offset.end());
+    net_info.neuron_start_addr.assign(dyn_neuron->ctx_offset.begin(), dyn_neuron->ctx_offset.end());
   }
 
   if (bmrt_arch_info::get_bmtpu_arch() == BM1684X ||
-      bmrt_arch_info::get_bmtpu_arch() == BM1688 ) {
+      bmrt_arch_info::get_bmtpu_arch() == BM1688 || bmrt_arch_info::get_bmtpu_arch() == MARS3 || bmrt_arch_info::get_bmtpu_arch() == SGTPUV8) {
     net_info.kernel_func_ids = net_ctx->kernel_module_->get_multi_fullnet_func_id(core_list);
   }
   net_info.do_allreduce = net_ctx->do_allreduce;
@@ -1609,12 +1634,22 @@ std::vector<int> Bmruntime::get_core_list_from_core_mask(uint32_t dyn_core_mask)
   return core_list;
 }
 
-void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const uint64_t thread_id, const uint64_t dyn_core_mask) {
+std::shared_ptr<dyn_neuron_stage_t> Bmruntime::net_ctx_get_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask) {
+  std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
+  auto dyn_neuron_ptr = net_ctx->dyn_neuron_stage_dict.at(dyn_core_mask);
+  neuron_stage_lock.unlock();
+  dyn_neuron_ptr->mutex.lock();
+  std::shared_ptr<dyn_neuron_stage_t> dyn_neuron(dyn_neuron_ptr, [](void* p){ ((dyn_neuron_stage_t*)p)->mutex.unlock(); });
+  return dyn_neuron;
+}
+
+void Bmruntime::__net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask) {
+  std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
   if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) != net_ctx->dyn_neuron_stage_dict.end()) {
+    neuron_stage_lock.unlock();
     return;
   }
 
-  std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
   auto devid = net_ctx->device_id;
   auto dyn_neuron_info = new dyn_neuron_stage_t();
   u64 neuron_num = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem.size() : net_ctx->neuron_size.size();
@@ -1627,18 +1662,14 @@ void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const uint64_t thre
   }
 
   net_ctx->dyn_neuron_stage_dict.emplace(dyn_core_mask, dyn_neuron_info);
-
   neuron_stage_lock.unlock();
 }
 
 void Bmruntime::update_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
   const net_stage_t *common_stage_info) {
-  if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) == net_ctx->dyn_neuron_stage_dict.end()) {
-    net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
-  }
 
   auto devid = net_ctx->device_id;
-  auto dyn_neuron_info = net_ctx->dyn_neuron_stage_dict[dyn_core_mask];
+  auto dyn_neuron_info = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
 
   auto &ctx_sizes = common_stage_info->neuron_size;
   auto ctx_start = common_stage_info->ctx_start & bmrt_arch_info::addr_mask();
@@ -1698,19 +1729,19 @@ void Bmruntime::update_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask
     }
   }
 
-  fill_subnet_dyn_neuron_tensor(net_ctx, dyn_core_mask, common_stage_info);
+  fill_subnet_dyn_neuron_tensor(net_ctx, dyn_neuron_info.get(), common_stage_info);
 }
 
 void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
     const net_stage_t *common_stage_info, bool use_multi_subnet) {
-  if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) == net_ctx->dyn_neuron_stage_dict.end()) {
-    net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
+  __net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
+  if(common_stage_info){
+      update_dyn_neuron(net_ctx, dyn_core_mask, common_stage_info);
   }
-  update_dyn_neuron(net_ctx, dyn_core_mask, common_stage_info);
 }
 
 void Bmruntime::fill_subnet_dyn_neuron_tensor(
-  net_ctx_t* net_ctx, const size_t dyn_core_mask,
+  net_ctx_t* net_ctx, dyn_neuron_stage_t* dyn_neuron,
   const net_stage_t *common_stage_info) {
   for (auto &subnet_tensor : common_stage_info->subnet_tensor_v) {
     tensor_ext_t bm_tensor_ext = subnet_tensor.second;
@@ -1724,7 +1755,7 @@ void Bmruntime::fill_subnet_dyn_neuron_tensor(
                                                 (tensor_addr & bmrt_arch_info::addr_mask()) + common_stage_info->coeff_offset, tensor_size);
       } else {
         u32 idx = get_mem_index(common_stage_info->ctx_borders, common_stage_info->ctx_start, tensor_addr);
-        tensor_addr += net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->ctx_offset[idx];
+        tensor_addr += dyn_neuron->ctx_offset[idx];
         tensor_addr &= bmrt_arch_info::addr_mask();
         bm_tensor_ext.tensor_info.device_mem = bm_mem_from_device(tensor_addr, tensor_size);
       }
@@ -1747,12 +1778,11 @@ void Bmruntime::fill_subnet_dyn_neuron_tensor(
       }
 
       if (need_mem_alloc) {
-        if (!net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->cpu_addr
-            && common_stage_info->cpu_mem_size > 0) {
-          net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->cpu_addr = new float[common_stage_info->cpu_mem_size];
+        if (!dyn_neuron->cpu_addr && common_stage_info->cpu_mem_size > 0) {
+          dyn_neuron->cpu_addr = new float[common_stage_info->cpu_mem_size];
         }
-        if (net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->cpu_addr) {
-          host_mem = net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->cpu_addr + bm_tensor_ext.host_mem.tensor_cpu_addr;
+        if (dyn_neuron->cpu_addr) {
+          host_mem = dyn_neuron->cpu_addr + bm_tensor_ext.host_mem.tensor_cpu_addr;
         } else {
           host_mem = new float[bm_tensor_ext.host_mem.size];
         }
@@ -1761,7 +1791,7 @@ void Bmruntime::fill_subnet_dyn_neuron_tensor(
       bm_tensor_ext.host_mem.addr = host_mem;
     }
 
-    net_ctx->dyn_neuron_stage_dict[dyn_core_mask]->subnet_tensor_v.insert(make_pair(tensor_name, bm_tensor_ext));
+    dyn_neuron->subnet_tensor_v[tensor_name] = bm_tensor_ext;
   }
 }
 
@@ -1789,7 +1819,7 @@ void Bmruntime::pre_alloc_neuron(int net_idx) {
   mem_b.key = m_net_ctx_v[net_idx]->mem_block.size();
   mem_b.used = false;
   m_net_ctx_v[net_idx]->mem_block.push_back(mem_b);
-  net_ctx_alloc_dyn_neuron(m_net_ctx_v[net_idx], mem_b.key, mem_b.key);
+  net_ctx_alloc_dyn_neuron(m_net_ctx_v[net_idx], mem_b.key, nullptr, false);
 }
 
 void Bmruntime::pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info) {
@@ -1819,7 +1849,7 @@ void Bmruntime::pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_inf
     fill_dmem_info(base_addr + offset, middle_buffer_size, "middle_buffer" + suffix);
     fill_dmem_info(mem_info->io_mem.addr, mem_info->io_mem.size, "io_mem" + suffix);
 
-    net_ctx_alloc_dyn_neuron(m_net_ctx_v[i], thread_idx, thread_idx);
+    net_ctx_alloc_dyn_neuron(m_net_ctx_v[i], thread_idx, nullptr, false);
   }
 }
 
@@ -2133,6 +2163,19 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
     dst.emplace_back(mem_cascade_t{net_c->output_names[i], devid, output_tensors[i]});
   }
 
+  // multi cards allreduce use bm_memcpy_p2p
+  // set using_fast_allreduce = false
+  unsigned int card_id = 0;
+  bm_get_card_id(m_handles[0], &card_id);
+  for (auto handle : m_handles) {
+    unsigned int cur_card_id = 0;
+    bm_get_card_id(handle, &cur_card_id);
+    if (cur_card_id != card_id) {
+      using_fast_allreduce = false;
+      break;
+    }
+  }
+
   for (size_t s = 0; s < net_c->step_ids.size(); s++) {
     // TODO: device_num = 2 fast_allreduce still have bug
     if (using_fast_allreduce &&
@@ -2248,9 +2291,7 @@ bool Bmruntime::launch(const net_cascade_t *net_c,
           }
 
           unsigned int chip_num = 0;
-          unsigned int card_id = 0;
           unsigned int card_start_devid = 0;
-          bm_get_card_id(m_handles[0], &card_id);
           bm_get_chip_num_from_card(card_id, &chip_num, &card_start_devid);
           BMRT_ASSERT_INFO((chip_num == 8),
               "Error: Only support [8]chip card allreduce, now is [%d]", chip_num);

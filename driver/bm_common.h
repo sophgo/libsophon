@@ -36,6 +36,8 @@
 #endif
 
 // #define PR_DEBUG
+extern uint32_t tpu_log_lv;
+
 
 #define BM_CHIP_VERSION 	PROJECT_VER_MAJOR
 #define BM_MAJOR_VERSION	PROJECT_VER_MINOR
@@ -70,7 +72,7 @@
 
 /* specify if platform is palladium */
 #define PALLADIUM_CLK_RATIO 4000
-#define DELAY_MS 20000
+#define DELAY_MS 120000
 #define POLLING_MS 1
 
 #define BL1_VERSION_BASE		0x25050100
@@ -266,6 +268,8 @@ struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
 	u64 bm_send_api_seq1;
+	u64 bm_sync_api_seq;
+	u64 bm_sync_api_seq1;
 	struct cdev cdev;
 	struct device *dev;
 	struct device *parent;
@@ -344,10 +348,17 @@ struct bin_buffer {
 	unsigned int target_addr;
 };
 
-#ifdef PR_DEBUG
-#define PR_TRACE(fmt, ...) pr_info(fmt, ##__VA_ARGS__) // to minimize print
-#else
-#define PR_TRACE(fmt, ...)
-#endif
+#define PR_TRACE(fmt, ...)					\
+	do {									\
+		if (tpu_log_lv && tpu_log_lv <= 2)	\
+			pr_info(fmt, ##__VA_ARGS__);	\
+	}while (0)
+
+#define PR_DEBUG(fmt, ...)                  \
+	do {									\
+		if (tpu_log_lv && tpu_log_lv <= 1)	\
+			pr_err(fmt, ##__VA_ARGS__);	\
+	}while (0)
+
 
 #endif /* _BM_COMMON_H_ */

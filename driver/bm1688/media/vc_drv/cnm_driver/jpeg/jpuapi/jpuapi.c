@@ -969,6 +969,7 @@ JpgRet JPU_DecStartOneFrame(JpgDecHandle handle, JpgDecParam *param)
         JpuWriteInstReg(pJpgInst->coreIndex, instRegIndex, MJPEG_PIC_START_REG, (1<<JPG_DEC_SLICE_ENABLE_START_PIC));
     }
     else {
+        pJpgInst->u64StartTime = jpgGetCurrentTime();
         JpuWriteInstReg(pJpgInst->coreIndex, instRegIndex, MJPEG_PIC_START_REG, (1<<JPG_ENABLE_START_PIC));
     }
 
@@ -1637,6 +1638,7 @@ JpgRet JPU_EncStartOneFrame(JpgEncHandle handle, JpgEncParam * param)
         jdi_log(pJpgInst->coreIndex, JDI_LOG_CMD_PICRUN, 1, instRegIndex);
 
     jpu_enable_irq(pJpgInst->coreIndex);
+    pJpgInst->u64StartTime = jpgGetCurrentTime();
     JpuWriteInstReg(pJpgInst->coreIndex, instRegIndex, MJPEG_PIC_START_REG, (1<<JPG_ENABLE_START_PIC));
 
     pEncInfo->encIdx++;

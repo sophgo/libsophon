@@ -48,7 +48,7 @@ int jpu_core_request_resource(int timeout) {
 
         if (id == -1) {
             if (timeout > 0 )
-                wait_event_timeout(jpuvdrv_core_wait_queue, isCoreIdle, msecs_to_jiffies(timeout));
+                wait_event_idle_exclusive_timeout(jpuvdrv_core_wait_queue, isCoreIdle, msecs_to_jiffies(timeout));
             else
                 wait_event(jpuvdrv_core_wait_queue, isCoreIdle);
         }

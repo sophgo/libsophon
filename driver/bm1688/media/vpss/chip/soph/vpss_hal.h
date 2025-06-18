@@ -19,6 +19,14 @@ enum sc_flip_mode {
 	SC_FLIP_MAX
 };
 
+enum sc_cir_mode {
+	SC_CIR_EMPTY,
+	SC_CIR_SHAPE = 2,
+	SC_CIR_LINE,
+	SC_CIR_DISABLE,
+	SC_CIR_MAX,
+};
+
 enum sc_quant_rounding {
 	SC_QUANT_ROUNDING_TO_EVEN = 0,
 	SC_QUANT_ROUNDING_AWAY_FROM_ZERO,
@@ -86,6 +94,28 @@ struct sc_border_vpp_param {
 	struct vip_range outside;
 };
 
+struct sc_circle_param {
+	union {
+		struct {
+			u32 value_r    : 8;
+			u32 value_g    : 8;
+			u32 value_b    : 8;
+			u32 line_width : 4;
+			u32 mode       : 3;
+			u32 enable     : 1;
+		} b;
+		u32 raw;
+	} cfg0;
+	union {
+		struct {
+			u32 center_x : 16;
+			u32 center_y : 16;
+		} b;
+		u32 raw;
+	} cfg1;
+	u16 radius;
+};
+
 /* struct sc_mute
  *   cover sc with the specified rgb-color if enabled.
  *
@@ -121,6 +151,7 @@ struct vpss_hal_chn_cfg {
 	struct convertto_param convert_to_cfg;
 	struct sc_border_param border_cfg;
 	struct sc_border_vpp_param border_vpp_cfg[VPSS_RECT_NUM];
+	struct sc_circle_param circle_cfg;
 	struct sc_mute mute_cfg;
 	struct csc_cfg csc_cfg;
 	enum sc_flip_mode flip;
