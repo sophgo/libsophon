@@ -1,6 +1,7 @@
 #ifndef _BM_ATTR_H_
 #define _BM_ATTR_H_
 #include "bm_common.h"
+#include "bm_gmem.h"
 
 #define BM_THERMAL_WINDOW_WIDTH 5
 #define BM_MAX_CHIP_NUM_PER_CARD	1

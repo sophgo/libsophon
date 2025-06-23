@@ -12,13 +12,13 @@
 struct bm_device_info;
 
 struct bm_handle_info {
-	DECLARE_HASHTABLE(api_htable, 5);
+	// DECLARE_HASHTABLE(api_htable, 5);
 	struct list_head list;
 	struct file *file;
 	pid_t open_pid;
 	u64 gmem_used;
-	u64 h_send_api_seq[BM_MAX_CORE_NUM];
-	u64 h_cpl_api_seq[BM_MAX_CORE_NUM];
+	u64 h_send_api_seq[1];
+	u64 h_cpl_api_seq[1];
 	struct mutex h_api_seq_mutex;
 	int f_owner;
 };

@@ -14,8 +14,32 @@
 #include "pthread.h"
 #include "bmlib_utils.h"
 
-
-static int bmlib_log_level = BMLIB_LOG_WARNING;
+// Get the value set by the environment variable bmlib_log_level, use default BMLIB_LOG_WARNING if not set
+static int bmlib_log_level = []() {
+  const char* env = getenv("BMLIB_LOG_LEVEL");
+  if (env) {
+    if (strcmp(env, "quiet") == 0) {
+      return BMLIB_LOG_QUIET;
+    } else if (strcmp(env, "debug") == 0) {
+      return BMLIB_LOG_DEBUG;
+    } else if (strcmp(env, "verbose") == 0) {
+      return BMLIB_LOG_VERBOSE;
+    } else if (strcmp(env, "info") == 0) {
+      return BMLIB_LOG_INFO;
+    } else if (strcmp(env, "warning") == 0) {
+      return BMLIB_LOG_WARNING;
+    } else if (strcmp(env, "error") == 0) {
+      return BMLIB_LOG_ERROR;
+    } else if (strcmp(env, "fatal") == 0) {
+      return BMLIB_LOG_FATAL;
+    } else if (strcmp(env, "panic") == 0) {
+      return BMLIB_LOG_PANIC;
+    }
+    int level = atoi(env);
+    return level;
+  }
+  return BMLIB_LOG_WARNING;
+}();
 #define BMLIB_LOG_LOG_TAG "bmlib_log"
 
 static pthread_mutex_t bmlog_mutex = PTHREAD_MUTEX_INITIALIZER;

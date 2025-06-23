@@ -7,13 +7,131 @@
 #include <linux/types.h>
 #include <linux/platform_device.h>
 
-#include "bm_api.h"
 #include "bm_attr.h"
 #include "bm_gmem.h"
 #include "bm_io.h"
 
 #include "bm_uapi.h"
 #include "version.h"
+
+
+struct smbus_devinfo {
+	u8 chip_temp_reg;
+	u8 board_temp_reg;
+	u8 board_power_reg;
+	u8 fan_speed_reg;
+	u8 vendor_id_reg;
+	u8 hw_version_reg;
+	u8 fw_version_reg;
+	u8 board_name_reg;
+	u8 sub_vendor_id_reg;
+	u8 sn_reg;
+	u8 mcu_version_reg;
+};
+
+
+typedef enum {
+	DEVICE,
+	PALLADIUM,
+	FPGA
+} PLATFORM;
+
+struct bootloader_version {
+	char *bl1_version;
+	char *bl2_version;
+	char *bl31_version;
+	char *uboot_version;
+	char *chip_version;
+};
+
+
+struct irq_name_to_id {
+	u32 irq_id_gdma_intr;
+	u32 irq_id_gdma_err_intr;
+	u32 irq_id_tpu_intr;
+	u32 irq_id_tpu_intr_pio_empty;
+	u32 irq_id_tpu_intr_pio_half_empty;
+	u32 irq_id_tpu_intr_pio_quart_empty;
+	u32 irq_id_tpu_intr_pio_one_empty;
+};
+
+
+struct chip_info {
+	const struct bm_card_reg *bm_reg;
+	struct smbus_devinfo dev_info;
+	struct device *device;
+	const char *chip_type;
+	char dev_name[20];
+	struct bm_bar_info bar_info;
+	int share_mem_size;
+	PLATFORM platform;
+	u32 delay_ms;
+	u32 polling_ms;
+	unsigned int chip_id;
+	int chip_index;
+	struct bootloader_version version;
+	int tpu_core_num;
+
+	struct irq_name_to_id irq_id;
+	struct platform_device *pdev;
+	struct reset_control *tpu;
+	struct reset_control *gdma;
+	struct reset_control *tpusys;
+	struct clk *tpu_clk;
+	struct clk *gdma_clk;
+	struct clk *fixed_tpu_clk;
+	struct clk *intc_clk;
+	struct clk *top_fab0_clk;
+	struct clk *timer_clk;
+
+	int (*bmdrv_setup_bar_dev_layout)(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
+
+	u32 (*bmdrv_pending_msgirq_cnt)(struct bm_device_info *bmdi);
+};
+
+
+struct bm_device_info {
+	int dev_index;
+	u64 bm_send_api_seq;
+	struct cdev cdev;
+	struct device *dev;
+	struct device *parent;
+	dev_t devno;
+	void *priv;
+	struct kobject kobj;
+	int core_id;
+	int MMAP_TPYE;
+	spinlock_t close_lock;
+	int use_count;
+	struct completion gdma_done;
+
+	struct mutex device_mutex;
+	struct chip_info cinfo;
+	struct bm_chip_attr c_attr;
+	struct bm_card *bmcd;
+	int enable_dyn_freq;
+	int dump_reg_type;
+	int fixed_fan_speed;
+	int status; /* active or fault */
+	int status_over_temp;
+	int status_sync_api;
+	u64 dev_refcount;
+
+	struct bm_gmem_info gmem_info;
+
+	struct list_head handle_list;
+
+	struct mutex clk_reset_mutex;
+
+	struct bm_misc_info misc_info;
+
+	struct bm_boot_info boot_info;
+
+	struct bm_profile profile;
+
+	struct proc_dir_entry *proc_dir;
+
+};
 
 
 char *base_get_chip_id(struct bm_device_info *bmdi);
@@ -116,84 +234,7 @@ struct bm_card {
 
 int bm_get_card_info(struct bm_card *bmcd);
 
-
-
-typedef enum {
-	DEVICE,
-	PALLADIUM,
-	FPGA
-} PLATFORM;
-
-
-struct smbus_devinfo {
-	u8 chip_temp_reg;
-	u8 board_temp_reg;
-	u8 board_power_reg;
-	u8 fan_speed_reg;
-	u8 vendor_id_reg;
-	u8 hw_version_reg;
-	u8 fw_version_reg;
-	u8 board_name_reg;
-	u8 sub_vendor_id_reg;
-	u8 sn_reg;
-	u8 mcu_version_reg;
-};
-
-struct bootloader_version {
-	char *bl1_version;
-	char *bl2_version;
-	char *bl31_version;
-	char *uboot_version;
-	char *chip_version;
-};
-
-struct irq_name_to_id {
-	u32 irq_id_gdma_intr;
-	u32 irq_id_gdma_err_intr;
-	u32 irq_id_tpu_intr;
-	u32 irq_id_tpu_intr_pio_empty;
-	u32 irq_id_tpu_intr_pio_half_empty;
-	u32 irq_id_tpu_intr_pio_quart_empty;
-	u32 irq_id_tpu_intr_pio_one_empty;
-};
-struct chip_info {
-	const struct bm_card_reg *bm_reg;
-	struct smbus_devinfo dev_info;
-	struct device *device;
-	const char *chip_type;
-	char dev_name[20];
-	struct bm_bar_info bar_info;
-	int share_mem_size;
-	PLATFORM platform;
-	u32 delay_ms;
-	u32 polling_ms;
-	unsigned int chip_id;
-	int chip_index;
-	struct bootloader_version version;
-	int tpu_core_num;
-
-	struct irq_name_to_id irq_id;
-	struct platform_device *pdev;
-	struct reset_control *tpu;
-	struct reset_control *gdma;
-	struct reset_control *tpusys;
-	struct clk *tpu_clk;
-	struct clk *gdma_clk;
-	struct clk *fixed_tpu_clk;
-	struct clk *intc_clk;
-	struct clk *top_fab0_clk;
-	struct clk *timer_clk;
-
-	int (*bmdrv_setup_bar_dev_layout)(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
-
-	u32 (*bmdrv_pending_msgirq_cnt)(struct bm_device_info *bmdi);
-};
-
 typedef int tpu_kernel_function_t;
-
-
-
-
 
 typedef enum {
 	MMAP_GDMA = 0,
@@ -202,50 +243,7 @@ typedef enum {
 	MMAP_SMEM,
 	MMAP_LMEM
 } TPU_SYS_NUM;
-struct bm_device_info {
-	int dev_index;
-	u64 bm_send_api_seq;
-	struct cdev cdev;
-	struct device *dev;
-	struct device *parent;
-	dev_t devno;
-	void *priv;
-	struct kobject kobj;
-	int core_id;
-	int MMAP_TPYE;
-	spinlock_t close_lock;
-	int use_count;
-	struct completion gdma_done;
 
-	struct mutex device_mutex;
-	struct chip_info cinfo;
-	struct bm_chip_attr c_attr;
-	struct bm_card *bmcd;
-	int enable_dyn_freq;
-	int dump_reg_type;
-	int fixed_fan_speed;
-	int status; /* active or fault */
-	int status_over_temp;
-	int status_sync_api;
-	u64 dev_refcount;
-
-	struct bm_api_info api_info[BM_MAX_CORE_NUM][2];
-
-	struct bm_gmem_info gmem_info;
-
-	struct list_head handle_list;
-
-	struct mutex clk_reset_mutex;
-
-	struct bm_misc_info misc_info;
-
-	struct bm_boot_info boot_info;
-
-	struct bm_profile profile;
-
-	struct proc_dir_entry *proc_dir;
-
-};
 
 // #define PR_DEBUG
 

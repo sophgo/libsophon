@@ -42,8 +42,7 @@ endif
 obj-m += $(BM_MODULE_NAME).o
 
 $(BM_MODULE_NAME)-y += bm_soc_drv.o bm_drv.o bm_fops.o bm_irq.o \
-	bm_ctl.o bm_api.o \
-	bm_io.o bm_attr.o bm_gmem.o \
+	bm_ctl.o bm_io.o bm_attr.o bm_gmem.o \
 	bm_bgm.o bm_genalloc.o \
 	bm_common.o bm_clkrst.o
 

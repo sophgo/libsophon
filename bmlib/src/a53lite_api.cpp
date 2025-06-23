@@ -303,6 +303,7 @@ static tpu_kernel_module_t cmodel_load_module(bm_handle_t handle, const char *mo
 #endif
 tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, const char *module_file, int core_id)
 {
+	bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 #ifdef USING_CMODEL
 	return cmodel_load_module(handle, module_file, core_id);
 #else
@@ -380,6 +381,7 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 		return NULL;
 	}
 
+
 	// ret = bm_sync_api_from_core(handle, core_id);
 	// if (ret != 0)
 	// {
@@ -401,10 +403,12 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 }
 
 tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *module_file) {
+	bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 	return tpu_kernel_load_module_file_to_core(handle, module_file, 0);
 }
 
 tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, const char *module_file, const char *key, int size, int core_id) {
+	bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 #ifdef USING_CMODEL
 	return cmodel_load_module(handle, module_file, core_id);
 #else
@@ -506,12 +510,14 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
 
 tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const char *module_file, const char *key, int size)
 {
+	bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 	return tpu_kernel_load_module_file(handle, module_file);
 	// return tpu_kernel_load_module_file_key_to_core(handle, module_file, key, size, 0);
 }
 
 tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const char *data, size_t length, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   // return tpu_kernel_load_module_file(handle, "/lib/libtpu_kernel_module.so");
 #ifdef USING_CMODEL
     const char *module_file = "__data__";
@@ -552,12 +558,24 @@ tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const cha
         return nullptr;
     }
 
-    return tpu_kernel_load_module_file(handle, lib_name_so);
+    p_module = tpu_kernel_load_module_file(handle, lib_name_so);
+    if (p_module == NULL){
+        remove(lib_name_so);
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                    BMLIB_LOG_ERROR,
+                    "tpu_kernel_load_module_file failed: %s\n", lib_name_so);
+        return nullptr;
+    }
+    // Remove the physical file at module_file path after loading
+    remove(lib_name_so);
+
+    return p_module;
 #endif
 }
 
 tpu_kernel_module_t tpu_kernel_load_module(bm_handle_t handle, const char *data, size_t length)
 {
+	bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 	return tpu_kernel_load_module_to_core(handle, data, length, 0);
 }
 
@@ -569,6 +587,7 @@ typedef int (*f_ptr)(void *, unsigned int);
 
 tpu_kernel_function_t tpu_kernel_get_function_from_core(bm_handle_t handle, tpu_kernel_module_t module, const char *function, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s current threadid=%x\n", __func__, pthread_self());
 #ifdef USING_CMODEL
   unsigned int core_num = 0;
   (void)bm_get_tpu_core_num(handle, &core_num);
@@ -615,11 +634,13 @@ tpu_kernel_function_t tpu_kernel_get_function_from_core(bm_handle_t handle, tpu_
   api_get_func.f_id = handle->bm_dev->cmodel_get_last_func_id(core_id);
 #endif
 
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "tpu_kernel_get_function id = %d\n", api_get_func.f_id);
   return api_get_func.f_id;
 }
 
 tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_module_t module, const char *function)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return tpu_kernel_get_function_from_core(handle, module, function, 0);
 }
 
@@ -633,6 +654,7 @@ typedef struct
 typedef int (*f_ptr)(void *, unsigned int);
 bm_status_t tpu_kernel_launch_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
 #ifdef USING_CMODEL
   unsigned int core_num = 0;
   (void)bm_get_tpu_core_num(handle, &core_num);
@@ -666,11 +688,13 @@ bm_status_t tpu_kernel_launch_from_core(bm_handle_t handle, tpu_kernel_function_
 
 bm_status_t tpu_kernel_launch(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return tpu_kernel_launch_from_core(handle, function, args, size, 0);
 }
 
 bm_status_t tpu_kernel_launch_async_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s current pthreadid=%x\n", __func__, pthread_self());
   bm_status_t ret = BM_SUCCESS;
   api_launch_func_t api_launch_func;
   api_launch_func.f_id = function;
@@ -695,11 +719,13 @@ bm_status_t tpu_kernel_launch_async_from_core(bm_handle_t handle, tpu_kernel_fun
 
 bm_status_t tpu_kernel_launch_async(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return tpu_kernel_launch_async_from_core(handle, function, args, size, 0);
 }
 
 bm_status_t tpu_kernel_launch_async_multicores(bm_handle_t handle, tpu_launch_param_t *param_list, int param_num) {
-  bm_status_t ret = BM_SUCCESS;
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
+	bm_status_t ret = BM_SUCCESS;
 #ifdef USING_CMODEL
   for(int i = 0; i < param_num; i++){
     ret = tpu_kernel_launch_async_from_core(handle, param_list[i].func_id, param_list[i].param_data, param_list[i].param_size, param_list[i].core_id);
@@ -732,16 +758,19 @@ bm_status_t tpu_kernel_launch_sync_multi_cores(
 
 bm_status_t tpu_kernel_sync_from_core(bm_handle_t handle, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return bm_sync_api_from_core(handle, core_id);
 }
 
 bm_status_t tpu_kernel_sync(bm_handle_t handle)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return bm_sync_api(handle);
 }
 
 bm_status_t tpu_kernel_unload_module_from_core(bm_handle_t handle, tpu_kernel_module_t p_module, int core_id)
 {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   bm_profile_unload_module(handle, p_module, core_id);
   a53lite_load_lib_t api_load_lib;
   bm_status_t ret = BM_SUCCESS;
@@ -765,11 +794,13 @@ bm_status_t tpu_kernel_unload_module_from_core(bm_handle_t handle, tpu_kernel_mo
 }
 
 bm_status_t tpu_kernel_unload_module(bm_handle_t handle, tpu_kernel_module_t p_module) {
-  return tpu_kernel_unload_module_from_core(handle, p_module, 0);
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
+	return tpu_kernel_unload_module_from_core(handle, p_module, 0);
 }
 
 bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_module) {
-  if (!p_module) {
+  bmlib_log(A53LITE_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
+	if (!p_module) {
     bmlib_log(A53LITE_RUNTIME_LOG_TAG,
           BMLIB_LOG_ERROR,
           "%s %d: null ptr input!\n", __FILE__, __LINE__);

@@ -29,7 +29,7 @@ static bmlib_api_dbg_callback api_debug_callback = NULL;
 std::atomic<int> bmcpu_app_live(0);
 
 bm_status_t find_lib_path(const char *lib_name, char **file_path) {
-  const std::vector<std::string> library_dirs = {"/lib", "/usr/lib", "/usr/lib64", "/lib64"};
+  const std::vector<std::string> library_dirs = {"/lib", "/usr/lib", "/usr/lib64", "/lib64", "/usr/lib32", "/lib32"};
   for (const auto& dir : library_dirs) {
     std::string path = dir + "/" + lib_name;
     std::ifstream file(path);
@@ -37,6 +37,21 @@ bm_status_t find_lib_path(const char *lib_name, char **file_path) {
       *file_path = (char *)malloc(path.size() + 1);
       strcpy(*file_path, path.c_str());
       return BM_SUCCESS;
+    }
+  }
+  // if not find in system paths, try to find in LD_LIBRARY_PATH
+  const char* ld_library_path = getenv("LD_LIBRARY_PATH");
+  if (ld_library_path != nullptr) {
+    std::stringstream ss(ld_library_path);
+    std::string dir;
+    while (std::getline(ss, dir, ':')) {
+      std::string path = dir + "/" + lib_name;
+      std::ifstream file(path);
+      if (file.is_open()) {
+        *file_path = (char *)malloc(path.size() + 1);
+        strcpy(*file_path, path.c_str());
+        return BM_SUCCESS;
+      }
     }
   }
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -117,16 +132,21 @@ bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
 
 void P(int semid) {
     struct sembuf sb = {0, -1, 0};
-    semop(semid, &sb, 1);
+    if (semop(semid, &sb, 1) == -1) {
+        perror("bmlib_runtime semop");
+    }
 }
 
 void V(int semid) {
     struct sembuf sb = {0, 1, 0};
-    semop(semid, &sb, 1);
+    if (semop(semid, &sb, 1) == -1) {
+        perror("bmlib_runtime semop");
+    }
 }
 
 
 bm_status_t bm_send_api_to_core(bm_handle_t handle, int api_id, const u8 *api, u32 size, int core_id) {
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   if (handle == nullptr) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
                 "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
@@ -212,14 +232,22 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
   uncomplete_msg_cv.notify_one();
 
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
-          "mq_send success! send_size %d, thread_id %d, wait for sem_key %ld \n",
-          sizeof(bm_api_to_bmcpu_t), tid, sem_key);
+          "mq_send success! api_id %x, thread_id %x, wait for sem_key %ld \n",
+          api_id, tid, sem_key);
   P(semid);
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, 
+          "wakeup semid:%d, sem_key=%ld\n", semid, sem_key);
 
   {
     std::lock_guard<std::mutex> lock(complete_msg_mtx);
-    bm_ret = complete_msg_queue.front();
-    complete_msg_queue.pop();
+    for (std::list<bm_ret_t>::iterator it = complete_msg_queue.begin(); it != complete_msg_queue.end(); ++it) {
+        if (it->tid == tid) {
+            bm_ret = *it;
+            complete_msg_queue.erase(it);
+            break;
+        }
+    }
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "complete num size:%d\n", complete_msg_queue.size());
   }
 
   if (bm_ret.result != 0) {
@@ -233,6 +261,11 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
     a53lite_get_func_t *api_new = (a53lite_get_func_t*)api;
     if (sscanf(bm_ret.msg, "find_func_id value: %d", &read_f_id) == 1) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "Read f_id: %d\n", read_f_id);
+    } else {
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                "%s:%d failed to read f_id from msg: %s\n",
+                __func__, __LINE__, bm_ret.msg);
+      return BM_ERR_FAILURE;
     }
     api_new->f_id = read_f_id;
   }
@@ -285,8 +318,9 @@ bm_status_t bm_send_api_multicores(bm_handle_t handle, int api_id, tpu_launch_pa
 }
 
 bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api, u32 size) {
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   return bm_send_api_to_core(handle, api_id, api, size, 0);
-  }
+}
 
 bm_status_t bm_device_sync(bm_handle_t handle) {
   int ret;
@@ -308,7 +342,7 @@ bm_status_t bm_device_sync(bm_handle_t handle) {
   return BM_ERR_FAILURE;
   }
   #endif
-  }
+}
 
 bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id) {
   int ret;
@@ -330,11 +364,11 @@ bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id) {
     return BM_ERR_FAILURE;
   }
   #endif
-  }
+}
 
 bm_status_t bm_handle_sync(bm_handle_t handle) {
     return bm_handle_sync_from_core(handle, 0);
-  }
+}
 
 u64 bm_get_version(bm_handle_t handle) {
   #ifdef USING_CMODEL
@@ -352,7 +386,7 @@ u64 bm_get_version(bm_handle_t handle) {
   u64 bm_version = (((u64)BMLIB_VERSION) << 32) | driver_version;
   return bm_version;
   #endif
-  }
+}
 
 bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
     bm_profile_record_sync_begin(handle, core_id);
@@ -379,20 +413,20 @@ bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
   #endif
     bm_profile_record_sync_end(handle, core_id);
     return status;
-  }
+}
 
 bm_status_t bm_thread_sync(bm_handle_t handle) {
     return bm_thread_sync_from_core(handle, 0);
-  }
+}
 
 
 bm_status_t bm_sync_api_from_core(bm_handle_t handle, int core_id) {
   return bm_thread_sync_from_core(handle, core_id);
-  }
+}
 
 bm_status_t bm_sync_api(bm_handle_t handle) {
   return bm_sync_api_from_core(handle, 0);
-  }
+}
 
 bm_status_t bm_reset_tpu(bm_handle_t handle) {
 
@@ -418,7 +452,7 @@ bm_status_t bm_reset_tpu(bm_handle_t handle) {
         return BM_ERR_FAILURE;
     }
   #endif
-  }
+}
 
 bm_status_t bm_dev_getcount(int *count) {
   if (!count) return BM_ERR_PARAM;
@@ -435,7 +469,7 @@ bm_status_t bm_dev_getcount(int *count) {
   close(fd);
   #endif
   return BM_SUCCESS;
-  }
+}
 
 bm_status_t bm_dev_query(int devid) {
   #ifdef USING_CMODEL
@@ -455,7 +489,7 @@ bm_status_t bm_dev_query(int devid) {
   close(fd);
   return BM_SUCCESS;
   #endif
-  }
+}
 
 #ifndef USING_CMODEL
 bm_status_t bm_create_ctx(bm_context_t *ctx, int devid) {
@@ -552,7 +586,7 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
                 "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
     }
 
-    if ( bmcpu_app_live.load() == 0 ) {
+    if (bmcpu_app_live.load() == 0 ) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "=======bmcpu app thread create======\n");
       bmcpu_app_live.fetch_add(1);
       pthread_t bmcpu;
@@ -597,15 +631,6 @@ void bm_dev_free(bm_handle_t handle) {
     bm_dev_mgr->free_bm_device(handle->dev_id);
     handle->bm_dev = nullptr;
   #else
-    switch (handle->misc_info.chipid) {
-      case CHIP_ID:
-        // do something here.
-        break;
-      default:
-        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "invalid chip id: 0x%x!\n", handle->misc_info.chipid);
-        break;
-    }
     bm_destroy_ctx(handle);
   #endif
   delete handle;
@@ -1368,8 +1393,6 @@ extern "C" {
   }
 #endif
 
-
-
 bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc) {
   #ifdef USING_CMODEL
   UNUSED(handle);
@@ -1844,9 +1867,9 @@ bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
     return BM_ERR_DEVNOTREADY;
   }
 
-  ret = platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl);
+  // ret = platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl);
   if (ret == 0) {
-  return BM_SUCCESS;
+    return BM_SUCCESS;
   } else {
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
             "%s:%d, ioclt ret = %d %d\n", __func__, __LINE__ , ret, __LINE__);

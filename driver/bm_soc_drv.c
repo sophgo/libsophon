@@ -12,6 +12,7 @@
 #include "bm_io.h"
 #include "bm_irq.h"
 #include "bm_clkrst.h"
+#include "bm_gmem.h"
 
 // TODO:
 // extern uint32_t sophon_get_chip_id(void);
@@ -327,38 +328,17 @@ static int bmdrv_remove(struct platform_device *pdev)
 
 MODULE_DEVICE_TABLE(of, bmdrv_match_table);
 
-#ifdef CONFIG_PM_SLEEP
+
 static int bmdrv_tpu_suspend(struct device *dev)
 {
-	struct bm_device_info *bmdi = dev_get_drvdata(dev);
-	u32 pm_status = 0;
-	u32 timeout_cnt = 0;
-
-	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, 1);
-	while(!(pm_status & 0x2) && (timeout_cnt < 100)) {
-		usleep_range(10000,20000);
-		pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET);
-		timeout_cnt++;
-	}
-	pr_err("bmdrv_tpu_suspend(%d)sus.\n", timeout_cnt);
 	return 0;
 }
 
 static int bmdrv_tpu_resume(struct device *dev)
 {
-	struct bm_device_info *bmdi = dev_get_drvdata(dev);
-	u32 pm_status = gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) & (~0x01);
-	u32 timeout_cnt = 0;
-
-	gp_reg_write_enh(bmdi, GP_REG_PM_OFFSET, pm_status); //set bit0 to 0
-	while(!gp_reg_read_enh(bmdi, GP_REG_PM_OFFSET) && (timeout_cnt < 100)) {
-		usleep_range(10000,20000);
-		timeout_cnt++;
-	}
-	pr_err("bmdrv_tpu_resume(%d) sus.\n", timeout_cnt);
 	return 0;
 }
-#endif
+
 
 static SIMPLE_DEV_PM_OPS(tpu_pm_ops, bmdrv_tpu_suspend, bmdrv_tpu_resume);
 

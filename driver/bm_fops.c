@@ -43,11 +43,11 @@ static int bmdev_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 
-	hash_init(h_info->api_htable);
+	// hash_init(h_info->api_htable);
 	h_info->file = file;
 	h_info->open_pid = open_pid;
 	h_info->gmem_used = 0ULL;
-	for (i = 0; i < BM_MAX_CORE_NUM; i++)
+	for (i = 0; i < 1; i++)
 	{
 		h_info->h_send_api_seq[i] = 0ULL;
 		h_info->h_cpl_api_seq[i] = 0ULL;
@@ -73,24 +73,17 @@ static int bmdev_open(struct inode *inode, struct file *file)
 
 static ssize_t bmdev_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
 {
-
-	pwr_ctrl_get(filp->private_data, NULL);
 	return 0;
-
 }
 
 static ssize_t bmdev_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
 {
-
-	return -1;
-
+	return 0;
 }
 
 static int bmdev_fasync(int fd, struct file *filp, int mode)
 {
-
-	return -1;
-
+	return 0;
 }
 
 static int bmdev_close(struct inode *inode, struct file *file)
@@ -466,7 +459,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 	case BMDEV_PWR_CTRL:
 	{
-		pwr_ctrl_ioctl(bmdi, (void __user *)arg);
 		break;
 	}
 

@@ -67,20 +67,8 @@ void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address);
 
 
 u32 top_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
-void gp_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
-u32 gp_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 
 u32 otp_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
-
-static inline void gp_reg_write_enh(struct bm_device_info *bmdi, u32 idx, u32 data)
-{
-	gp_reg_write(bmdi, idx * 4, data);
-}
-
-static inline u32 gp_reg_read_enh(struct bm_device_info *bmdi, u32 idx)
-{
-	return gp_reg_read(bmdi, idx * 4);
-}
 
 
 void io_init(struct bm_device_info *bmdi);

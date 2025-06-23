@@ -94,14 +94,31 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../build/tpu-bmodel/libmodel_combine.s
 
 if(BUILD_STATIC_LIB)
     set(STATIC_LIB_NAME ${TARGET_NAME}-static)
-    add_library(${STATIC_LIB_NAME} STATIC $<TARGET_OBJECTS:${PROJECT_NAME}>)
-    target_compile_options(${STATIC_LIB_NAME} PRIVATE -fPIC)
+
+    add_library(${STATIC_LIB_NAME} STATIC ${SRCS})
+
+    target_compile_options(${STATIC_LIB_NAME} PRIVATE 
+        -fPIC
+        -fvisibility=default
+    )
+
     target_include_directories(${STATIC_LIB_NAME} PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    set_target_properties(${STATIC_LIB_NAME} PROPERTIES SOVERSION ${sover})
-    set_target_properties(${STATIC_LIB_NAME} PROPERTIES OUTPUT_NAME ${TARGET_NAME})
+
+    set_target_properties(${STATIC_LIB_NAME} PROPERTIES 
+        OUTPUT_NAME ${TARGET_NAME}
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    )
+
+    target_link_libraries(${STATIC_LIB_NAME} pthread rt dl)
+
+    add_custom_command(TARGET ${STATIC_LIB_NAME} POST_BUILD
+        COMMAND ${CMAKE_RANLIB} $<TARGET_FILE:${STATIC_LIB_NAME}>
+        COMMENT "Running ranlib on ${STATIC_LIB_NAME}"
+    )
+
     install(TARGETS ${STATIC_LIB_NAME}
-        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
         COMPONENT libsophon)
 endif()
 
@@ -112,12 +129,12 @@ if(TARGET ${TARGET_NAME})
     )
 endif()
 
-if(TARGET ${STATIC_LIB_NAME})
-    add_custom_command(TARGET ${STATIC_LIB_NAME} POST_BUILD
-        COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${STATIC_LIB_NAME}>
-        COMMENT "Stripping ${STATIC_LIB_NAME} after build"
-    )
-endif()
+# if(TARGET ${STATIC_LIB_NAME})
+#     add_custom_command(TARGET ${STATIC_LIB_NAME} POST_BUILD
+#         COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${STATIC_LIB_NAME}>
+#         COMMENT "Stripping ${STATIC_LIB_NAME} after build"
+#     )
+# endif()
 
 
 if(NOT "${PLATFORM}" STREQUAL "cmodel")

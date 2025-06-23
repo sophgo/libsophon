@@ -3383,6 +3383,7 @@ bm_status_t bm_memset_device(bm_handle_t     handle,
 bm_status_t bm_memcpy_d2d_with_core(bm_handle_t handle, bm_device_mem_t dst,
                           int dst_offset, bm_device_mem_t src, int src_offset,
                           int len, int core_id) {
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   int max_n = 1;
   int src_nstride = bm_mem_get_device_size(src) / max_n / FLOAT_SIZE;
   int dst_nstride = bm_mem_get_device_size(dst) / max_n / FLOAT_SIZE;
@@ -3431,6 +3432,7 @@ bm_status_t bm_memcpy_d2d_stride_with_core(bm_handle_t     handle,
                                   int             count,
                                   int             format_size,
                                   int             core_id) {
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   bm_status_t ret = BM_SUCCESS;
   tpu_kernel_function_t f_id;
 
@@ -3515,6 +3517,7 @@ bm_status_t bm_memcpy_d2d_stride(bm_handle_t     handle,
 bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst,
                                 size_t dst_offset, bm_device_mem_t src,
                                 size_t src_offset, size_t size, int core_id) {
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
   bm_status_t ret = BM_SUCCESS;
   tpu_kernel_function_t f_id;
 

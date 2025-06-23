@@ -38,9 +38,6 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 {
 	int ret = 0;
 	struct chip_info *cinfo = &bmdi->cinfo;
-	u32 channel = 0;
-	u32 core = 0;
-	u32 core_num = cinfo->tpu_core_num;
 
 	INIT_LIST_HEAD(&bmdi->handle_list);
 	bmdrv_sw_register_init(bmdi);
@@ -50,16 +47,6 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	if (bmdi->gmem_info.bm_gmem_init &&
 			bmdi->gmem_info.bm_gmem_init(bmdi))
 		return -EFAULT;
-
-	for (core = 0; core < core_num; core++)
-	{
-		for (channel = 0; channel < 2; channel++)
-		{
-			if (bmdi->api_info[core][channel].bm_api_init &&
-					bmdi->api_info[core][channel].bm_api_init(bmdi, core, channel))
-				return -EFAULT;
-		}
-	}
 
 	if (bmdi->c_attr.bm_card_attr_init &&
 			bmdi->c_attr.bm_card_attr_init(bmdi))
@@ -77,18 +64,6 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 
 void bmdrv_software_deinit(struct bm_device_info *bmdi)
 {
-	u32 channel = 0;
-	u32 core = 0;
-	u32 core_num = bmdi->cinfo.tpu_core_num;
-
-	for (core = 0; core < core_num; core++)
-	{
-		for (channel = 0; channel < 2; channel++)
-		{
-			if (bmdi->api_info[core][channel].bm_api_deinit)
-				bmdi->api_info[core][channel].bm_api_deinit(bmdi, core, channel);
-		}
-	}
 
 	if (bmdi->gmem_info.bm_gmem_deinit)
 		bmdi->gmem_info.bm_gmem_deinit(bmdi);

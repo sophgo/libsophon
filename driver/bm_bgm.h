@@ -16,6 +16,12 @@
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include "bm_uapi.h"
+#include "bm_common.h"
+#include "bm_attr.h"
+#include "bm_gmem.h"
+#include "bm_io.h"
+#include "version.h"
 
 #define BGM_4K_BYTE (1024 * 4)
 #define BGM_4K_ALIGN(x) (((x) + BGM_4K_BYTE - 1) / BGM_4K_BYTE * BGM_4K_BYTE)

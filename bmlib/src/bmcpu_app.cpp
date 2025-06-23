@@ -21,9 +21,10 @@ static int f_id = 22;
 static int find_func_id = 0;
 #define BMLIB_bmcpu_LOG_TAG "bmcpu_app"
 std::queue<bm_api_to_bmcpu_t> uncomplete_msg_queue;
-std::queue<bm_ret_t> complete_msg_queue;
+std::list<bm_ret_t> complete_msg_queue;
 std::mutex uncomplete_msg_mtx;
 std::mutex complete_msg_mtx;
+std::mutex sem_msg_mtx;
 std::condition_variable uncomplete_msg_cv;
 bm_profile_t bm_profile = {0};
 
@@ -277,7 +278,7 @@ static int unload_lib_process(bm_api_cpu_load_library_internal_t* api) {
   for (int i = 0; i < MD5SUM_LEN; i++) {
       printf("%x", (int)api->md5[i]);
   }
-  std::cout << std::endl;
+  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "\n");
   std::cout << std::dec;
 
   std::array<unsigned char, MD5SUM_LEN> api_md5;
@@ -304,7 +305,7 @@ static int get_func_process(bm1688_get_func_internal_t *api) {
   for (int i = 0; i < MD5SUM_LEN; i++) {
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO,"%d", (int)api->md5[i]);
   }
-  std::cout << std::endl;
+  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "\n");
   std::cout << std::dec;
 
   std::array<unsigned char, MD5SUM_LEN> api_md5;
@@ -459,7 +460,7 @@ void* bmcpu_thread(void* arg) {
       }
       {
           std::lock_guard<std::mutex> lock(complete_msg_mtx);
-          complete_msg_queue.push(ret_struct);
+          complete_msg_queue.push_back(ret_struct);
       }
       //Wake up the API caller
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "*************API ID: 0x%x done **************\n", bm_api->api_id);
@@ -468,15 +469,17 @@ void* bmcpu_thread(void* arg) {
       std::cout << std::dec;
 
       // The semaphore is released here, and the API caller can continue to execute
-      // printf("ret_struct.sem_key:%ld\n",ret_struct.sem_key);
+      bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_DEBUG, "ret_struct.sem_key:%ld\n", ret_struct.sem_key);
       int semid = semget(ret_struct.sem_key, 1, IPC_CREAT | 0666);
+      //bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_DEBUG, "===========sem value = %d\n", semctl(semid, 0, GETVAL));
       if (semid == -1) {
           perror("semget");
           return nullptr;
       }
       struct sembuf sb = {0, 1, 0};
-      semop(semid, &sb, 1);
-
+      if (semop(semid, &sb, 1) == -1) {
+          perror("bmcpu semop");
+      }
   }
 
   for (auto &mapping : mapped_memory_list) {

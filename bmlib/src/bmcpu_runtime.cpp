@@ -265,6 +265,7 @@ bm_status_t bm_send_api_ext(bm_handle_t handle,
                             const u8 *  api,
                             u32         size,
                             u64 *       api_handle) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "enter %s\n", __func__);
     auto api_id = static_cast<sglib_api_id_t>(id);
     bm_status_t                        status;
     const u8 *                         api_internal = api;

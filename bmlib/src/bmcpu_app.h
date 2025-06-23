@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <queue>
+#include <list>
 #include <semaphore.h>
 #include <map>
 #include <dlfcn.h>
@@ -21,9 +22,10 @@
 
 void* bmcpu_thread(void* arg);
 extern std::queue<bm_api_to_bmcpu_t> uncomplete_msg_queue;
-extern std::queue<bm_ret_t> complete_msg_queue;
+extern std::list<bm_ret_t> complete_msg_queue;
 extern std::mutex uncomplete_msg_mtx;
 extern std::mutex complete_msg_mtx;
+extern std::mutex sem_msg_mtx;
 extern std::condition_variable uncomplete_msg_cv;
 extern bm_profile_t bm_profile;
 #endif

@@ -13,6 +13,8 @@ struct Binary;
 struct Shape;
 struct ShapeT;
 
+struct RelEntry;
+
 struct CmdGroup;
 struct CmdGroupT;
 
@@ -101,6 +103,42 @@ FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(8) Binary FLATBUFFERS_FINAL_CLASS {
 };
 FLATBUFFERS_STRUCT_END(Binary, 16);
 
+FLATBUFFERS_MANUALLY_ALIGNED_STRUCT(4) RelEntry FLATBUFFERS_FINAL_CLASS {
+ private:
+  uint32_t base_addr_id_;
+  uint32_t addr_offset_;
+  uint32_t cmd_offset_;
+
+ public:
+  RelEntry() {
+    memset(this, 0, sizeof(RelEntry));
+  }
+  RelEntry(uint32_t _base_addr_id, uint32_t _addr_offset, uint32_t _cmd_offset)
+      : base_addr_id_(flatbuffers::EndianScalar(_base_addr_id)),
+        addr_offset_(flatbuffers::EndianScalar(_addr_offset)),
+        cmd_offset_(flatbuffers::EndianScalar(_cmd_offset)) {
+  }
+  uint32_t base_addr_id() const {
+    return flatbuffers::EndianScalar(base_addr_id_);
+  }
+  void mutate_base_addr_id(uint32_t _base_addr_id) {
+    flatbuffers::WriteScalar(&base_addr_id_, _base_addr_id);
+  }
+  uint32_t addr_offset() const {
+    return flatbuffers::EndianScalar(addr_offset_);
+  }
+  void mutate_addr_offset(uint32_t _addr_offset) {
+    flatbuffers::WriteScalar(&addr_offset_, _addr_offset);
+  }
+  uint32_t cmd_offset() const {
+    return flatbuffers::EndianScalar(cmd_offset_);
+  }
+  void mutate_cmd_offset(uint32_t _cmd_offset) {
+    flatbuffers::WriteScalar(&cmd_offset_, _cmd_offset);
+  }
+};
+FLATBUFFERS_STRUCT_END(RelEntry, 12);
+
 struct ShapeT : public flatbuffers::NativeTable {
   typedef Shape TableType;
   std::vector<uint64_t> dim;
@@ -175,6 +213,7 @@ struct CmdGroupT : public flatbuffers::NativeTable {
   std::unique_ptr<Binary> binary_gdma;
   uint32_t bdc_cmd_byte;
   uint32_t gdma_cmd_byte;
+  std::vector<RelEntry> reloc_entries;
   CmdGroupT()
       : bdc_num(0),
         gdma_num(0),
@@ -191,7 +230,8 @@ struct CmdGroup FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_BINARY_BDC = 8,
     VT_BINARY_GDMA = 10,
     VT_BDC_CMD_BYTE = 12,
-    VT_GDMA_CMD_BYTE = 14
+    VT_GDMA_CMD_BYTE = 14,
+    VT_RELOC_ENTRIES = 16
   };
   uint32_t bdc_num() const {
     return GetField<uint32_t>(VT_BDC_NUM, 0);
@@ -229,6 +269,12 @@ struct CmdGroup FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   bool mutate_gdma_cmd_byte(uint32_t _gdma_cmd_byte) {
     return SetField<uint32_t>(VT_GDMA_CMD_BYTE, _gdma_cmd_byte, 0);
   }
+  const flatbuffers::Vector<const RelEntry *> *reloc_entries() const {
+    return GetPointer<const flatbuffers::Vector<const RelEntry *> *>(VT_RELOC_ENTRIES);
+  }
+  flatbuffers::Vector<const RelEntry *> *mutable_reloc_entries() {
+    return GetPointer<flatbuffers::Vector<const RelEntry *> *>(VT_RELOC_ENTRIES);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyField<uint32_t>(verifier, VT_BDC_NUM) &&
@@ -237,6 +283,8 @@ struct CmdGroup FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<Binary>(verifier, VT_BINARY_GDMA) &&
            VerifyField<uint32_t>(verifier, VT_BDC_CMD_BYTE) &&
            VerifyField<uint32_t>(verifier, VT_GDMA_CMD_BYTE) &&
+           VerifyOffset(verifier, VT_RELOC_ENTRIES) &&
+           verifier.VerifyVector(reloc_entries()) &&
            verifier.EndTable();
   }
   CmdGroupT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -265,6 +313,9 @@ struct CmdGroupBuilder {
   void add_gdma_cmd_byte(uint32_t gdma_cmd_byte) {
     fbb_.AddElement<uint32_t>(CmdGroup::VT_GDMA_CMD_BYTE, gdma_cmd_byte, 0);
   }
+  void add_reloc_entries(flatbuffers::Offset<flatbuffers::Vector<const RelEntry *>> reloc_entries) {
+    fbb_.AddOffset(CmdGroup::VT_RELOC_ENTRIES, reloc_entries);
+  }
   explicit CmdGroupBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -284,8 +335,10 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(
     const Binary *binary_bdc = 0,
     const Binary *binary_gdma = 0,
     uint32_t bdc_cmd_byte = 0,
-    uint32_t gdma_cmd_byte = 0) {
+    uint32_t gdma_cmd_byte = 0,
+    flatbuffers::Offset<flatbuffers::Vector<const RelEntry *>> reloc_entries = 0) {
   CmdGroupBuilder builder_(_fbb);
+  builder_.add_reloc_entries(reloc_entries);
   builder_.add_gdma_cmd_byte(gdma_cmd_byte);
   builder_.add_bdc_cmd_byte(bdc_cmd_byte);
   builder_.add_binary_gdma(binary_gdma);
@@ -293,6 +346,27 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(
   builder_.add_gdma_num(gdma_num);
   builder_.add_bdc_num(bdc_num);
   return builder_.Finish();
+}
+
+inline flatbuffers::Offset<CmdGroup> CreateCmdGroupDirect(
+    flatbuffers::FlatBufferBuilder &_fbb,
+    uint32_t bdc_num = 0,
+    uint32_t gdma_num = 0,
+    const Binary *binary_bdc = 0,
+    const Binary *binary_gdma = 0,
+    uint32_t bdc_cmd_byte = 0,
+    uint32_t gdma_cmd_byte = 0,
+    const std::vector<RelEntry> *reloc_entries = nullptr) {
+  auto reloc_entries__ = reloc_entries ? _fbb.CreateVectorOfStructs<RelEntry>(*reloc_entries) : 0;
+  return bmodel::CreateCmdGroup(
+      _fbb,
+      bdc_num,
+      gdma_num,
+      binary_bdc,
+      binary_gdma,
+      bdc_cmd_byte,
+      gdma_cmd_byte,
+      reloc_entries__);
 }
 
 flatbuffers::Offset<CmdGroup> CreateCmdGroup(flatbuffers::FlatBufferBuilder &_fbb, const CmdGroupT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -803,6 +877,7 @@ struct TensorT : public flatbuffers::NativeTable {
   int32_t zero_point;
   int32_t hidden;
   int32_t index;
+  std::unique_ptr<RelEntry> relentry;
   TensorT()
       : data_type(0),
         gmem_stmode(0),
@@ -833,7 +908,8 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
     VT_PAD_H = 22,
     VT_ZERO_POINT = 24,
     VT_HIDDEN = 26,
-    VT_INDEX = 28
+    VT_INDEX = 28,
+    VT_RELENTRY = 30
   };
   const flatbuffers::String *name() const {
     return GetPointer<const flatbuffers::String *>(VT_NAME);
@@ -913,6 +989,12 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
   bool mutate_index(int32_t _index) {
     return SetField<int32_t>(VT_INDEX, _index, 0);
   }
+  const RelEntry *relentry() const {
+    return GetStruct<const RelEntry *>(VT_RELENTRY);
+  }
+  RelEntry *mutable_relentry() {
+    return GetStruct<RelEntry *>(VT_RELENTRY);
+  }
   bool Verify(flatbuffers::Verifier &verifier) const {
     return VerifyTableStart(verifier) &&
            VerifyOffsetRequired(verifier, VT_NAME) &&
@@ -931,6 +1013,7 @@ struct Tensor FLATBUFFERS_FINAL_CLASS : private flatbuffers::Table {
            VerifyField<int32_t>(verifier, VT_ZERO_POINT) &&
            VerifyField<int32_t>(verifier, VT_HIDDEN) &&
            VerifyField<int32_t>(verifier, VT_INDEX) &&
+           VerifyField<RelEntry>(verifier, VT_RELENTRY) &&
            verifier.EndTable();
   }
   TensorT *UnPack(const flatbuffers::resolver_function_t *_resolver = nullptr) const;
@@ -980,6 +1063,9 @@ struct TensorBuilder {
   void add_index(int32_t index) {
     fbb_.AddElement<int32_t>(Tensor::VT_INDEX, index, 0);
   }
+  void add_relentry(const RelEntry *relentry) {
+    fbb_.AddStruct(Tensor::VT_RELENTRY, relentry);
+  }
   explicit TensorBuilder(flatbuffers::FlatBufferBuilder &_fbb)
         : fbb_(_fbb) {
     start_ = fbb_.StartTable();
@@ -1007,10 +1093,12 @@ inline flatbuffers::Offset<Tensor> CreateTensor(
     uint32_t pad_h = 0,
     int32_t zero_point = 0,
     int32_t hidden = 0,
-    int32_t index = 0) {
+    int32_t index = 0,
+    const RelEntry *relentry = 0) {
   TensorBuilder builder_(_fbb);
   builder_.add_size(size);
   builder_.add_device_addr(device_addr);
+  builder_.add_relentry(relentry);
   builder_.add_index(index);
   builder_.add_hidden(hidden);
   builder_.add_zero_point(zero_point);
@@ -1039,7 +1127,8 @@ inline flatbuffers::Offset<Tensor> CreateTensorDirect(
     uint32_t pad_h = 0,
     int32_t zero_point = 0,
     int32_t hidden = 0,
-    int32_t index = 0) {
+    int32_t index = 0,
+    const RelEntry *relentry = 0) {
   auto name__ = name ? _fbb.CreateString(name) : 0;
   auto shape__ = shape ? _fbb.CreateVector<flatbuffers::Offset<Shape>>(*shape) : 0;
   return bmodel::CreateTensor(
@@ -1056,7 +1145,8 @@ inline flatbuffers::Offset<Tensor> CreateTensorDirect(
       pad_h,
       zero_point,
       hidden,
-      index);
+      index,
+      relentry);
 }
 
 flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &_fbb, const TensorT *_o, const flatbuffers::rehasher_function_t *_rehasher = nullptr);
@@ -3373,6 +3463,7 @@ inline void CmdGroup::UnPackTo(CmdGroupT *_o, const flatbuffers::resolver_functi
   { auto _e = binary_gdma(); if (_e) _o->binary_gdma = std::unique_ptr<Binary>(new Binary(*_e)); };
   { auto _e = bdc_cmd_byte(); _o->bdc_cmd_byte = _e; };
   { auto _e = gdma_cmd_byte(); _o->gdma_cmd_byte = _e; };
+  { auto _e = reloc_entries(); if (_e) { _o->reloc_entries.resize(_e->size()); for (flatbuffers::uoffset_t _i = 0; _i < _e->size(); _i++) { _o->reloc_entries[_i] = *_e->Get(_i); } } };
 }
 
 inline flatbuffers::Offset<CmdGroup> CmdGroup::Pack(flatbuffers::FlatBufferBuilder &_fbb, const CmdGroupT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3389,6 +3480,7 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(flatbuffers::FlatBufferBuild
   auto _binary_gdma = _o->binary_gdma ? _o->binary_gdma.get() : 0;
   auto _bdc_cmd_byte = _o->bdc_cmd_byte;
   auto _gdma_cmd_byte = _o->gdma_cmd_byte;
+  auto _reloc_entries = _o->reloc_entries.size() ? _fbb.CreateVectorOfStructs(_o->reloc_entries) : 0;
   return bmodel::CreateCmdGroup(
       _fbb,
       _bdc_num,
@@ -3396,7 +3488,8 @@ inline flatbuffers::Offset<CmdGroup> CreateCmdGroup(flatbuffers::FlatBufferBuild
       _binary_bdc,
       _binary_gdma,
       _bdc_cmd_byte,
-      _gdma_cmd_byte);
+      _gdma_cmd_byte,
+      _reloc_entries);
 }
 
 inline CoreCommandsT *CoreCommands::UnPack(const flatbuffers::resolver_function_t *_resolver) const {
@@ -3567,6 +3660,7 @@ inline void Tensor::UnPackTo(TensorT *_o, const flatbuffers::resolver_function_t
   { auto _e = zero_point(); _o->zero_point = _e; };
   { auto _e = hidden(); _o->hidden = _e; };
   { auto _e = index(); _o->index = _e; };
+  { auto _e = relentry(); if (_e) _o->relentry = std::unique_ptr<RelEntry>(new RelEntry(*_e)); };
 }
 
 inline flatbuffers::Offset<Tensor> Tensor::Pack(flatbuffers::FlatBufferBuilder &_fbb, const TensorT* _o, const flatbuffers::rehasher_function_t *_rehasher) {
@@ -3590,6 +3684,7 @@ inline flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &
   auto _zero_point = _o->zero_point;
   auto _hidden = _o->hidden;
   auto _index = _o->index;
+  auto _relentry = _o->relentry ? _o->relentry.get() : 0;
   return bmodel::CreateTensor(
       _fbb,
       _name,
@@ -3604,7 +3699,8 @@ inline flatbuffers::Offset<Tensor> CreateTensor(flatbuffers::FlatBufferBuilder &
       _pad_h,
       _zero_point,
       _hidden,
-      _index);
+      _index,
+      _relentry);
 }
 
 inline CpuConstT *CpuConst::UnPack(const flatbuffers::resolver_function_t *_resolver) const {

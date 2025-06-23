@@ -34,16 +34,6 @@ u32 top_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr + reg_offset);
 }
 
-void gp_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
-{
-	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.gp_bar_vaddr + reg_offset);
-}
-
-u32 gp_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
-{
-	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.gp_bar_vaddr + reg_offset);
-}
-
 u32 otp_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 {
 	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.otp_bar_vaddr + reg_offset);

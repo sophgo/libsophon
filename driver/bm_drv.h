@@ -7,7 +7,6 @@
 #include <linux/version.h>
 #include <linux/slab.h>
 #include "bm_ctl.h"
-#include "bm_api.h"
 
 struct bm_device_info;
 int bmdrv_software_init(struct bm_device_info *bmdi);
