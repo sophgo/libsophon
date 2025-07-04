@@ -50,7 +50,8 @@ typedef enum bm_store_mode_e {
 typedef enum bm_runtime_flag_e {
   BM_RUNTIME_AUTO = 0,              /* auto flag*/
   BM_RUNTIME_SHARE_MEM = 1 << 0,    /*bit0: 0,dyn mem; 1,share mem */
-  BM_RUNTIME_CHECK_MEM = 1 << 1     /*bit1: 0,no check; 1,check sha256*/
+  BM_RUNTIME_CHECK_MEM = 1 << 1,    /*bit1: 0,no check; 1,check sha256*/
+  BM_RUNTIME_SHARE_DYNMEM = 1 << 2, /*bit2: 0,no share; 1,share dyn mem*/
 } bm_runtime_flag_t;
 
 /* flags for addr_mode */

@@ -30,6 +30,9 @@ public:
   static bmdnn_func_mars3 *bmdnn_mars3() {
     return (bmdnn_func_mars3 *)(sta_bmfunc_ptr->bmdnn_fn);
   }
+  static bmdnn_func_sgtpuv8 *bmdnn_sgtpuv8() {
+    return (bmdnn_func_sgtpuv8 *)(sta_bmfunc_ptr->bmdnn_fn);
+  }
 
   static bmdnn_func_2260 *bmdnn_2260() {
     return (bmdnn_func_2260 *)(sta_bmfunc_ptr->bmdnn_fn);

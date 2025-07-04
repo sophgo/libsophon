@@ -101,7 +101,7 @@ static void deal_with_options(int argc, char **argv) {
 
 static void add_array(cnpy::npz_t &map, std::string name, bm_handle_t bm_handle,
                       const bm_tensor_t &dst) {
-  std::vector<uint64_t> shape;
+  std::vector<size_t> shape;
   size_t count = 1;
   for (int i = 0; i < dst.shape.num_dims; i++) {
     auto d = dst.shape.dims[i];

@@ -58,10 +58,10 @@ function cmodel_run_bmodel() {
   local bmodel_args="--bmodel"
   if [ -d "$bmodel_name" ]; then
     bmodel_args="--context_dir"
-    bmodel_name="$bmodel_name/compilation.bmodel"
     if [ ! -e "$bmodel_name/output_ref_data.dat" ]; then
       bmodel_args="--compare 0 --context_dir"
     fi
+    bmodel_name="$bmodel_name/compilation.bmodel"
   fi
   local chip=`show_bmodel_chip ${bmodel_name}`
   if [ $chip = 'bm1688' ]; then

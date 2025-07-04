@@ -176,6 +176,24 @@ void ModelGen::AddNet(string net_name, const Offset<NetParameter> &parameter, ui
         BMODEL_LOG(FATAL) << "net[" << net_name << "] dynamic is conflict." << std::endl;
         exit(-1);
       }
+      for (int i = 0; i < net_old->input_tensor()->size(); ++i) {
+        if (net_old->input_tensor()->Get(i)->name()->str() != net_new->input_tensor()->Get(i)->name()->str()) {
+          BMODEL_LOG(FATAL) << "net[" << net_name << "] input names is conflict."
+                            << "input " << i << ": origin name: " << net_old->input_tensor()->Get(i)->name()->str()
+                            << ". new name " << net_new->input_tensor()->Get(i)->name()->str() << "."
+                            << std::endl;
+          exit(-1);
+        }
+      }
+      for (int i = 0; i < net_old->output_tensor()->size(); ++i) {
+        if (net_old->output_tensor()->Get(i)->name()->str() != net_new->output_tensor()->Get(i)->name()->str()) {
+          BMODEL_LOG(FATAL) << "net[" << net_name << "] output names is conflict."
+                            << "output " << i << ": origin name: " << net_old->output_tensor()->Get(i)->name()->str()
+                            << ". new name " << net_new->output_tensor()->Get(i)->name()->str() << "."
+                            << std::endl;
+          exit(-1);
+        }
+      }
       bool old_have_subnet =
           (net_old->sub_net() != NULL) ? (net_old->sub_net()->size() > 1) : false;
       bool new_have_subnet =
@@ -603,6 +621,11 @@ uint8_t *ModelCtx::decrypt_buffer_from_file(uint64_t file_start, uint64_t size,
   // encrypt or decrypt
   uint8_t *out_buffer = decrypt_func_(buffer, size, out_size);
   free(buffer);
+
+  if (out_buffer == nullptr) {
+    BMODEL_LOG(FATAL) << "Decryption failed: the result returned by decrypt_func_ is null." << std::endl;
+    throw std::runtime_error("failed to decrypt");
+  }
   return out_buffer;
 }
 
@@ -619,16 +642,13 @@ void ModelCtx::decrypt_bmodel(const std::string &filename) {
   uint64_t header_start = sizeof(header_.magic) + sizeof(header_.header_size);
   uint64_t to_decrypt_header_size = header_.header_size - header_start;
   uint64_t decrypted_header_size = 0;
-  uint8_t *decrypted_header_data = decrypt_buffer_from_file(
-      header_start, to_decrypt_header_size, &decrypted_header_size);
+  std::unique_ptr<uint8_t, decltype(&free)> decrypted_header_data(
+      decrypt_buffer_from_file(header_start, to_decrypt_header_size, &decrypted_header_size), free);
   if (decrypted_header_data == nullptr || (decrypted_header_size + header_start != sizeof(header_))) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken .." << std::endl;
-    if (decrypted_header_data != nullptr) {
-      free(decrypted_header_data);
-    }
     throw std::runtime_error("failed to decrypt");
   }
-  memcpy((char *)&header_ + header_start, decrypted_header_data,
+  memcpy((char *)&header_ + header_start, decrypted_header_data.get(),
          decrypted_header_size);
 
   // check reserved to determine key in decryption
@@ -644,8 +664,8 @@ void ModelCtx::decrypt_bmodel(const std::string &filename) {
   uint64_t flat_start = header_.header_size;
   uint64_t to_decrypt_flat_size = header_.flatbuffers_size;
   uint64_t decrypted_flat_size = 0;
-  uint8_t *decrypted_flat_data = decrypt_buffer_from_file(
-      flat_start, to_decrypt_flat_size, &decrypted_flat_size);
+  std::unique_ptr<uint8_t, decltype(&free)> decrypted_flat_data(
+      decrypt_buffer_from_file(flat_start, to_decrypt_flat_size, &decrypted_flat_size), free);
   if (decrypted_flat_data == nullptr) {
     BMODEL_LOG(FATAL) << "File[" << filename << "] is broken .." << std::endl;
     throw std::runtime_error("failed to decrypt");
@@ -661,11 +681,7 @@ void ModelCtx::decrypt_bmodel(const std::string &filename) {
     BMODEL_LOG(FATAL) << "Memory alloc failed" << std::endl;
     throw std::runtime_error("failed to load bmodel");
   }
-  memcpy(model_buffer_, decrypted_flat_data, decrypted_flat_size);
-
-  // free
-  free(decrypted_header_data);
-  free(decrypted_flat_data);
+  memcpy(model_buffer_, decrypted_flat_data.get(), decrypted_flat_size);
 
   // check
   flatbuffers::Verifier v((uint8_t *)model_buffer_, decrypted_flat_size);

@@ -1117,13 +1117,8 @@ void bmrt_test()
           bm_memcpy_s2d(bm_handles[devid], input_tensor.device_mem, ((void *)host_data.data()));
         }
 
-        std::vector<bm_profile_t> starts(1), ends(1);
-        std::vector<std::thread> threads;
-        if (use_multi_thread) {
-          starts.resize(2);
-          ends.resize(2);
-          threads.resize(core_lists.size());
-        }
+        std::vector<bm_profile_t> starts(core_lists.size()), ends(core_lists.size());
+        std::vector<std::thread> threads(core_lists.size());
         for (auto &s : starts) memset(&s, 0, sizeof(bm_profile_t));
         for (auto &e : ends) memset(&e, 0, sizeof(bm_profile_t));
 
@@ -1194,8 +1189,8 @@ void bmrt_test()
         if (EXPORT_NEURON && loop == 0) {
           save_neuron(p_bmrt, net_idx, stage_idx);
         }
-        // memcpy output data from device to system
 
+        // memcpy output data from device to system
         for (int t = 0; t < REAL_MEM_NUM; t++) {
           for (int output_idx = 0; output_idx < net_info->output_num; ++output_idx) {
             auto &output_tensor = output_tensors[t][output_idx];

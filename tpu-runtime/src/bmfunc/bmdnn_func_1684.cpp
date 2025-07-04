@@ -93,6 +93,31 @@ void bmdnn_func_1684::fill_api_info(const tpu_net_info_t &net_info,
     p_api = (int *)p_api + 1;
     *(int *)p_api = cmd_info.at(i).gdma_cmd_num;
   }
+  BMRT_LOG_RUN(DEBUG, {
+    for (size_t i = 0; i < input_info.size(); ++i) {
+      const auto &info = input_info.at(i);
+      auto byte_size = bmrt_data_type_size((bm_data_type_t)info.dtype) *
+                      (info.n * info.c * info.h * info.w);
+      BMRT_LOG(DEBUG, "in[%d] user_addr=0x%llx, cmd_addr=0x%llx, shape=[%d, %d, %d, %d], dtype=%s, byte_size=%d",
+          i, info.user_global_addr, info.compiled_global_addr, info.n, info.c, info.h, info.w, dtype_to_string((bm_data_type_t)info.dtype), byte_size);
+    }
+    for (size_t i = 0; i < output_info.size(); ++i) {
+      const auto &info = output_info.at(i);
+      auto byte_size = bmrt_data_type_size((bm_data_type_t)info.dtype) *
+                      (info.n * info.c * info.h * info.w);
+      BMRT_LOG(DEBUG, "out[%d] user_addr=0x%llx, cmd_addr=0x%llx, shape=[%d, %d, %d, %d], dtype=%s, byte_size=%d",
+          i, info.user_global_addr, info.compiled_global_addr, info.n, info.c, info.h, info.w, dtype_to_string((bm_data_type_t)info.dtype), byte_size);
+    }
+    for (size_t core_idx = 0; core_idx < 1; core_idx++) {
+      BMRT_LOG(DEBUG, "core[%d], tiu_cmd_addr=0x%llx, gdma_cmd_addr=0x%llx", core_idx,
+               net_info.core_commands[core_idx].bdc_cmd_addr, net_info.core_commands[core_idx].gdma_cmd_addr);
+      const auto &cmd_info = net_info.core_commands[core_idx].cmd_info;
+      for(u32 g=0; g<cmd_info.size(); g++){
+        BMRT_LOG(DEBUG, "  --> group[%d], tiu_cmd_num=%d, tiu_cmd_size=%d, gdma_cmd_num=%d, gdma_cmd_size=%d", g,
+                 cmd_info[g].bdc_cmd_num, cmd_info[g].gdma_cmd_num);
+      }
+    }
+  });
 }
 bm_status_t
 bmdnn_func_1684::_bmdnn_multi_fullnet_(bm_handle_t handle,
@@ -252,6 +277,34 @@ using_arm_buffer_size,arm_reserved_size);
      p_api = (u64*)p_api + 1;
      *(u32*)p_api = arm_reserved_size;
      p_api = (u64*)p_api + 1;
+
+    BMRT_LOG_RUN(DEBUG, {
+        BMRT_LOG(DEBUG, "ir_addr=0x%llx, ir_length=%d[0x%x]", compiled_ir_global_addr, compiled_ir_length, compiled_ir_length);
+        for(u32 i = 0; i < input_num; ++i){
+          auto dims = input_dtype_and_dims[i]&0xFFFF;
+          auto dtype = (input_dtype_and_dims[i]>>16)&0xFFFF;
+          std::string shape_str = std::to_string(input_shapes[i][0]);
+          for(u32 j = 1; j < dims; j++){
+            shape_str += "," + std::to_string(input_shapes[i][j]);
+          }
+          BMRT_LOG(DEBUG, "in[%d] addr=0x%llx, shape=[%s], dtype=%s, elem_num=%d",
+              i, input_addrs[i], shape_str.c_str(), dtype_to_string((bm_data_type_t)dtype), input_elem_nums[i]);
+        }
+        //output information
+        for(u32 i = 0; i < output_num; ++i){
+          BMRT_LOG(DEBUG, "out[%d] addr=0x%llx", i, output_addrs[i]);
+        }
+        //output shape info related
+        BMRT_LOG(DEBUG, "out_shape_addr=0x%llx", output_shape_global_addr);
+        BMRT_LOG(DEBUG, "ctx_start=0x%llx, coeff_mem_offset=0x%llx", apd_ctx_start, apd_coeff_mem_offset);
+
+        *(u32*)p_api = ctx_num;
+        p_api = (u32*)p_api + 1;
+
+        for (size_t i = 0; i < ctx_num; ++i) {
+          BMRT_LOG(DEBUG, "ctx[%d]: border=0x%llx, offset=0x%llx",i , apd_ctx_mem_borders[i], apd_ctx_mem_offset[i]);
+        }
+    });
 
      bm_status_t status =
          bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer, api_buffer_size);

@@ -35,6 +35,8 @@ bmrt_arch_info::bmrt_arch_info(const string& arch_name)
       target_bmtpu_arch = SG2380;
     } else if (arch_name == "MARS3") {
       target_bmtpu_arch = MARS3;
+    } else if (arch_name == "SGTPUV8") {
+      target_bmtpu_arch = SGTPUV8;
     } else {
       BMRT_LOG(FATAL, "Error: unknown processor name [%s]",  arch_name.c_str());
     }
@@ -217,6 +219,7 @@ u64 bmrt_arch_info::get_gmem_cmd_start_offset()
     case BM1880:
     case BM1684X:
     case MARS3:
+    case SGTPUV8:
     case BM1688:
     case BM1690:
     case SG2380:
@@ -342,7 +345,8 @@ u64 bmrt_arch_info::addr_mask() {
     mask = (1ull << 35) - 1;
   } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690 ||
              sta_bmtpu_ptr->target_bmtpu_arch == SG2380 ||
-             sta_bmtpu_ptr->target_bmtpu_arch == MARS3) {
+             sta_bmtpu_ptr->target_bmtpu_arch == MARS3 ||
+             sta_bmtpu_ptr->target_bmtpu_arch == SGTPUV8) {
     mask = (1ull << 40) - 1;
   }
   return mask;
