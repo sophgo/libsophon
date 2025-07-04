@@ -9,6 +9,7 @@
 #include "bm1688_reg.h"
 #include "bm1688_card.h"
 #include "bm1688_cdma.h"
+#include "bm1688_smmu.h"
 #include "bm_fw.h"
 #include "bm_api.h"
 

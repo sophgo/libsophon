@@ -15,50 +15,25 @@ find_package(bmlib REQUIRED)
 find_package(bmodel REQUIRED)
 find_package(Threads REQUIRED)
 
-
-if(NOT DEFINED LITE_BUILD)
-    include(gen_kernel_header.cmake)
-    add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
-endif()
+include(gen_kernel_header.cmake)
+add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
 
 file(GLOB_RECURSE srcs src/*.cpp src/*.c)
 
 add_library(bmrt SHARED ${srcs})
 add_library(bmrt_static STATIC ${srcs})
 target_compile_options(bmrt_static PRIVATE -fPIC)
-
-if(LITE_BUILD)
-    target_compile_options(bmrt PRIVATE -Os -fno-omit-frame-pointer -ffunction-sections -fdata-sections -fno-exceptions -fmerge-all-constants -fexceptions)
-    target_compile_options(bmrt_static PRIVATE -Os -fno-omit-frame-pointer -ffunction-sections -fdata-sections -fno-exceptions -fmerge-all-constants -fexceptions)
-    add_definitions(-DLITE_BUILD)
-else()
-    add_dependencies(bmrt kernel_header)
-    add_dependencies(bmrt_static kernel_header)
-endif()
-
-if(CMAKE_STRIP)
-    add_custom_command(TARGET bmrt
-        POST_BUILD
-        COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:bmrt>
-        COMMENT "Stripping symbols for target architecture"
-        VERBATIM
-    )
-else()
-    message(WARNING "Cross-compile strip tool not found, skipping symbol stripping")
-endif()
-
-if("${PLATFORM}" STREQUAL "soc")
-    add_definitions(-DSOC_MODE=1)
-endif()
+add_dependencies(bmrt kernel_header)
+add_dependencies(bmrt_static kernel_header)
 
 target_link_libraries(bmrt PUBLIC
     bmodel::bmodel bmlib::bmlib
     ${CMAKE_DL_LIBS}
-    Threads::Threads -lrt)
+    Threads::Threads)
 target_link_libraries(bmrt_static PUBLIC
     bmodel::bmodel bmlib::bmlib
     ${CMAKE_DL_LIBS}
-    Threads::Threads -lrt)
+    Threads::Threads)
 target_include_directories(bmrt PUBLIC
     ${common_dir}/base/
     ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
@@ -82,7 +57,7 @@ set(app_srcs
     app/bmrt_test.cpp
     app/bmrt_test_case.cpp)
 add_executable(bmrt_test ${app_srcs})
-target_link_libraries(bmrt_test bmrt  bmrt_static -lrt)
+target_link_libraries(bmrt_test bmrt  bmrt_static)
 target_compile_definitions(bmrt_test PRIVATE
     VER="${revision}")
 
@@ -91,21 +66,16 @@ set(runner_srcs
     app/model_runner/model_runner.cpp)
 add_executable(model_runner ${runner_srcs})
 
-if("${ARCH}" STREQUAL "arm64" OR "${ARCH}" STREQUAL "arm")
+if("${ARCH}" STREQUAL "arm64")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
-    message(STATUS "SDK_VER: $ENV{SDK_VER}")
-    if("$ENV{SDK_VER}" STREQUAL "musl")
-        target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libzmusl.so -lrt)
-    else()
-        target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so -lrt)
-    endif()
+    target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so)
 elseif("${ARCH}" STREQUAL "loongarch64")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
-    target_link_libraries(model_runner bmrt bmrt_static ${LIB_DIR}/lib/libz.so -lrt)
+    target_link_libraries(model_runner bmrt bmrt_static ${LIB_DIR}/lib/libz.so)
 else()
-    target_link_libraries(model_runner bmrt bmrt_static z -lrt)
+    target_link_libraries(model_runner bmrt bmrt_static z)
 endif()
 
 target_compile_definitions(model_runner PRIVATE

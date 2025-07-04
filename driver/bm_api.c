@@ -13,7 +13,6 @@
 #include "bm_msgfifo.h"
 #include "bm_thread.h"
 #include "bm1688_card.h"
-#include "bm1688_base64.h"
 
 #define TPU0_CFG_PWR_CTRL_ADDR (0x26000100 + 0xc0)
 #define TPU1_CFG_PWR_CTRL_ADDR (0x26010100 + 0xc0)
@@ -168,36 +167,6 @@ int pwr_ctrl_ioctl(struct bm_device_info *bmdi, void *arg)
 	return 0;
 }
 
-static void reg_proc_show(struct bm_device_info *bmdi)
-{
-	int addr = 0;
-	int value = 0;
-	int core_num = 0;
-	int core_offset = 0x10000;
-	int tiu_reg_base_addr = 0x26000000;
-	int gdma_reg_base_addr = 0x26020000;
-	int read_count = 128;
-	int i, j;
-
-	core_num = base_get_core_num(bmdi);
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + tiu_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			pr_err("tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + gdma_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			pr_err("gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-}
-
 int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 {
 	int threshold = 1000000;
@@ -240,7 +209,6 @@ int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 		return 0;
 	} else if (current_status == 0x102) {
 		pr_err("bm-sophon%d: TPU%d SYS hang. TPU%d C906 current status: polling engine done\n", bmdi->dev_index, core_id, core_id);
-		reg_proc_show(bmdi);
 		return 1;
 	} else {
 		pr_err("bm-sophon%d: TPU%d C906 hang. TPU%d C906 current status: 0x%x\n",
@@ -533,10 +501,6 @@ int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 		list_add_tail(&(func_node->func_list), &(bmdi->exec_func.func_list));
 		mutex_unlock(&(bmdi->exec_func.exec_func.bm_get_func_mutex));
 	}
-
-	PR_DEBUG("get func on core %d, func id = %d , func name = %s\n", func_node->exec_func.core_id,
-				func_node->exec_func.f_id, func_node->exec_func.func_name);
-
 	ret = copy_to_user((bm_get_func_t __user *)p_bm_api->api_addr, &func_node->exec_func, sizeof(bm_get_func_t));
 	if (ret) {
 		pr_err("bm-sophon%d %s %d copy_to_user fail\n", bmdi->dev_index, __FILE__, __LINE__);
@@ -590,7 +554,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	mutex_unlock(&lib_info->bmcpu_lib_mutex);
 	ret = copy_to_user((u8 __user *)p_bm_api->api_addr, &api_cpu_load_library_internal, sizeof(bm_api_dyn_cpu_load_library_internal_t));
 	if (ret) {
-		pr_err("bm-sophon%d copy_to_user fail\n", bmdi->dev_index);
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
 		return ret;
 	}
 
@@ -870,7 +834,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	bm_api_ext_t *bm_api_list = NULL;
 	int i;
 	int is_pm_enable = 0;
-	int func_id;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -953,11 +916,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			return ret;
 	}
 
-	if (bm_api.api_id == 0x90000003) {
-		ret = copy_from_user(&func_id, (bm_get_func_t __user *)bm_api.api_addr, 4);
-		PR_DEBUG("lanuch fun %d to core %d\n", func_id, core_id);
-	}
-
 	param_num = 1;
 	if (bm_api.api_id == 0x90000013) {
 		tpu_launch_param_t *param_list = kmalloc(bm_api.api_size, GFP_KERNEL);
@@ -978,7 +936,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			bm_api_list[i].api_addr = (u8 *)api_addr_tmp;
 			bm_api_list[i].api_size = (param_list[i].param_size + 8);
 			api_from_userspace = 0;
-			PR_DEBUG("lanuch func %d to core %d\n", param_list[i].func_id, param_list[i].core_id);
 		}
 		kfree(param_list);
 		mutex_lock(&apinfo_core0->api_mutex);
@@ -1261,7 +1218,6 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 
 	pr_err("bm-sophon%d %s, wait api timeout, wait %dms, core_id=%d\n",
 		 bmdi->dev_index, __func__, timeout_ms, core_id);
-	bmdev_dump_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 	if (bmdev_debug_tpusys(bmdi, core_id))
 		return -EBUSY;
 	else
@@ -1495,14 +1451,4 @@ void bmdrv_clear_func_list(struct bm_device_info *bmdi)
 	}
 
 	mutex_unlock(&(bmdi->exec_func.exec_func.bm_get_func_mutex));
-}
-void print_dny_lib_info(struct bm_device_info *bmdi)
-{
-	struct bmcpu_lib *lib_temp, *lib_next;
-	struct bmcpu_lib *lib_info = bmdi->lib_dyn_info;
-
-	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-		pr_err("lib_name=%s,file=%p,refcount=%d\n", lib_temp->lib_name, lib_temp->file,
-				lib_temp->refcount);
-	}
 }

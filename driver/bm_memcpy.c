@@ -53,6 +53,8 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	case 0x1686a200:
 		memcpy_info->bm_cdma_transfer = bm1688_cdma_transfer;
 		memcpy_info->bm_dual_cdma_transfer = bm1688_dual_cdma_transfer;
+		memcpy_info->bm_disable_smmu_transfer = bm1688_disable_smmu_transfer;
+		memcpy_info->bm_enable_smmu_transfer = bm1688_enable_smmu_transfer;
 		break;
 	default:
 		return -EINVAL;
@@ -331,8 +333,6 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 	u64 p_addr = 0;
 	int index = 0;
 
-	PR_DEBUG("[%s] params:dst=%lld, src=%p, size=%d, inter=%d\n", __func__, dst, src, size, intr);
-
 	if (cdma_iommu_mode == KERNEL_USER_SETUP_IOMMU) {
 		struct bm_buffer_object *bo_src = NULL;
 
@@ -422,7 +422,7 @@ int bmdev_memcpy_2d_s2d(struct bm_device_info *bmdi, struct file *file, struct b
 }
 
 //for now, ignore mmu mode in memcpy_s2d_internal
-int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size, bool intr)
+int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size)
 {
 	u32 pass_idx = 0;
 	u32 cur_addr_inc = 0;
@@ -435,8 +435,6 @@ int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *
 	u64 p_addr = 0;
 	int index = 0x0;
 
-	PR_DEBUG("[%s] params:dst=%lld, src=%p, size=%d\n", __func__, dst, src, size);
-
 	for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
 		if ((pass_idx + 1) * realmem_size < size)
 			size_step = realmem_size;
@@ -446,7 +444,7 @@ int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *
 		bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
 		memcpy(v_addr, src_cpy, size_step);
 		bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
-				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
+				dst + cur_addr_inc, size_step, HOST2CHIP, false, false);
 		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
 			bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 			return -EBUSY;
@@ -457,7 +455,7 @@ int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *
 	return 0;
 }
 
-int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size, bool intr)
+int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u32 size)
 {
 	u32 pass_idx = 0;
 	u32 cur_addr_inc = 0;
@@ -471,8 +469,6 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 	u64 p_addr = 0;
 	int index = 0x0;
 
-	PR_DEBUG("[%s] params:dst=%p, src=%lld, size=%d\n", __func__, dst, src, size);
-
 	for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
 		if ((pass_idx + 1) * realmem_size < size)
 			size_step = realmem_size;
@@ -482,7 +478,7 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 		bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, CHIP2HOST, &index);
 		bmdev_construct_cdma_arg(&cdma_arg, src + cur_addr_inc,
 			p_addr & 0xffffffffff,
-			size_step, CHIP2HOST, intr, false);
+			size_step, CHIP2HOST, false, false);
 		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
 			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 			return -EBUSY;
@@ -495,50 +491,7 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 
 	return ret;
 }
-int bmdrv_compare_fw_stage(struct bm_device_info *bmdi, u64 src, u32 size, const unsigned int *firmware)
-{
-	u32 pass_idx = 0;
-	u32 cur_addr_inc = 0;
-	unsigned long size_step;
-	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
-	u32 realmem_size = memcpy_info->stagemem_d2s.size / STAGEMEM_SLOT_NUM;
-	// void *dst_cpy;
-	bm_cdma_arg cdma_arg;
-	int ret = 0;
-	void *v_addr = NULL;
-	u64 p_addr = 0;
-	int index = 0x0;
-	int i = 0;
-	unsigned int *p = NULL;
-	for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
-		if ((pass_idx + 1) * realmem_size < size)
-			size_step = realmem_size;
-		else
-			size_step = size - pass_idx * realmem_size;
-		// dst_cpy = (u8 __user *)dst + cur_addr_inc;
-		bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, CHIP2HOST, &index);
-		bmdev_construct_cdma_arg(&cdma_arg, src + cur_addr_inc,
-			p_addr & 0xffffffffff,
-			size_step, CHIP2HOST, false, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
-			return -EBUSY;
-		}
 
-		// memcpy(dst_cpy, v_addr, size_step);
-		p = (unsigned int *)v_addr;
-		for (i = 0; i < size_step/sizeof(u32); i++) {
-			if (p[i] != firmware[cur_addr_inc/sizeof(u32) + i]) {
-				pr_info("compare fw fail, host = 0x%x, chip = 0x%x, index = %d\n", p[i], firmware[cur_addr_inc + i], cur_addr_inc + i);
-				return -EFAULT;
-			}
-		}
-		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
-		cur_addr_inc += size_step;
-	}
-
-	return ret;
-}
 int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user *dst, u64 src, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode)
 {
@@ -553,8 +506,6 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
         void *v_addr = NULL;
 	u64 p_addr = 0;
 	int index = 0x0;
-
-	PR_DEBUG("[%s] params:dst=%p, src=%lld, size=%d, inter=%d\n", __func__, dst, src, size, intr);
 
 	if (cdma_iommu_mode == KERNEL_USER_SETUP_IOMMU) {
 		struct bm_buffer_object *bo_dst = NULL;

@@ -548,11 +548,14 @@ RetCode SetClockGate(Uint32 coreIdx, Uint32 on)
     vpu_instance_pool_t *vip;
 
     vip = (vpu_instance_pool_t *)vdi_get_instance_pool(coreIdx);
-    if (!vip)
-        return RETCODE_SUCCESS;
+    if (!vip) {
+        VLOG(ERR, "SetClockGate: RETCODE_INSUFFICIENT_RESOURCE\n");
+        return RETCODE_INSUFFICIENT_RESOURCE;
+    }
 
-    if (vdi_set_clock_gate(coreIdx, on) != 0)
+    if (vdi_set_clock_gate(coreIdx, on) != 0) {
         return RETCODE_FAILURE;
+    }
 
     return RETCODE_SUCCESS;
 }

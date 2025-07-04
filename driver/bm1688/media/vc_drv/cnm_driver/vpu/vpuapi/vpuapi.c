@@ -146,12 +146,17 @@ int VPU_GetProductId(int coreIdx)
         return productId;
     }
 
-    if (EnterLock(coreIdx) != RETCODE_SUCCESS) {
+    mutex_lock(&__vdi_init_mutex);
+    if (vdi_init(coreIdx) < 0) {
+        mutex_unlock(&__vdi_init_mutex);
         return -1;
     }
+    mutex_unlock(&__vdi_init_mutex);
 
-    if (vdi_init(coreIdx) < 0) {
-        LeaveLock(coreIdx);
+    if (EnterLock(coreIdx) != RETCODE_SUCCESS) {
+        mutex_lock(&__vdi_init_mutex);
+        vdi_release(coreIdx);
+        mutex_unlock(&__vdi_init_mutex);
         return -1;
     }
 
@@ -159,10 +164,11 @@ int VPU_GetProductId(int coreIdx)
         productId = -1;
     else
         productId = ProductVpuGetId(coreIdx);
+    LeaveLock((coreIdx));
 
+    mutex_lock(&__vdi_init_mutex);
     vdi_release(coreIdx);
-    LeaveLock(coreIdx);
-
+    mutex_unlock(&__vdi_init_mutex);
     return productId;
 }
 
@@ -177,12 +183,15 @@ static RetCode InitializeVPU(Uint32 coreIdx, const Uint16* code, Uint32 size)
 {
     RetCode ret;
 
-    if (EnterLock(coreIdx) != RETCODE_SUCCESS) {
+    mutex_lock(&__vdi_init_mutex);
+    if (vdi_init(coreIdx) < 0) {
+        mutex_unlock(&__vdi_init_mutex);
         return RETCODE_FAILURE;
     }
+    mutex_unlock(&__vdi_init_mutex);
 
-    if (vdi_init(coreIdx) < 0) {
-        LeaveLock(coreIdx);
+    // EnterLock(coreIdx);
+    if (EnterLock(coreIdx) != RETCODE_SUCCESS) {
         return RETCODE_FAILURE;
     }
 
@@ -267,13 +276,14 @@ RetCode VPU_DeInit(Uint32 coreIdx)
 
     s_pusBitCode[coreIdx] = NULL;
     s_bitCodeSize[coreIdx] = 0;
+    LeaveLock(coreIdx);
 
 #if defined(SUPPORT_SW_UART) || defined(SUPPORT_SW_UART_V2)
     destroy_sw_uart_thread(coreIdx);
 #endif
-
+    mutex_lock(&__vdi_init_mutex);
     ret = vdi_release(coreIdx);
-    LeaveLock(coreIdx);
+    mutex_unlock(&__vdi_init_mutex);
     if (ret != 0)
         return RETCODE_FAILURE;
 
@@ -573,8 +583,10 @@ RetCode VPU_DecClose(DecHandle handle)
     if (GetPendingInst(pCodecInst->coreIdx) == pCodecInst)
         ClearPendingInst(pCodecInst->coreIdx);
 
-    FreeCodecInstance(pCodecInst);
     LeaveLock(pCodecInst->coreIdx);
+
+    FreeCodecInstance(pCodecInst);
+
     return ret;
 }
 
@@ -807,6 +819,8 @@ static RetCode DecRegisterFrameBuffer(DecHandle handle, FrameBuffer *bufArray, i
     ret = ProductVpuDecRegisterFramebuffer(pCodecInst);
 
     LeaveLock(pCodecInst->coreIdx);
+
+
     return ret;
 }
 
@@ -868,6 +882,7 @@ RetCode VPU_DecUpdateFrameBuffer(DecHandle handle, FrameBuffer* fbcFb, FrameBuff
     ret = ProductVpuDecUpdateFrameBuffer((CodecInst*)handle, fbcFb, linearFb, mvColIndex, picWidth, picHeight);
 
     LeaveLock(pCodecInst->coreIdx);
+
     return ret;
 }
 
@@ -1896,7 +1911,7 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
             pDecInfo->vbUserData.phys_addr = pDecInfo->userDataBufAddr;
             pDecInfo->vbUserData.size = pDecInfo->userDataBufSize;
             pDecInfo->vbUserData.virt_addr = (unsigned long)userDataVirtAddr;
-            if (vdi_attach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbUserData, 0) != 0) {
+            if (vdi_attach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbUserData) != 0) {
                 return RETCODE_INSUFFICIENT_RESOURCE;
             }
             break;
@@ -2502,8 +2517,10 @@ RetCode VPU_EncClose(EncHandle handle)
     if (pEncInfo->vbTask.size)
         vdi_free_dma_memory(pCodecInst->coreIdx, &pEncInfo->vbTask, ENC_TASK, pCodecInst->instIndex);
 
-    FreeCodecInstance(pCodecInst);
     LeaveLock(pCodecInst->coreIdx);
+
+    FreeCodecInstance(pCodecInst);
+
     return ret;
 }
 
@@ -2638,6 +2655,7 @@ RetCode VPU_EncRegisterFrameBuffer(EncHandle handle, FrameBuffer* bufArray, int 
     SetPendingInst(pCodecInst->coreIdx, 0);
 
     LeaveLock(pCodecInst->coreIdx);
+
     return ret;
 }
 

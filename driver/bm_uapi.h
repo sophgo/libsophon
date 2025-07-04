@@ -155,8 +155,6 @@ struct bm_reg {
 #define BMDEV_FLUSH_GMEM		_IOWR('p', 0x18, unsigned long)
 #define BMDEV_ALLOC_GMEM_ION		_IOW('p', 0x19, unsigned long)
 #define BMDEV_GMEM_ADDR		        _IOW('p', 0x1a, unsigned long)
-#define BMDEV_ALLOC_GMEM_ION_U64        _IOW('p', 0x1b, unsigned long)
-#define BMDEV_FREE_GMEM_U64             _IOW('p', 0x1c, unsigned long)
 
 #define BMDEV_SEND_API			_IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API		_IOW('p', 0x21, unsigned long)
@@ -255,7 +253,6 @@ struct bm_reg {
 #define BMDEV_LOADED_LIB		        _IOR('p', 0x95, unsigned long)
 #define BMDEV_GET_SMI_ATTR              _IOR('p', 0x96, unsigned long)
 #define BMDEV_PWR_CTRL                  _IOR('p', 0x97, unsigned long)
-#define BMDEV_GET_LIB_INFO             _IOWR('p', 0x98, unsigned long)
 
 #define BMDEV_GET_IDLE_COREID          _IOR('p', 0xB0, unsigned long)
 

@@ -10,10 +10,6 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/version.h>
-#include <linux/string.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
-#include <linux/uaccess.h>
 #include "bm_common.h"
 #include "bm_drv.h"
 #include "bm_io.h"
@@ -32,8 +28,6 @@
 #include "bm1688_cdma.h"
 #include "bm1684_cdma.h"
 #include "bm1688_base64.h"
-
-struct proc_dir_entry *bmdi_folder;
 
 // TODO:
 // extern uint32_t sophon_get_chip_id(void);
@@ -365,27 +359,27 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 	int ret;
 
 	bmdi->cinfo.version.bl1_version = kmalloc(BL1_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, BL1_VERSION_BASE, BL1_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, BL1_VERSION_BASE, BL1_VERSION_SIZE);
 	if (ret)
 		goto err_bl1_version;
 
 	bmdi->cinfo.version.bl2_version = kmalloc(BL2_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE);
 	if (ret)
 		goto err_bl2_version;
 
 	bmdi->cinfo.version.bl31_version = kmalloc(BL31_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl31_version, BL31_VERSION_BASE, BL31_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl31_version, BL31_VERSION_BASE, BL31_VERSION_SIZE);
 	if (ret)
 		goto err_bl31_version;
 
 	bmdi->cinfo.version.uboot_version = kmalloc(UBOOT_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_BASE, UBOOT_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_BASE, UBOOT_VERSION_SIZE);
 	if (ret)
 		goto err_uboot_version;
 
 	bmdi->cinfo.version.chip_version = kmalloc(CHIP_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.chip_version, CHIP_VERSION_BASE, CHIP_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.chip_version, CHIP_VERSION_BASE, CHIP_VERSION_SIZE);
 	if (ret)
 		goto err_chip_version;
 
@@ -413,168 +407,11 @@ static void bmdrv_free_boot_loader_version(struct bm_device_info *bmdi)
 	kfree(bmdi->cinfo.version.chip_version);
 }
 
-static int bmdi_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-
-	seq_printf(m, "libsophon git version:%s\n", GIT_VER_STRING);
-	seq_printf(m, "status:%d\n", bmdi->status);
-
-	return 0;
-}
-
-static int seq_bmdi_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, bmdi_proc_show, PDE_DATA(inode));
-}
-
-static const struct proc_ops bmdi_proc_ops = {
-	.proc_open = seq_bmdi_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
-};
-
-static int lib_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	struct bmcpu_lib *lib_node;
-	struct bmcpu_lib *lib_temp, *lib_next;
-	struct bmcpu_lib *lib_info = bmdi->lib_dyn_info;
-	char hex_str[33];
-	int i = 0;
-
-	seq_puts(m, "lib_name                      md5                                refcount    core_id\n");
-
-	mutex_lock(&lib_info->bmcpu_lib_mutex);
-	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
-		lib_node = lib_temp;
-		for (i = 0; i < 16; i++) {
-			sprintf(hex_str + (i * 2), "%02x", lib_node->md5[i]);
-		}
-		hex_str[32] = '\0';
-		seq_printf(m, "%-30s%-35s%-12d%-7d\n", lib_node->lib_name, hex_str,
-					lib_node->refcount, lib_node->core_id);
-	}
-	mutex_unlock(&lib_info->bmcpu_lib_mutex);
-
-	return 0;
-}
-
-static int seq_lib_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, lib_proc_show, PDE_DATA(inode));
-}
-
-static const struct proc_ops lib_proc_ops = {
-	.proc_open = seq_lib_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
-};
-
-static int api_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	struct api_fifo_entry api_entry;
-	struct bm_api_info *api_info;
-	int count = 0;
-	int core_num = 0;
-	int api_num = 0;
-	int i = 0;
-	u64 glob_api_num = 0;
-	u64 sync_api_num = 0;
-
-	core_num = base_get_core_num(bmdi);
-	for (i = 0; i < core_num; i++) {
-		if (i == 0) {
-			sync_api_num = bmdi->bm_sync_api_seq;
-			glob_api_num = bmdi->bm_send_api_seq;
-		} else if (i == 1) {
-			sync_api_num = bmdi->bm_sync_api_seq1;
-			glob_api_num = bmdi->bm_send_api_seq1;
-		}
-		api_info = &bmdi->api_info[i][GP_REG_MESSAGE_WP_CHANNEL_XPU];
-		api_num = kfifo_len(&api_info->api_fifo) / API_ENTRY_SIZE;
-		seq_printf(m, "there is %d apis in core_%d fifo\n", api_num, i);
-		seq_printf(m, "%lld apis has send, %lld has sync\n", glob_api_num, sync_api_num);
-		if (api_num > 0) {
-			count = kfifo_out(&api_info->api_fifo, &api_entry, API_ENTRY_SIZE);
-			if (count < API_ENTRY_SIZE) {
-				pr_err("core_id %d: The dequeue entry size %d is not correct!\n", i, count);
-				break;
-			}
-			seq_printf(m, "first api info:\n    api_id:%d\n", api_entry.api_id);
-			seq_printf(m, "    global_api_seq:%lld\n", api_entry.global_api_seq);
-		}
-		seq_puts(m, "\n");
-	}
-
-	return 0;
-}
-
-static int seq_api_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, api_proc_show, PDE_DATA(inode));
-}
-
-static const struct proc_ops api_proc_ops = {
-	.proc_open = seq_api_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
-};
-
-static int reg_proc_show(struct seq_file *m, void *v)
-{
-	struct bm_device_info *bmdi = m->private;
-	int addr = 0;
-	int value = 0;
-	int core_num = 0;
-	int core_offset = BD_ENGINE_TPU1_OFFSET;
-	void *tiu_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr;
-	void *gdma_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr;
-	int read_count = 128;
-	int i, j;
-
-	core_num = base_get_core_num(bmdi);
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + *(u32 *)tiu_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			seq_printf(m, "tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + *(u32 *)gdma_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			seq_printf(m, "gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-	return 0;
-}
-
-static int seq_reg_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, reg_proc_show, PDE_DATA(inode));
-}
-
-static const struct proc_ops reg_proc_ops = {
-	.proc_open = seq_reg_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
-};
-
 static int bmdrv_probe(struct platform_device *pdev)
 {
 	int rc;
 	struct chip_info *cinfo;
 	struct bm_device_info *bmdi;
-	struct proc_dir_entry *proc_bmdi;
-	struct proc_dir_entry *proc_lib;
-	struct proc_dir_entry *proc_api;
-	struct proc_dir_entry *proc_reg;
-	const char *name;
 
 	PR_TRACE("bmdrv: probe start\n");
 
@@ -666,27 +503,6 @@ static int bmdrv_probe(struct platform_device *pdev)
 
 	// pwr_ctrl_set(bmdi, NULL);
 
-	name = pdev->dev.of_node->full_name;
-	bmdi_folder = proc_mkdir(name, NULL);
-	if (!bmdi_folder)
-		dev_err(&pdev->dev, "Error creating bmdi proc folder entry\n");
-
-	proc_bmdi = proc_create_data("bmdi_base_info", 0664, bmdi_folder, &bmdi_proc_ops, bmdi);
-	if (!proc_bmdi)
-		dev_err(&pdev->dev, "Create bmdi base info proc failed!\n");
-
-	proc_lib = proc_create_data("bmdi_lib_info", 0664, bmdi_folder, &lib_proc_ops, bmdi);
-	if (!proc_lib)
-		dev_err(&pdev->dev, "Create bmdi lib info proc failed!\n");
-
-	proc_api = proc_create_data("bmdi_api_info", 0664, bmdi_folder, &api_proc_ops, bmdi);
-	if (!proc_api)
-		dev_err(&pdev->dev, "Create bmdi api info proc failed!\n");
-
-	proc_reg = proc_create_data("tpu_reg_info", 0664, bmdi_folder, &reg_proc_ops, bmdi);
-	if (!proc_reg)
-		dev_err(&pdev->dev, "Create bmdi reg info proc failed!\n");
-
 	dev_info(cinfo->device, "Card %d(type:%s) probe done\n", bmdi->dev_index,
 			cinfo->chip_type);
 	return 0;
@@ -741,12 +557,6 @@ static int bmdrv_remove(struct platform_device *pdev)
 		bmdrv_remove_bmci();
 		bmdrv_class_destroy();
 	}
-	remove_proc_entry("bmdi_base_info", bmdi_folder);
-	remove_proc_entry("bmdi_lib_info", bmdi_folder);
-	remove_proc_entry("bmdi_api_info", bmdi_folder);
-	remove_proc_entry("tpu_reg_info", bmdi_folder);
-	remove_proc_entry("bmtpu", NULL);
-
 	return 0;
 }
 

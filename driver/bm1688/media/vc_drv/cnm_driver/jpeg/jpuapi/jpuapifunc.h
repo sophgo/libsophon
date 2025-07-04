@@ -284,9 +284,6 @@ typedef struct JpgInst {
         JpgEncInfo encInfo;
         JpgDecInfo decInfo;
     } *JpgInfo;
-
-    Uint64 u64StartTime;
-    Uint64 u64EndTime;
 } JpgInst;
 
 

@@ -32,11 +32,10 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
         sizeof(u64) * 2 +
         (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() + sizeof(int) +
         2 * sizeof(u64) + sizeof(int); // base message id
-
+    api_info.api_id.push_back(BM_API_ID_MULTI_FULLNET);
     api_info.api_data[core_idx].assign(api_buffer_size, 0);
     api_info.input_addr_offset.assign(input_info.size(), 0);
     api_info.output_addr_offset.assign(output_info.size(), 0);
-    api_info.api_id.emplace_back(net_info.kernel_func_ids[0]);
 
     void *p_api = api_info.api_data[core_idx].data();
     // input global offset process
@@ -112,19 +111,23 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
 }
 bm_status_t
 bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
-                                        const tpu_net_info_t &net_info)
-{
+                                       const tpu_net_info_t &net_info) {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
   api_info_t api_info;
   fill_api_info(net_info, api_info);
-  auto api_id = net_info.kernel_func_ids[0];
-  bm_status_t status = tpu_kernel_launch_async(handle, api_id,
-                                               api_info.api_data[0].data(),
-                                               api_info.api_data[0].size());
-  if (BM_SUCCESS != status)
-  {
-    BMRT_LOG(WRONG, "tpu_kernel_launch failed, func id:%d, status:%d", api_id, status);
+  bm_status_t status = BM_SUCCESS;
+  for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
+    bm_status_t core_status = bm_send_api_to_core(
+        handle, (bm_api_id_t)api_info.api_id[0],
+        api_info.api_data[core_idx].data(),
+        api_info.api_data[core_idx].size(),
+        net_info.core_list.at(core_idx));
+    if (BM_SUCCESS != core_status) {
+      status = (status == BM_SUCCESS) ? core_status : status;
+      BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
+               BM_API_ID_MULTI_FULLNET, core_status);
+    }
   }
   return status;
 }

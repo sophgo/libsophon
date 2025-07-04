@@ -289,8 +289,6 @@ extern void BitstreamWriter_Destroy(BSWriter writer);
    -------------------------------------------------------------------------- */
 extern char* jpuGetFileExtension(const char* filename);
 
-extern Uint64 jpgGetCurrentTime(void);
-
 #if defined (__cplusplus)
 }
 #endif

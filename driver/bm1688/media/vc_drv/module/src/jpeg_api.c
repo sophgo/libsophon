@@ -1102,10 +1102,10 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
             JLOG(ERR, "Error enc: timeout happened,core:%d inst %d, reason:%d\n",
             pst_handle->core_idx, pst_handle->handle->instIndex, int_reason);
             _jpeg_dump_register(pst_handle->core_idx, pst_handle->handle->instIndex);
-            ret = JPU_EncGetOutputInfo(pst_handle->handle, &pst_handle->output_info);
+            JPU_SetJpgPendingInstEx(pst_handle->handle, NULL);
             JpgLeaveLock();
             JPU_ReleaseCore(pst_handle->core_idx);
-            return ENC_TIMEOUT;
+            return JPG_RET_FAILURE;
         }
         if (int_reason == -2) {
             JLOG(ERR, "Interrupt occurred. but this interrupt is not for my instance enc\n");
@@ -1153,9 +1153,7 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
     pst_handle->valid_cnt++;
     JPU_ReleaseCore(pst_handle->core_idx);
 
-    if (pst_handle->open_param.bitrate)
-        jpeg_rc_update_pic_info(pst_handle, pst_handle->output_info.bitstreamSize * 8);
-
+    jpeg_rc_update_pic_info(pst_handle, pst_handle->output_info.bitstreamSize * 8);
     return ret;
 }
 
@@ -1497,7 +1495,6 @@ int jpeg_dec_send_stream(drv_jpg_handle handle, void *data, int length, int time
         }
     }
 
-    pst_handle->handle->u64EndTime = jpgGetCurrentTime();
     ret = JPU_DecGetOutputInfo(pst_handle->handle, &pst_handle->output_info);
     if (ret != JPG_RET_SUCCESS) {
         JLOG(ERR, "JPU_DecGetOutputInfo failed Error code is 0x%x \n", ret );
@@ -1571,7 +1568,8 @@ int jpeg_enc_get_stream(drv_jpg_handle handle, void *data, unsigned long int *pu
     }
 
     if (pu64HwTime) {
-        *pu64HwTime = pst_handle->handle->u64EndTime - pst_handle->handle->u64StartTime;
+        //*pu64HwTime = pJpgInst->u64EndTime - pJpgInst->u64StartTime;
+        *pu64HwTime = 0; //get the cost time
     }
 
     return ret;
@@ -1596,7 +1594,8 @@ int jpeg_dec_get_frame(drv_jpg_handle handle, void *data, unsigned long int *pu6
         pst_handle->valid_cnt--;
 
     if (pu64HwTime) {
-        *pu64HwTime = pst_handle->handle->u64EndTime - pst_handle->handle->u64StartTime;
+        //*pu64HwTime = pJpgInst->u64EndTime - pJpgInst->u64StartTime;
+        *pu64HwTime = 0; //get the cost time
     }
 
     return JPG_RET_SUCCESS;

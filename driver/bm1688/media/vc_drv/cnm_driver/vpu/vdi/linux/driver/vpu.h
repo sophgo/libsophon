@@ -103,13 +103,5 @@ long vpu_free_extern_memory(vpudrv_buffer_t *vdb);
 int  vpu_free_extern_buffers(int core_idx);
 void vpu_clk_disable(int core_idx);
 void vpu_clk_enable(int core_idx);
-
-int vpu_get_suspend_state(void);
-int vpu_core_lock(unsigned long core_idx);
-void vpu_core_unlock(unsigned long core_idx);
-int vpu_disp_lock(unsigned long core_idx);
-void vpu_disp_unlock(unsigned long core_idx);
-int vpu_mem_lock(unsigned long core_idx);
-void vpu_mem_unlock(unsigned long core_idx);
 #endif
 

@@ -146,11 +146,6 @@ void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 				api_entry.thd_info->cpl_api_seq[core_id] = api_entry.thd_api_seq[core_id];
 				api_entry.h_info->h_cpl_api_seq[core_id] = api_entry.thd_info->cpl_api_seq[core_id];
 			}
-			if (core_id == 0) {
-				bmdi->bm_sync_api_seq = api_entry.global_api_seq;
-			} else if (core_id == 1) {
-				bmdi->bm_sync_api_seq1 = api_entry.global_api_seq;
-			}
 			bmdrv_post_api_process(bmdi, api_entry, channel, core_id);
 			if (api_entry.h_info)
 				wake_up_all(&api_entry.h_info->h_msg_done);
@@ -607,6 +602,7 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	u32 wp, rp, new_rp;
 	u32 header_size;
+	u32 data;
 
 	spin_lock(&msg_lock);
 
@@ -624,11 +620,8 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 		if (wp == rp) {
 			PR_TRACE("the fifo is empty.\n");
 		} else {
-			while (new_rp != wp) {
-				pr_err("bm-sophon%d message in xpu fifo : 0x%x\n", bmdi->dev_index,
-				shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0));
-				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
-			}
+			data = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, core_id);
+			pr_err("bm-sophon%d tpu api [%d:%s] timeout\n", bmdi->dev_index, data, api_desc(data));
 		}
 	}
 #ifdef PCIE_MODE_ENABLE_CPU

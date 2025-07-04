@@ -41,7 +41,7 @@ typedef map < pool_addr_t, pool_size_t> pool_map_t;
 class offset_prev_finder {
 public:
 	offset_prev_finder(pool_addr_t offset_prev) : offset_prev_(offset_prev) {}
-	bool operator()(const pool_pair_t pair_) {
+	bool operator(void)(const pool_pair_t pair_) {
 		return pair_.first + pair_.second == offset_prev_;
 	}
 private:
@@ -51,7 +51,7 @@ private:
 class offset_next_finder {
 public:
 	offset_next_finder(pool_addr_t offset_next) : offset_next_(offset_next) {}
-	bool operator()(const pool_pair_t pair_) {
+	bool operator(void)(const pool_pair_t pair_) {
 		return pair_.first == offset_next_;
 	}
 private:

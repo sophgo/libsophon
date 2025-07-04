@@ -6,8 +6,6 @@
 #include <string.h>
 #include <memory>
 #include <functional>
-#include <thread>
-#include <mutex>
 #include "bmrt_arch_info.h"
 #include "bmruntime_common.h"
 #ifdef __linux__
@@ -174,7 +172,6 @@ private:
     vector<profile_mem_info_t> mem_info;
     vector<int> core_list;
     bm_handle_t handle = nullptr;
-    std::mutex mutex;
 };
 
 class BMProfileDeviceBase {

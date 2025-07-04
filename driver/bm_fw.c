@@ -79,13 +79,12 @@ static int bmdrv_load_firmware(struct bm_device_info *bmdi, struct file *file, u
 {
 	int ret = 0x0;
 
-	if (bmdev_memcpy_s2d_internal(bmdi, dst, firmware, word_num * sizeof(u32), false)) {
+	if (bmdev_memcpy_s2d_internal(bmdi, dst, firmware, word_num * sizeof(u32))) {
 		pr_err("bmdrv: memcpy s2d firmware failed!\n");
 		return -EFAULT;
 	}
-	pr_info("bmdrv: memcpy s2d firmware success!\n");
-	// ret = bmdrv_compare_fw(bmdi, file, firmware, word_num, dst);
-	ret = bmdrv_compare_fw_stage(bmdi, dst, word_num * sizeof(u32), firmware);
+
+	ret = bmdrv_compare_fw(bmdi, file, firmware, word_num, dst);
 
 	if (ret < 0) {
 		pr_err("bmdrv: bmsophon%d fw compare fail!\n", bmdi->dev_index);
@@ -96,7 +95,7 @@ static int bmdrv_load_firmware(struct bm_device_info *bmdi, struct file *file, u
 
 int bmdrv_wait_fwinit_done(struct bm_device_info *bmdi)
 {
-	int cnt = 20000;
+	int cnt = 2500;
 	int polling_ms = bmdi->cinfo.polling_ms;
 	u32 fw_mask = ~(0xf << 28);
 	u32 value0 = 0;
@@ -137,7 +136,7 @@ int bmdrv_wait_fwinit_done(struct bm_device_info *bmdi)
 			value0 = gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 0);
 			value1 = gp_reg_read_idx(bmdi, GP_REG_FW_STATUS, 1);
 			if (cnt) {
-				pr_info("bmdrv: bmsophon%d firmware init done!, status1 = 0x%x, status2 = 0x%x, cnt: %d, polling_ms: %d\n", bmdi->dev_index, value0, value1, cnt, polling_ms);
+				pr_info("bmdrv: bmsophon%d firmware init done!, status1 = 0x%x, status2 = 0x%x\n", bmdi->dev_index, value0, value1);
 				return 0;
 			} else {
 				pr_err("bmdrv: bmsophon%d firmware init timeout!, status1 = 0x%x, status2 = 0x%x\n", bmdi->dev_index, value0, value1);
@@ -220,8 +219,8 @@ static int bmdrv_fw_download_kernel(struct bm_device_info *bmdi, struct file *fi
 {
 	int ret;
 	u64 a53lite_park = 0x100000000;
-	u64 c906_0_park = C906_0_PARK;
-	u64 c906_1_park = C906_1_PARK;
+	u64 c906_0_park = 0x104000000;
+	u64 c906_1_park = 0x114000000; // 256M
 	const char *bm1684x_dyn_fw = "bm1684x_firmware.bin";
 	const char *bm1684_itcm_fw = "bm1684_tcm_firmware.bin";
 	const char *bm1684x_ddr_fw = "bm1684_ddr_firmware.bin";
@@ -366,7 +365,7 @@ static int bmdrv_eu_table_load(struct bm_device_info *bmdi)
 	}
 
 	if (bmdev_memcpy_s2d_internal(bmdi, bmdi->gmem_info.resmem_info.eutable_addr,
-			      eu_cmd_warp, EU_CMD_LEN * sizeof(u32), false)) {
+			      eu_cmd_warp, EU_CMD_LEN * sizeof(u32))) {
 		pr_err("bmdrv: load eu table failed!\n");
 		kfree(eu_cmd_warp);
 		return -EFAULT;

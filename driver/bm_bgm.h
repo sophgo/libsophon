@@ -48,26 +48,6 @@ typedef struct bm_mem_desc {
 	unsigned int                    size;
 } bm_mem_desc_t;
 
-typedef struct bm_mem_desc_u64 {
-	union {
-		struct {
-			unsigned long device_addr;
-			unsigned int reserved0;
-			int dmabuf_fd;
-		} device;
-		struct {
-			void *system_addr;
-			unsigned int reserved;
-			int reserved1;
-		} system;
-	} u;
-
-	bm_mem_flags_t flags;
-	unsigned long long size;
-} bm_mem_desc_u64_t;
-
-typedef struct bm_mem_desc_u64 bm_device_mem_u64_t;
-
 typedef struct bm_mem_desc   bm_device_mem_t;
 
 enum ion_heap_type {
@@ -166,6 +146,5 @@ void ion_device_create(struct bm_device_info *bmdi);
 struct ion_heap *ion_carveout_heap_create(struct ion_platform_heap *heap_data);
 int ion_alloc(struct bm_device_info *bmdi, struct ion_allocation_data* alloc_data);
 void ion_carveout_heap_destroy(struct ion_carveout_heap *carveout_heap);
-struct ion_buffer *ion_alloc_nofd(struct bm_device_info *bmdi, struct ion_allocation_data *alloc_data);
-void ion_free_nofd(struct ion_buffer *buffer);
+
 #endif

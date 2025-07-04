@@ -49,11 +49,16 @@ typedef struct  {
     vpudrv_buffer_t         vdb_register;
     vpu_buffer_t            vpu_common_memory;
     int                     vpu_buffer_pool_count;
+    MUTEX_HANDLE            vpu_mutex;
+    MUTEX_HANDLE            vmem_mutex;
+    MUTEX_HANDLE            vpu_disp_mutex;
+    void* rev1_mutex;
     pid_t pid;
     unsigned int chip_id;
     unsigned char             ext_addr;
     unsigned int instance_start_flag;
     atomic_t instance_count;
+    int mutex[VDI_NUM_LOCK_HANDLES];
 } vdi_info_t;
 
 static vdi_info_t s_vdi_info[MAX_NUM_VPU_CORE];
@@ -157,12 +162,19 @@ int vdi_init(unsigned long core_idx)
 
     VLOG(INFO, "[VDI] map vdb_register core_idx=%d, virtaddr=0x%x, size=%d\n", core_idx, (int)vdi->vdb_register.virt_addr, vdi->vdb_register.size);
 
+
+    if (vdi_lock(core_idx) < 0)
+    {
+        VLOG(ERR, "[VDI] fail to handle lock function\n");
+        goto ERR_VDI_INIT;
+    }
     vdi_set_clock_gate(core_idx, 1);
 
     vdi->product_code = vdi_read_register(core_idx, VPU_PRODUCT_CODE_REGISTER);
 
     if (vdi_allocate_common_memory(core_idx) < 0)
     {
+        vdi_unlock(core_idx);
         VLOG(ERR, "[VDI] fail to get vpu common buffer from driver\n");
         goto ERR_VDI_INIT;
     }
@@ -172,6 +184,7 @@ int vdi_init(unsigned long core_idx)
     vdi->task_num++;
     vdi_set_clock_gate(core_idx, 0);
     atomic_set(&vdi->instance_count, 1);
+    vdi_unlock(core_idx);
     VLOG(INFO, "[VDI] success to init driver \n");
     return 0;
 
@@ -243,9 +256,16 @@ int vdi_release(unsigned long core_idx)
     if (!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return 0;
 
+    if (vdi_lock(core_idx) < 0)
+    {
+        VLOG(ERR, "[VDI] fail to handle lock function\n");
+        return -1;
+    }
+
     if (vdi->task_num > 1) // means that the opened instance remains
     {
         vdi->task_num--;
+        vdi_unlock(core_idx);
         return 0;
     }
 
@@ -275,6 +295,7 @@ int vdi_release(unsigned long core_idx)
     vdi->task_num--;
     vpu_op_close(core_idx);
     vdi->vpu_fd = -1;
+    vdi_unlock(core_idx);
     osal_memset(vdi, 0x00, sizeof(vdi_info_t));
 
     return 0;
@@ -329,7 +350,7 @@ int vdi_allocate_common_memory(unsigned long core_idx)
         return -1;
     }
 
-    VLOG(INFO, "[VDI] vdi_allocate_common_memory, physaddr=0x%lx, virtaddr=0x%lx\n", vdb.phys_addr, vdb.virt_addr);
+    VLOG(INFO, "[VDI] vdi_allocate_common_memory, physaddr=0x%x, virtaddr=0x%x\n", (int)vdb.phys_addr, (int)vdb.virt_addr);
     // convert os driver buffer type to vpu buffer type
     vdi->pvip->vpu_common_buffer.size = SIZE_COMMON;
     vdi->pvip->vpu_common_buffer.phys_addr = (unsigned long)(vdb.phys_addr);
@@ -351,8 +372,8 @@ int vdi_allocate_common_memory(unsigned long core_idx)
 
     vdi_set_ddr_map(core_idx, vdb.phys_addr >> 32);
 
-    VLOG(INFO, "[VDI] vdi_get_common_memory physaddr=0x%lx, size=%d, virtaddr=0x%lx\n", \
-        vdi->vpu_common_memory.phys_addr, (int)vdi->vpu_common_memory.size, vdi->vpu_common_memory.virt_addr);
+    VLOG(INFO, "[VDI] vdi_get_common_memory physaddr=0x%x, size=%d, virtaddr=0x%x\n", \
+        (int)vdi->vpu_common_memory.phys_addr, (int)vdi->vpu_common_memory.size, (int)vdi->vpu_common_memory.virt_addr);
 
     return 0;
 }
@@ -369,11 +390,6 @@ vpu_instance_pool_t *vdi_get_instance_pool(unsigned long core_idx)
 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00 )
         return NULL;
-
-    if (sizeof(CodecInst) > MAX_INST_HANDLE_SIZE) {
-        VLOG(ERR, "[VDI] CodecInst = %d, MAX_INST_HANDLE_SIZE = %d\n",
-                (int)sizeof(CodecInst), MAX_INST_HANDLE_SIZE);
-    }
 
     osal_memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
     if (!vdi->pvip)
@@ -397,6 +413,11 @@ vpu_instance_pool_t *vdi_get_instance_pool(unsigned long core_idx)
         }
 
         vdi->pvip = (vpu_instance_pool_t *)(vdb.virt_addr);
+        vdi->vpu_mutex      = (void *)((unsigned long)vdi->mutex); //change the pointer of vpu_mutex to at end pointer of vpu_instance_pool_t to assign at allocated position.
+        vdi->vpu_disp_mutex = (void *)((unsigned long)vdi->mutex + sizeof(MUTEX_HANDLE));
+        vdi->vmem_mutex     = (void *)((unsigned long)vdi->mutex + 2*sizeof(MUTEX_HANDLE));
+        vdi->rev1_mutex = (void *)((unsigned long)vdi->mutex + 4*sizeof(MUTEX_HANDLE));
+
         VLOG(INFO, "[VDI] instance pool physaddr=0x%x, virtaddr=0x%x, base=0x%x, size=%d\n", (int)vdb.phys_addr, (int)vdb.virt_addr, (int)vdb.base, (int)vdb.size);
     }
 
@@ -505,32 +526,146 @@ int vdi_vpu_reset(unsigned long core_idx)
 
 int vdi_lock(unsigned long core_idx)
 {
-    return vpu_core_lock(core_idx);
+    vdi_info_t *vdi;
+    int count;
+    int sync_ret;
+    int sync_val = task_pid_nr(current);//current->tgid;// = getpid();
+    volatile int *sync_lock_ptr = NULL;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return -1;
+    count = 0;
+    sync_lock_ptr = (volatile int *)vdi->vpu_mutex;
+    while((sync_ret = __sync_val_compare_and_swap(sync_lock_ptr, 0, sync_val)) != 0)
+    {
+        count++;
+        if (count > (ATOMIC_SYNC_TIMEOUT)) {
+            VLOG(ERR, "%s failed to get lock sync_ret=%d, sync_val=%d, sync_ptr=%d \n", __FUNCTION__, sync_ret, sync_val, (int)*sync_lock_ptr);
+            return -1;
+        }
+        osal_msleep(1);
+    }
+
+    return 0;//lint !e454
 }
 
 void vdi_unlock(unsigned long core_idx)
 {
-    vpu_core_unlock(core_idx);
+    vdi_info_t *vdi;
+    volatile int *sync_lock_ptr = NULL;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return;
+
+    sync_lock_ptr = (volatile int *)vdi->vpu_mutex;
+    __sync_lock_release(sync_lock_ptr);
 }
 
 int vdi_disp_lock(unsigned long core_idx)
 {
-    return vpu_disp_lock(core_idx);
+    vdi_info_t *vdi;
+    int count;
+    int sync_ret;
+    int sync_val = task_pid_nr(current);
+    volatile int *sync_lock_ptr = NULL;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return -1;
+
+    count = 0;
+    sync_lock_ptr = (volatile int *)vdi->vpu_disp_mutex;
+    while((sync_ret = __sync_val_compare_and_swap(sync_lock_ptr, 0, sync_val)) != 0)
+    {
+        count++;
+        if (count > (ATOMIC_SYNC_TIMEOUT)) {
+            VLOG(ERR, "%s failed to get lock sync_ret=%d, sync_val=%d, sync_ptr=%d \n", __FUNCTION__, sync_ret, sync_val, (int)*sync_lock_ptr);
+            return -1;
+        }
+        osal_msleep(1);
+    }
+
+    return 0;//lint !e454
 }
 
 void vdi_disp_unlock(unsigned long core_idx)
 {
-    vpu_disp_unlock(core_idx);
+    vdi_info_t *vdi;
+    volatile int *sync_lock_ptr = NULL;
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return;
+
+    sync_lock_ptr = (volatile int *)vdi->vpu_disp_mutex;
+    __sync_lock_release(sync_lock_ptr);
+
 }
+
 
 static int vmem_lock(unsigned long core_idx)
 {
-    return vpu_mem_lock(core_idx);
+    vdi_info_t *vdi;
+    int count;
+    int sync_ret;
+    int sync_val = task_pid_nr(current);
+    volatile int *sync_lock_ptr = NULL;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return -1;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return -1;
+
+    count = 0;
+    sync_lock_ptr = (volatile int *)vdi->vmem_mutex;
+    while((sync_ret = __sync_val_compare_and_swap(sync_lock_ptr, 0, sync_val)) != 0)
+    {
+        count++;
+        if (count > (ATOMIC_SYNC_TIMEOUT)) {
+            VLOG(ERR, "%s failed to get lock sync_ret=%d, sync_val=%d, sync_ptr=%d \n", __FUNCTION__, sync_ret, sync_val, (int)*sync_lock_ptr);
+            return -1;
+        }
+        osal_msleep(1);
+    }
+
+    return 0;//lint !e454
 }
 
 static void vmem_unlock(unsigned long core_idx)
 {
-    vpu_mem_unlock(core_idx);;
+    vdi_info_t *vdi;
+    volatile int *sync_lock_ptr = NULL;
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
+        return;
+
+    sync_lock_ptr = (volatile int *)vdi->vmem_mutex;
+    __sync_lock_release(sync_lock_ptr);
+
 }
 
 void vdi_write_register(unsigned long core_idx, unsigned int addr, unsigned int data)
@@ -915,7 +1050,7 @@ unsigned long vdi_get_dma_memory_free_size(unsigned long core_idx)
     return size;
 }
 
-int vdi_attach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, unsigned char is_cached)
+int vdi_attach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb)
 {
     vdi_info_t *vdi;
     int i;
@@ -936,7 +1071,6 @@ int vdi_attach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, unsigned cha
     vdb.base = vb->base;
 
     vdb.virt_addr = vb->virt_addr;
-    vdb.is_cached = is_cached;
 
     vmem_lock(core_idx);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
@@ -1251,7 +1385,6 @@ int vdi_wait_bus_busy(unsigned long core_idx, int timeout, unsigned int gdi_busy
                 return -1;
             }
         }
-        usleep_range(5, 10);    // delay more to give idle time to OS;
     }
     return 0;
 }
@@ -1284,7 +1417,6 @@ int vdi_wait_vpu_busy(unsigned long core_idx, int timeout, unsigned int addr_bit
                 return -1;
             }
         }
-        usleep_range(5, 10);   // delay more to give idle time to OS;
     }
     return 0;
 }
@@ -1316,7 +1448,6 @@ int vdi_wait_vcpu_bus_busy(unsigned long core_idx, int timeout, unsigned int gdi
                 return -1;
             }
         }
-        usleep_range(5, 10);   // delay more to give idle time to OS;
     }
     return 0;
 }
@@ -1550,13 +1681,5 @@ int vdi_release_instance(unsigned long core_idx)
     return 0;
 }
 
-int vdi_get_suspend_state(void)
-{
-#ifdef VPU_SUPPORT_CLOCK_CONTROL
-    return vpu_get_suspend_state();
-#else
-    return 0;
-#endif
-}
 #endif	//#if defined(linux) || defined(__linux) || defined(ANDROID)
 

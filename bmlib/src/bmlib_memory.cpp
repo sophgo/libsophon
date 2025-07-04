@@ -43,6 +43,7 @@ bm_basic_func_t g_basic_func[] = {
 	{.func_name = (char*)"sg_api_memcpy_wstride", 0, 0},
 	{.func_name = (char*)"sg_api_memcpy_byte", 0, 0},
 };
+int g_init_basic_func_flag = 0;
 
 #define BMLIB_MEM_GUARD_SIZE 1024
 static unsigned char guard_data[BMLIB_MEM_GUARD_SIZE] = {0};
@@ -92,11 +93,11 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	bm_get_tpu_scalar_num(handle, &core_num);
 	pthread_mutex_lock(&mutex);
 
-	if (handle->g_init_basic_func_flag == 0x5a) {
+	if (g_init_basic_func_flag == 0x5a) {
 		pthread_mutex_unlock(&mutex);
 		return BM_SUCCESS;
 	}
-	handle->g_init_basic_func_flag = 0x5a;
+	g_init_basic_func_flag = 0x5a;
 
 	#ifdef __linux__
 	char key[64] = {0};
@@ -149,7 +150,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 
 tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_name, int core_id)
 {
-	if (handle->g_init_basic_func_flag != 0x5a) {
+	if (g_init_basic_func_flag != 0x5a) {
 		printf("error g_basic_func not init\n");
 		return -1;
 	}
@@ -660,7 +661,7 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 			ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
 
 			if (ret == 0) {
-				ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION_U64, pmem);
+				ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION, pmem);
 				break;
 			}
 			}
@@ -747,7 +748,7 @@ static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) 
   	}
 #endif
 	bm_profile_record_mem_begin(ctx);
-	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM_U64, pmem);
+	ret = platform_ioctl(ctx, BMDEV_FREE_GMEM, pmem);
 	if (ret != 0) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
 		"bm free gmem failed, ioclt ret = %d:%d\n", ret, __LINE__);
@@ -3875,10 +3876,7 @@ bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst
 	bm_api_memcpy_byte_t api = {bm_mem_get_device_addr(src) + src_offset,
 								bm_mem_get_device_addr(dst) + dst_offset, size};
 	if (bm_is_dynamic_loading(handle)) {
-		ret = bm_init_basic_func_id(handle);
-		if (ret != BM_SUCCESS) {
-			return ret;
-		}
+		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_byte", core_id);
 		ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_byte_t), core_id);
 	} else {

@@ -88,9 +88,7 @@ typedef struct decoder_handle{
     FrameBufferFormat wtl_format;
     int cbcr_interleave;
     int nv21;
-    Queue *timestamp_decode;
-    Queue *timestamp_display;
-    TIMESTAMP_INFO *timestamp_pool;
+    Queue *timestamp_info;
     int is_bind_mode;
     struct vb_jobs_t jobs;
     int cmd_queue_depth;
@@ -615,10 +613,6 @@ static int fill_command_queue(DECODER_HANDLE *pst_handle)
     SRC_INFO *src_info;
     DecParam dec_param = {0};
 
-    if (vdi_get_suspend_state()) {
-        return RETCODE_QUEUEING_FAILURE;
-    }
-
     if ((!pst_handle->decode_one_frame) &&
         (pst_handle->seq_status != SEQ_CHANGE) &&
         (pst_handle->seq_status != SEQ_DECODE_FINISH) &&
@@ -642,31 +636,23 @@ static int fill_command_queue(DECODER_HANDLE *pst_handle)
         } else if (pst_handle->open_param->bitstreamMode == BS_MODE_INTERRUPT) {
             if (pst_handle->seq_status != SEQ_DECODE_FINISH)
                 pst_handle->decode_one_frame = 1;
-
-            if (pst_handle->seq_status == SEQ_INIT_NON) {
-                Uint32 room;
-                VPU_DecGetBitstreamBuffer(pst_handle->handle, NULL, NULL, &room);
-                if (room == (pst_handle->bitstream_size - 1))//stream buffer is empty
-                    pst_handle->decode_one_frame = 0;
-            }
         }
     }
 
     if (pst_handle->decode_one_frame) {
         if (pst_handle->seq_status == SEQ_INIT_NON) {
+            pst_handle->seq_status = SEQ_INIT_START;
             ret = VPU_DecIssueSeqInit(pst_handle->handle);
             if (RETCODE_SUCCESS != ret) {
                 VLOG(ERR, "VPU_DecIssueSeqInit failed! ret=%08x\n", ret);
                 return ret;
             }
-            pst_handle->seq_status = SEQ_INIT_START;
         }
 
         if (pst_handle->seq_status == SEQ_DECODE_START) {
             ret = VPU_DecStartOneFrame(pst_handle->handle, &dec_param);
             if (ret != RETCODE_SUCCESS) {
-                if (ret != RETCODE_QUEUEING_FAILURE)
-                    VLOG(ERR, "VPU_DecStartOneFrame failed! ret=%08x\n", ret);
+                VLOG(ERR, "VPU_DecStartOneFrame failed! ret=%08x\n", ret);
                 pst_handle->decode_one_frame = 0;
                 return ret;
             }
@@ -685,7 +671,6 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
     SecAxiUse  sec_axi_info = {0};
     int cycle_per_tick = 256;
     int height_from_user, width_from_user;
-    int numOfDecFbc, numOfDecwtl;
 
     ret = VPU_WaitInterruptEx(pst_handle->handle, timeout);
     if (ret < 0) {
@@ -734,37 +719,11 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
             return RETCODE_FAILURE;
         }
 
-        if(pst_handle->frameBufFlag == 1)
-        {
-            if (pst_handle->open_param->wtlEnable){
-                numOfDecFbc = pst_handle->seq_info->minFrameBufferCount + pst_handle->cmd_queue_depth;
-                numOfDecwtl = pst_handle->seq_info->frameBufDelay + pst_handle->frame_buffer_count + pst_handle->cmd_queue_depth;
-            }
-            else{
-                numOfDecFbc = pst_handle->seq_info->minFrameBufferCount + pst_handle->cmd_queue_depth + pst_handle->frame_buffer_count;
-                numOfDecwtl = 0;
-            }
-            if(pst_handle->numOfDecFbc < numOfDecFbc || pst_handle->numOfDecwtl < numOfDecwtl) {
-                VLOG(ERR, "framebuffers cnt is less than the VPU minimum require. minFrameBufferCount:%d  frameBufDelayCount:%d\n",
-                pst_handle->seq_info->minFrameBufferCount, pst_handle->seq_info->frameBufDelay);
-                pst_handle->seq_status = SEQ_DECODE_FRAMEBUFFER_NOTENOUGH;
-                return RETCODE_FAILURE;
-            }
-        }
-
         ret = alloc_framebuffer(pst_handle);
         if (ret != RETCODE_SUCCESS) {
             pst_handle->seq_status = SEQ_DECODE_FINISH;
             VLOG(ERR, "alloc_framebuffer failed! ret = %08x\n",ret);
             return RETCODE_FAILURE;
-        }
-
-        if(pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END && pst_handle->timestamp_pool == NULL) {
-            pst_handle->timestamp_pool = (TIMESTAMP_INFO *)osal_calloc(1, sizeof(TIMESTAMP_INFO) * (pst_handle->numOfDecFbc + pst_handle->numOfDecwtl + 1));
-            if (pst_handle->timestamp_pool == NULL) {
-                VLOG(ERR, "timestamp pool alloc failed!\n");
-                return RETCODE_FAILURE;
-            }
         }
 
         pst_handle->seq_status = SEQ_DECODE_START;
@@ -779,18 +738,8 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
         if (pst_handle->output_info->indexFrameDisplay == DISPLAY_IDX_FLAG_SEQ_END)
             pst_handle->seq_status = SEQ_DECODE_FINISH;
 
-        if(pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
-            TIMESTAMP_INFO *timestamp_decode;
-            timestamp_decode = (TIMESTAMP_INFO *)Queue_Dequeue(pst_handle->timestamp_decode);
-            if(timestamp_decode != NULL && pst_handle->output_info->indexFrameDecoded >= 0) {
-                pst_handle->timestamp_pool[pst_handle->output_info->indexFrameDecoded].pts = timestamp_decode->pts;
-                pst_handle->timestamp_pool[pst_handle->output_info->indexFrameDecoded].dts = timestamp_decode->dts;
-            }
-        }
-
         if (pst_handle->output_info->indexFrameDisplay >= 0) {
             FRAME_INFO frame_info;
-            TIMESTAMP_INFO timestamp_display = {0};
             frame_info.frame_idx = pst_handle->output_info->indexFrameDisplay;
             frame_info.seqenceno = ++pst_handle->frame_num;//pst_handle->output_info->sequenceNo;
             frame_info.pic_type = pst_handle->output_info->picType;
@@ -798,14 +747,6 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
             frame_info.decode_hwtime =
                 (pst_handle->output_info->decDecodeEndTick - pst_handle->output_info->decHostCmdTick)*cycle_per_tick/(VPU_STAT_CYCLES_CLK/1000000);
             Queue_Enqueue(pst_handle->display_frame, &frame_info);
-
-            if(pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
-                timestamp_display.pts = pst_handle->timestamp_pool[pst_handle->output_info->indexFrameDisplay].pts;
-                if(pst_handle->output_info->indexFrameDecoded >= 0)
-                    timestamp_display.dts = pst_handle->timestamp_pool[pst_handle->output_info->indexFrameDecoded].dts;
-                Queue_Enqueue(pst_handle->timestamp_display, &timestamp_display);
-            }
-
             wake_up(&tVdecWaitQueue[pst_handle->channel_index]);
         }
 
@@ -833,9 +774,7 @@ static int process_data(DECODER_HANDLE *pst_handle, int timeout)
     if (pst_handle->stop_wait_interrupt) {
         FRAME_INFO *frame_info;
         if (!queue_status.instanceQueueCount && queue_status.reportQueueEmpty) {
-            if(pst_handle->seq_status >= SEQ_CHANGE) {
-                free_framebuffer(pst_handle);
-            }
+            free_framebuffer(pst_handle);
             up(&pst_handle->sem_release);
             return RETCODE_SUCCESS;
         }
@@ -863,22 +802,13 @@ static int process_data(DECODER_HANDLE *pst_handle, int timeout)
         ret = sequence_change(pst_handle);
         if (ret != RETCODE_SUCCESS)
             return ret;
-
-        if(pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
-            osal_free(pst_handle->timestamp_pool);
-            pst_handle->timestamp_pool = osal_calloc(1, sizeof(TIMESTAMP_INFO) * (pst_handle->numOfDecFbc + pst_handle->numOfDecwtl));
-            if (pst_handle->timestamp_pool == NULL) {
-                VLOG(ERR, "timestamp pool alloc failed!\n");
-                return RETCODE_FAILURE;
-            }
-        }
     }
 
     VPU_DecGiveCommand(pst_handle->handle, DEC_GET_QUEUE_STATUS, &queue_status);
     if (pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END)
         fill_queue_cnt = pst_handle->cmd_queue_depth - queue_status.instanceQueueCount;
     else
-        fill_queue_cnt = queue_status.instanceQueueFull ? 0 : (pst_handle->cmd_queue_depth - queue_status.instanceQueueCount);
+        fill_queue_cnt = queue_status.instanceQueueFull ? 0 : 1;
 
     for (i=0; i<fill_queue_cnt; i++)
         fill_command_queue(pst_handle);
@@ -907,7 +837,6 @@ static int thread_decode(void *param)
 
             process_data(pst_handle, 30);
         }
-        usleep_range(5, 10);    // delay more to give idle time to OS;
     }
 
     return 0;
@@ -996,9 +925,7 @@ reinit:
     else
         pst_handle->cmd_queue_depth = COMMAND_QUEUE_DEPTH;
     set_default_dec_param(pst_handle->open_param);
-    pst_handle->timestamp_pool = NULL;
-    pst_handle->timestamp_decode = Queue_Create_With_Lock(32, sizeof(TIMESTAMP_INFO));
-    pst_handle->timestamp_display = Queue_Create_With_Lock(32, sizeof(TIMESTAMP_INFO));
+    pst_handle->timestamp_info = Queue_Create_With_Lock(32, sizeof(TIMESTAMP_INFO));
     pst_handle->display_frame = Queue_Create_With_Lock(32, sizeof(FRAME_INFO));
     pst_handle->busy_src_buffer = Queue_Create_With_Lock(pst_handle->cmd_queue_depth, sizeof(SRC_INFO));
     pst_handle->free_src_buffer = Queue_Create_With_Lock(pst_handle->cmd_queue_depth, sizeof(PhysicalAddress));
@@ -1042,7 +969,7 @@ reinit:
                 vb_buffer.size = buf_info[i].size;
                 vb_buffer.virt_addr = (unsigned long)phys_to_virt(vb_buffer.phys_addr);
                 vb_buffer.base = vb_buffer.virt_addr;
-                vdi_attach_dma_memory(core_idx, &vb_buffer, 1);
+                vdi_attach_dma_memory(core_idx, &vb_buffer);
             }
             pst_handle->bitstream_buffer[i] = vb_buffer.phys_addr;
             Queue_Enqueue(pst_handle->free_src_buffer, &vb_buffer.phys_addr);
@@ -1061,7 +988,7 @@ reinit:
             vb_buffer.size = buf_info[0].size;
             vb_buffer.virt_addr = (unsigned long)phys_to_virt(vb_buffer.phys_addr);
             vb_buffer.base = vb_buffer.virt_addr;
-            vdi_attach_dma_memory(core_idx, &vb_buffer, 1);
+            vdi_attach_dma_memory(core_idx, &vb_buffer);
         }
         pst_handle->bitstream_buffer[0] = vb_buffer.phys_addr;
         pst_handle->bitstream_size = vb_buffer.size;
@@ -1084,7 +1011,7 @@ reinit:
         pst_handle->numOfDecFbc = pInitDecCfg->numOfDecFbc;
         pst_handle->numOfDecwtl = pInitDecCfg->numOfDecwtl;
         buf_info = (buffer_info_s *)pInitDecCfg->frame_buffer;
-        VLOG(INFO, "Frame buffer alloc by user. numOfDecFbc:%d numOfDecwtl:%d\n", pst_handle->numOfDecFbc, pst_handle->numOfDecwtl);
+        VLOG(ERR, "%s:%d frame buffer num:%d\n", __func__, __LINE__, pst_handle->numOfDecFbc+pst_handle->numOfDecwtl);
         for(i=0; i<(pst_handle->numOfDecFbc+pst_handle->numOfDecwtl); i++) {
             pst_handle->pst_frame_buffer[i].bufY = buf_info[i].phys_addr;
             pst_handle->pst_frame_buffer[i].size = buf_info[i].size;
@@ -1135,8 +1062,7 @@ fail:
     Queue_Destroy(pst_handle->display_frame);
     Queue_Destroy(pst_handle->busy_src_buffer);
     Queue_Destroy(pst_handle->free_src_buffer);
-    Queue_Destroy(pst_handle->timestamp_decode);
-    Queue_Destroy(pst_handle->timestamp_display);
+    Queue_Destroy(pst_handle->timestamp_info);
 
     if (pst_handle->pst_frame_buffer)
         vfree(pst_handle->pst_frame_buffer);
@@ -1203,13 +1129,7 @@ int vdec_close(void *pHandle)
     Queue_Destroy(pst_handle->display_frame);
     Queue_Destroy(pst_handle->busy_src_buffer);
     Queue_Destroy(pst_handle->free_src_buffer);
-    Queue_Destroy(pst_handle->timestamp_decode);
-    Queue_Destroy(pst_handle->timestamp_display);
-
-    if(pst_handle->timestamp_pool) {
-        vfree(pst_handle->timestamp_pool);
-        pst_handle->timestamp_pool = NULL;
-    }
+    Queue_Destroy(pst_handle->timestamp_info);
 
     if (pst_handle->pst_frame_buffer) {
         vfree(pst_handle->pst_frame_buffer);
@@ -1268,13 +1188,8 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
     if (pst_handle->user_pic_enable && pdopc->bsLen)
         return RETCODE_QUEUEING_FAILURE;
 
-    if(pst_handle->seq_status == SEQ_DECODE_WRONG_RESOLUTION ||
-        pst_handle->seq_status == SEQ_DECODE_FRAMEBUFFER_NOTENOUGH) {
+    if(pst_handle->seq_status == SEQ_DECODE_WRONG_RESOLUTION) {
         return RETCODE_INVALID_PARAM;
-    }
-
-    if (vdi_get_suspend_state()) {
-        return RETCODE_QUEUEING_FAILURE;
     }
 
     if (pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
@@ -1318,7 +1233,7 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
         if (pdopc->bsLen) {
             timestamp_info.pts = pdopc->pts;
             timestamp_info.dts = pdopc->dts;
-            Queue_Enqueue(pst_handle->timestamp_decode, (void *)&timestamp_info);
+            Queue_Enqueue(pst_handle->timestamp_info, (void *)&timestamp_info);
         }
 
         if (pdopc->bsLen == 0) {
@@ -1434,7 +1349,7 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
     }
 
     if (pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
-        timestamp_info = (TIMESTAMP_INFO *)Queue_Dequeue(pst_handle->timestamp_display);
+        timestamp_info = (TIMESTAMP_INFO *)Queue_Dequeue(pst_handle->timestamp_info);
         if (timestamp_info) {
             pdfc->pts = timestamp_info->pts;
             pdfc->dts = timestamp_info->dts;
