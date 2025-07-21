@@ -21,7 +21,7 @@ void dump_data_int(char *desc, void *addr, int n, int c, int h, int w);
 void dump_matrix_float(char *desc, void *addr, int row, int col);
 void dump_array_file(char * file, int row_num, int col_num, int transpose, float * parr);
 void simple_hash(const char *input, unsigned char hash[16]);
-
+uint64_t get_timestamp_us();
 /* dump to file */
 void dump_float_tensor(const char * filename,
     int length, float * dump_data);

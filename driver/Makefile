@@ -51,11 +51,13 @@ ifndef SOC_LINUX_DIR
 endif
 LINUX_SRC := $(SOC_LINUX_DIR)
 KBUILD_CFLAGS += -DSOC_MODE
+KBUILD_CFLAGS += -g
+
 
 all: clean
 	mkdir -p $(BM_KERNEL_DRIVER_OUT_DIR)
 	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(LINUX_SRC) M=$(PWD) modules
-	$(CROSS_COMPILE)strip --strip-unneeded $(BM_MODULE_NAME).ko
+	# $(CROSS_COMPILE)strip --strip-unneeded $(BM_MODULE_NAME).ko
 	cp -u $(BM_MODULE_NAME).ko $(BM_KERNEL_DRIVER_OUT_DIR)
 	@make -C $(LINUX_SRC) M=$(PWD) clean
 

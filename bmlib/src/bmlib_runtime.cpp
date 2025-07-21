@@ -24,7 +24,7 @@ using namespace std;
 
 #define BMLIB_RUNTIME_LOG_TAG "bmlib_runtime"
 static bmlib_api_dbg_callback api_debug_callback = NULL;
-
+static uint64_t tpu_usage = 0;
 
 std::atomic<int> bmcpu_app_live(0);
 
@@ -157,7 +157,6 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
 #endif
 
   pthread_t tid = pthread_self();
-  // pid_t pid = getpid();
   char proj_id[10];
 	int ret = 0;
   struct bm_ret bm_ret;
@@ -174,20 +173,6 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
   bm_api.sem_key = sem_key;
   bm_api.tid = tid;
 
-  // open message queue
-  // bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
-            // "open message queue.\n");
-  // struct mq_attr attr;
-  // attr.mq_flags = 0;
-  // attr.mq_maxmsg = 20;
-  // attr.mq_msgsize = sizeof(bm_api_to_bmcpu_t);
-  // attr.mq_curmsgs = 0;
-  // mqd_t mq1 = mq_open(QUEUE1_NAME, O_WRONLY | O_CREAT, 0644, &attr);
-  // // mqd_t mq1 = mq_open(QUEUE1_NAME, O_WRONLY);
-  // if (mq1 == (mqd_t)-1) {
-  //     perror("mq_open queue");
-  //     return BM_ERR_FAILURE;
-  // }
 
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "create semget.....\n");
@@ -209,22 +194,12 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
           perror("Failed to initialize semaphore");
           return BM_ERR_FAILURE;
       }
-      printf("New semaphore created, semid: %d\n", semid);
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "New semaphore created, semid: %d\n", semid);
   }
 
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "send data to mquequ.....\n");
-  // if (mq_send(mq1, (const char*)&bm_api, sizeof(bm_api_to_bmcpu_t), 0) == -1) {
-  //     perror("mq_send header");
-  //     mq_close(mq1);
-  //     return BM_ERR_FAILURE;
-  // }
-  // ret = ioctl(handle->dev_fd, BMDEV_SEND_API, &bm_api);
-  // if(ret!=0){
-  //   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-  //               "bmdev send api failed, api_id = 0x%x\n", api_id);
-  //   return BM_ERR_FAILURE;
-  // }
+
   {
     std::lock_guard<std::mutex> lock(uncomplete_msg_mtx);
     uncomplete_msg_queue.push(bm_api);
@@ -499,7 +474,7 @@ bm_status_t bm_create_ctx(bm_context_t *ctx, int devid) {
   snprintf(devname, sizeof(devname), "/dev/bm-tpu%d", devid);
   fd = open(devname, O_RDWR);
   if (fd < 0) {
-    printf("Create BM Handle Failed for dev%d\n", devid);
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "Create BM Handle Failed for dev%d\n", devid);
     return BM_ERR_BUSY;
   }
   ctx->dev_fd = fd;
@@ -1469,13 +1444,13 @@ bm_status_t bm_get_product_sn(char *product_sn) {
   //open boot1 device
   fd = open(boot1, O_RDWR);
   if (fd < 0) {
-    printf("open boot failed when get product sn !\n");
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "open boot failed when get product sn !\n");
     return BM_ERR_FAILURE;
   }
 
   cnt = read(fd, &rd_header, RDBUF_SIZE);
   if (cnt !=RDBUF_SIZE) {
-    printf("read rdbuf failed!\n");
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "read rdbuf failed!\n");
     close(fd);
     return BM_ERR_DATA;
   }
@@ -1511,12 +1486,12 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
   if (chip_id == 0x1686a200) {
     fd = open("/dev/mmcblk0boot1", O_RDONLY);
     if (fd < 0) {
-        printf("open /dev/mmcblk0boot1 failed!\n");
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "open /dev/mmcblk0boot1 failed!\n");
         return BM_ERR_FAILURE;
     }
     cnt = read(fd, sn, 17);
     if (cnt < 0) {
-        printf("read /dev/mmcblk0boot1 failed!\n");
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "read /dev/mmcblk0boot1 failed!\n");
         close(fd);
         return BM_ERR_FAILURE;
     }
@@ -1529,13 +1504,13 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
     //open boot1 device
     fd = open(boot1, O_RDWR);
     if (fd < 0) {
-      printf("open boot failed when get sn!\n");
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "open boot failed when get sn!\n");
       return BM_ERR_FAILURE;
     }
 
     cnt = read(fd, &rd_header, RDBUF_SIZE);
     if (cnt != RDBUF_SIZE) {
-      printf("read rdbuf failed!\n");
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "read rdbuf failed!\n");
       close(fd);
       return BM_ERR_DATA;
     }
@@ -1959,7 +1934,7 @@ bm_status_t bm_memcpy_s2s(uint64_t u64PhyDst, uint64_t u64PhySrc, uint64_t u64Si
 
   ret_ = f_ptr(&api_mem_param, sizeof(api_mem_param));
   if (ret_ != 0) {
-    printf("sg_api_1d_memcpy failed!\n");
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "sg_api_1d_memcpy failed!\n");
     dlclose(handle_lib);
     bm_dev_free(handle);
     return BM_ERR_FAILURE;
@@ -1981,7 +1956,7 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   bmcpu_app_live.fetch_add(1);
   ret = bm_dev_request(&handle, 0);
   if ((ret != BM_SUCCESS) || (handle == NULL)) {
-    printf("bm_dev_request error, ret = %d\r\n", ret);
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "bm_dev_request error, ret = %d\r\n", ret);
     return BM_ERR_FAILURE;
   }
   // open so file, the path is fixed /lib/libtpu_kernel_module.so
@@ -2006,7 +1981,7 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   for (int type = 0; type < 5; type++) {
     ret_ = ioctl(handle->dev_fd, BMDEV_SET_IOMAP_TPYE, type);
     if (ret != 0) {
-      printf("ioctl failed\n");
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "ioctl failed\n");
       dlclose(handle_lib);
       bm_dev_free(handle);
       return BM_ERR_FAILURE;
@@ -2033,7 +2008,7 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
 
   ret_ = f_ptr(api_mem_param, sizeof(sg_api_2d_memcpy_t));
   if (ret_ != 0) {
-    printf("sg_api_2d_memcpy failed!\n");
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "sg_api_2d_memcpy failed!\n");
     dlclose(handle_lib);
     bm_dev_free(handle);
     return BM_ERR_FAILURE;
@@ -2043,5 +2018,6 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   dlclose(handle_lib);
   return BM_SUCCESS;
 }
+
 
 #endif

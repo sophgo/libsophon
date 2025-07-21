@@ -94,18 +94,18 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle) {
     unsigned int core_num = 1;
     bm_status_t ret = bm_get_tpu_core_num(handle, &core_num);
     if (ret != BM_SUCCESS) {
-      printf("cannot get core_num");
+      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "cannot get core_num");
     }
     if (core_num>FUNC_MAX_CORE_NUM) {
-      printf("MAX_CORE_NUM=%d, real core_num=%d\n", FUNC_MAX_CORE_NUM, core_num);
-    pthread_mutex_unlock(&mutex);
+      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "MAX_CORE_NUM=%d, real core_num=%d\n", FUNC_MAX_CORE_NUM, core_num);
+      pthread_mutex_unlock(&mutex);
       return BM_ERR_FAILURE;
     }
     for (unsigned int core_id=0; core_id<core_num; core_id++) {
       bm_module = tpu_kernel_load_module_file_to_core(handle, lib_path, core_id);
       if (bm_module == NULL) {
-      pthread_mutex_unlock(&mutex);
-          printf("bm_module %d is null!\n", core_id);
+          pthread_mutex_unlock(&mutex);
+          bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "bm_module %d is null!\n", core_id);
           return BM_ERR_FAILURE;
       }
       for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
@@ -120,7 +120,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle) {
 
 tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_name, int core_id) {
   if (g_init_basic_func_flag != 0x5a) {
-    printf("error g_basic_func not init\n");
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "error g_basic_func not init\n");
     return -1;
   }
   for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
@@ -128,7 +128,7 @@ tpu_kernel_function_t bm_get_basic_func_id(bm_handle_t handle, const char *func_
       return g_basic_func[i].f_ids[core_id];
     }
   }
-  printf("not found func_name: %s\n", func_name);
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "not found func_name: %s\n", func_name);
   return -1;
 }
 
@@ -1205,7 +1205,7 @@ void bm_free_device(bm_handle_t ctx, bm_device_mem_t mem) {
   #ifdef USING_CMODEL
   ctx->bm_dev->bm_device_free_mem(bm_mem_get_device_addr(mem));
   #else
-  // bm_free_gmem(ctx, &mem);
+  bm_free_gmem(ctx, &mem);
   #endif
 }
 
@@ -1675,9 +1675,9 @@ bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *
   //            handle->dev_fd, bm_mem_get_device_addr_u64(*dmem));
   if (fcntl(dmem->u.device.dmabuf_fd, F_GETFD) == -1) {
     if (errno == EBADF) {
-        printf("dmem->u.device.dmabuf_fd is not valid\n");
+        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "dmem->u.device.dmabuf_fd is not valid\n");
     } else {
-        perror("dmem->u.device.dmabuf_fd fcntl error");
+        bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "dmem->u.device.dmabuf_fd fcntl error");
     }
   }
   ret	= mmap(NULL, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,

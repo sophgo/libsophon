@@ -1,4 +1,6 @@
 #include <math.h>
+#include <cstdint>
+#include <time.h>
 #include "stdio.h"
 #include "stdlib.h"
 #include "api.h"
@@ -58,6 +60,12 @@ int array_cmp_fix16b(
   }
 
   return 0;
+}
+
+uint64_t get_timestamp_us() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
 int array_cmp_fix8b(

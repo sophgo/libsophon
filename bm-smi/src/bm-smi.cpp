@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
     return -EINVAL;
   }
 
+
   tcsetattr(0, TCSANOW, &stTermCfg);
   return 0;
 }

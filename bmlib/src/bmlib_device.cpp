@@ -350,7 +350,7 @@
           perror("Failed to initialize semaphore");
           return BM_ERR_FAILURE;
       }
-      printf("New semaphore created, semid: %d\n", semid);
+      bmlib_log(BMLIB_DEVICE_TAG, BMLIB_LOG_INFO, "New semaphore created, semid: %d\n", semid);
   }
 
   bmlib_log(BMLIB_DEVICE_TAG, BMLIB_LOG_INFO,

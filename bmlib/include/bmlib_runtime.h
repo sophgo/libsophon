@@ -86,6 +86,13 @@ typedef enum {
   PERF_MONITOR_TPU = 1
 } PERF_MONITOR_ID;
 
+typedef struct Timer {
+    unsigned      interval_ms;
+    void        (*cb)(void);
+    pthread_t     tid;
+    volatile int  running;
+} Timer_t;
+
 typedef enum {
   BMCPU_IDLE    = 0,
   BMCPU_RUNNING = 1,
@@ -3225,6 +3232,7 @@ bm_status_t bm_memcpy_s2s(uint64_t u64PhyDst, uint64_t u64PhySrc, uint64_t u64Si
 bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *p2d_memcpy);
 
 bm_status_t find_lib_path(const char *lib_name, char **file_path);
+
 #if defined(__cplusplus)
 }
 #endif

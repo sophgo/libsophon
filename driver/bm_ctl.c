@@ -111,12 +111,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	pattr->mem_total = div_u64(div_u64(bmdrv_gmem_total_size(bmdi), 1024), 1024);
 	pattr->mem_used = pattr->mem_total - div_u64(div_u64(bmdrv_gmem_avail_size(bmdi), 1024), 1024);
 	bmdrv_heap_mem_used(bmdi, &pattr->stat);
-
-	if ((bmdi->cinfo.chip_id == CHIP_ID) && (bmdi->cinfo.tpu_core_num == 2))
-		pattr->tpu_util = div_u64((c_attr->bm_get_npu_util(bmdi) + c_attr->bm_get_npu_util1(bmdi)), 2);
-	else
-		pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
-
+	pattr->tpu_util = 0;
 	if (c_attr->bm_get_chip_temp != NULL)
 		pattr->chip_temp = c_attr->chip_temp;
 	else

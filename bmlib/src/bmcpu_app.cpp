@@ -14,6 +14,7 @@ The program ensures thread safety
 */
 #include "bmcpu_app.h"
 #include "bmlib_ioctl.h"
+#include "bmlib_utils.h"
 
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -26,7 +27,11 @@ std::mutex uncomplete_msg_mtx;
 std::mutex complete_msg_mtx;
 std::mutex sem_msg_mtx;
 std::condition_variable uncomplete_msg_cv;
+static uint64_t start_bm_profile_timestamp=0;
+static uint64_t end_bm_profile_timestamp=0;
 bm_profile_t bm_profile = {0};
+static int flag= 0;
+
 
 typedef struct bm_api_cpu_load_library_internal {
   u8 library_path[256];
@@ -121,31 +126,31 @@ static int mmap_tpu_sys(int fd) {
 
   mmap_gdma = mmap_paddr_to_vaddr(0, TPU_GDMA_SIZE, fd);
   if (mmap == NULL) {
-    printf("GDMA mmap failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "GDMA mmap failed\n");
     return -1;
   }
 
   mmap_sys = mmap_paddr_to_vaddr(1, TPU_SYS_SIZE, fd);
   if (mmap == NULL) {
-    printf("SYS mmap failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "SYS mmap failed\n");
     return -1;
   }
 
   mmap_reg = mmap_paddr_to_vaddr(2, TPU_REG_SIZE, fd);
   if (mmap == NULL) {
-    printf("REG mmap failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "REG mmap failed\n");
     return -1;
   }
 
   mmap_smem = mmap_paddr_to_vaddr(3, TPU_SMEM_SIZE, fd);
   if (mmap == NULL) {
-    printf("SMEM mmap failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "SMEM mmap failed\n");
     return -1;
   }
 
   mmap_lmem = mmap_paddr_to_vaddr(4, TPU_LMEM_SIZE, fd);
   if (mmap == NULL) {
-    printf("LMEM mmap failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "LMEM mmap failed\n");
     return -1;
   }
 
@@ -166,31 +171,31 @@ static int mmap_addr_to_firmwarecore(void* handle) {
 
   result = CallPhysicalToVirtual(mmap_gdma, 0);
   if (result!=0) {
-    printf("CallPhysicalToVirtual failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "CallPhysicalToVirtual failed\n");
     return -1;
   }
 
   result = CallPhysicalToVirtual(mmap_sys, 1);
   if (result!=0) {
-    printf("CallPhysicalToVirtual failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "CallPhysicalToVirtual failed\n");
     return -1;
   }
 
   result = CallPhysicalToVirtual(mmap_reg, 2);
   if (result != 0) {
-    printf("CallPhysicalToVirtual failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "CallPhysicalToVirtual failed\n");
     return -1;
   }
 
   result = CallPhysicalToVirtual(mmap_smem, 3);
   if (result != 0) {
-    printf("CallPhysicalToVirtual failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "CallPhysicalToVirtual failed\n");
     return -1;
   }
 
   result = CallPhysicalToVirtual(mmap_lmem, 4);
   if (result != 0) {
-    printf("CallPhysicalToVirtual failed\n");
+    bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "CallPhysicalToVirtual failed\n");
     return -1;
   }
 
@@ -274,10 +279,10 @@ static int unload_lib_process(bm_api_cpu_load_library_internal_t* api) {
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "Library Name: %s\n", api->library_name);
   // std::cout << "Library Path: " << api->library_path << std::endl;
   // std::cout << "Library Size: " << api->size << std::endl;
-  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "MD5: ");
-  for (int i = 0; i < MD5SUM_LEN; i++) {
-      printf("%x", (int)api->md5[i]);
-  }
+  // bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "MD5: ");
+  // for (int i = 0; i < MD5SUM_LEN; i++) {
+  //     printf("%x", (int)api->md5[i]);
+  // }
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "\n");
   std::cout << std::dec;
 
@@ -376,6 +381,89 @@ static int call_func_process(bm1688_launch_func_internal* api_addr) {
 }
 
 
+void* timer_tpu_usage_thread(void* arg) {
+    int fd_file = open("/tmp/bmcpu_app_usage", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd_file < 0) {
+        perror("File open failed");
+        return NULL;
+    }
+
+    int tfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (tfd < 0) {
+        perror("Timer creation failed");
+        close(fd_file);
+        return NULL;
+    }
+
+    uint64_t interval_us = 1000;  // default 1000 us
+    const char* interval_env = getenv("SET_TPU_WINDOWS");
+    if (interval_env != nullptr) {
+      uint64_t val = strtoull(interval_env, nullptr, 10);
+      if (val > 0 && val <= 20000) {
+        interval_us = val;
+      } else {
+        bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_WARNING, "Invalid value for SET_TPU_WINDOWS(0~20000), using default value 1000 us\n");
+      }
+    }
+
+    while (1) {
+        uint64_t exp;
+        usleep(interval_us);
+        uint64_t tpu_start = start_bm_profile_timestamp;
+        uint64_t tpu_end = 0;
+        uint64_t window_end = get_timestamp_us();
+
+        if (flag==1) {
+            tpu_end = get_timestamp_us();
+        } else {
+            tpu_end = end_bm_profile_timestamp;
+        }
+
+        uint64_t current_timestamp = window_end - interval_us;
+        int tpu_usage = 0;
+        // printf("tpu_start: %llu, tpu_end: %llu, current_timestamp: %llu, window_end: %llu, caculate_time: %llu\n",
+              //  tpu_start, tpu_end, current_timestamp, window_end, (tpu_end - tpu_start));
+
+        // 1. The time window is completely before TPU execution
+        if (tpu_start >= window_end) {
+            tpu_usage = 0;
+        }
+        // 2. The time window is completely after TPU execution
+        else if (tpu_end <= current_timestamp) {
+            tpu_usage = 0;
+        }
+        // 3. The TPU execution completely covers the time window
+        else if (tpu_start <= current_timestamp && tpu_end >= window_end) {
+            tpu_usage = 100;
+        }
+        // 4. Partial overlap
+        else {
+            uint64_t overlap_start = (tpu_start > current_timestamp) 
+                                    ? tpu_start : current_timestamp;
+            uint64_t overlap_end = (tpu_end < window_end) 
+                                  ? tpu_end : window_end;
+            
+            if (overlap_end > overlap_start) {
+                uint64_t overlap_duration = overlap_end - overlap_start;
+                tpu_usage = (overlap_duration * 100) / interval_us;
+            } else {
+                tpu_usage = 0;
+            }
+        }
+        // printf("TPU usage in the last 0.005 seconds: %d%%\n", tpu_usage);
+
+        lseek(fd_file, 0, SEEK_SET);
+        dprintf(fd_file, "%d\n", tpu_usage);
+        fsync(fd_file);
+
+    }
+    
+    close(tfd);
+    close(fd_file);
+    return NULL;
+}
+
+
 void* bmcpu_thread(void* arg) {
   bm_api_to_bmcpu_t *bm_api;
   bm_api = (bm_api_to_bmcpu_t *)malloc(sizeof(bm_api_to_bmcpu_t));
@@ -383,6 +471,26 @@ void* bmcpu_thread(void* arg) {
   bm1688_get_func_internal_t *bm_api_func;
   bm1688_launch_func_internal *bm_api_launch;
   u32 ret = 0;
+  start_bm_profile_timestamp = get_timestamp_us();
+  end_bm_profile_timestamp = start_bm_profile_timestamp;
+  uint64_t tmp_start_bm_profile_timestamp = 0;
+
+  // Check the environment variable SHOW_TPU_USAGE, if set, start the timer_tpu_usage_thread
+  const char *env_var = getenv("SHOW_TPU_USAGE");
+  if (env_var != NULL && strcmp(env_var, "1") == 0) {
+      pthread_t tid;
+      if (pthread_create(&tid, NULL, timer_tpu_usage_thread, NULL) != 0) {
+          perror("Failed to create timer thread");
+      }
+
+      struct sched_param param;
+      param.sched_priority = 80;
+      int ret = pthread_setschedparam(tid, SCHED_FIFO, &param);
+      if (ret != 0) {
+          errno = ret;
+          perror("pthread_setschedparam");
+      }
+  }
 
   int *fd = (int *)arg;
 
@@ -421,9 +529,13 @@ void* bmcpu_thread(void* arg) {
           ret = unload_lib_process(api);
           break;
       case API_ID_SGTPUV8_LAUNCH_FUNC:
+          start_bm_profile_timestamp= get_timestamp_us();
+          flag= 1;
           bm_api_launch = (bm1688_launch_func_internal *)bm_api->api_data;
           bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "==========launch func!=========\n");
           ret = call_func_process(bm_api_launch);
+          flag= 0;
+          end_bm_profile_timestamp = get_timestamp_us();
           break;
       case API_ID_SGTPUV8_GET_FUNC:
           bm_api_func = (bm1688_get_func_internal_t *)bm_api->api_data;

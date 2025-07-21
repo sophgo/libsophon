@@ -309,7 +309,6 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 #else
 	int ret;
 	a53lite_load_lib_t api_load_lib;
-	bm_device_mem_t dev_mem;
 	u32 file_size;
 	tpu_kernel_module_t p_module;
 	// const char *tmp = "libtpu_kernel_module.so";
@@ -333,17 +332,6 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 		return nullptr;
 	}
 
-	memset(&dev_mem, 0, sizeof(dev_mem));
-	// ret = a53lite_load_file(handle, module_file, &dev_mem, &file_size);
-	// if (ret != BM_SUCCESS)
-	// {
-	// 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-	// 			  BMLIB_LOG_ERROR,
-	// 			  "%s %d: laod file failed!\n", __FILE__, __LINE__);
-	// 	free(p_module);
-	// 	return nullptr;
-	// }
-
 	const char *tmp = strrchr((const char *)module_file, (int)'/');
 	if (tmp)
 		tmp += 1;
@@ -362,16 +350,14 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 
 	strncpy((char *)api_load_lib.lib_name, tmp, strlen(tmp));
 	strncpy((char *)api_load_lib.lib_path, module_file, strlen(module_file));
-	api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
-	api_load_lib.size = file_size;
 
 	// api_load_lib.md5[0] = 0xff;
 	simple_hash((char *)api_load_lib.lib_name, api_load_lib.md5);
 
 	ret = bm_send_api(handle,
-							  BM_API_ID_TPUSCALER_LOAD_LIB,
-							  (u8 *)&api_load_lib,
-							  sizeof(api_load_lib));
+						BM_API_ID_TPUSCALER_LOAD_LIB,
+						(u8 *)&api_load_lib,
+						sizeof(api_load_lib));
 	if (ret != 0) {
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
 				  BMLIB_LOG_ERROR,
@@ -381,23 +367,11 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 		return NULL;
 	}
 
-
-	// ret = bm_sync_api_from_core(handle, core_id);
-	// if (ret != 0)
-	// {
-	// 	bmlib_log(A53LITE_RUNTIME_LOG_TAG,
-	// 			  BMLIB_LOG_ERROR,
-	// 			  "load module file sync api error, ret %d\n",
-	// 			  ret);
-	// 	free(p_module);
-	// 	return nullptr;
-	// }
 	strncpy(p_module->lib_name, tmp, strlen(tmp));
 	p_module->lib_name[strlen(tmp)] = '\0';
 	memcpy(p_module->md5, api_load_lib.md5, MD5SUM_LEN);
 
 	bm_profile_load_module(handle, p_module, core_id);
-	bm_free_device(handle, dev_mem);
 	return p_module;
 #endif
 }

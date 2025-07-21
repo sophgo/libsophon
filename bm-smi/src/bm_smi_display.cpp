@@ -265,6 +265,10 @@ static void bm_smi_tpuv_to_str(int dev_id, char *s) {
     }
 }
 
+static void bm_smi_cnum_to_str(int dev_id, char *s) {
+    snprintf(s, 7, "%s", "N/A");
+}
+
 /* convert 12vatx current to string*/
 static void bm_smi_12v_curr_to_str(int dev_id, char *s) {
     if (g_attr[dev_id].atx12v_curr == ATTR_NOTSUPPORTED_VALUE) {
@@ -394,15 +398,38 @@ static void bm_smi_fan_to_str(int dev_id, char *s) {
     }
 }
 
+struct timespec tpu_time;
+static FILE *fp = NULL;
+
+int bm_timer_for_tpu_usage() {
+    int tpu_usage = 0;
+
+    if (fp == NULL) {
+        fp = fopen("/tmp/bmcpu_app_usage", "r");
+        if(fp == NULL) {
+            return 0;
+        }
+        return 0;
+    }
+
+    rewind(fp); // Ensure file pointer is at the beginning before reading
+
+    if (fscanf(fp, "%d", &tpu_usage) != 1) {
+        printf("Failed to read first timestamp from /tmp/bmcpu_app_time\n");
+        fclose(fp);
+        fp = NULL;
+        return 0;
+    }
+    fclose(fp);
+    fp = NULL;
+    usleep(10000);
+
+    return (tpu_usage > 100 || tpu_usage < 0) ? 0 : tpu_usage;
+}
+
 /* convert tpu util to string*/
 static void bm_smi_tpu_util_to_str(int dev_id, char *s) {
-    if (g_attr[dev_id].tpu_util == ATTR_NOTSUPPORTED_VALUE) {
-        snprintf(s, 6, "%s", " N/A ");
-    } else if (g_attr[dev_id].tpu_util == 100) {
-        snprintf(s, 6, "%s", "100% ");
-    } else {
-        snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util);
-    }
+    snprintf(s, 4, "%d%%", bm_timer_for_tpu_usage());
 }
 
 /* convert card index to string*/
@@ -468,6 +495,7 @@ static void bm_smi_display_attr(int            dev_id,
     bm_smi_boardp_to_str(dev_id, boardp_s);
     bm_smi_tpup_to_str(dev_id, tpup_s);
     bm_smi_tpuv_to_str(dev_id, tpuv_s);
+    bm_smi_cnum_to_str(dev_id, cnum_s);
     bm_smi_12v_curr_to_str(dev_id, c12v_s);
     bm_smi_sn_to_str(dev_id, sn_s);
 

@@ -12,6 +12,9 @@
 #include <sys/sem.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/timerfd.h>
+#include <unistd.h>
+#include <stdint.h>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -28,4 +31,5 @@ extern std::mutex complete_msg_mtx;
 extern std::mutex sem_msg_mtx;
 extern std::condition_variable uncomplete_msg_cv;
 extern bm_profile_t bm_profile;
+// extern uint64_t bm_profile_timestamp;
 #endif
