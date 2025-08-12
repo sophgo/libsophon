@@ -226,6 +226,28 @@ typedef struct{
 	int param_num;
 } tpu_launch_async_param_t;
 
+struct bm_heap_stat {
+  unsigned int mem_total;
+  unsigned int mem_avail;
+  unsigned int mem_used;
+};
+
+typedef struct bm_heap_stat_byte {
+  unsigned int  heap_id;
+  unsigned long long mem_total;
+  unsigned long long mem_avail;
+  unsigned long long mem_used;
+  unsigned long long mem_start_addr;
+} bm_heap_stat_byte_t;
+
+typedef struct bm_dev_stat {
+  int mem_total;
+  int mem_used;
+  int tpu_util;
+  int heap_num;
+  struct bm_heap_stat heap_stat[4];
+} bm_dev_stat_t;
+
 /**
  * @name    tpu_kernel_load_module_file
  * @brief   To load dyn file
@@ -497,17 +519,6 @@ DECL_EXPORT void bmlib_log(const char *tag, int level, const char *fmt, ...);
     }                                          \
   } while (0)
 #endif
-
-/**
- * @name    bm_reset_tpu
- * @brief   safely reset tpu system
- * @ingroup bmlib_runtime
- *
- * @param [in] handle  The given handle
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_reset_tpu(bm_handle_t handle);
 
 /*******************handle releated functions *********************************/
 /**
@@ -859,6 +870,8 @@ DECL_EXPORT void bm_mem_set_system_addr_u64(struct bm_mem_desc_u64* pmem, void *
  * @retval  bm_system_mem_t  The system memory descriptor created
  */
 DECL_EXPORT bm_system_mem_t bm_mem_from_system(void *system_addr);
+DECL_EXPORT bm_system_mem_u64_t bm_mem_from_system_u64(void *system_addr);
+
 
 /*******************memory alloc and free functions ***************************/
 /**
@@ -1091,6 +1104,35 @@ DECL_EXPORT bm_status_t sg_malloc_device_byte_heap_mask(bm_handle_t handle, sg_d
  */
 DECL_EXPORT bm_status_t bm_malloc_device_byte_heap_mask_u64(bm_handle_t handle, bm_device_mem_u64_t *pmem,
                                   int heap_id_mask, unsigned long long size);
+
+/**
+ * @name    bm_malloc_device_mem
+ * @brief   To malloc device memory in size of byte and output paddr
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out]  paddr  The result malloc device memory addr
+ * @param [in]  heap_id The heap where to allocate  0/1/2
+ * @param [in]  size    The number of bytes to allocate
+ * @retval  paddr
+ */
+DECL_EXPORT bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
+                                              int heap_id, unsigned long long size);
+
+/**
+ * @name    bm_malloc_device_mem_mask
+ * @brief   To malloc device memory in size of byte within the specified heaps and output paddr
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out]  paddr  The result malloc device memory addr
+ * @param [in]  heap_id_mask The mask which heaps allocate from. each bit indicate one heap
+ * @param [in]  size    The number of bytes to allocate
+ * @retval  paddr
+ */
+DECL_EXPORT bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
+                                              int heap_id_mask, unsigned long long size);
+
 
 /**
  * @name    bm_free_device_mem
@@ -1704,6 +1746,43 @@ DECL_EXPORT bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_ha
                           bm_device_mem_t src, bm_device_mem_t dst,
                           bool force_dst_cdma);
 
+DECL_EXPORT bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
+                          bm_device_mem_t src, bm_device_mem_t dst,
+                          struct stride_cfg *stride, bool force_use_dst_cdma);
+DECL_EXPORT bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src,
+                          struct stride_cfg *stride);
+DECL_EXPORT bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src,
+							struct stride_cfg *stride);
+
+/**
+ * @name    bm_memcpy_s2d_gather
+ * @brief   To copy data from system virtual memory to device memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] dst     The destination memory (device memory descriptor )
+ * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
+ * @param [in] ...     void *src and unsigned long long len
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_s2d_gather(bm_handle_t handle, bm_device_mem_t dst, int argc, ...);
+
+/**
+ * @name    bm_memcpy_d2s_scatter
+ * @brief   To copy data from  device memory to system virtual memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] src     The destination memory (device memory descriptor )
+ * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
+ * @param [in] ...     void *dst and unsigned long long len
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int argc, ...);
 /**
  * @name    bm_memset_device_to_core
  * @brief   To fill in specified device memory with the given value
@@ -1785,6 +1864,11 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handl
                                                    struct bm_mem_desc sys_mem,
                                                    bool need_copy, int n, int c,
                                                    int h, int w);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_u64(bm_handle_t handle,
+                                                   struct bm_mem_desc_u64 *dev_mem,
+                                                   struct bm_mem_desc_u64 sys_mem,
+                                                   bool need_copy, int n, int c,
+                                                   int h, int w);
 
 /**
  * @name    bm_mem_convert_system_to_device_neuron_byte
@@ -1805,6 +1889,12 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handl
 DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_byte(
     bm_handle_t handle, struct bm_mem_desc *dev_mem, struct bm_mem_desc sys_mem,
     bool need_copy, int n, int c, int h, int w);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_neuron_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy,
+														int n, int c, int h, int w);
+
 
 /**
  * @name    bm_mem_convert_system_to_device_coeff
@@ -1827,6 +1917,12 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff(bm_handle_t handle
                                                   struct bm_mem_desc sys_mem,
                                                   bool need_copy,
                                                   int coeff_count);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_u64(bm_handle_t handle,
+                                                  struct bm_mem_desc_u64 *dev_mem,
+                                                  struct bm_mem_desc_u64 sys_mem,
+                                                  bool need_copy,
+                                                  int coeff_count);
+
 /**
  * @name    bm_mem_convert_system_to_device_coeff_byte
  * @brief   To malloc a piece of device memory according to the size of
@@ -1846,6 +1942,11 @@ DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff(bm_handle_t handle
 DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_byte(
     bm_handle_t handle, struct bm_mem_desc *dev_mem, struct bm_mem_desc sys_mem,
     bool need_copy, int coeff_count);
+DECL_EXPORT bm_status_t bm_mem_convert_system_to_device_coeff_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy, int coeff_count);
+
 
 /*******************memory map functions *************************************/
 /**
@@ -1897,7 +1998,6 @@ DECL_EXPORT bm_status_t sg_mem_mmap_device_mem(bm_handle_t handle, sg_device_mem
 DECL_EXPORT bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *dmem,
         unsigned long long *vmem);
 
-/*******************memory map functions *************************************/
 /**
  * @name    bm_mem_mmap_device_mem_no_cache
  * @brief   To map a piece of device memory to user space with cache disabled.
@@ -2284,6 +2384,18 @@ DECL_EXPORT bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id
 DECL_EXPORT bm_status_t bm_thread_sync(bm_handle_t handle);
 
 /**
+ * @name    bm_set_sync_timeout
+ * @brief   To set sync timeout ms.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle  The device handle
+ * @param [in] timeout Sync timeout
+ * @retval  BM_SUCCESS Succeeds.
+ *          Other code Fails.
+ */
+DECL_EXPORT bm_status_t bm_set_sync_timeout(bm_handle_t handle, int timeout);
+
+/**
  * @name    bm_thread_sync_from_core
  * @brief   To synchronize APIs of the current thread. The thread will block
  *          until all the outstanding APIs of the current thread are finished.
@@ -2330,61 +2442,6 @@ typedef struct bm_profile {
  */
 DECL_EXPORT bm_status_t bm_get_profile(bm_handle_t handle, bm_profile_t *profile);
 
-typedef struct bootloader_version{
-	char *bl1_version;
-	char *bl2_version;
-	char *bl31_version;
-	char *uboot_version;
-	int *chip_version;
-} boot_loader_version;
-
-/**
- * @name    bm_get_boot_loader_version
- * @brief   To get the boot_loader_version
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out] version The result version data
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_boot_loader_version(bm_handle_t handle, boot_loader_version *version);
-
-/**
- * @name    bm_get_vpu_instant_usage
- * @brief   To get vpu usage
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out] smi_attr The result vpu usage
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_vpu_instant_usage(bm_handle_t handle, int *vpu_usage);
-
-/**
- * @name    bm_get_jpu_core_usage
- * @brief   To get the jpu usage
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out] smi_attr The result jpu usage
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_jpu_core_usage(bm_handle_t handle, int *jpu_usage);
-
-/**
- * @name    bm_get_vpp_instant_usage
- * @brief   To get the vpp usage
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out] smi_attr The result vpp usage
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_vpp_instant_usage(bm_handle_t handle, int *vpp_usage);
 /**
  * @name    bm_get_last_api_process_time_us
  * @brief   This function is abandoned.
@@ -2396,7 +2453,83 @@ DECL_EXPORT bm_status_t bm_get_last_api_process_time_us(bm_handle_t handle,
 DECL_EXPORT bm_status_t bm_get_last_api_process_time_us(bm_handle_t handle,
 											unsigned long long *time_us);
 #endif
-/*******************tpu clock and module reset releated functions *************/
+
+/**
+ * @name    bm_enable_perf_monitor
+ * @brief   enable perf monitor to get gdma and tpu performance data
+ * @ingroup bmlib_perf
+ *
+ * @param [in]  handle         The device handle
+ * @param [in]  perf_monitor   The monitor to perf
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_enable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_monitor);
+
+/**
+ * @name    bm_disable_perf_monitor
+ * @brief   disable perf monitor to get gdma and tpu performance data
+ * @ingroup bmlib_perf
+ *
+ * @param [in]  handle         The device handle
+ * @param [in]  perf_monitor   The monitor to perf
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_disable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_monitor);
+
+/**
+ * @name    sg_get_gmem_heap_id
+ * @brief   To get the heap id of allocated global memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  pmem The allocted global memory
+ * @param [out] heapid The result of get heap id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t sg_get_gmem_heap_id(bm_handle_t handle, sg_device_mem_t *pmem, unsigned int *heapid);
+
+/**
+ * @name    bm_get_gmem_heap_id_u64
+ * @brief   To get the heap id of allocated global memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  pmem The allocted global memory
+ * @param [out] heapid The result of get heap id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_gmem_heap_id_u64(bm_handle_t handle, bm_device_mem_u64_t *pmem, unsigned int *heapid);
+
+/**
+ * @name    bm_get_gmem_total_heap_num
+ * @brief   To get the total heap num of global memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  heap_num The result of get total num
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_gmem_total_heap_num(bm_handle_t handle, unsigned int *heap_num);
+
+/**
+ * @name    bm_get_gmem_heap_stat_byte_by_id
+ * @brief   To get the heap stat by heap id
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  heap_id The heap index to get heap status
+ * @param [out] pheap_byte The result of get heap status
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_gmem_heap_stat_byte_by_id(bm_handle_t handle, bm_heap_stat_byte_t *pheap_byte, unsigned int heap_id);
+
+/*******************tpu clock and module reset releated functions *************************/
 
 /**
  * @name    bm_set_clk_tpu_freq
@@ -2422,7 +2555,7 @@ DECL_EXPORT bm_status_t bm_set_clk_tpu_freq(bm_handle_t handle, int freq);
  */
 DECL_EXPORT bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq);
 
-/*******************misc functions ********************************************/
+/*******************device management api functions ***************************************/
 struct bm_misc_info {
   int pcie_soc_mode;  /*0---pcie; 1---soc*/
   int ddr_ecc_enable; /*0---disable; 1---enable*/
@@ -2460,6 +2593,43 @@ struct bm_misc_info {
 DECL_EXPORT bm_status_t bm_get_misc_info(bm_handle_t handle, struct bm_misc_info *pmisc_info);
 
 /**
+ * @name    bm_get_card_num
+ * @brief   get card number
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  card_id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_card_num(unsigned int *card_num);
+
+/**
+ * @name    bm_get_card_id
+ * @brief   get card id
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  card_id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_card_id(bm_handle_t handle, unsigned int *card_id);
+
+/**
+ * @name    bm_get_chip_num_from_card
+ * @brief   get chip number and start chip id from card
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  chip_num
+ * @param [out]  dev_start_index
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_chip_num_from_card(unsigned int card_id, unsigned int *chip_num, unsigned int *dev_start_index);
+
+/**
  * @name    bm_get_chipid
  * @brief   To get the chipid of the device. (0x1682 / 0x1684 / 0x168?)
  * @ingroup bmlib_runtime
@@ -2470,6 +2640,31 @@ DECL_EXPORT bm_status_t bm_get_misc_info(bm_handle_t handle, struct bm_misc_info
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bm_get_chipid(bm_handle_t handle, unsigned int *p_chipid);
+
+/**
+ * @name    bm_get_stat
+ * @brief   To get the stat data at the moment
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out] profile The result stat data
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_stat(bm_handle_t handle, bm_dev_stat_t *stat);
+
+/**
+ * @name    bm_get_gmem_heap_id
+ * @brief   To get the heap id of allocated global memory
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  pmem The allocted global memory
+ * @param [out] heapid The result of get heap id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_gmem_heap_id(bm_handle_t handle, bm_device_mem_t *pmem, unsigned int *heapid);
 
 #define BMLIB_LOG_QUIET    -8
 #define BMLIB_LOG_PANIC     0
@@ -2512,38 +2707,285 @@ DECL_EXPORT void bmlib_log_set_level(int level);
 DECL_EXPORT void bmlib_log_set_callback(void (*callback)(const char*, int, const char*, va_list args));
 
 /**
- * @name    bm_set_debug_mode
- * @brief   To set the debug mode for firmware log for tpu
- * @ingroup bmlib_log
+ * @name    bm_get_tpu_current
+ * @brief   get tpu current
+ * @ingroup bmlib_runtime
  *
- * @param [in]  handle  The device handle
- * @param [in]  mode    The debug mode of fw log, 0/1 for disable/enable log
- * @retval  void
- */
-DECL_EXPORT void bm_set_debug_mode(bm_handle_t handle, int mode);
-
-/**
- * @name    bmlib_api_dbg_callback
- * @brief   To set debug callback to get firmware log
- * @ingroup bmlib_log
- *
- * @param [in]  bmlib_api_dbg_callback  callback to get firmware log
- * @retval  void
- */
-typedef void (*bmlib_api_dbg_callback)(int, int, int, const char*);
-// api, result, duratioin, log, third int for api duration for future
-DECL_EXPORT void bmlib_set_api_dbg_callback(bmlib_api_dbg_callback callback);
-
-/**
- * @name    bmcpu_get_cpu_status
- * @brief   Get bmcpu status
- * @ingroup bmlib_log
- *
- * @param [in]  handle          The device handle
- * @retval  BMCPU_RUNNING  bmcpu is running.
+ * @param [in]   handle     The device handle
+ * @param [out]  tpuc(mA)   The pointer for tpu current
+ * @retval  BM_SUCCESS  Succeeds.
  *          Other code  Fails.
  */
-DECL_EXPORT bm_cpu_status_t bmcpu_get_cpu_status(bm_handle_t handle);
+DECL_EXPORT bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc);
+
+/**
+ * @name    bm_get_board_max_power
+ * @brief   get board support max power
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  maxp    The pointer for maxp
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp);
+
+/**
+ * @name    bm_get_board_power
+ * @brief   get board power
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]   handle    The device handle
+ * @param [out]  boardp    The pointer for boardp
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp);
+
+/**
+ * @name    bm_get_fan_speed
+ * @brief   get board fan speed
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  fan    The pointer for fan speed
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_fan_speed(bm_handle_t handle, unsigned int *fan);
+
+/**
+ * @name    bm_get_ecc_correct_num
+ * @brief   get ecc_correct_num
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  ecc_correct_num
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+#ifdef __linux__
+DECL_EXPORT bm_status_t bm_get_ecc_correct_num(bm_handle_t handle, unsigned long *ecc_correct_num);
+#else
+DECL_EXPORT bm_status_t bm_get_ecc_correct_num(bm_handle_t handle, unsigned long long *ecc_correct_num);
+#endif
+/**
+ * @name    bm_get_12v_atx
+ * @brief   get atx_12v
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  atx_12v
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v);
+
+/**
+ * @name    bm_get_sn
+ * @brief   get sn
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  sn
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_sn(bm_handle_t handle, char *sn);
+
+/**
+ * @name    bm_get_status
+ * @brief   get chip status
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  status  The board error status, each bit represents an error state
+ *  status == 0x0, borad is nornal, staus > 0, borad is abnormal;
+ *  bit0 == 1, tpu is hang
+ *  bit1 == 1, pcie link abnormal
+ *  bit2 == 1, board temperature is too high
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_status(bm_handle_t handle, int *status);
+
+/**
+ * @name    bm_get_tpu_maxclk
+ * @brief   get tpu_maxclk
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  tpu_maxclk
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk);
+
+/**
+ * @name    bm_get_tpu_minclk
+ * @brief   get tpu_minclk
+ * @ingroup device management api
+ *
+ * @param [in]   handle  The device handle
+ * @param [out]  tpu_minclk
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk);
+
+/**
+ * @name    bm_get_driver_version
+ * @brief   get driver version
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  driver_version
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version);
+
+/**
+ * @name    bm_get_board_name
+ * @brief   get device board name
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  board_name
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_board_name(bm_handle_t handle, char *name);
+
+/**
+ * @name    bm_get_board_temp
+ * @brief   get board temperature
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  board_temp
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp);
+
+/**
+ * @name    bm_get_chip_temp
+ * @brief   get chip temperature
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  chip_temp
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_chip_temp(bm_handle_t handle, unsigned int *chip_temp);
+
+/**
+ * @name    bm_get_tpu_power
+ * @brief   get TPU power
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  tpu_power
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power);
+
+/**
+ * @name    bm_get_tpu_volt
+ * @brief   get TPU voltage
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  tpu_volt
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_volt(bm_handle_t handle, unsigned int *tpu_volt);
+
+/**
+ * @name    bm_get_dynfreq_status
+ * @brief   get chip dynamic freq status
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [out]  dynfreq_status
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status);
+
+/**
+ * @name    bm_change_dynfreq_status
+ * @brief   change(enable/disable) chip dynamic freq status
+ * @ingroup device management api
+ *
+ * @param [in]   handle The device handle
+ * @param [in]   new_status
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status);
+
+/**
+ * @name    bm_get_core_to_send
+ * @brief   get the core id of the core with the least current load
+ * @ingroup load balancing api
+ *
+ * @param [in]   handle The device handle
+ * @param [in]   core_id  the core id of the core with the least current load
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bmdev_get_idle_coreid(bm_handle_t handle, int *core_id);
+
+/**
+ * @name    bm_get_tpu_scalar_num
+ * @brief   To get the core number of TPU scalar
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle    The device handle
+ * @param [out] core_num The core number of TPU scalar
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_tpu_scalar_num(bm_handle_t handle, unsigned int *core_num);
+
+/**
+ * @name    bm_get_tpu_scalar_num
+ * @brief   To get the core number of TPU scalar
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle    The device handle
+ * @param [in/out] bm_api_cfg_pwr_ctrl Pointer to cfg_pwr_ctrl_t structure
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl);
+
+typedef struct bootloader_version{
+	char *bl1_version;
+	char *bl2_version;
+	char *bl31_version;
+	char *uboot_version;
+	int *chip_version;
+} boot_loader_version;
+
+/**
+ * @name    bm_get_boot_loader_version
+ * @brief   To get the boot_loader_version
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [out] version The result version data
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_get_boot_loader_version(bm_handle_t handle, boot_loader_version *version);
+
+/********************************enable A53 ***************************************/
 
 /**
  * @name    bmcpu_start_cpu
@@ -2758,28 +3200,15 @@ DECL_EXPORT bm_status_t bmcpu_close_process(bm_handle_t handle, int process_hand
 DECL_EXPORT bm_status_t bmcpu_reset_cpu(bm_handle_t handle);
 
 /**
- * @name    bm_enable_perf_monitor
- * @brief   enable perf monitor to get gdma and tpu performance data
- * @ingroup bmlib_perf
+ * @name    bm_reset_tpu
+ * @brief   safely reset tpu system
+ * @ingroup bmlib_runtime
  *
- * @param [in]  handle         The device handle
- * @param [in]  perf_monitor   The monitor to perf
+ * @param [in] handle  The given handle
  * @retval  BM_SUCCESS  Succeeds.
  *          Other code  Fails.
  */
-DECL_EXPORT bm_status_t bm_enable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_monitor);
-
-/**
- * @name    bm_disable_perf_monitor
- * @brief   disable perf monitor to get gdma and tpu performance data
- * @ingroup bmlib_perf
- *
- * @param [in]  handle         The device handle
- * @param [in]  perf_monitor   The monitor to perf
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_disable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_monitor);
+DECL_EXPORT bm_status_t bm_reset_tpu(bm_handle_t handle);
 
 /**
  * @name    bmcpu_set_log
@@ -2819,107 +3248,6 @@ DECL_EXPORT bm_status_t bmcpu_get_log(bm_handle_t handle, int process_handle, ch
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bmcpu_sync_time(bm_handle_t handle);
-
-/*******************trace and profile releated functions **********************/
-struct bm_heap_stat {
-  unsigned int mem_total;
-  unsigned int mem_avail;
-  unsigned int mem_used;
-};
-
-typedef struct bm_heap_stat_byte {
-  unsigned int  heap_id;
-  unsigned long long mem_total;
-  unsigned long long mem_avail;
-  unsigned long long mem_used;
-  unsigned long long mem_start_addr;
-} bm_heap_stat_byte_t;
-
-typedef struct bm_dev_stat {
-  int mem_total;
-  int mem_used;
-  int tpu_util;
-  int heap_num;
-  struct bm_heap_stat heap_stat[4];
-} bm_dev_stat_t;
-
-/**
- * @name    bm_get_stat
- * @brief   To get the stat data at the moment
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out] profile The result stat data
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_stat(bm_handle_t handle, bm_dev_stat_t *stat);
-
-/**
- * @name    bm_get_gmem_heap_id
- * @brief   To get the heap id of allocated global memory
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [in]  pmem The allocted global memory
- * @param [out] heapid The result of get heap id
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-
-DECL_EXPORT bm_status_t bm_get_gmem_heap_id(bm_handle_t handle, bm_device_mem_t *pmem, unsigned int *heapid);
-
-/**
- * @name    sg_get_gmem_heap_id
- * @brief   To get the heap id of allocated global memory
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [in]  pmem The allocted global memory
- * @param [out] heapid The result of get heap id
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-
-DECL_EXPORT bm_status_t sg_get_gmem_heap_id(bm_handle_t handle, sg_device_mem_t *pmem, unsigned int *heapid);
-
-/**
- * @name    bm_get_gmem_heap_id_u64
- * @brief   To get the heap id of allocated global memory
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [in]  pmem The allocted global memory
- * @param [out] heapid The result of get heap id
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_gmem_heap_id_u64(bm_handle_t handle, bm_device_mem_u64_t *pmem, unsigned int *heapid);
-
-/**
- * @name    bm_get_gmem_total_heap_num
- * @brief   To get the total heap num of global memory
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [in]  heap_num The result of get total num
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_gmem_total_heap_num(bm_handle_t handle, unsigned int *heap_num);
-
-/**
- * @name    bm_get_gmem_heap_stat_byte_by_id
- * @brief   To get the heap stat by heap id
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [in]  heap_id The heap index to get heap status
- * @param [out] pheap_byte The result of get heap status
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_gmem_heap_stat_byte_by_id(bm_handle_t handle, bm_heap_stat_byte_t *pheap_byte, unsigned int heap_id);
 
 DECL_EXPORT bm_status_t bm_load_firmware(
         bm_handle_t  handle,
@@ -2986,81 +3314,79 @@ DECL_EXPORT bm_status_t bmkernel_launch(bm_handle_t handle, const void *args,
  */
 DECL_EXPORT bm_status_t bmkernel_load_lookup_table(bm_handle_t handle, const void* table, unsigned int size);
 
-/*******************device management api functions ********************************************/
+
+#define  bm_get_tpu_core_num bm_get_tpu_scalar_num
+
+/******************************* not suport yet *********************************/
 /**
- * @name    bm_get_tpu_current
- * @brief   get tpu current
- * @ingroup bmlib_runtime
+ * @name    bm_set_debug_mode
+ * @brief   To set the debug mode for firmware log for tpu
+ * @ingroup bmlib_log
  *
- * @param [in]   handle     The device handle
- * @param [out]  tpuc(mA)   The pointer for tpu current
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
+ * @param [in]  handle  The device handle
+ * @param [in]  mode    The debug mode of fw log, 0/1 for disable/enable log
+ * @retval  void
  */
-DECL_EXPORT bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc);
+DECL_EXPORT void bm_set_debug_mode(bm_handle_t handle, int mode);
 
 /**
- * @name    bm_get_board_max_power
- * @brief   get board support max power
- * @ingroup bmlib_runtime
+ * @name    bmlib_api_dbg_callback
+ * @brief   To set debug callback to get firmware log
+ * @ingroup bmlib_log
  *
- * @param [in]   handle  The device handle
- * @param [out]  maxp    The pointer for maxp
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
+ * @param [in]  bmlib_api_dbg_callback  callback to get firmware log
+ * @retval  void
  */
-DECL_EXPORT bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp);
+typedef void (*bmlib_api_dbg_callback)(int, int, int, const char*);
+// api, result, duration, log, third int for api duration for future
+DECL_EXPORT void bmlib_set_api_dbg_callback(bmlib_api_dbg_callback callback);
 
 /**
- * @name    bm_get_board_power
- * @brief   get board power
- * @ingroup bmlib_runtime
+ * @name    bmcpu_get_cpu_status
+ * @brief   Get bmcpu status
+ * @ingroup bmlib_log
  *
- * @param [in]   handle    The device handle
- * @param [out]  boardp    The pointer for boardp
- * @retval  BM_SUCCESS  Succeeds.
+ * @param [in]  handle          The device handle
+ * @retval  BMCPU_RUNNING  bmcpu is running.
  *          Other code  Fails.
  */
-DECL_EXPORT bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp);
+DECL_EXPORT bm_cpu_status_t bmcpu_get_cpu_status(bm_handle_t handle);
 
 /**
- * @name    bm_get_fan_speed
- * @brief   get board fan speed
+ * @name    bm_get_vpu_instant_usage
+ * @brief   To get vpu usage
  * @ingroup bmlib_runtime
  *
- * @param [in]   handle The device handle
- * @param [out]  fan    The pointer for fan speed
+ * @param [in]  handle  The device handle
+ * @param [out] smi_attr The result vpu usage
  * @retval  BM_SUCCESS  Succeeds.
  *          Other code  Fails.
  */
-DECL_EXPORT bm_status_t bm_get_fan_speed(bm_handle_t handle, unsigned int *fan);
+DECL_EXPORT bm_status_t bm_get_vpu_instant_usage(bm_handle_t handle, int *vpu_usage);
 
 /**
- * @name    bm_get_ecc_correct_num
- * @brief   get ecc_correct_num
- * @ingroup device management api
+ * @name    bm_get_jpu_core_usage
+ * @brief   To get the jpu usage
+ * @ingroup bmlib_runtime
  *
- * @param [in]   handle  The device handle
- * @param [out]  ecc_correct_num
+ * @param [in]  handle  The device handle
+ * @param [out] smi_attr The result jpu usage
  * @retval  BM_SUCCESS  Succeeds.
  *          Other code  Fails.
  */
-#ifdef __linux__
-DECL_EXPORT bm_status_t bm_get_ecc_correct_num(bm_handle_t handle, unsigned long *ecc_correct_num);
-#else
-DECL_EXPORT bm_status_t bm_get_ecc_correct_num(bm_handle_t handle, unsigned long long *ecc_correct_num);
-#endif
+DECL_EXPORT bm_status_t bm_get_jpu_core_usage(bm_handle_t handle, int *jpu_usage);
+
 /**
- * @name    bm_get_12v_atx
- * @brief   get atx_12v
- * @ingroup device management api
+ * @name    bm_get_vpp_instant_usage
+ * @brief   To get the vpp usage
+ * @ingroup bmlib_runtime
  *
- * @param [in]   handle  The device handle
- * @param [out]  atx_12v
+ * @param [in]  handle  The device handle
+ * @param [out] smi_attr The result vpp usage
  * @retval  BM_SUCCESS  Succeeds.
  *          Other code  Fails.
  */
-DECL_EXPORT bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v);
+DECL_EXPORT bm_status_t bm_get_vpp_instant_usage(bm_handle_t handle, int *vpp_usage);
 
 /**
  * @name    bm_get_product_sn
@@ -3072,295 +3398,6 @@ DECL_EXPORT bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v);
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bm_get_product_sn(char *product_sn);
-
-/**
- * @name    bm_get_sn
- * @brief   get sn
- * @ingroup device management api
- *
- * @param [in]   handle  The device handle
- * @param [out]  sn
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_sn(bm_handle_t handle, char *sn);
-
-/**
- * @name    bm_get_status
- * @brief   get chip status
- * @ingroup device management api
- *
- * @param [in]   handle  The device handle
- * @param [out]  status  The board error status, each bit represents an error state
- *  status == 0x0, borad is nornal, staus > 0, borad is abnormal;
- *  bit0 == 1, tpu is hang
- *  bit1 == 1, pcie link abnormal
- *  bit2 == 1, board temperature is too high
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_status(bm_handle_t handle, int *status);
-
-/**
- * @name    bm_get_tpu_maxclk
- * @brief   get tpu_maxclk
- * @ingroup device management api
- *
- * @param [in]   handle  The device handle
- * @param [out]  tpu_maxclk
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk);
-
-/**
- * @name    bm_get_tpu_minclk
- * @brief   get tpu_minclk
- * @ingroup device management api
- *
- * @param [in]   handle  The device handle
- * @param [out]  tpu_minclk
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk);
-
-/**
- * @name    bm_get_driver_version
- * @brief   get driver version
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  driver_version
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version);
-
-/**
- * @name    bm_get_board_name
- * @brief   get device board name
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  board_name
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_board_name(bm_handle_t handle, char *name);
-
-/**
- * @name    bm_get_board_temp
- * @brief   get board temperature
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  board_temp
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp);
-
-/**
- * @name    bm_get_chip_temp
- * @brief   get chip temperature
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  chip_temp
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_chip_temp(bm_handle_t handle, unsigned int *chip_temp);
-
-/**
- * @name    bm_get_tpu_power
- * @brief   get TPU power
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  tpu_power
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power);
-
-/**
- * @name    bm_get_tpu_volt
- * @brief   get TPU voltage
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  tpu_volt
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_tpu_volt(bm_handle_t handle, unsigned int *tpu_volt);
-
-/**
- * @name    bm_get_card_id
- * @brief   get card id
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  card_id
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_card_id(bm_handle_t handle, unsigned int *card_id);
-
-/**
- * @name    bm_get_card_num
- * @brief   get card number
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  card_id
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_card_num(unsigned int *card_num);
-
-/**
- * @name    bm_get_chip_num_from_card
- * @brief   get chip number and start chip id from card
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  chip_num
- * @param [out]  dev_start_index
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_chip_num_from_card(unsigned int card_id, unsigned int *chip_num, unsigned int *dev_start_index);
-
-/**
- * @name    bm_get_dynfreq_status
- * @brief   get chip dynamic freq status
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [out]  dynfreq_status
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status);
-
-/**
- * @name    bm_change_dynfreq_status
- * @brief   change(enable/disable) chip dynamic freq status
- * @ingroup device management api
- *
- * @param [in]   handle The device handle
- * @param [in]   new_status
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status);
-
-/**
- * @name    bm_get_core_to_send
- * @brief   get the core id of the core with the least current load
- * @ingroup load balancing api
- *
- * @param [in]   handle The device handle
- * @param [in]   core_id  the core id of the core with the least current load
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bmdev_get_idle_coreid(bm_handle_t handle, int *core_id);
-
-/**
- * @name    bm_get_tpu_scalar_num
- * @brief   To get the core number of TPU scalar
- * @ingroup bmlib_runtime
- *
- * @param [in] handle    The device handle
- * @param [out] core_num The core number of TPU scalar
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_get_tpu_scalar_num(bm_handle_t handle, unsigned int *core_num);
-
-/**
- * @name    bm_get_tpu_scalar_num
- * @brief   To get the core number of TPU scalar
- * @ingroup bmlib_runtime
- *
- * @param [in] handle    The device handle
- * @param [in/out] bm_api_cfg_pwr_ctrl Pointer to cfg_pwr_ctrl_t structure
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl);
-
-#define  bm_get_tpu_core_num bm_get_tpu_scalar_num
-
-bm_status_t bm_memcpy_c2c_stride(bm_handle_t src_handle, bm_handle_t dst_handle,
-                          bm_device_mem_t src, bm_device_mem_t dst,
-                          struct stride_cfg *stride, bool force_use_dst_cdma);
-bm_status_t bm_memcpy_d2s_stride(bm_handle_t handle, void *dst, bm_device_mem_t src,
-                          struct stride_cfg *stride);
-bm_status_t bm_memcpy_s2d_stride(bm_handle_t handle, bm_device_mem_t dst, void *src,
-							struct stride_cfg *stride);
-
-/**
- * @name    bm_malloc_device_mem
- * @brief   To malloc device memory in size of byte and output paddr
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out]  paddr  The result malloc device memory addr
- * @param [in]  heap_id The heap where to allocate  0/1/2
- * @param [in]  size    The number of bytes to allocate
- * @retval  paddr
- */
-DECL_EXPORT bm_status_t bm_malloc_device_mem(bm_handle_t handle, unsigned long long *paddr,
-                                              int heap_id, unsigned long long size);
-
-/**
- * @name    bm_malloc_device_mem_mask
- * @brief   To malloc device memory in size of byte within the specified heaps and output paddr
- * @ingroup bmlib_runtime
- *
- * @param [in]  handle  The device handle
- * @param [out]  paddr  The result malloc device memory addr
- * @param [in]  heap_id_mask The mask which heaps allocate from. each bit indicate one heap
- * @param [in]  size    The number of bytes to allocate
- * @retval  paddr
- */
-DECL_EXPORT bm_status_t bm_malloc_device_mem_mask(bm_handle_t handle, unsigned long long *paddr,
-                                              int heap_id_mask, unsigned long long size);
-
-/**
- * @name    bm_memcpy_s2d_gather
- * @brief   To copy data from system virtual memory to device memory
- * @ingroup bmlib_runtime
- *
- * @param [in] handle  The device handle
- * @param [in] dst     The destination memory (device memory descriptor )
- * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
- * @param [in] ...     void *src and unsigned long long len
- *
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_memcpy_s2d_gather(bm_handle_t handle, bm_device_mem_t dst, int argc, ...);
-
-/**
- * @name    bm_memcpy_d2s_scatter
- * @brief   To copy data from  device memory to system virtual memory
- * @ingroup bmlib_runtime
- *
- * @param [in] handle  The device handle
- * @param [in] src     The destination memory (device memory descriptor )
- * @param [in] argc    The number of system memory and len (system memory, a void* pointer)
- * @param [in] ...     void *dst and unsigned long long len
- *
- * @retval  BM_SUCCESS  Succeeds.
- *          Other code  Fails.
- */
-DECL_EXPORT bm_status_t bm_memcpy_d2s_scatter(bm_handle_t handle, bm_device_mem_t src, int argc, ...);
 #if defined(__cplusplus)
 }
 #endif

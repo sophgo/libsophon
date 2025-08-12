@@ -40,11 +40,11 @@ enum {
 #define MAX_PRINT_LENGTH 128
 
 #ifdef ANDROID
-#include <utils/Log.h>
-#undef LOG_NDEBUG
-#define LOG_NDEBUG 0
-#undef LOG_TAG
-#define LOG_TAG "VPUAPI"
+    #include <utils/Log.h>
+    #undef LOG_NDEBUG
+    #define LOG_NDEBUG 0
+    #undef LOG_TAG
+    #define LOG_TAG "VPUAPI"
 #endif
 
 #define VLOG(dbg_lv, format, ...)                   LogMsg(dbg_lv, "[%s:%d]"format, __FUNCTION__, __LINE__, ##__VA_ARGS__)
@@ -53,27 +53,28 @@ enum {
 #define LOG_ENABLE_FILE	SetLogDecor(GetLogDecor()|LOG_HAS_FILE);
 
 typedef void * osal_file_t;
-# ifndef SEEK_SET
-# define	SEEK_SET	0
-# endif
+#ifndef SEEK_SET
+    #define	SEEK_SET	0
+#endif
 
-# ifndef SEEK_CUR
-# define	SEEK_CUR	1
-# endif
+#ifndef SEEK_CUR
+    #define	SEEK_CUR	1
+#endif
 
-# ifndef SEEK_END
-# define	SEEK_END	2
-# endif
+#ifndef SEEK_END
+    #define	SEEK_END	2
+#endif
 
 #if defined(_WIN32) || defined(__WIN32__) || defined(_WIN64) || defined(WIN32) || defined(__MINGW32__)
 #elif defined(linux) || defined(__linux) || defined(ANDROID)
 #else
 
 #ifndef stdout
-# define	stdout	(void * )1
+    #define	stdout	(void * )1
 #endif
+
 #ifndef stderr
-# define	stderr	(void * )1
+    #define	stderr	(void * )1
 #endif
 
 #endif
@@ -149,7 +150,7 @@ int osal_snprintf(char* str, size_t buf_size, const char *format, ...);
 /********************************************************************************
  * THREAD                                                                       *
  ********************************************************************************/
-osal_thread_t osal_thread_create(int(*start_routine)(void*), void*arg);
+osal_thread_t osal_thread_create(int(*start_routine)(void*), void*arg, char* name);
 
 /* @return  0 - success
             2 - failure
@@ -188,12 +189,7 @@ void osal_sem_destroy(osal_sem_t sem);
  */
 Uint64 osal_gettime(void);
 
-osal_file_t osal_fopen(const char *file_name, const char *mode);
-size_t osal_fwrite(const void *p, int size, int count, osal_file_t fp);
-size_t osal_fread(void *p, int size, int count, osal_file_t fp);
-long osal_ftell(osal_file_t fp);
-int osal_fseek(osal_file_t fp, long offset, int origin);
-int osal_fclose(osal_file_t fp);
+
 
 #if defined (__cplusplus)
 }

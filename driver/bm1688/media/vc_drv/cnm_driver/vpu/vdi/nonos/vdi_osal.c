@@ -267,7 +267,7 @@ void osal_msleep(Uint32 millisecond)
     VLOG(WARN, "<%s:%d> Please implemenet osal_msleep()\n", __FUNCTION__, __LINE__);
 }
 
-osal_thread_t osal_thread_create(void(*start_routine)(void*), void*arg)
+osal_thread_t osal_thread_create(void(*start_routine)(void*), void*arg, char* name)
 {
     VLOG(WARN, "<%s:%d> NEED TO IMPLEMENT %s\n", __FUNCTION__, __LINE__, __FUNCTION__);
     return NULL;

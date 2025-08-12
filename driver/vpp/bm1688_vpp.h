@@ -3,7 +3,6 @@
 //#include "../bm_common.h"
 #include <linux/vpss_uapi.h>
 #include "vpss.h"
-#include "vpss_proc.h"
 
 typedef unsigned char u8;
 typedef unsigned long long u64;
@@ -66,7 +65,7 @@ struct vpp_batch_n {
 extern int bmdev_memcpy_d2s(struct bm_device_info *bmdi,struct file *file,
 		void __user *dst, u64 src, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
-void vpss_reg_write(uintptr_t addr, u32 data);
-u32 vpss_reg_read(uintptr_t addr);
+void vpss_reg_write(void *bmdi, uintptr_t addr, u32 data);
+u32 vpss_reg_read(void *bmdi, uintptr_t addr);
 #endif
 

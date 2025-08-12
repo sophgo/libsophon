@@ -473,7 +473,7 @@ RetCode Coda9VpuBuildUpDecParam(CodecInst* pCodec, DecOpenParam* param)
     if (pCodec->codecMode == AVC_DEC)
         pDecInfo->vbWork.size += PS_SAVE_SIZE;
 
-    if (vdi_allocate_dma_memory(pCodec->coreIdx, &pDecInfo->vbWork, DEC_WORK, pCodec->instIndex) < 0)
+    if (vdi_allocate_dma_memory(pCodec->coreIdx, &pDecInfo->vbWork, "DEC_WORK", pCodec->instIndex) < 0)
         return RETCODE_INSUFFICIENT_RESOURCE;
 
 
@@ -1443,7 +1443,7 @@ RetCode Coda9VpuDecRegisterFramebuffer(CodecInst* instance)
         vbBuffer.size      = size_mvcolbuf;
         vbBuffer.phys_addr = 0;
         for (i=0  ; i<pDecInfo->numFbsForDecoding ; i++) {
-            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuffer, DEC_MV, pCodecInst->instIndex)<0){
+            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuffer, "DEC_MV", pCodecInst->instIndex)<0){
                 return RETCODE_FAILURE;
             }
             pDecInfo->vbMV[i] = vbBuffer;
@@ -1616,7 +1616,7 @@ RetCode Coda9VpuDecRegisterFramebuffer(CodecInst* instance)
         vpu_buffer_t    *pvbSlice = &pDecInfo->vbSlice;
         if (pvbSlice->size == 0) {
             pvbSlice->size = VP8_MB_SAVE_SIZE;
-            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, pvbSlice, DEC_ETC, pCodecInst->instIndex) < 0) {
+            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, pvbSlice, "DEC_VP8", pCodecInst->instIndex) < 0) {
                 return RETCODE_INSUFFICIENT_RESOURCE;
             }
         }
@@ -1627,7 +1627,7 @@ RetCode Coda9VpuDecRegisterFramebuffer(CodecInst* instance)
         vpu_buffer_t    *pvbSlice = &pDecInfo->vbSlice;
         if (pvbSlice->size == 0) {
             pvbSlice->size = SLICE_SAVE_SIZE;
-            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, pvbSlice, DEC_ETC, pCodecInst->instIndex) < 0) {
+            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, pvbSlice, "DEC_SLICE", pCodecInst->instIndex) < 0) {
                 return RETCODE_INSUFFICIENT_RESOURCE;
             }
         }
@@ -1774,7 +1774,7 @@ RetCode Coda9VpuBuildUpEncParam(CodecInst* pCodecInst, EncOpenParam* param)
     }
 
     pEncInfo->vbWork.size       = WORK_BUF_SIZE;
-    if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &pEncInfo->vbWork, ENC_WORK, pCodecInst->instIndex) < 0)
+    if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &pEncInfo->vbWork, "ENC_WORK", pCodecInst->instIndex) < 0)
         return RETCODE_INSUFFICIENT_RESOURCE;
 
 
@@ -2245,7 +2245,7 @@ RetCode Coda9VpuEncRegisterFramebuffer(CodecInst* pCodecInst)
 
         vbBuf.size      = subsampleLumaSize + 2*subsampleChromaSize;
         vbBuf.phys_addr = (PhysicalAddress)0;
-        if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuf, ENC_ETC, pCodecInst->instIndex) < 0) {
+        if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuf, "ENC_ETC", pCodecInst->instIndex) < 0) {
             pEncInfo->vbSubSampFrame.size      = 0;
             pEncInfo->vbSubSampFrame.phys_addr = 0;
             return RETCODE_INSUFFICIENT_RESOURCE;
@@ -2273,7 +2273,7 @@ RetCode Coda9VpuEncRegisterFramebuffer(CodecInst* pCodecInst)
         if (pCodecInst->codecMode == AVC_ENC && pCodecInst->codecModeAux == AVC_AUX_MVC) {
             vbBuf.size      = subsampleLumaSize + 2*subsampleChromaSize;
             vbBuf.phys_addr = (PhysicalAddress)0;
-            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuf, ENC_ETC, pCodecInst->instIndex) < 0) {
+            if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &vbBuf, "ENC_ETC", pCodecInst->instIndex) < 0) {
                 pEncInfo->vbSubSampFrame.size      = 0;
                 pEncInfo->vbSubSampFrame.phys_addr = 0;
                 return RETCODE_INSUFFICIENT_RESOURCE;
@@ -2300,7 +2300,7 @@ RetCode Coda9VpuEncRegisterFramebuffer(CodecInst* pCodecInst)
     if (pCodecInst->codecMode == MP4_ENC) {
         // MPEG4 Encoder Data-Partitioned bitstream temporal buffer
         pEncInfo->vbScratch.size = SIZE_MP4ENC_DATA_PARTITION;
-        if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &pEncInfo->vbScratch, ENC_ETC, pCodecInst->instIndex)<0)
+        if (vdi_allocate_dma_memory(pCodecInst->coreIdx, &pEncInfo->vbScratch, "ENC_ETC", pCodecInst->instIndex)<0)
             return RETCODE_INSUFFICIENT_RESOURCE;
         VpuWriteReg(pCodecInst->coreIdx, CMD_SET_FRAME_DP_BUF_BASE, pEncInfo->vbScratch.phys_addr);
         VpuWriteReg(pCodecInst->coreIdx, CMD_SET_FRAME_DP_BUF_SIZE, pEncInfo->vbScratch.size>>10);

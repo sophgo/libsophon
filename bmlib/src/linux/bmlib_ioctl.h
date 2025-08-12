@@ -25,6 +25,7 @@
 
 #define BMDEV_SEND_API                _IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API         _IOW('p', 0x21, unsigned long)
+#define BMDEV_SYNC_TIMEOUT_API        _IOW('p', 0x22, unsigned long)
 #define BMDEV_DEVICE_SYNC_API         _IOW('p', 0x23, unsigned long)
 #define BMDEV_HANDLE_SYNC_API         _IOW('p', 0x27, unsigned long)
 #define BMDEV_SEND_API_EXT            _IOW('p', 0x28, unsigned long)

@@ -1506,3 +1506,23 @@ void print_dny_lib_info(struct bm_device_info *bmdi)
 				lib_temp->refcount);
 	}
 }
+
+int bmdrv_set_sync_timeout(struct bm_device_info *bmdi, unsigned long arg)
+{
+	int ret, timeout;
+
+	ret = copy_from_user(&timeout, (int __user *)arg, sizeof(int));
+	if (ret) {
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+		return ret;
+	}
+
+	if (timeout < 0) {
+		pr_info("set sync timeout error!\n");
+		return -1;
+	}
+
+	bmdi->cinfo.delay_ms = timeout;
+
+	return 0;
+}

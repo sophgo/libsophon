@@ -62,7 +62,7 @@ static const struct bm_bar_info bm1688_pcie2_bar_layout[] = {
 		.bar1_part_info[20] = {0x76E000, 0x080000, 0x2580C000},
 		.bar1_part_info[21] = {0x7EE000, 0x002000, 0x20BE8000},
 		.bar1_part_info[22] = {0x7F0000, 0x001000, 0xFFFFE000},
-		.bar1_part_info[23] = {0x7F1000, 0x001000, 0x05026000},
+		.bar1_part_info[23] = {0x7F1000, 0x002000, 0x05025000},
 
 		.bar2_len = 0x400000,
 		.bar2_dev_start = 0,
@@ -128,7 +128,7 @@ static const struct bm_bar_info bm1688_pcie4_bar_layout[] = {
 		.bar1_part_info[20] = {0x76E000, 0x080000, 0x2580C000},
 		.bar1_part_info[21] = {0x7EE000, 0x002000, 0x20BE8000},
 		.bar1_part_info[22] = {0x7F0000, 0x001000, 0xFFFFF000},
-		.bar1_part_info[23] = {0x7F1000, 0x001000, 0x05026000},
+		.bar1_part_info[23] = {0x7F1000, 0x002000, 0x05025000},
 
 		.bar2_len = 0x400000,
 		.bar2_dev_start = 0,
@@ -143,14 +143,18 @@ void bm1688_pcie_get_outbound_base(struct bm_device_info *bmdi)
 {
 	struct bm_card *bmcd = NULL;
 	u32 mode;
-	if(bmdi->cinfo.pcie_func_index > 0) {
+
+	if (bmdi->cinfo.pcie_func_index > 0) {
 		bmcd = bmdrv_card_get_bm_card(bmdi);
 		mode = bmcd->card_bmdi[0]->cinfo.mode;
 	} else {
 		mode = bmdi->cinfo.mode;
 	}
 
-	bmdi->cinfo.ob_base = 0x800;
+	if (mode & BM1688_PCIE_EP_SEL_0)
+		bmdi->cinfo.ob_base = 0xC00;
+	else
+		bmdi->cinfo.ob_base = 0x800;
 }
 
 void bm1688_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev)
@@ -425,18 +429,33 @@ void bm1688_bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_de
 	REG_WRITE32(atu_base_addr, 0x3720, bar4_start >> 32);
 }
 
+static void bm1688_pcie_fix_ep_sel(struct bm_device_info *bmdi)
+{
+       struct bm_bar_info *bari = &bmdi->cinfo.bar_info;
+       u32 sel = bmdi->cinfo.mode & BM1688_PCIE_EP_SEL_MASK;
+
+       if (sel == BM1688_PCIE_EP_SEL_MASK)
+               sel = bari->bar0_dev_start == BM1688_PCIE_EP_DBI_0
+                       ? BM1688_PCIE_EP_SEL_0
+                       : BM1688_PCIE_EP_SEL_1;
+
+       bmdi->cinfo.mode = (bmdi->cinfo.mode & ~BM1688_PCIE_EP_SEL_MASK) | sel;
+}
+
 int bm1688_bmdrv_pcie_get_mode(struct bm_device_info *bmdi)
 {
-	int mode = 0x0;
+	u32 mode = 0x0;
 
 	//get ssperi trap
-	//mode = top_reg_read(bmdi, 0x04) >> 25;
 	mode = bm_read32(bmdi, 0x28100004) >> 25;
 	if (mode == 0xffffffff) {
 		pr_err("pcie get mode fail\n");
 		return -1;
 	}
+
 	bmdi->cinfo.mode = mode&0xf;
+
+	bm1688_pcie_fix_ep_sel(bmdi);
 	pr_info("pcie mode 0x%x \n", bmdi->cinfo.mode);
 	return 0;
 }

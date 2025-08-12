@@ -10,14 +10,14 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
   const std::vector<tpu_tensor_info_t> &input_info = net_info.input_info;
   const std::vector<tpu_tensor_info_t> &output_info = net_info.output_info;
   const std::vector<tpu_cmd_info_t> &cmd_info = net_info.core_commands[0].cmd_info;
+  const std::vector<cmd_reloc_entry_t> &gdma_reloc_entries = net_info.core_commands[0].gdma_reloc_entries;
+  const std::vector<u64>& reloc_base_addrs = net_info.reloc_base_addrs;
 
   u32 api_buffer_size =
-      sizeof(int) +
-      (input_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // input
-      sizeof(int) +
-      (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
-      sizeof(u64) * 2 + (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() +
-      sizeof(int);
+      sizeof(int) + (input_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // input
+      sizeof(int) + (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
+      sizeof(u64) * 2 + sizeof(int) + (cmd_info.size() * (sizeof(int) * 2 + sizeof(u32) * 2)) + // cmds loc and size
+      sizeof(u32) + (gdma_reloc_entries.size() * (2 * sizeof(u64)));   // reloc entries in IO_RELOC mode    
   if (net_info.do_allreduce) {
     api_buffer_size += sizeof(u32);
     api_buffer_size += sizeof(tpu_kernel_allreduce_1684x_t);
@@ -77,6 +77,19 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
     p_api = (u32 *)p_api + 1;
     *(u32 *)p_api = cmd_info.at(i).gdma_cmd_byte_size;
     p_api = (u32 *)p_api + 1;
+  }
+
+  // gdma relocation info
+  *(u32 *)p_api = gdma_reloc_entries.size();
+  p_api = (u32 *)p_api + 1;
+  for (size_t i = 0; i < gdma_reloc_entries.size(); i++) {
+    const auto& reloc_entry = gdma_reloc_entries[i];
+    const auto& reloc_addr_info = reloc_entry.reloc_addr_info;
+    *(u64 *)p_api = reloc_entry.cmd_offset;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = reloc_base_addrs[reloc_addr_info.base_addr_id] +
+                    reloc_addr_info.addr_offset;
+    p_api = (u64 *)p_api + 1;
   }
 
   if (net_info.do_allreduce == 1) {

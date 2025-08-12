@@ -30,7 +30,6 @@ extern struct bm_ctrl_info *bmci;
 extern int dev_count;
 extern char release_date[];
 
-
 static int bmdrv_card_nums_proc_show(struct seq_file *m, void *v)
 {
 	int card_num = 1;
@@ -2117,6 +2116,7 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 		(void *)bmdi);
 	proc_create_data("ddr_capacity", 0444, bmdi->proc_dir, &bmdrv_ddr_config_file_ops,
 		(void *)bmdi);
+	vpss_proc_init(bmdi->proc_dir, &bmdi->vppdrvctx.vpss_dev);
 #endif
 	return 0;
 }
@@ -2168,6 +2168,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("completed_api_counter", bmdi->proc_dir);
 	remove_proc_entry("arm9_cache", bmdi->proc_dir);
 	remove_proc_entry("ddr_capacity", bmdi->proc_dir);
+	vpss_proc_remove(bmdi->proc_dir, &bmdi->vppdrvctx.vpss_dev);
 	proc_remove(bmdi->proc_dir);
 	if (bmdi->dev_index == bmdi->bmcd->dev_start_index) {
 		bmsophon_card_proc_dir = bmdi->card_proc_dir;
@@ -2291,7 +2292,7 @@ void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 
 	for (i = 0; i < size/ARM9FW_LOG_LINE_SIZE; i++) {
 		strncpy(str, p, ARM9FW_LOG_LINE_SIZE - 1);
-		pr_info("bm-sophon%d core_%d: %s", bmdi->dev_index, core_id, str);
+		PR_TRACE("bm-sophon%d core_%d: %s", bmdi->dev_index, core_id, str);
 		p += ARM9FW_LOG_LINE_SIZE;
 	}
 	memset(bmdi->monitor_thread_info.log_mem[core_id].host_vaddr, 0, size);

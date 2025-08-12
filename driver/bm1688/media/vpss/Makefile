@@ -5,7 +5,6 @@ ifneq ($(KERNELRELEASE),)
 include $(PWD)/chip/$(CVIARCH_L)/chip.mk
 $(CVIARCH_L)_vpss-objs += common/vpss_proc.o
 $(CVIARCH_L)_vpss-objs += common/vpss.o
-$(CVIARCH_L)_vpss-objs += common/vpss_ioctl.o
 
 obj-m += $(CVIARCH_L)_vpss.o
 

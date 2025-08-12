@@ -23,6 +23,8 @@ void bm1688_tpu_clk_enable(struct bm_device_info *bmdi);
 void bm1688_tpu_clk_disable(struct bm_device_info *bmdi);
 void bm1688_gdma_clk_enable(struct bm_device_info *bmdi);
 void bm1688_gdma_clk_disable(struct bm_device_info *bmdi);
+void bm1688_cdma_clk_enable(struct bm_device_info *bmdi);
+void bm1688_cdma_clk_disable(struct bm_device_info *bmdi);
 
 #ifndef SOC_MODE
 int bm1688_get_mcu_reg(struct bm_device_info *bmdi, u32 index, u8 *data);

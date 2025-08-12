@@ -409,7 +409,7 @@ Int32 writeVuiRbsp(int coreIdx, TestEncConfig *encConfig, EncOpenParam *encOP, v
     if (encOP->encodeVuiRbsp == TRUE) {
         vbVuiRbsp->size = VUI_HRD_RBSP_BUF_SIZE;
 
-        if (vdi_allocate_dma_memory(coreIdx, vbVuiRbsp, ENC_ETC, 0) < 0) {//I don't know instIndex before Calling VpuEncOpen
+        if (vdi_allocate_dma_memory(coreIdx, vbVuiRbsp, "VUIBUF", 0) < 0) {//I don't know instIndex before Calling VpuEncOpen
             VLOG(ERR, "fail to allocate VUI rbsp buffer\n" );
             return FALSE;
         }
@@ -442,7 +442,7 @@ Int32 writeHrdRbsp(int coreIdx, TestEncConfig *encConfig, EncOpenParam *encOP, v
     if (encOP->encodeHrdRbspInVPS)
     {
         vbHrdRbsp->size    = VUI_HRD_RBSP_BUF_SIZE;
-        if (vdi_allocate_dma_memory(coreIdx, vbHrdRbsp, ENC_ETC, 0) < 0) {//I don't know instIndex before Calling VpuEncOpen
+        if (vdi_allocate_dma_memory(coreIdx, vbHrdRbsp, "VUI_HRD_BUF", 0) < 0) {//I don't know instIndex before Calling VpuEncOpen
             VLOG(ERR, "fail to allocate HRD rbsp buffer\n" );
             return FALSE;
         }
@@ -493,7 +493,7 @@ int allocateRoiMapBuf(EncHandle handle, TestEncConfig encConfig, vpu_buffer_t *v
         //number of roi buffer should be the same as source buffer num.
         for (i = 0; i < srcFbNum ; i++) {
             vbRoi[i].size = ctuNum;
-            if (vdi_allocate_dma_memory(coreIdx, &vbRoi[i], ENC_ETC, handle->instIndex) < 0) {
+            if (vdi_allocate_dma_memory(coreIdx, &vbRoi[i], "ROIMAPBUF", handle->instIndex) < 0) {
                 VLOG(ERR, "fail to allocate ROI buffer\n" );
                 return FALSE;
             }

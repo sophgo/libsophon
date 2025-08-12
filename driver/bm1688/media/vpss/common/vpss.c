@@ -29,104 +29,18 @@
 #include "vpss_common.h"
 #include "vpss_hal.h"
 
-/*******************************************************
- *  MACRO definition
- ******************************************************/
-#ifndef FPGA_PORTING
-#define IDLE_TIMEOUT_MS      10000
-#define EOF_WAIT_TIMEOUT_MS  1000
-#else
-#define IDLE_TIMEOUT_MS      60000
-#define EOF_WAIT_TIMEOUT_MS  60000
-#endif
-
-#define CTX_EVENT_WKUP       0x0001
-#define CTX_EVENT_EOF        0x0002
-#define CTX_EVENT_VI_ERR     0x0004
-
-struct vpss_jobs_ctx {
-	struct vb_jobs_t ins;
-	struct vb_jobs_t outs[VPSS_MAX_CHN_NUM];
-};
-struct vpss_handler_ctx {
-	wait_queue_head_t wait;
-	struct task_struct *thread;
-	spinlock_t hdl_lock;
-	atomic_t active_cnt;
-	unsigned char events;
-};
-struct vpss_ext_ctx {
-	struct csc_cfg csc_cfg;
-	struct csc_cfg chn_csc_cfg[VPSS_MAX_CHN_NUM];
-	signed int proc_amp[PROC_AMP_MAX];
-};
-
 struct vpss_stitch_data {
 	wait_queue_head_t wait;
 	unsigned char flag;
 };
 
-static struct vpss_ctx *g_vpss_ctx[VPSS_MAX_GRP_NUM] = { [0 ... VPSS_MAX_GRP_NUM - 1] = NULL };
-
-static unsigned char g_is_bm_scene = false;
-
-static struct workqueue_struct *g_vpss_workqueue;
-
-//update proc info
-static void _update_vpss_chn_real_frame_rate(struct timer_list *timer);
-DEFINE_TIMER(timer_proc, _update_vpss_chn_real_frame_rate);
-static atomic_t g_timer_added = ATOMIC_INIT(0);
-
-//global lock
-static struct mutex g_vpss_lock;
-
-//timer callback
-static vpss_timer_cb g_core_cb;
-static void *g_core_data;
-
-static struct semaphore g_vpss_core_sem;
-
 void vpss_wkup_frame_done_handle(void *pdata)
 {
 	struct vpss_job *job = container_of(pdata, struct vpss_job, data);
 
-	if(!g_is_bm_scene)
-		queue_work(g_vpss_workqueue, &job->job_work);
-	else {
-		struct vpss_stitch_data *data = (struct vpss_stitch_data *)job->data;
-		data->flag = 1;
-		wake_up(&data->wait);
-	}
-}
-
-static void _update_vpss_chn_real_frame_rate(struct timer_list *timer)
-{
-	int i, j;
-	unsigned long long duration, cur_time_us;
-	struct timespec64 cur_time;
-
-	UNUSED(timer);
-	ktime_get_ts64(&cur_time);
-	cur_time_us = (unsigned long long)cur_time.tv_sec * USEC_PER_SEC + cur_time.tv_nsec / NSEC_PER_USEC;
-
-	for (i = 0; i < VPSS_MAX_GRP_NUM; ++i) {
-		if (g_vpss_ctx[i] && g_vpss_ctx[i]->is_created) {
-			for (j = 0; j < VPSS_MAX_CHN_NUM; ++j) {
-				if (g_vpss_ctx[i]->chn_cfgs[j].is_enabled) {
-					duration = cur_time_us - g_vpss_ctx[i]->chn_cfgs[j].chn_work_status.prev_time;
-					if (duration >= 1000000) {
-						g_vpss_ctx[i]->chn_cfgs[j].chn_work_status.real_frame_rate
-							= g_vpss_ctx[i]->chn_cfgs[j].chn_work_status.frame_num;
-						g_vpss_ctx[i]->chn_cfgs[j].chn_work_status.frame_num = 0;
-						g_vpss_ctx[i]->chn_cfgs[j].chn_work_status.prev_time = cur_time_us;
-					}
-				}
-			}
-		}
-	}
-	g_core_cb(g_core_data);
-
-	mod_timer(&timer_proc, jiffies + msecs_to_jiffies(1000));
+	struct vpss_stitch_data *data = (struct vpss_stitch_data *)job->data;
+	data->flag = 1;
+	wake_up(&data->wait);
 }
 
 signed int video_frame_dmabuf_fd_to_paddr(video_frame_s *video_frame){
@@ -150,14 +64,12 @@ signed int video_frame_dmabuf_fd_to_paddr(video_frame_s *video_frame){
 	return 0;
 }
 
-signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg){
+signed int vpss_bm_send_frame(struct vpss_device *dev, bm_vpss_cfg *vpss_cfg){
 	signed int ret = 0, i = 0, j = 0;
 	struct vpss_job *job = kzalloc(sizeof(struct vpss_job), GFP_ATOMIC);
 	struct vpss_hal_grp_cfg *grp_hw_cfg = &job->cfg.grp_cfg;
 	struct vpss_hal_chn_cfg *chn_hw_cfg = &job->cfg.chn_cfg[0];
 	struct vpss_stitch_data data;
-
-	if(!g_is_bm_scene) g_is_bm_scene = true;
 
 	init_waitqueue_head(&data.wait);
 	data.flag = 0;
@@ -290,12 +202,10 @@ signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg){
 	chn_hw_cfg->pixelformat = vpss_cfg->chn_frm_cfg.video_frame.video_frame.pixel_format;
 	chn_hw_cfg->bytesperline[0] = vpss_cfg->chn_frm_cfg.video_frame.video_frame.stride[0];
 	chn_hw_cfg->bytesperline[1] = vpss_cfg->chn_frm_cfg.video_frame.video_frame.stride[1];
-	if(vpss_cfg->chn_frm_cfg.video_frame.video_frame.phyaddr[0] < 0x1000){ // dmabuf_fd
-		ret = video_frame_dmabuf_fd_to_paddr(&vpss_cfg->chn_frm_cfg.video_frame.video_frame);
-		if(ret != 0){
-			kfree(job);
-			return ret;
-		}
+	if(vpss_cfg->chn_frm_cfg.video_frame.video_frame.phyaddr[0] < 0x1000){
+		TRACE_VPSS(DBG_ERR, "pcie no support dmabuf fd\n");
+		kfree(job);
+		return ret;
 	}
 	for (i = 0; i < NUM_OF_PLANES; ++i)
 		chn_hw_cfg->addr[i] = vpss_cfg->chn_frm_cfg.video_frame.video_frame.phyaddr[i];
@@ -344,7 +254,9 @@ signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg){
 		break;
 	}
 
-	if (down_interruptible(&g_vpss_core_sem)){
+	job->dev = dev;
+
+	if (down_interruptible(&dev->g_vpss_core_sem)){
 		ret = -1;
 		goto fail;
 	}
@@ -364,90 +276,17 @@ signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg){
 		for (i = 0; i < VPSS_MAX; i++) {
 			if (!(job->vpss_dev_mask & BIT(i)))
 				continue;
-			vpss_hal_down_reg(i);
+			vpss_hal_down_reg(dev->scaler, i);
 		}
 	}
 fail:
-	up(&g_vpss_core_sem);
+	up(&dev->g_vpss_core_sem);
 	kfree(job);
 
 	return ret;
 }
 
-void vpss_mode_init(void)
+void vpss_init(struct vpss_device *dev)
 {
-	mutex_lock(&g_vpss_lock);
-	if (atomic_cmpxchg(&g_timer_added, 0, 1) == 0)
-		add_timer(&timer_proc);
-	mod_timer(&timer_proc, jiffies + msecs_to_jiffies(1000));
-	mutex_unlock(&g_vpss_lock);
-}
-
-void vpss_mode_deinit(void)
-{
-	mutex_lock(&g_vpss_lock);
-	if (atomic_cmpxchg(&g_timer_added,1, 0) == 1)
-		del_timer_sync(&timer_proc);
-	mutex_unlock(&g_vpss_lock);
-}
-
-void register_timer_fun(vpss_timer_cb cb, void *data)
-{
-	g_core_cb = cb;
-	g_core_data = data;
-}
-
-void vpss_init(void)
-{
-	mutex_init(&g_vpss_lock);
-	sema_init(&g_vpss_core_sem, VPSS_WORK_MAX);
-}
-
-void vpss_deinit(void)
-{
-	mutex_destroy(&g_vpss_lock);
-}
-
-signed int vpss_suspend_handler(void)
-{
-	int count;
-	vpss_grp grp_id;
-	struct vpss_ctx *ctx;
-
-	mutex_lock(&g_vpss_lock);
-	if (atomic_cmpxchg(&g_timer_added,1, 0) == 1)
-		del_timer(&timer_proc);
-	mutex_unlock(&g_vpss_lock);
-
-	for (grp_id = 0; grp_id < VPSS_MAX_GRP_NUM; ++grp_id) {
-		if (!g_vpss_ctx[grp_id])
-			continue;
-
-		ctx = g_vpss_ctx[grp_id];
-
-		//wait frame done
-		count = 20;
-		while (!ctx->online_from_isp && --count > 0) {
-			if (atomic_read(&ctx->hdl_state) == HANDLER_STATE_STOP)
-				break;
-			usleep_range(1000, 2000);
-		}
-		if (count == 0) {
-			TRACE_VPSS(DBG_ERR, "Grp(%d) Wait timeout, HW hang.\n", grp_id);
-			//TODO: reset dev and job
-		}
-	}
-
-	return 0;
-}
-
-signed int vpss_resume_handler(void)
-{
-	mutex_lock(&g_vpss_lock);
-	if (atomic_cmpxchg(&g_timer_added,0, 1) == 0)
-		add_timer(&timer_proc);
-	mod_timer(&timer_proc, jiffies + msecs_to_jiffies(1000));
-	mutex_unlock(&g_vpss_lock);
-
-	return 0;
+	sema_init(&dev->g_vpss_core_sem, VPSS_WORK_MAX);
 }

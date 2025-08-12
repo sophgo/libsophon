@@ -35,17 +35,17 @@
 #include "jputypes.h"
 
 #define MAX_JPU_BUFFER_POOL 512
-#define JpuWriteInstReg(CORE, INST_IDX, ADDR, DATA) jdi_write_register_ext(CORE, ((unsigned long)(INST_IDX * NPT_REG_SIZE) + ADDR), DATA)
-#define JpuReadInstReg(CORE, INST_IDX, ADDR )		    jdi_read_register_ext(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR ) // system register write 	with instance index
+#define JpuWriteInstReg(CORE, INST_IDX, ADDR, DATA)         jdi_write_register(CORE, ((unsigned long)(INST_IDX * NPT_REG_SIZE) + ADDR), DATA)
+#define JpuReadInstReg(CORE, INST_IDX, ADDR )		        jdi_read_register(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR ) // system register write 	with instance index
 
-#define JpuWriteReg(CORE, ADDR, DATA )                   jdi_write_register_ext(CORE, ADDR, DATA ) // system register write
-#define JpuReadReg(CORE, ADDR )                          jdi_read_register_ext(CORE, ADDR )           // system register write
+#define JpuWriteReg(CORE, ADDR, DATA )                      jdi_write_register(CORE, ADDR, DATA ) // system register write
+#define JpuReadReg(CORE, ADDR )                             jdi_read_register(CORE, ADDR )           // system register write
 
-#define JpuWriteInstRegExt(CORE, INST_IDX, ADDR, DATA )		jdi_write_register_ext(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR, DATA ) // system register write 	with instance index
-#define JpuReadInstRegExt(CORE, INST_IDX, ADDR )		    jdi_read_register_ext(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR ) // system register write 	with instance index
+#define JpuWriteInstRegExt(CORE, INST_IDX, ADDR, DATA )		jdi_write_register(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR, DATA ) // system register write 	with instance index
+#define JpuReadInstRegExt(CORE, INST_IDX, ADDR )		    jdi_read_register(CORE, ((unsigned long)INST_IDX*NPT_REG_SIZE)+ADDR ) // system register write 	with instance index
 
-#define JpuWriteRegExt(CORE, ADDR, DATA )                   jdi_write_register_ext(CORE, ADDR, DATA ) // system register write
-#define JpuReadRegExt(CORE, ADDR )                          jdi_read_register_ext(CORE, ADDR )           // system register write
+#define JpuWriteRegExt(CORE, ADDR, DATA )                   jdi_write_register(CORE, ADDR, DATA ) // system register write
+#define JpuReadRegExt(CORE, ADDR )                          jdi_read_register(CORE, ADDR )           // system register write
 
 #define JpuWriteMem(ADDR, DATA, LEN, ENDIAN )               jdi_write_memory(ADDR, DATA, LEN, ENDIAN ) // system memory write
 #define JpuReadMem(ADDR, DATA, LEN, ENDIAN )                jdi_read_memory(ADDR, DATA, LEN, ENDIAN ) // system memory write
@@ -115,8 +115,6 @@ void jdi_sw_top_reset(int core_idx);
 
 void jdi_write_register(int core_idx, unsigned long addr, unsigned int data);
 unsigned long jdi_read_register(int core_idx, unsigned long addr);
-void jdi_write_register_ext(int core_idx, unsigned long addr, unsigned int data);
-unsigned long jdi_read_register_ext(int core_idx, unsigned long addr);
 
 size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int endian);
 size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int endian);

@@ -646,8 +646,9 @@ static int h264e_map_nalu_type(venc_pack_s *ppack, int NalType)
         H264E_NALU_SEI,
     };
     int naluType;
+#ifndef PLATFORM_SOC
     unsigned char tmp[8] = {0};
-
+#endif
     if (!ppack) {
         DRV_VENC_ERR("ppack is NULL\n");
         return -1;
@@ -658,8 +659,12 @@ static int h264e_map_nalu_type(venc_pack_s *ppack, int NalType)
         return -1;
     }
 
-    VpuReadMem(0, ppack->u64PhyAddr, tmp, 8, VDI_128BIT_LITTLE_ENDIAN);
+#ifdef PLATFORM_SOC
+    naluType = ppack->pu8Addr[4] & 0x1f;
+#else
+	VpuReadMem(0, ppack->u64PhyAddr, tmp, 8, VDI_128BIT_LITTLE_ENDIAN);
     naluType = tmp[4] & 0x1f;
+#endif
 
     if (NalType < NAL_I || NalType >= NAL_MAX) {
         DRV_VENC_ERR("NalType = %d\n", NalType);
@@ -792,8 +797,9 @@ static int h265e_map_nalu_type(venc_pack_s *ppack, int NalType)
         H265E_NALU_VPS,
     };
     int naluType;
+#ifndef PLATFORM_SOC
     unsigned char tmp[8] = {0};
-
+#endif
     if (!ppack) {
         DRV_VENC_ERR("ppack is NULL\n");
         return -1;
@@ -804,8 +810,12 @@ static int h265e_map_nalu_type(venc_pack_s *ppack, int NalType)
         return -1;
     }
 
-    VpuReadMem(0, ppack->u64PhyAddr, tmp, 8, VDI_128BIT_LITTLE_ENDIAN);
+#ifdef PLATFORM_SOC
+    naluType = (ppack->pu8Addr[4] & 0x7f) >> 1;
+#else
+	VpuReadMem(0, ppack->u64PhyAddr, tmp, 8, VDI_128BIT_LITTLE_ENDIAN);
     naluType = (tmp[4] & 0x7f) >> 1;
+#endif
 
     if (NalType < NAL_I || NalType >= NAL_MAX) {
         DRV_VENC_ERR("NalType = %d\n", NalType);

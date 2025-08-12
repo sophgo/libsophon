@@ -800,124 +800,135 @@ struct sclr_fbd_cfg {
 	u8 endian; //128-bit big endian:15, 128-bit LSB priority byte ordering:0
 };
 
+struct scaler {
+	struct sclr_core_cfg g_sc_cfg[SCL_MAX_INST];
+	struct sclr_gop_cfg g_gop_cfg[SCL_MAX_INST][SCL_MAX_GOP_INST];
+	struct sclr_img_cfg g_img_cfg[SCL_MAX_INST];
+	struct sclr_cir_cfg g_cir_cfg[SCL_MAX_INST];
+	struct sclr_border_cfg g_bd_cfg[SCL_MAX_INST];
+	struct sclr_border_vpp_cfg g_bd_vpp_cfg[SCL_MAX_INST][BORDER_VPP_MAX];
+	struct sclr_odma_cfg g_odma_cfg[SCL_MAX_INST];
+	struct sclr_fbd_cfg g_fbd_cfg[SCL_MAX_INST];
+	void *bmdi;
+};
 
 void sclr_set_base_addr(void *vi_base, void *vd0_base, void *vd1_base, void *vo_base);
 void sclr_init_sys_top_addr(void);
 void sclr_deinit_sys_top_addr(void);
-void sclr_reg_force_up(u8 inst);
-void sclr_top_set_cfg(u8 inst, bool sc_enable, bool fbd_enable);
-void sclr_rt_set_cfg(u8 inst, union sclr_rt_cfg cfg);
-union sclr_rt_cfg sclr_rt_get_cfg(u8 inst);
-void sclr_top_reg_done(u8 inst);
-u8 sclr_top_pg_late_get_bus(u8 inst);
-void sclr_top_pg_late_clr(u8 inst);
+void sclr_reg_force_up(struct scaler *scaler, u8 inst);
+void sclr_top_set_cfg(struct scaler *scaler, u8 inst, bool sc_enable, bool fbd_enable);
+void sclr_rt_set_cfg(struct scaler *scaler, u8 inst, union sclr_rt_cfg cfg);
+union sclr_rt_cfg sclr_rt_get_cfg(struct scaler *scaler, u8 inst);
+void sclr_top_reg_done(struct scaler *scaler, u8 inst);
+u8 sclr_top_pg_late_get_bus(struct scaler *scaler, u8 inst);
+void sclr_top_pg_late_clr(struct scaler *scaler, u8 inst);
 void sclr_top_bld_set_cfg(struct sclr_bld_cfg *cfg);
 void sclr_top_get_sb_default(struct sclr_top_sb_cfg *cfg);
 void sclr_top_set_sb(struct sclr_top_sb_cfg *cfg);
-void sclr_top_set_src_share(u8 inst, bool is_share);
-void sclr_set_cfg(u8 inst, bool sc_bypass, bool gop_bypass,
+void sclr_top_set_src_share(struct scaler *scaler, u8 inst, bool is_share);
+void sclr_set_cfg(struct scaler *scaler, u8 inst, bool sc_bypass, bool gop_bypass,
 		  bool cir_bypass, bool odma_bypass);
-struct sclr_core_cfg *sclr_get_cfg(u8 inst);
-void sclr_set_input_size(u8 inst, struct sclr_size src_rect, bool update);
-void sclr_set_crop(u8 inst, struct sclr_rect crop_rect, bool is_update);
-void sclr_set_output_size(u8 inst, struct sclr_size rect);
-void sclr_set_scale_mir(u8 inst, bool enable);
-void sclr_set_scale_phase(u8 inst, u32 h_ph, u32 v_ph);
-void sclr_set_scale(u8 inst);
-struct sclr_status sclr_get_status(u8 inst);
-void sclr_read_2tap_nor(u8 inst, u16 *resize_hnor, u16 *resize_vnor);
-void sclr_update_coef(u8 inst, enum sclr_algorithm coef);
+struct sclr_core_cfg *sclr_get_cfg(struct scaler *scaler, u8 inst);
+void sclr_set_input_size(struct scaler *scaler, u8 inst, struct sclr_size src_rect, bool update);
+void sclr_set_crop(struct scaler *scaler, u8 inst, struct sclr_rect crop_rect, bool is_update);
+void sclr_set_output_size(struct scaler *scaler, u8 inst, struct sclr_size rect);
+void sclr_set_scale_mir(struct scaler *scaler, u8 inst, bool enable);
+void sclr_set_scale_phase(struct scaler *scaler, u8 inst, u32 h_ph, u32 v_ph);
+void sclr_set_scale(struct scaler *scaler, u8 inst);
+struct sclr_status sclr_get_status(struct scaler *scaler, u8 inst);
+void sclr_read_2tap_nor(struct scaler *scaler, u8 inst, u16 *resize_hnor, u16 *resize_vnor);
+void sclr_update_coef(struct scaler *scaler, u8 inst, enum sclr_algorithm coef);
 
-void sclr_img_reg_shadow_sel(u8 inst, bool read_shadow);
-void sclr_img_set_cfg(u8 inst, struct sclr_img_cfg *cfg);
-struct sclr_img_cfg *sclr_img_get_cfg(u8 inst);
-void sclr_vpss_sw_top_reset(u8 inst);
-void sclr_img_reset(u8 inst);
-void sclr_img_start(u8 inst);
-void sclr_slave_ready(u8 inst);
-void sclr_img_set_fmt(u8 inst, enum sclr_format fmt);
-void sclr_img_set_mem(u8 inst, struct sclr_mem *mem, bool update);
-void sclr_img_set_addr(u8 inst, u64 addr0, u64 addr1, u64 addr2);
-void sclr_img_csc_en(u8 inst, bool enable);
-void sclr_img_set_csc(u8 inst, struct sclr_csc_matrix *cfg);
-union sclr_img_dbg_status sclr_img_get_dbg_status(u8 inst, bool clr);
-void sclr_img_checksum_en(u8 inst, bool enable);
-void sclr_img_get_checksum_status(u8 inst, struct sclr_img_checksum_status *status);
-void sclr_img_dup2fancy_bypass(u8 inst, bool enable);
+void sclr_img_reg_shadow_sel(struct scaler *scaler, u8 inst, bool read_shadow);
+void sclr_img_set_cfg(struct scaler *scaler, u8 inst, struct sclr_img_cfg *cfg);
+struct sclr_img_cfg *sclr_img_get_cfg(struct scaler *scaler, u8 inst);
+void sclr_vpss_sw_top_reset(struct scaler *scaler, u8 inst);
+void sclr_img_reset(struct scaler *scaler, u8 inst);
+void sclr_img_start(struct scaler *scaler, u8 inst);
+void sclr_slave_ready(struct scaler *scaler, u8 inst);
+void sclr_img_set_fmt(struct scaler *scaler, u8 inst, enum sclr_format fmt);
+void sclr_img_set_mem(struct scaler *scaler, u8 inst, struct sclr_mem *mem, bool update);
+void sclr_img_set_addr(struct scaler *scaler, u8 inst, u64 addr0, u64 addr1, u64 addr2);
+void sclr_img_csc_en(struct scaler *scaler, u8 inst, bool enable);
+void sclr_img_set_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg);
+union sclr_img_dbg_status sclr_img_get_dbg_status(struct scaler *scaler, u8 inst, bool clr);
+void sclr_img_checksum_en(struct scaler *scaler, u8 inst, bool enable);
+void sclr_img_get_checksum_status(struct scaler *scaler, u8 inst, struct sclr_img_checksum_status *status);
+void sclr_img_dup2fancy_bypass(struct scaler *scaler, u8 inst, bool enable);
 
 void sclr_oenc_set_cfg(struct sclr_oenc_cfg *oenc_cfg);
 struct sclr_oenc_cfg *sclr_oenc_get_cfg(void);
-void sclr_cover_set_cfg(u8 inst, u8 cover_w_inst, struct sclr_cover_cfg *cover_cfg, bool update);
-void sclr_img_set_trig(u8 inst, enum sclr_img_trig_src trig_src);
+void sclr_cover_set_cfg(struct scaler *scaler, u8 inst, u8 cover_w_inst, struct sclr_cover_cfg *cover_cfg, bool update);
+void sclr_img_set_trig(struct scaler *scaler, u8 inst, enum sclr_img_trig_src trig_src);
 void sclr_img_get_sb_default(struct sclr_img_in_sb_cfg *cfg);
-void sclr_cir_set_cfg(u8 inst, struct sclr_cir_cfg *cfg);
-void sclr_odma_set_cfg(u8 inst, struct sclr_odma_cfg *cfg);
-struct sclr_odma_cfg *sclr_odma_get_cfg(u8 inst);
-void sclr_odma_set_fmt(u8 inst, enum sclr_format fmt);
-void sclr_odma_set_mem(u8 inst, struct sclr_mem *mem);
-void sclr_odma_set_addr(u8 inst, u64 addr0, u64 addr1, u64 addr2);
-union sclr_odma_dbg_status sclr_odma_get_dbg_status(u8 inst);
-void sclr_set_out_mode(u8 inst, enum sclr_out_mode mode);
-void sclr_set_quant(u8 inst, struct sclr_quant_formula *cfg);
-void sclr_set_convert_to(u8 inst, struct sclr_convertto_formula *cfg);
-void sclr_border_set_cfg(u8 inst, struct sclr_border_cfg *cfg);
-void sclr_border_vpp_set_cfg(u8 inst, u8 border_idx, struct sclr_border_vpp_cfg *cfg, bool update);
-struct sclr_border_vpp_cfg * sclr_border_vpp_get_cfg(u8 inst, u8 border_idx);
-struct sclr_border_cfg *sclr_border_get_cfg(u8 inst);
-void sclr_set_csc_ctrl(u8 inst, struct sclr_csc_cfg *cfg);
-struct sclr_csc_cfg *sclr_get_csc_ctrl(u8 inst);
-void sclr_set_csc(u8 inst, struct sclr_csc_matrix *cfg);
-void sclr_get_csc(u8 inst, struct sclr_csc_matrix *cfg);
-void sclr_core_set_cfg(u8 inst, struct sclr_core_cfg *cfg);
-void sclr_core_checksum_en(u8 inst, bool enable);
-void sclr_core_get_checksum_status(u8 inst, struct sclr_core_checksum_status *status);
-void sclr_intr_ctrl(u8 inst, union sclr_intr intr_mask);
-union sclr_intr sclr_get_intr_mask(u8 inst);
-void sclr_set_intr_mask(u8 inst, union sclr_intr intr_mask);
-void sclr_intr_clr(u8 inst, union sclr_intr intr_mask);
-union sclr_intr sclr_intr_status(u8 inst);
+void sclr_cir_set_cfg(struct scaler *scaler, u8 inst, struct sclr_cir_cfg *cfg);
+void sclr_odma_set_cfg(struct scaler *scaler, u8 inst, struct sclr_odma_cfg *cfg);
+struct sclr_odma_cfg *sclr_odma_get_cfg(struct scaler *scaler, u8 inst);
+void sclr_odma_set_fmt(struct scaler *scaler, u8 inst, enum sclr_format fmt);
+void sclr_odma_set_mem(struct scaler *scaler, u8 inst, struct sclr_mem *mem);
+void sclr_odma_set_addr(struct scaler *scaler, u8 inst, u64 addr0, u64 addr1, u64 addr2);
+union sclr_odma_dbg_status sclr_odma_get_dbg_status(struct scaler *scaler, u8 inst);
+void sclr_set_out_mode(struct scaler *scaler, u8 inst, enum sclr_out_mode mode);
+void sclr_set_quant(struct scaler *scaler, u8 inst, struct sclr_quant_formula *cfg);
+void sclr_set_convert_to(struct scaler *scaler, u8 inst, struct sclr_convertto_formula *cfg);
+void sclr_border_set_cfg(struct scaler *scaler, u8 inst, struct sclr_border_cfg *cfg);
+void sclr_border_vpp_set_cfg(struct scaler *scaler, u8 inst, u8 border_idx, struct sclr_border_vpp_cfg *cfg, bool update);
+struct sclr_border_vpp_cfg * sclr_border_vpp_get_cfg(struct scaler *scaler, u8 inst, u8 border_idx);
+struct sclr_border_cfg *sclr_border_get_cfg(struct scaler *scaler, u8 inst);
+void sclr_set_csc_ctrl(struct scaler *scaler, u8 inst, struct sclr_csc_cfg *cfg);
+struct sclr_csc_cfg *sclr_get_csc_ctrl(struct scaler *scaler, u8 inst);
+void sclr_set_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg);
+void sclr_get_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg);
+void sclr_core_set_cfg(struct scaler *scaler, u8 inst, struct sclr_core_cfg *cfg);
+void sclr_core_checksum_en(struct scaler *scaler, u8 inst, bool enable);
+void sclr_core_get_checksum_status(struct scaler *scaler, u8 inst, struct sclr_core_checksum_status *status);
+void sclr_intr_ctrl(struct scaler *scaler, u8 inst, union sclr_intr intr_mask);
+union sclr_intr sclr_get_intr_mask(struct scaler *scaler, u8 inst);
+void sclr_set_intr_mask(struct scaler *scaler, u8 inst, union sclr_intr intr_mask);
+void sclr_intr_clr(struct scaler *scaler, u8 inst, union sclr_intr intr_mask);
+union sclr_intr sclr_intr_status(struct scaler *scaler, u8 inst);
 
-void sclr_gop_set_cfg(u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update);
-struct sclr_gop_cfg *sclr_gop_get_cfg(u8 inst, u8 layer);
-void sclr_gop_ow_set_cfg(u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *ow_cfg, bool update);
-int sclr_gop_setup_256LUT(u8 inst, u8 layer, u16 length, u16 *data);
-int sclr_gop_update_256LUT(u8 inst, u8 layer, u8 index, u16 data);
-int sclr_gop_setup_16LUT(u8 inst, u8 layer, u8 length, u16 *data);
-int sclr_gop_update_16LUT(u8 inst, u8 layer, u8 index, u16 data);
-void sclr_gop_fb_set_cfg(u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *cfg);
-u32 sclr_gop_fb_get_record(u8 inst, u8 layer, u8 fb_inst);
+void sclr_gop_set_cfg(struct scaler *scaler, u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update);
+struct sclr_gop_cfg *sclr_gop_get_cfg(struct scaler *scaler, u8 inst, u8 layer);
+void sclr_gop_ow_set_cfg(struct scaler *scaler, u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *ow_cfg, bool update);
+int sclr_gop_setup_256LUT(struct scaler *scaler, u8 inst, u8 layer, u16 length, u16 *data);
+int sclr_gop_update_256LUT(struct scaler *scaler, u8 inst, u8 layer, u8 index, u16 data);
+int sclr_gop_setup_16LUT(struct scaler *scaler, u8 inst, u8 layer, u8 length, u16 *data);
+int sclr_gop_update_16LUT(struct scaler *scaler, u8 inst, u8 layer, u8 index, u16 data);
+void sclr_gop_fb_set_cfg(struct scaler *scaler, u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *cfg);
+u32 sclr_gop_fb_get_record(struct scaler *scaler, u8 inst, u8 layer, u8 fb_inst);
 
-void sclr_pri_set_cfg(u8 inst, struct sclr_privacy_cfg *cfg);
-void sclr_gop_odec_set_cfg_from_oenc(u8 inst, u8 layer, struct sclr_gop_odec_cfg *odec_cfg);
+void sclr_pri_set_cfg(struct scaler *scaler, u8 inst, struct sclr_privacy_cfg *cfg);
+void sclr_gop_odec_set_cfg_from_oenc(struct scaler *scaler, u8 inst, u8 layer, struct sclr_gop_odec_cfg *odec_cfg);
 
-void sclr_ctrl_init(u8 inst, bool is_resume);
+void sclr_ctrl_init(struct scaler* scaler, u8 inst, bool is_resume);
 void sclr_get_2tap_scale(struct sclr_scale_2tap_cfg *cfg);
-void sclr_ctrl_set_scale(u8 inst, struct sclr_scale_cfg *cfg);
-int sclr_ctrl_set_input(u8 inst, enum sclr_input input,
+void sclr_ctrl_set_scale(struct scaler *scaler, u8 inst, struct sclr_scale_cfg *cfg);
+int sclr_ctrl_set_input(struct scaler *scaler, u8 inst, enum sclr_input input,
 			enum sclr_format fmt, enum sclr_csc csc);
-int sclr_ctrl_set_output(u8 inst, struct sclr_csc_cfg *cfg,
+int sclr_ctrl_set_output(struct scaler *scaler, u8 inst, struct sclr_csc_cfg *cfg,
 			 enum sclr_format fmt);
-void sclr_engine_cmdq(u8 inst, struct sclr_ctrl_cfg *cfgs, u8 cnt,
+void sclr_engine_cmdq(struct scaler *scaler, u8 inst, struct sclr_ctrl_cfg *cfgs, u8 cnt,
 							u64 cmdq_phy_addr, void *cmdq_vir_addr,
 							u32 cmdq_buf_size);
 
-void sclr_clr_cmdq(u8 inst);
-int sclr_set_fbd(u8 inst, struct sclr_fbd_cfg *cfg, bool is_update);
-struct sclr_fbd_cfg *sclr_fbd_get_cfg(u8 inst);
+void sclr_clr_cmdq(struct scaler *scaler, u8 inst);
+int sclr_set_fbd(struct scaler *scaler, u8 inst, struct sclr_fbd_cfg *cfg, bool is_update);
+struct sclr_fbd_cfg *sclr_fbd_get_cfg(struct scaler *scaler, u8 inst);
 struct sclr_csc_matrix *sclr_get_csc_mtrx(enum sclr_csc csc);
 
-u8 sclr_tile_cal_size(u8 inst, u16 out_l_end);
-u8 sclr_v_tile_cal_size(u8 inst, u16 out_l_end);
-bool sclr_left_tile(u8 inst, u16 src_l_w);
-bool sclr_right_tile(u8 inst, u16 src_offset);
-bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right);
-bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left);
+u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end);
+u8 sclr_v_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end);
+bool sclr_left_tile(struct scaler *scaler, u8 inst, u16 src_l_w);
+bool sclr_right_tile(struct scaler *scaler, u8 inst, u16 src_offset);
+bool sclr_down_tile(struct scaler *scaler, u8 inst, u16 src_offset, u8 is_right);
+bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_left);
 
-void sclr_dump_top_register(u8 inst);
-void sclr_dump_img_in_register(int img_inst);
-void sclr_dump_core_register(int inst);
-void sclr_dump_odma_register(u8 inst);
-void sclr_dump_register(u8 inst);
+void sclr_dump_top_register(struct scaler *scaler, u8 inst);
+void sclr_dump_img_in_register(struct scaler *scaler, int img_inst);
+void sclr_dump_core_register(struct scaler *scaler, int inst);
+void sclr_dump_odma_register(struct scaler *scaler, u8 inst);
+void sclr_dump_register(struct scaler *scaler, u8 inst);
 int vpss_online_multi(int w, int h, u64 *dst_addr);
 int vpss_online_single(enum vpss_dev inst, int w, int h, u64 dst_addr);
 int vpss_online_check_irq_handler(int timeout);

@@ -2014,15 +2014,25 @@ RetCode VPU_DecGiveCommand(DecHandle handle, CodecCommand cmd, void* param)
                     vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFrame, DEC_ETC, pCodecInst->instIndex);
             }
             for (i=0  ; i<MAX_REG_FRAME; i++) {
-                if (pDecInfo->vbFbcYTbl[i].size && pDecInfo->frameBufFlag == 0)
-                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i], DEC_FBCY_TBL, pCodecInst->instIndex);
-                else if (pDecInfo->frameBufFlag == 1)
-                    vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                if (pDecInfo->vbFbcYTbl[i].size) {
+                    if(pDecInfo->frameBufFlag == 1) {
+                        vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i]);
+                        memset(&pDecInfo->vbFbcYTbl[i], 0, sizeof(vpu_buffer_t));
+                    }
+                    else {
+                        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcYTbl[i], DEC_FBCY_TBL, pCodecInst->instIndex);
+                    }
+                }
 
-                if (pDecInfo->vbFbcCTbl[i].size && pDecInfo->frameBufFlag == 0)
-                    vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i], DEC_FBCC_TBL, pCodecInst->instIndex);
-                else if (pDecInfo->frameBufFlag == 1)
-                    vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                if (pDecInfo->vbFbcCTbl[i].size) {
+                    if(pDecInfo->frameBufFlag == 1) {
+                        vdi_dettach_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i]);
+                        memset(&pDecInfo->vbFbcCTbl[i], 0, sizeof(vpu_buffer_t));
+                    }
+                    else {
+                        vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbFbcCTbl[i], DEC_FBCC_TBL, pCodecInst->instIndex);
+                    }
+                }
 
                 if (pDecInfo->vbMV[i].size)
                     vdi_free_dma_memory(pCodecInst->coreIdx, &pDecInfo->vbMV[i], DEC_MV, pCodecInst->instIndex);

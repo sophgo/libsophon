@@ -543,6 +543,18 @@ void bm1688_gdma_clk_disable(struct bm_device_info *bmdi)
 	PR_TRACE("bm1688 gdma clk is gating\n");
 	clk_disable_unprepare(bmdi->cinfo.gdma_clk);
 }
+
+void bm1688_cdma_clk_enable(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 cdma clk is enable\n");
+	clk_prepare_enable(bmdi->cinfo.cdma_clk);
+}
+
+void bm1688_cdma_clk_disable(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 cdma clk is gating\n");
+	clk_disable_unprepare(bmdi->cinfo.cdma_clk);
+}
 #else
 void bm1688_tpu_clk_enable(struct bm_device_info *bmdi){ }
 void bm1688_tpu_clk_disable(struct bm_device_info *bmdi){ }

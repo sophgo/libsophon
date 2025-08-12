@@ -92,13 +92,13 @@ long vpu_close_instance(vpudrv_inst_info_t *inst_info);
 int vpu_hw_reset(int core_idx);
 long vpu_flush_dcache(vpudrv_buffer_t *info);
 long vpu_invalidate_dcache(vpudrv_buffer_t *info);
-long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb);
+long vpu_allocate_physical_memory(vpudrv_buffer_t *vdb, char* buf_name);
 long vpu_free_physical_memory(vpudrv_buffer_t *vdb);
 long vpu_get_free_mem_size(unsigned long *size);
 long vpu_set_clock_gate(int core_idx, unsigned int *clkgate);
 long vpu_wait_interrupt(vpudrv_intr_info_t *info);
 
-long vpu_allocate_extern_memory(vpudrv_buffer_t *vdb);
+long vpu_allocate_extern_memory(vpudrv_buffer_t *vdb, char* buf_name);
 long vpu_free_extern_memory(vpudrv_buffer_t *vdb);
 int  vpu_free_extern_buffers(int core_idx);
 void vpu_clk_disable(int core_idx);

@@ -52,8 +52,8 @@
 #include "bm_io.h"
 
 #define IOMMU_ADDR_BIT_NUM (40)
-extern int vc_drv_init(struct bm_device_info *bmdi);
-extern int vc_drv_deinit(struct bm_device_info *bmdi);
+extern int vc_init(struct bm_device_info *bmdi);
+extern int vc_exit(struct bm_device_info *bmdi);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
 #define PCI_DMA_TODEVICE DMA_TO_DEVICE
@@ -540,7 +540,7 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
-			vc_drv_init(bmdi);
+			vc_init(bmdi);
 			spacc_init(bmdi);
 			mutex_init(&bmdi->efuse_mutex);
 		}
@@ -557,7 +557,7 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		//}
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_init(bmdi);
-			vc_drv_init(bmdi);
+			vc_init(bmdi);
 		// 	spacc_init(bmdi);
 		// 	mutex_init(&bmdi->efuse_mutex);
 		}
@@ -662,14 +662,14 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 	case 0x1686:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_exit(bmdi);
-			vc_drv_deinit(bmdi);
+			vc_exit(bmdi);
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
 	case 0x1686a200:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 			vpp_exit(bmdi);
-			vc_drv_deinit(bmdi);
+			vc_exit(bmdi);
 		}
 		pr_info("bm-sophon%d bm1688 bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
@@ -1176,7 +1176,7 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rc = bmdrv_fw_load(bmdi, NULL, NULL);
 	if (rc) {
 		pr_err("bmdrv: firmware load failed! continue run\n");
-		// goto err_enable_attr;
+	 	// goto err_enable_attr;
 	}
 
 	bmdrv_smbus_set_default_value(pdev, bmdi);
@@ -1218,11 +1218,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_ctrl_add_dev;
 	}
 
-	// rc = bm_monitor_thread_init(bmdi);
-	// if (rc) {
-	// 	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
-	// 	goto err_monitor_thread_init;
-	// }
+	//rc = bm_monitor_thread_init(bmdi);
+	//if (rc) {
+	//	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
+	//	goto err_monitor_thread_init;
+	//}
 
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
@@ -1283,7 +1283,7 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	cinfo = &bmdi->cinfo;
 	dev_info(cinfo->device, "remove\n");
 	// i2c2_deinit(bmdi);
-	// bm_monitor_thread_deinit(bmdi);
+	//bm_monitor_thread_deinit(bmdi);
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686) {
 		if ((bmdi->misc_info.a53_enable == 1)

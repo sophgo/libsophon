@@ -2,14 +2,21 @@
 #define __VC_DRV_PROC_H__
 
 #include <linux/device.h>
+#ifdef PLATFORM_SOC
+    #define PROC_PATH "soph/"
+#else //PLATFORM_PCIE
+    #define PROC_PATH "bmsophon/"
+#endif
 
-#define VENC_PROC_NAME "bmsophon/venc"
-#define H265E_PROC_NAME "bmsophon/h265e"
-#define H264E_PROC_NAME "bmsophon/h264e"
-#define JPEGE_PROC_NAME "bmsophon/jpege"
-#define CODEC_PROC_NAME "bmsophon/codec"
-#define RC_PROC_NAME "bmsophon/rc"
-#define VDEC_PROC_NAME "bmsophon/vdec"
+#define VENC_PROC_NAME PROC_PATH"venc"
+#define H265E_PROC_NAME PROC_PATH"h265e"
+#define H264E_PROC_NAME PROC_PATH"h264e"
+#define JPEGE_PROC_NAME PROC_PATH"jpege"
+#define CODEC_PROC_NAME PROC_PATH"codec"
+#define RC_PROC_NAME PROC_PATH"rc"
+#define VDEC_PROC_NAME PROC_PATH"vdec"
+#define VPUINFO_PROC_NAME PROC_PATH"vpuinfo"
+
 #define VIDEO_PROC_PERMS (0644)
 #define VIDEO_PROC_PARENT (NULL)
 #define MAX_PROC_STR_SIZE (255)

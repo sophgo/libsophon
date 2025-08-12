@@ -86,7 +86,8 @@ typedef struct _vdec_chn_attr_s {
 	unsigned int u32FrameBufCnt;
 	compress_mode_e enCompressMode; /* RW; compress mode */
 	unsigned char u8CommandQueueDepth; /* RW; command queue depth [0,4]*/
-	unsigned char u8ReorderEnable;
+	unsigned char u8ReorderEnable;  /* 0: Decode order, 1: Display order */
+	unsigned char u8AsyncGetframe;  /* RW; async get frame flag */
 	union {
 		vdec_attr_video_s
 		stVdecVideoAttr; /* structure with video ( h264/h265) */

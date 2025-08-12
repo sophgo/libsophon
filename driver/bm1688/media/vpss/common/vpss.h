@@ -18,7 +18,7 @@ typedef void (*vpss_timer_cb)(void *data);
 
 /* Configured from user, IOCTL */
 
-signed int vpss_bm_send_frame(bm_vpss_cfg *vpss_cfg);
+signed int vpss_bm_send_frame(struct vpss_device *dev, bm_vpss_cfg *vpss_cfg);
 
 /* INTERNAL */
 signed int vpss_set_vivpss_mode(const vi_vpss_mode_s *mode);
@@ -32,17 +32,9 @@ void vpss_set_mlv_info(u8 snr_num, struct mlv_i_s *p_m_lv_i);
 void vpss_get_mlv_info(u8 snr_num, struct mlv_i_s *p_m_lv_i);
 
 int _vpss_call_cb(u32 m_id, u32 cmd_id, void *data);
-void vpss_init(void);
-void vpss_deinit(void);
-s32 vpss_suspend_handler(void);
-s32 vpss_resume_handler(void);
+void vpss_init(struct vpss_device *dev);
 
 signed int check_vpss_id(vpss_grp grp_id, vpss_chn chn_id);
-
-void vpss_mode_init(void);
-void vpss_mode_deinit(void);
-
-void register_timer_fun(vpss_timer_cb cb, void *data);
 
 struct vpss_ctx **vpss_get_ctx(void);
 

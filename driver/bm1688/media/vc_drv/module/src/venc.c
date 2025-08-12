@@ -15,7 +15,7 @@
 
 #include "vc_drv_proc.h"
 #include "venc_rc.h"
-
+#include "platform.h"
 
 extern wait_queue_head_t tVencWaitQueue[];
 
@@ -470,6 +470,15 @@ static int _venc_event_handler(void *data)
         vi_cnt++;
         cond_resched();
     }
+    /*
+        ION cannot be released in two processes
+        In bind mode, stream header is alocated in `_venc_event_handler`,
+        so it can only be released when this process exits.
+    */
+   s32Ret = pEncCtx->base.ioctl(pEncCtx, DRV_H26X_OP_RELEASE_HEADER, NULL);
+   if(s32Ret != 0) {
+       DRV_VENC_ERR("DRV_H26X_OP_RELEASE_HEADER failed\n");
+   }
 
     DRV_VENC_INFO("------------end\n");
     #ifdef DUMP_BIND_YUV
@@ -768,6 +777,40 @@ static int _drv_venc_set_pixelformat(venc_chn VeChn,
 
     s32Ret = pEncCtx->base.ioctl(pEncCtx, DRV_H26X_OP_SET_IN_PIXEL_FORMAT,
                      (void *)&inPixelFormat);
+
+    return s32Ret;
+}
+
+static int _drv_check_venc_attr(venc_chn_context *pChnHandle)
+{
+    venc_chn_attr_s *pChnAttr = pChnHandle->pChnAttr;
+    int s32Ret = 0;
+
+    if (pChnAttr->stVencAttr.enType == PT_H264 || pChnAttr->stVencAttr.enType == PT_H265) {
+        if (pChnAttr->stVencAttr.u32PicWidth < DRV_H26X_VENC_PIC_WIDTH_MIN ||
+            pChnAttr->stVencAttr.u32PicHeight < DRV_H26X_VENC_PIC_HEIGHT_MIN) {
+            DRV_VENC_ERR("u32PicWidth = %d, u32PicHeight = %d\n",
+                     pChnAttr->stVencAttr.u32PicWidth,
+                     pChnAttr->stVencAttr.u32PicHeight);
+            return DRV_ERR_VENC_ILLEGAL_PARAM;
+        }
+
+        if (pChnAttr->stVencAttr.u32PicWidth > DRV_H26X_VENC_PIC_HEIGHT_MAX ||
+            pChnAttr->stVencAttr.u32PicHeight > DRV_H26X_VENC_PIC_HEIGHT_MAX) {
+            DRV_VENC_ERR("u32PicWidth = %d, u32PicHeight = %d\n",
+                     pChnAttr->stVencAttr.u32PicWidth,
+                     pChnAttr->stVencAttr.u32PicHeight);
+            return DRV_ERR_VENC_ILLEGAL_PARAM;
+        }
+
+        if (pChnAttr->stVencAttr.u32PicWidth % 2 != 0 ||
+            pChnAttr->stVencAttr.u32PicHeight % 2 != 0) {
+            DRV_VENC_ERR("u32PicWidth = %d, u32PicHeight = %d\n",
+                     pChnAttr->stVencAttr.u32PicWidth,
+                     pChnAttr->stVencAttr.u32PicHeight);
+            return DRV_ERR_VENC_ILLEGAL_PARAM;
+        }
+    }
 
     return s32Ret;
 }
@@ -1302,6 +1345,8 @@ static int _drv_set_rcparam_to_drv(venc_chn_context *pChnHandle)
         prcp->u32ThrdLv = prcparam->u32ThrdLv;
         prcp->s32InitialDelay = prcparam->s32InitialDelay;
         prcp->s32ChangePos = 0;
+        prcp->bBgEnhanceEn = prcparam->bBgEnhanceEn;
+        prcp->s32BgDeltaQp = prcparam->s32BgDeltaQp;
 
         if (pVencAttr->enType == PT_H264) {
             if (prcatt->enRcMode == VENC_RC_MODE_H264CBR) {
@@ -2389,6 +2434,12 @@ static int _drv_init_chn_ctx(venc_chn VeChn, const venc_chn_attr_s *pstAttr)
         goto ERR_DRV_INIT_CHN_CTX_3;
     }
 
+    s32Ret = _drv_check_venc_attr(pChnHandle);
+    if (s32Ret != 0) {
+        DRV_VENC_ERR("_drv_check_venc_attr\n");
+        goto ERR_DRV_INIT_CHN_CTX_3;
+    }
+
     s32Ret = _drv_check_rcmode_attr(pChnHandle);
     if (s32Ret != 0) {
         DRV_VENC_ERR("drv_check_rcmode_attr\n");
@@ -2597,21 +2648,29 @@ static int _drv_process_result(venc_chn_context *pChnHandle,
         return s32Ret;
     }
 
-    // if (pVencAttr->enType == PT_JPEG || pVencAttr->enType == PT_MJPEG) {
-    //     if (pstStream->u32PackCount > 0) {
-    //         venc_pack_s *ppack = &pstStream->pstPack[pstStream->u32PackCount -1];
-
-    //         int j;
-
-    //         for (j = (ppack->u32Len - ppack->u32Offset - 1); j > 0; j--) {
-    //             unsigned char *tmp_ptr = ppack->pu8Addr + ppack->u32Offset + j;
-    //             if (tmp_ptr[0] == 0xd9 && tmp_ptr[-1] == 0xff) {
-    //                 break;
-    //             }
-    //         }
-    //         ppack->u32Len = ppack->u32Offset + j + 1;
-    //     }
-    // }
+    if (pVencAttr->enType == PT_JPEG || pVencAttr->enType == PT_MJPEG) {
+        if (pstStream->u32PackCount > 0) {
+            venc_pack_s *ppack = &pstStream->pstPack[pstStream->u32PackCount -1];
+            int j;
+            char *ptr_stream;
+#ifdef PLATFORM_SOC
+            ptr_stream = ppack->pu8Addr;
+#else
+            ptr_stream = vzalloc(ppack->u32Len);
+            pcie_memcpy_d2s(ptr_stream, ppack->u64PhyAddr, ppack->u32Len);
+#endif
+            for (j = (ppack->u32Len - ppack->u32Offset - 1); j > 0; j--) {
+                unsigned char *tmp_ptr = ptr_stream + ppack->u32Offset + j;
+                if (tmp_ptr[0] == 0xd9 && tmp_ptr[-1] == 0xff) {
+                    break;
+                }
+            }
+            ppack->u32Len = ppack->u32Offset + j + 1;
+#ifndef PLATFORM_SOC
+            vfree(ptr_stream);
+#endif
+        }
+    }
 
     return s32Ret;
 }
@@ -3211,6 +3270,24 @@ int drv_venc_start_recvframe(venc_chn VeChn,
         return s32Ret;
     }
 
+    s32Ret = bind_get_src(&chn, &stBindSrc);
+    DRV_VENC_DBG("get bind src, ret:%d\n", s32Ret);
+    if (s32Ret == 0) {
+        if (pEncCtx->base.ioctl) {
+            if (pChnHandle->pChnAttr->stVencAttr.enType == PT_H265 ||
+                pChnHandle->pChnAttr->stVencAttr.enType == PT_H264) {
+                isBindMode = TRUE;
+                s32Ret = pEncCtx->base.ioctl(pEncCtx, DRV_H26X_OP_SET_BIND_MODE, (void *)&isBindMode);
+                if (s32Ret != 0) {
+                    DRV_VENC_ERR("DRV_H26X_OP_SET_BIND_MODE, %d\n", s32Ret);
+                    return -1;
+                }
+            }
+        }
+        pVbCtx->currBindMode = 1;
+        pChnHandle->bChnEnable = 1;
+    }
+
     if (pEncCtx->base.ioctl) {
         if (pChnHandle->pChnAttr->stVencAttr.enType == PT_H265 ||
             pChnHandle->pChnAttr->stVencAttr.enType == PT_H264) {
@@ -3236,38 +3313,15 @@ int drv_venc_start_recvframe(venc_chn VeChn,
     pChnVars->chnState = venc_chn_STATE_START_ENC;
     handle->chn_status[VeChn] = venc_chn_STATE_START_ENC;
 
-    s32Ret = bind_get_src(&chn, &stBindSrc);
-    DRV_VENC_DBG("get bind src, ret:%d\n", s32Ret);
-    if (s32Ret == 0) {
-        // struct sched_param param = {
-        //     .sched_priority = 95,
-        // };
-        if (pEncCtx->base.ioctl) {
-            if (pChnHandle->pChnAttr->stVencAttr.enType == PT_H265 ||
-                pChnHandle->pChnAttr->stVencAttr.enType == PT_H264) {
-                isBindMode = TRUE;
-                s32Ret = pEncCtx->base.ioctl(pEncCtx, DRV_H26X_OP_SET_BIND_MODE, (void *)&isBindMode);
-                if (s32Ret != 0) {
-                    DRV_VENC_ERR("DRV_H26X_OP_SET_BIND_MODE, %d\n", s32Ret);
-                    return -1;
-                }
-            }
-        }
-
-        pVbCtx->currBindMode = 1;
-        pChnHandle->bChnEnable = 1;
+    if (pVbCtx->currBindMode == 1) {
+        char thread_name[32] = {0};
         if (!pVbCtx->thread) {
-            pVbCtx->thread = kthread_run(_venc_event_handler,
-                            (void *)pChnHandle,
-                            "soph_vc_bh%d", VeChn);
-
-            if (IS_ERR(pVbCtx->thread)) {
-                DRV_VENC_ERR(
-                    "failed to create venc binde mode thread for chn %d\n",
-                    VeChn);
+            sprintf(thread_name, "soph_vc_bh%d", VeChn);
+            pVbCtx->thread = osal_thread_create(_venc_event_handler, (void *)pChnHandle, thread_name);
+            if (pVbCtx->thread == NULL) {
+                DRV_VENC_ERR("failed to create venc binde mode thread for chn %d\n", VeChn);
                 return -1;
             }
-            // sched_setscheduler(pVbCtx->thread, SCHED_RR, &param);
             SEMA_POST(&pChnVars->sem_send);
         }
     }

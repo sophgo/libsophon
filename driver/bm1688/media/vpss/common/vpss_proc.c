@@ -5,13 +5,12 @@
 #include "base_ctx.h"
 
 #include "vpss_debug.h"
-#include "vpss_proc.h"
 #include "vpss_common.h"
 #include "scaler.h"
 #include "vpss_core.h"
 #include "vpss.h"
 
-#define VPSS_PROC_NAME          "bmsophon/vpss"
+#define VPSS_PROC_NAME          "vpss"
 #define VPP_PROC_NAME          "vppinfo"
 
 // for proc info
@@ -172,11 +171,11 @@ static const struct file_operations vpp_proc_fops = {
 };
 #endif
 
-int vpss_proc_init(struct vpss_device *dev)
+int vpss_proc_init(struct proc_dir_entry *proc_dir, struct vpss_device *dev)
 {
 	struct proc_dir_entry *entry;
 
-	entry = proc_create_data(VPSS_PROC_NAME, 0644, NULL,
+	entry = proc_create_data(VPSS_PROC_NAME, 0644, proc_dir,
 				 &vpss_proc_fops, dev);
 	if (!entry) {
 		TRACE_VPSS(DBG_ERR, "vpss proc creation failed\n");
@@ -186,9 +185,9 @@ int vpss_proc_init(struct vpss_device *dev)
 	return 0;
 }
 
-int vpss_proc_remove(struct vpss_device *dev)
+int vpss_proc_remove(struct proc_dir_entry *proc_dir, struct vpss_device *dev)
 {
-	remove_proc_entry(VPSS_PROC_NAME, NULL);
+	remove_proc_entry(VPSS_PROC_NAME, proc_dir);
 	return 0;
 }
 

@@ -15,6 +15,7 @@
 #include "bm1684/bm1684_ce.h"
 #include "bm_napi.h"
 #include "sg_comm.h"
+#include "bm_thermal.h"
 #else
 #include <linux/platform_device.h>
 #endif

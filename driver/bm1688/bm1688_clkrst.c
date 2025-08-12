@@ -621,6 +621,13 @@ int bm1688_modules_clk_init(struct bm_device_info* bmdi)
 		dev_err(dev, "failed to retrieve gdma clk");
 		return ret;
 	}
+	cinfo->cdma_clk = devm_clk_get(dev, "cdma");
+	if (IS_ERR(cinfo->cdma_clk)) {
+		ret = PTR_ERR(cinfo->cdma_clk);
+		dev_err(dev, "failed to retrieve cdma clk");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -643,6 +650,7 @@ void bm1688_modules_clk_enable(struct bm_device_info* bmdi)
 	bm1688_tc906b_clk_enable(bmdi);
 	bm1688_timer_clk_enable(bmdi);
 	bm1688_gdma_clk_enable(bmdi);
+	bm1688_cdma_clk_enable(bmdi);
 }
 
 void bm1688_modules_clk_disable(struct bm_device_info* bmdi)
@@ -652,5 +660,6 @@ void bm1688_modules_clk_disable(struct bm_device_info* bmdi)
 	bm1688_tc906b_clk_disable(bmdi);
 	bm1688_timer_clk_disable(bmdi);
 	bm1688_gdma_clk_disable(bmdi);
+	bm1688_cdma_clk_disable(bmdi);
 }
 #endif

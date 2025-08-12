@@ -423,7 +423,7 @@ Store mode
 
 bm_store_mode_t specifies how data is stored. You only need to focus on BM_STORE_1N. If you want to focus on the bottom layer and optimize performance, you need to focus on BM_STORE_2N and BM_STORE_4N.
 
-BM_STORE_1N is the default storage method for data types. It indicates data is stored as normal.
+BM_STORE_1N is the default storage method for all the data types. It indicates data is stored as normal.
 
 BM_STORE_2N is only used for BM_FLOAT16/BM_INT16/BM_UINT16. It indicates the data with two different batches and the same other dimension positions are placed in a 32-bit data space. For example, for a four-dimensional (n, c, h, w) tensor, (0, ci, hi, wi) data is placed in the lower 16 bits of 32 bits and (1, ci, hi, wi) is placed in the upper 16 bits.
 
@@ -1005,6 +1005,62 @@ The difference with bmrt_launch_tensor is as follows:
 
 * Both input and output are stored in the system memory.
 * It is a synchronous interface. The inference has been completed when the interface returns.
+
+bmrt_get_neuron_number
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+
+  /**
+  * @name    bmrt_get_neuron_number
+  * @brief   get inner runtime device mem number in bmruntime
+  * @ingroup bmruntime
+  *
+  * For simple bmodel, the number of mem is always 1
+  *
+  * @param [in]    p_bmrt            Bmruntime that had been created
+  * @param [in]    net_name          The name of the neuron network
+  * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+  * @param [in]    core_list         core id list those will be used to inference
+  * @param [in]    core_num          number of the core list
+  * @return int    the number of neuron mem
+  */
+  int bmrt_get_neuron_number(void *p_bmrt, const char* net_name);
+
+
+bmrt_get_neuron_memory
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+.. code-block:: cpp
+
+  /**
+  * @name    bmrt_get_neuron_memory
+  * @brief   get inner runtime device mem in bmruntime
+  * @ingroup bmruntime
+  *
+  * This API should be called after calling bmrt_launch_tensor_multi_cores or bmrt_pre_alloc_neuron_multi_cores
+  * After calling this API, the memory for inference is returned.
+  * Different core list uses independent runtime device memory to support parallel inference
+  * Note: User should make sure NOT to use the memory during launching inference
+  *
+  * @param [in]    p_bmrt            Bmruntime that had been created
+  * @param [in]    net_name          The name of the neuron network
+  * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+  * @param [in]    core_list         core id list those will be used to inference
+  * @param [in]    core_num          number of the core list
+  * @return the neuron memory on device
+  */
+  bm_device_mem_t bmrt_get_neuron_memory(void *p_bmrt, const char* net_name, int mem_index, const int* core_list, int core_num);
+
+code example:
+
+.. code-block:: cpp
+
+  auto neuron_num = bmrt_get_neuron_number(p_bmrt, net_info->name);
+  for(int neuron_index = 0; neuron_index<neuron_num; neuron_index++){
+    auto neuron_mem = bmrt_get_neuron_memory(p_bmrt, net_info->name, neuron_index, core_list, core_num);
+    BMRT_LOG(DEBUG, "neuron[%d]: addr=0x%0llX, size=%d\n", neuron_index, bm_mem_get_device_addr(neuron_mem), bm_mem_get_device_size(neuron_mem));
+  }
 
 bmrt_trace
 >>>>>>>>>>>>>>>>>>>>

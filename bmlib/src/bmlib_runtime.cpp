@@ -459,6 +459,23 @@ bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
 	return status;
 }
 
+bm_status_t bm_set_sync_timeout(bm_handle_t handle, int timeout) {
+    bm_status_t status = BM_SUCCESS;
+#ifndef USING_CMODEL
+    if (handle == nullptr) {
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                  "handle is nullptr %s: %s: %d\n",
+                  __FILE__, __func__, __LINE__);
+        status = BM_ERR_DEVNOTREADY;
+    } else if (0 == platform_ioctl(handle, BMDEV_SYNC_TIMEOUT_API, &timeout)) {
+        status = BM_SUCCESS;
+    } else {
+        status = BM_ERR_FAILURE;
+    }
+#endif
+    return status;
+}
+
 bm_status_t bm_thread_sync(bm_handle_t handle)
 {
 	return bm_thread_sync_from_core(handle, 0);

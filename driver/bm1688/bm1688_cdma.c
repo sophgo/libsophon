@@ -974,16 +974,4 @@ void bm1688_cdma_reset(struct bm_device_info* bmdi)
 	udelay(1000);
 	reset_control_deassert(bmdi->cinfo.cdma);
 }
-
-void bm1688_cdma_clk_enable(struct bm_device_info* bmdi)
-{
-	PR_TRACE("bm1688 cdma clk is enable\n");
-	clk_prepare_enable(bmdi->cinfo.cdma_clk);
-}
-
-void bm1688_cdma_clk_disable(struct bm_device_info* bmdi)
-{
-	PR_TRACE("bm1688 cdma clk is gating\n");
-	clk_disable_unprepare(bmdi->cinfo.cdma_clk);
-}
 #endif

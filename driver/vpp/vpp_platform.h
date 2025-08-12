@@ -44,6 +44,7 @@ int  vpp_init(struct bm_device_info *bmdi);
 void vpp_exit(struct bm_device_info *bmdi);
 int  bm_vpp_check_usage_info(struct bm_device_info *bmdi);
 void vpp_usage_info_init(struct bm_device_info *bmdi);
+void vpp_usage_info_exit(struct bm_device_info *bmdi);
 
 int  bm1688_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg);
 void bm1688_vpp_request_irq(struct bm_device_info *bmdi);

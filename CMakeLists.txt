@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 cmake_policy(SET CMP0048 NEW)
 
 project("libsophon"
-    VERSION 0.4.12)
+    VERSION 0.4.13)
 
 set(CMAKE_CXX_STANDARD 11)
 

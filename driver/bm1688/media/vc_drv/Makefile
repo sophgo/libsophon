@@ -1,11 +1,5 @@
-include $(PWD)/../Makefile.interdrv.param
 
-# Specify the kernel version
-KVERSION := $(shell uname -r)
 
-# Specify the kernel build directory
-KERNEL_DIR := /lib/modules/$(KVERSION)/build
-#KERNEL_DIR := /lib/modules/5.4.0-200-generic/build
 VC_DRV_HEADER := -I$(PWD)									\
 				-I$(PWD)/common								\
 				-I$(PWD)/common/rcKernel					\
@@ -59,7 +53,8 @@ MODULE_SOURCES = vc_drv.c 	\
 		common/rcKernel/float_point/soft_float.c \
 		common/drv_file.c \
 		common/vc_getopt.c \
-		common/datastructure.c
+		common/datastructure.c \
+		common/platform.c
 
 
 VPU_SOURCES = cnm_driver/vpu/vdi/linux/vdi.c \
@@ -100,6 +95,9 @@ KBUILD_EXTRA_SYMBOLS += $(PWD)/../base/Module.symvers
 KBUILD_EXTRA_SYMBOLS += $(PWD)/../sys/Module.symvers
 
 ccflags-y += $(VC_DRV_HEADER) -DUSE_KERNEL_MODE -DKERNEL_MODE -DENABLE_DEC -DMJPEG_INTERFACE_API -DCNM_WAVE_SERIES
+ccflags-y += -DPLATFORM_SOC -DVC_SUPPORT_CLOCK_CONTROL
+
+ccflags-y += -DRV_TEST -mno-outline-atomics
 
 ccflags-y += -DRV_TEST
 
@@ -121,7 +119,7 @@ else
 PWD	  := $(shell pwd)
 
 all:
-	$(MAKE) -C $(KERNEL_DIR) M=$(PWD) modules
+	$(MAKE)	ARCH=$(ARCH) -C $(KERNEL_DIR) M=$(PWD) modules
 
 endif
 

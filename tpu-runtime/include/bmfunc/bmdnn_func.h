@@ -38,6 +38,18 @@ struct tpu_cmd_info_t {
   /// byte size of cdma command
   uint64_t cdma_cmd_byte_size;
 };
+struct reloc_entry_t {
+  /// id of base-addrs(io-addrs).
+  uint32_t base_addr_id;
+  /// addr offset from the base-addr. 
+  uint32_t addr_offset;
+};
+struct cmd_reloc_entry_t {
+  reloc_entry_t reloc_addr_info;
+  /// cmd offset (in Byte) from the tpu_single_core_cmd_t.gdma_cmd_addr.
+  uint64_t cmd_offset;
+};
+
 struct tpu_single_core_cmd_t {
   std::vector<tpu_cmd_info_t> cmd_info;
   /// global addr of bdc command
@@ -50,6 +62,8 @@ struct tpu_single_core_cmd_t {
   uint64_t hau_cmd_addr;
   //// global addr of sdma command
   uint64_t sdma_cmd_addr;
+  /// reloc entries for gdma command
+  std::vector<cmd_reloc_entry_t> gdma_reloc_entries;
 };
 
 typedef struct tpu_kernel_allreduce_1684x {
@@ -78,6 +92,7 @@ typedef struct tpu_kernel_global_move_1684x {
 typedef struct {
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
+  std::vector<u64> reloc_base_addrs;  // base io-addrs in io-reloc mode.
   std::vector<tpu_single_core_cmd_t> core_commands;
   std::vector<int32_t> core_list;
   /// kernel func id(used for dynamic loading)
@@ -488,8 +503,11 @@ class bmdnn_func_mars3 : public bmdnn_func {
         unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list);
 
-    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable);
+    bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size);
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable);
     bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         int core,
+                                         tpu_kernel_function_t func_id,
                                          unsigned long long output_global_addr,
                                          unsigned int output_max_size,
                                          unsigned int offset,

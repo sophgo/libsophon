@@ -690,6 +690,41 @@ DECL_EXPORT bool bmrt_pre_alloc_neuron_multi_cores(
     int core_num);
 
 /**
+ * @name    bmrt_get_neuron_number
+ * @brief   get inner runtime device mem number in bmruntime
+ * @ingroup bmruntime
+ *
+ * For simple bmodel, the number of mem is always 1
+ *
+ * @param [in]    p_bmrt            Bmruntime that had been created
+ * @param [in]    net_name          The name of the neuron network
+ * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+ * @param [in]    core_list         core id list those will be used to inference
+ * @param [in]    core_num          number of the core list
+ * @return int    the number of neuron mem
+ */
+DECL_EXPORT int bmrt_get_neuron_number(void *p_bmrt, const char* net_name);
+
+/**
+ * @name    bmrt_get_neuron_memory
+ * @brief   get inner runtime device mem in bmruntime
+ * @ingroup bmruntime
+ *
+ * This API should be called after calling bmrt_launch_tensor_multi_cores or bmrt_pre_alloc_neuron_multi_cores
+ * After calling this API, the memory for inference is returned.
+ * Different core list uses independent runtime device memory to support parallel inference
+ * Note: User should make sure NOT to use the memory during launching inference
+ *
+ * @param [in]    p_bmrt            Bmruntime that had been created
+ * @param [in]    net_name          The name of the neuron network
+ * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+ * @param [in]    core_list         core id list those will be used to inference
+ * @param [in]    core_num          number of the core list
+ * @return the neuron memory on device
+ */
+DECL_EXPORT bm_device_mem_t bmrt_get_neuron_memory(void *p_bmrt, const char* net_name, int mem_index, const int* core_list, int core_num);
+
+/**
  * @name    bmrt_pre_alloc_mem
  * @brief   To pre-allocate the neuron network compute memory during multi-cores arch inference.
  * @ingroup bmruntime

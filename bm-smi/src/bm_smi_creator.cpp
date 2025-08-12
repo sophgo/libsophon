@@ -19,6 +19,8 @@ class bm_smi_test* bm_smi_creator::create(bm_smi_cmdline &cmdline) {
 		return (class bm_smi_test*)(new bm_smi_display_util_detail(cmdline));
 	} else if (cmdline.m_op == "core_util") {
 		return (class bm_smi_test*)(new bm_smi_core_util(cmdline));
+	} else if (cmdline.m_op == "mem_info") {
+		return (class bm_smi_test*)(new bm_smi_mem_info(cmdline));
 	}
 
 	return nullptr;
