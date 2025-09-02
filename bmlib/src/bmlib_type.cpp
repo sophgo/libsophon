@@ -4,7 +4,7 @@
 
 jmp_buf error_stat;
 
-void fw_log(int level, const char *fmt, ...) {
+void fw_printf(int level, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vprintf(fmt, args);

@@ -30,15 +30,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdarg.h>
-#include <atomic>
 #include <sys/mman.h>
 #include <dlfcn.h>
-#include <sstream>
+#include <pthread.h>
 #define DECL_EXPORT
 #define DECL_IMPORT
 
 void bmcpu_thread();
-extern std::atomic<int> bmcpu_app_live;
+extern int bmcpu_app_live;
 
 #if defined(__cplusplus)
 extern "C" {

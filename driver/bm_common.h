@@ -81,7 +81,7 @@ struct chip_info {
 	struct clk *gdma_clk;
 	struct clk *fixed_tpu_clk;
 	struct clk *intc_clk;
-	struct clk *top_fab0_clk;
+	struct clk *tpu_sys_clk;
 	struct clk *timer_clk;
 
 	int (*bmdrv_setup_bar_dev_layout)(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
@@ -199,14 +199,6 @@ char *bmdrv_get_error_string(int error);
 #define DELAY_MS 20000
 #define POLLING_MS 1
 
-#define BL1_VERSION_BASE 0x25050100
-#define BL1_VERSION_SIZE 0x40
-#define BL2_VERSION_BASE (BL1_VERSION_BASE + BL1_VERSION_SIZE) // 0x101fb240
-#define BL2_VERSION_SIZE 0x40
-#define BL31_VERSION_BASE (BL2_VERSION_BASE + BL2_VERSION_SIZE) // 0x101fb280
-#define BL31_VERSION_SIZE 0x40
-#define UBOOT_VERSION_BASE (BL31_VERSION_BASE + BL31_VERSION_SIZE) // 0x101fb2c0
-#define UBOOT_VERSION_SIZE 0x50
 #define CHIP_VERSION_BASE 0x27102014
 #define CHIP_VERSION_SIZE 0x4
 

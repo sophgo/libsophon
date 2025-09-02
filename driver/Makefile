@@ -1,44 +1,22 @@
 PLATFORM ?= asic
 CLEAN_BUILD ?= 0
 
-
-ifeq ($(PLATFORM), asic)
-ccflags-y += -DPLATFORM_ASIC
-endif
-ifeq ($(PLATFORM), palladium)
-ccflags-y += -DPLATFORM_PALLADIUM
-endif
-ifeq ($(PLATFORM), fpga)
-ccflags-y += -DPLATFORM_FPGA
-endif
-
-
 PWD := $(shell pwd)
-
 
 BM_KERNEL_DRIVER_OUT_DIR ?= $(PWD)/../build/driver/$(TARGET_PROJECT)
 BM_MODULE_NAME = bmtpu
 
-ccflags-y += -Os -Wall -Werror -Wno-unused-function
+ccflags-y += -Os -Wall -Werror -Wno-unused-function -Wunused-variable -Wunused -Werror=unused
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif
-ccflags-y += -I$(src)  -I$(src)/SGTPUV8 \
-       -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
-ccflags-y += -DSOC_MODE
-cflags-y += -DSOC_MODE
+ccflags-y += -I$(src)
 
 FW_SIMPLE ?= 0
 ifeq ($(FW_SIMPLE),1)
   ccflags-y += -DFW_SIMPLE
 endif
 
-SYNC_API_INT_MODE ?= 1
-ifeq ($(SYNC_API_INT_MODE),1)
-  ccflags-y += -DSYNC_API_INT_MODE=1
-else
-  ccflags-y += -DSYNC_API_INT_MODE=0
-endif
 obj-m += $(BM_MODULE_NAME).o
 
 $(BM_MODULE_NAME)-y += bm_soc_drv.o bm_drv.o bm_fops.o bm_irq.o \
@@ -50,7 +28,6 @@ ifndef SOC_LINUX_DIR
     $(error "subtype of soc kernel to build not set!")
 endif
 LINUX_SRC := $(SOC_LINUX_DIR)
-KBUILD_CFLAGS += -DSOC_MODE
 KBUILD_CFLAGS += -g
 
 

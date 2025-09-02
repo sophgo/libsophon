@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[]) {
   int ret;
-  bmcpu_app_live.fetch_add(1);
+  __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
   struct termios stTermCfg;
   bm_smi_cmdline cmdline(argc, argv);
   ret = cmdline.validate_flags();

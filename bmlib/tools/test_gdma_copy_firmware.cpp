@@ -659,7 +659,7 @@ int main(int argc, char *argv[]) {
   DeviceMemAllocator allocator;
   tpu_kernel_function_t f_id;
   bm_status_t ret = BM_SUCCESS;
-  bmcpu_app_live.fetch_add(1);
+  __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
   int ret_1 = 0;
 
   int i = 0;

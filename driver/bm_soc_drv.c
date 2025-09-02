@@ -14,11 +14,8 @@
 #include "bm_clkrst.h"
 #include "bm_gmem.h"
 
-// TODO:
-// extern uint32_t sophon_get_chip_id(void);
 extern int dev_count;
 extern struct bm_ctrl_info *bmci;
-// static void __iomem *tpu_reg_base;
 
 static const struct of_device_id bmdrv_match_table[] = {
 	{.compatible = "cvitek,tpu"},
@@ -67,15 +64,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct platform_device 
 		cinfo->bm_reg = &bm_reg_SGTPUV8;
 		cinfo->share_mem_size = 1 << 12;
 		cinfo->chip_type = "MARS3";
-#ifdef PLATFORM_PALLADIUM
-		cinfo->platform = PALLADIUM;
-#endif
-#ifdef PLATFORM_ASIC
 		cinfo->platform = DEVICE;
-#endif
-#ifdef PLATFORM_FPGA
-		cinfo->platform = FPGA;
-#endif
 		// cinfo->bmdrv_pending_msgirq_cnt = SGTPUV8_pending_msgirq_cnt;
 		cinfo->tpu_core_num = 1;
 		break;
@@ -106,7 +95,7 @@ static int bmdrv_init_misc_info(struct platform_device *pdev, struct bm_device_i
 
 	misc_info->chipid = bmdi->cinfo.chip_id;
 	misc_info->tpu_core_num = bmdi->cinfo.tpu_core_num;
-	misc_info->pcie_soc_mode = BM_DRV_SOC_MODE;
+	misc_info->pcie_soc_mode = 1;
 	misc_info->driver_version = BM_DRIVER_VERSION;
 	return 0;
 }
@@ -148,13 +137,13 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 {
 	//enable tiu and gdma
 	writel(0xff, bmdi->cinfo.bar_info.bar_vaddr[MMAP_SYS]);
-	// printk("open clk read addr for tpu_sys:%hX\n", readl(bmdi->cinfo.bar_info.bar_vaddr[MMAP_SYS]));
 	//enable tpu
 	writel(readl(bmdi->cinfo.bar_info.bar_vaddr[MMAP_REG] + 0x100) | 0x1,
 							bmdi->cinfo.bar_info.bar_vaddr[MMAP_REG] + 0x100);
 
 	SGTPUV8_modules_clk_init(bmdi);
 	SGTPUV8_modules_clk_enable(bmdi);
+	// printk("open clk read addr for tpu_sys:%hX\n", readl(bmdi->cinfo.bar_info.bar_vaddr[MMAP_SYS]));
 	// printk("open clk read addr for tpu:%hX\n", readl(bmdi->cinfo.bar_info.bar_vaddr[MMAP_REG] + 0x100 + 0x100));
 	// printk("open clk read addr for gdma:%hX\n", readl(bmdi->cinfo.bar_info.bar_vaddr[MMAP_GDMA] + 0x1000 + 0x4));
 	// SGTPUV8_modules_reset_init(bmdi);
@@ -336,6 +325,8 @@ static int bmdrv_tpu_suspend(struct device *dev)
 
 static int bmdrv_tpu_resume(struct device *dev)
 {
+	struct bm_device_info *bmdi = dev_get_drvdata(dev);
+	bmdrv_hardware_init(bmdi);
 	return 0;
 }
 

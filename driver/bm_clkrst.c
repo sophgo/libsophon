@@ -62,18 +62,18 @@ int SGTPUV8_modules_clk_init(struct bm_device_info *bmdi)
 	struct chip_info *cinfo = &bmdi->cinfo;
 	int ret = 0;
 
-	cinfo->tpu_clk = devm_clk_get(dev, "clk_tpu_axi");
+	cinfo->tpu_clk = devm_clk_get(dev, "clk_tpu");
 	if (IS_ERR(cinfo->tpu_clk))
 	{
 		ret = PTR_ERR(cinfo->tpu_clk);
 		dev_err(dev, "failed to retrieve tpu clk");
 		return ret;
 	}
-	cinfo->top_fab0_clk = devm_clk_get(dev, "clk_tpu_sys");
-	if (IS_ERR(cinfo->top_fab0_clk))
+	cinfo->tpu_sys_clk = devm_clk_get(dev, "clk_tpu_sys");
+	if (IS_ERR(cinfo->tpu_sys_clk))
 	{
-		ret = PTR_ERR(cinfo->top_fab0_clk);
-		dev_err(dev, "failed to retrieve top_fab0 clk");
+		ret = PTR_ERR(cinfo->tpu_sys_clk);
+		dev_err(dev, "failed to retrieve tpu_sys clk");
 		return ret;
 	}
 	cinfo->gdma_clk = devm_clk_get(dev, "clk_tpu_gdma");
@@ -89,30 +89,33 @@ int SGTPUV8_modules_clk_init(struct bm_device_info *bmdi)
 void SGTPUV8_modules_clk_deinit(struct bm_device_info *bmdi)
 {
 	struct device *dev = &bmdi->cinfo.pdev->dev;
-	struct chip_info *cinfo = &bmdi->cinfo;
-
-	devm_clk_put(dev, cinfo->tpu_clk);
-	devm_clk_put(dev, cinfo->top_fab0_clk);
+	devm_clk_put(dev, bmdi->cinfo.tpu_clk);
+	devm_clk_put(dev, bmdi->cinfo.tpu_sys_clk);
 	// devm_clk_put(dev, cinfo->timer_clk);
-	devm_clk_put(dev, cinfo->gdma_clk);
+	devm_clk_put(dev, bmdi->cinfo.gdma_clk);
 }
 
 void SGTPUV8_modules_clk_enable(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.tpu_clk && bmdi->cinfo.top_fab0_clk) {
+	if (bmdi->cinfo.tpu_clk && bmdi->cinfo.tpu_sys_clk && bmdi->cinfo.gdma_clk) {
 		PR_TRACE("enable tpu clk\n");
 		clk_prepare_enable(bmdi->cinfo.tpu_clk);
-		clk_prepare_enable(bmdi->cinfo.top_fab0_clk);
+		clk_prepare_enable(bmdi->cinfo.tpu_sys_clk);
 		clk_prepare_enable(bmdi->cinfo.gdma_clk);
+	} else {
+		PR_TRACE("SGTPUV8 clk is NULL, not need to deinit\n");
 	}
 }
 
 void SGTPUV8_modules_clk_disable(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.tpu_clk && bmdi->cinfo.top_fab0_clk) {
+	if (bmdi->cinfo.tpu_clk && bmdi->cinfo.tpu_sys_clk && bmdi->cinfo.gdma_clk) {
 		PR_TRACE("SGTPUV8 clk is gating\n");
 		clk_disable_unprepare(bmdi->cinfo.tpu_clk);
-		clk_disable_unprepare(bmdi->cinfo.top_fab0_clk);
+		clk_disable_unprepare(bmdi->cinfo.tpu_sys_clk);
+		clk_disable_unprepare(bmdi->cinfo.gdma_clk);
+	} else {
+		PR_TRACE("SGTPUV8 clk is NULL, not need to deinit\n");
 	}
 }
 

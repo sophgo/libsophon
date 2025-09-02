@@ -62,8 +62,12 @@ struct BmMemory {
   bm_handle_t bm_handle;
   bool do_check;
 
-  void Init(const string &desc, bm_handle_t handle, const bm_device_mem_t &mem,
-            void *buffer, bool do_check = false);
+  // copy buffer to mem
+  void Init(const string &desc, bm_handle_t handle, bm_device_mem_t &mem,
+            void *buffer, bool do_check = false,
+            bool is_soc_save_mem_mode = false);
+  // no buffer copy to mem
+  void Init(const string &dest, bm_handle_t handle, bm_device_mem_t &mem);
   void Update(const bm_device_mem_t &mem, void *buffer);
   u32 GetBytes() {return bytes;}
   int GetData(void* buffer);
@@ -75,6 +79,8 @@ struct single_core_command_t {
   vector<int> bdc_id;   // for static
   vector<u32> gdma_cmd_byte; // for static
   vector<u32> bdc_cmd_byte; // for static
+
+  vector<cmd_reloc_entry_t> gdma_reloc_entries;  // for re-locating CMD-io-addr
 
   BmMemory gdma_mem;    // for static
   BmMemory bdc_mem;     // for static
@@ -174,6 +180,7 @@ typedef enum {
   TENSOR_TYPE_NET_INPUT      = (1 << 0),
   TENSOR_TYPE_NET_OUTPUT     = (1 << 1),
   TENSOR_TYPE_IMM_IO         = (1 << 2),
+  TENSOR_TYPE_IMM_RELOC      = (1 << 3),   // cmd-addrs will be relocated to user-io-addrs..
 } tensor_io_type_t;
 
 /* record host mem in addition to device mem for
@@ -184,11 +191,12 @@ typedef struct {
   bm_shape_t          max_shape;
   host_mem_t          host_mem;
   int                 mem_type;
-  tensor_io_type_t    io_type;
+  tensor_io_type_t    io_type;    /* INPUT, OUTPUT, IMM, IMM_RELOC  */
   int                 io_index;   /* index fro net input/output */
   SUBNET_INFO_T*      src_subnet; /* src subnet for imm i/o tensor */
   int                 record_elem_num; /*if 0, do not use it, the real elem num can be compute from shape. if not 0, use it*/
   unsigned int        pad_h; /* pad_h for conv 3ic */
+  u32                 reloc_info[2];  /* (base_addr_id, addr-offset). IMM_RELOC tensors should be relocated to user-io-addrs. */  
 } tensor_ext_t;
 
 typedef struct {
@@ -299,6 +307,7 @@ struct net_ctx_t {
   vector<int> input_index_v;
   vector<int> output_hidden_v;
   vector<int> output_index_v;
+  vector<u64> reloc_base_addrs;  // GLOBAL addrs used in io_reloc mode
   int32_t do_allreduce = 0;
   tpu_kernel_allreduce_1684x_t allreduce_param;
 };
@@ -412,6 +421,8 @@ class Bmruntime {
   void pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const std::vector<int> &core_list);
   void pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info);
   void pre_alloc_neuron(int net_idx);
+  int get_inner_neuron_number(const char* net_name);
+  bm_device_mem_t get_inner_neuron_memory(const char* net_name, int mem_index, const int* core_list, int core_num);
   bool memcpy_s2d_parallel(bm_tensor_t tensors[], void * datas[],
                            int tensor_num[], int device_num);
   bool memcpy_d2s_parallel(void * datas[], bm_tensor_t tensors[],
@@ -462,7 +473,13 @@ class Bmruntime {
 
   inline void set_flags(uint32_t flags) {
     m_flags = flags;
+    if (flags & BM_RUNTIME_SHARE_MEM) {
+      // even it is dynamic, we can share the memory, to avoid memory wastes
+      m_flags |= BM_RUNTIME_SHARE_DYNMEM;
+    }
   }
+
+  void init_flags();
 
   inline int get_network_number()
   {
@@ -522,6 +539,18 @@ class Bmruntime {
   void clear_device_mem(const std::string &desc);
   void fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc);
   int get_stage_idx(const char* net_name, const bm_tensor_t* input_tensors);
+  void convert_bdc_legacy(ModelCtx *model_ctx,
+                          u32 cmd_word_num,
+                          u32 devid,
+                          net_stage_t *stage,
+                          std::vector<const bmodel::CmdGroup *> &cmd_groups,
+                          u32 core_idx);
+  void convert_bdc(ModelCtx *model_ctx,
+                   u32 cmd_word_num,
+                   u32 devid,
+                   net_stage_t *stage,
+                   std::vector<const bmodel::CmdGroup *> &cmd_groups,
+                   u32 core_idx);
 
 protected:
   bool alloc_mem;
@@ -583,7 +612,12 @@ protected:
   bool setup_profile_context(ModelCtx* model_ctx, net_stage_t* net_stage,
                              const bmodel::Binary* net_profile,
                              const bmodel::Binary* net_stat);
-
+  void update_base_addrs_for_io_reloc(std::vector<u64>* reloc_base_addrs, 
+                               const bm_tensor_t* input_tensors, int input_num,
+                               const bm_tensor_t* output_tensors, int output_num) const;
+  void update_subnet_tensor_addrs_for_io_reloc(std::map<string, tensor_ext_t>* subnet_tensor_v, 
+                                 const std::vector<u64>* user_io_addrs, int input_num, int output_num) const;
+  void fix_io_tensor_info_for_io_reloc(std::vector<tpu_tensor_info_t>& tensor_infos) const;
   void set_profile_enabled(bool enable);
   bool update_net_coeff(
     ModelCtx* model_ctx, int net_idx, int mem_idx,
@@ -645,6 +679,7 @@ protected:
                                   std::vector<bm_tensor_t> out_tensors);
   uint32_t get_dyn_core_mask(int stage_idx, const std::vector<int32_t> core_list);
   std::vector<int> get_core_list_from_core_mask(uint32_t dyn_core_mask);
+  bool get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem);
 public:
   api_info_t get_api_info(int net_idx, const bm_tensor_t *input_tensors,
                           int input_num, bm_tensor_t *output_tensors,
@@ -664,6 +699,8 @@ protected:                                                    // one bmruntime c
   bool using_internal_bm_handle; /* internal initlized bm_handle or accept from user parameter */
   int m_devids[MAX_DEVICE_NUM];
   bool using_fast_allreduce;
+  bool m_bdc_fixed; // whether bdc is fixed, if false, use bdc legacy
+  map<vector<u64>, bm_device_mem_t> m_bdc_mem_map;
 
   vector<bm_device_mem_t> m_device_mem_vec;     /* save device memory address, for free */
   vector<uint32_t> m_device_mem_ids;            /* record each device memory belong which device*/
@@ -715,7 +752,8 @@ protected:                                                    // one bmruntime c
   bool launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                          const bm_tensor_t* input_tensors, int input_num,
                          bm_tensor_t* output_tensors, int output_num,
-                         const std::vector<int32_t> &core_list, const uint32_t dyn_core_mask, bool force_sync);
+                         const std::vector<int32_t> &core_list, const uint32_t dyn_core_mask, bool force_sync,
+                         const std::vector<u64>* user_io_addrs = nullptr);
   bool launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
                             const bm_tensor_t* input_tensors, const int* input_elem_num, int input_num,
                             bm_tensor_t* output_tensors, int* output_elem_num, int output_num,

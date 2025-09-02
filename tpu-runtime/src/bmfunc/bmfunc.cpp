@@ -26,8 +26,8 @@ bmfunc::bmfunc(const string &arch_name) {
     bmdnn_fn = new bmdnn_func_2260();
   } else if (arch == SG2380) {
     bmdnn_fn = new bmdnn_func_2380();
-  } else if (arch == MARS3) {
-    bmdnn_fn = new bmdnn_func_mars3();
+  } else if (arch == CV184X) {
+    bmdnn_fn = new bmdnn_func_cv184x();
   } else if (arch == SGTPUV8) {
     bmdnn_fn = new bmdnn_func_sgtpuv8();
   } else {

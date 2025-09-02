@@ -23,10 +23,9 @@ static int find_func_id = 0;
 #define BMLIB_bmcpu_LOG_TAG "bmcpu_app"
 std::queue<bm_api_to_bmcpu_t> uncomplete_msg_queue;
 std::list<bm_ret_t> complete_msg_queue;
-std::mutex uncomplete_msg_mtx;
-std::mutex complete_msg_mtx;
-std::mutex sem_msg_mtx;
-std::condition_variable uncomplete_msg_cv;
+pthread_mutex_t uncomplete_msg_mtx = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t complete_msg_mtx = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t uncomplete_msg_cv = PTHREAD_COND_INITIALIZER;
 static uint64_t start_bm_profile_timestamp=0;
 static uint64_t end_bm_profile_timestamp=0;
 bm_profile_t bm_profile = {0};
@@ -284,7 +283,6 @@ static int unload_lib_process(bm_api_cpu_load_library_internal_t* api) {
   //     printf("%x", (int)api->md5[i]);
   // }
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "\n");
-  std::cout << std::dec;
 
   std::array<unsigned char, MD5SUM_LEN> api_md5;
   std::copy(std::begin(api->md5), std::end(api->md5), api_md5.begin());
@@ -311,7 +309,6 @@ static int get_func_process(bm1688_get_func_internal_t *api) {
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO,"%d", (int)api->md5[i]);
   }
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "\n");
-  std::cout << std::dec;
 
   std::array<unsigned char, MD5SUM_LEN> api_md5;
   std::copy(std::begin(api->md5), std::end(api->md5), api_md5.begin());
@@ -503,16 +500,16 @@ void* bmcpu_thread(void* arg) {
       bm_ret ret_struct;
 
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "waiting for API\n");
-      {
-          std::unique_lock<std::mutex> lock(uncomplete_msg_mtx);
-          uncomplete_msg_cv.wait(lock, [] { return !uncomplete_msg_queue.empty(); });
-          *bm_api = uncomplete_msg_queue.front();
-          uncomplete_msg_queue.pop();
+      pthread_mutex_lock(&uncomplete_msg_mtx);
+      while (uncomplete_msg_queue.empty()) {
+        pthread_cond_wait(&uncomplete_msg_cv, &uncomplete_msg_mtx);
       }
+      *bm_api = uncomplete_msg_queue.front();
+      uncomplete_msg_queue.pop();
+      pthread_mutex_unlock(&uncomplete_msg_mtx);
 
       // bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "recive mq_size1: %d \n", mq_size);
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "API ID: 0x%x \n" , bm_api->api_id);
-      std::cout << std::dec;
       //A timer to record the API usage time
       auto start = std::chrono::high_resolution_clock::now();
       bm_profile.sent_api_counter++;
@@ -570,15 +567,13 @@ void* bmcpu_thread(void* arg) {
           snprintf(ret_struct.msg, sizeof(ret_struct.msg), "find_func_id value: %d\n", find_func_id);
           bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "find_func_id value: %d\n", find_func_id);
       }
-      {
-          std::lock_guard<std::mutex> lock(complete_msg_mtx);
-          complete_msg_queue.push_back(ret_struct);
-      }
+      pthread_mutex_lock(&complete_msg_mtx);
+      complete_msg_queue.push_back(ret_struct);
+      pthread_mutex_unlock(&complete_msg_mtx);
       //Wake up the API caller
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "*************API ID: 0x%x done **************\n", bm_api->api_id);
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "*************ret: %d **************\n", ret);
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "*************duration: %d **************\n", duration);
-      std::cout << std::dec;
 
       // The semaphore is released here, and the API caller can continue to execute
       bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_DEBUG, "ret_struct.sem_key:%ld\n", ret_struct.sem_key);

@@ -25,39 +25,65 @@ using namespace std;
 #define BMLIB_RUNTIME_LOG_TAG "bmlib_runtime"
 static bmlib_api_dbg_callback api_debug_callback = NULL;
 static uint64_t tpu_usage = 0;
-
-std::atomic<int> bmcpu_app_live(0);
+int bmcpu_app_live = 0; // Global variable to track if bmcpu app is live
 
 bm_status_t find_lib_path(const char *lib_name, char **file_path) {
-  const std::vector<std::string> library_dirs = {"/lib", "/usr/lib", "/usr/lib64", "/lib64", "/usr/lib32", "/lib32"};
-  for (const auto& dir : library_dirs) {
-    std::string path = dir + "/" + lib_name;
-    std::ifstream file(path);
-    if (file.is_open()) {
-      *file_path = (char *)malloc(path.size() + 1);
-      strcpy(*file_path, path.c_str());
-      return BM_SUCCESS;
+    const char *library_dirs[] = {
+        "/lib", "/usr/lib", "/usr/lib64", "/lib64",
+        "/usr/lib32", "/lib32", NULL
+    };
+
+    for (int i = 0; library_dirs[i] != NULL; i++) {
+        size_t path_len = strlen(library_dirs[i]) + 1 + strlen(lib_name) + 1;
+        char *path = (char *)malloc(path_len);
+        if (path == NULL) {
+            return BM_ERR_FAILURE;
+        }
+
+        snprintf(path, path_len, "%s/%s", library_dirs[i], lib_name);
+
+        if (access(path, F_OK) == 0) {
+            *file_path = path;
+            return BM_SUCCESS;
+        }
+        free(path);
     }
-  }
-  // if not find in system paths, try to find in LD_LIBRARY_PATH
-  const char* ld_library_path = getenv("LD_LIBRARY_PATH");
-  if (ld_library_path != nullptr) {
-    std::stringstream ss(ld_library_path);
-    std::string dir;
-    while (std::getline(ss, dir, ':')) {
-      std::string path = dir + "/" + lib_name;
-      std::ifstream file(path);
-      if (file.is_open()) {
-        *file_path = (char *)malloc(path.size() + 1);
-        strcpy(*file_path, path.c_str());
-        return BM_SUCCESS;
-      }
+
+    const char *ld_library_path = getenv("LD_LIBRARY_PATH");
+    if (ld_library_path != NULL) {
+        char *ld_copy = strdup(ld_library_path);
+        if (ld_copy == NULL) {
+            return BM_ERR_FAILURE;
+        }
+
+        char *dir = strtok(ld_copy, ":");
+        while (dir != NULL) {
+            size_t path_len = strlen(dir) + 1 + strlen(lib_name) + 1;
+            char *path = (char *)malloc(path_len);
+            if (path == NULL) {
+                free(ld_copy);
+                return BM_ERR_FAILURE;
+            }
+
+            snprintf(path, path_len, "%s/%s", dir, lib_name);
+
+            if (access(path, F_OK) == 0) {
+                *file_path = path;
+                free(ld_copy);
+                return BM_SUCCESS;
+            }
+
+            free(path);
+            dir = strtok(NULL, ":");
+        }
+
+        free(ld_copy);
     }
-  }
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-        "%s:%d Library %s not found in system paths\n",
-        __func__, __LINE__, lib_name);
-  return BM_ERR_FAILURE;
+
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+            "%s:%d Library %s not found in system paths\n",
+            __func__, __LINE__, lib_name);
+    return BM_ERR_FAILURE;
 }
 
 void bm_flush(bm_handle_t handle) {
@@ -84,13 +110,9 @@ void bm_gmem_arm_reserved_release(bm_handle_t handle) {
   #if defined USING_CMODEL
   handle->bm_dev->bm_device_arm_reserved_rel();
   #else
-  int ret;
-  ret = platform_ioctl(handle, BMDEV_RELEASE_ARM_RESERVED, 0);
-  if (ret != 0)
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-              "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
+  
   #endif
-  }
+}
 
 #ifndef USING_CMODEL
 bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
@@ -200,11 +222,11 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
                 "send data to mquequ.....\n");
 
-  {
-    std::lock_guard<std::mutex> lock(uncomplete_msg_mtx);
-    uncomplete_msg_queue.push(bm_api);
-  }
-  uncomplete_msg_cv.notify_one();
+  pthread_mutex_lock(&uncomplete_msg_mtx);
+  uncomplete_msg_queue.push(bm_api);
+  pthread_mutex_unlock(&uncomplete_msg_mtx);
+  // Notify the bmcpu thread that there is a new API request
+  pthread_cond_signal(&uncomplete_msg_cv);
 
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
           "mq_send success! api_id %x, thread_id %x, wait for sem_key %ld \n",
@@ -213,22 +235,21 @@ return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
   bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, 
           "wakeup semid:%d, sem_key=%ld\n", semid, sem_key);
 
-  {
-    std::lock_guard<std::mutex> lock(complete_msg_mtx);
-    for (std::list<bm_ret_t>::iterator it = complete_msg_queue.begin(); it != complete_msg_queue.end(); ++it) {
-        if (it->tid == tid) {
-            bm_ret = *it;
-            complete_msg_queue.erase(it);
-            break;
-        }
-    }
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "complete num size:%d\n", complete_msg_queue.size());
+  pthread_mutex_lock(&complete_msg_mtx);
+  for (std::list<bm_ret_t>::iterator it = complete_msg_queue.begin(); it != complete_msg_queue.end(); ++it) {
+      if (it->tid == tid) {
+          bm_ret = *it;
+          complete_msg_queue.erase(it);
+          break;
+      }
   }
+  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, "complete num size:%d\n", complete_msg_queue.size());
+  pthread_mutex_unlock(&complete_msg_mtx);
 
   if (bm_ret.result != 0) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-      "%s:%d api result = %u\n", __func__, __LINE__, bm_ret.result);
-    return BM_ERR_FAILURE;
+      bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+        "%s:%d api result = %u\n", __func__, __LINE__, bm_ret.result);
+      return BM_ERR_FAILURE;
   }
 
   if (api_id == BM_API_ID_TPUSCALER_GET_FUNC) {
@@ -298,46 +319,18 @@ bm_status_t bm_send_api(bm_handle_t handle, int api_id, const u8 *api, u32 size)
 }
 
 bm_status_t bm_device_sync(bm_handle_t handle) {
-  int ret;
   #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_sync();
   #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-  ret = platform_ioctl(handle, BMDEV_DEVICE_SYNC_API, 0);
-  if (ret == 0) {
   return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-              "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
   #endif
 }
 
 bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id) {
-  int ret;
   #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_sync();
   #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-  ret = platform_ioctl(handle, BMDEV_HANDLE_SYNC_API, &core_id);
-  if (ret == 0) {
-    return BM_SUCCESS;
-  } else {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-                "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-    return BM_ERR_FAILURE;
-  }
+  return BM_SUCCESS;
   #endif
 }
 
@@ -561,9 +554,9 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
                 "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
     }
 
-    if (bmcpu_app_live.load() == 0 ) {
+    if (__atomic_load_n(&bmcpu_app_live, __ATOMIC_SEQ_CST) == 0 ) {
       bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO, "=======bmcpu app thread create======\n");
-      bmcpu_app_live.fetch_add(1);
+      __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
       pthread_t bmcpu;
       if (pthread_create(&bmcpu, NULL, bmcpu_thread, static_cast<void*>(&ctx->dev_fd)) != 0) {
           perror("pthread_create");
@@ -644,29 +637,10 @@ bm_status_t bm_get_profile(bm_handle_t handle, bm_profile_t *profile) {
 }
 
 bm_status_t bm_get_boot_loader_version(bm_handle_t handle, boot_loader_version *version) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
 
   return BM_SUCCESS;
-  #else
-  int ret;
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_GET_VERSION, version);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-          "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_get_smi_attr(bm_handle_t handle, struct bm_smi_attr_t *smi_attr) {
   #ifdef USING_CMODEL
@@ -695,154 +669,37 @@ bm_status_t bm_get_smi_attr(bm_handle_t handle, struct bm_smi_attr_t *smi_attr) 
 
 
 bm_status_t bm_trace_enable(bm_handle_t handle) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
-
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_TRACE_ENABLE, 0);
-  if (ret == 0) {
-    return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_trace_disable(bm_handle_t handle) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_TRACE_DISABLE, 0);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_traceitem_number(bm_handle_t handle, long long *number) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(number);
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  if (number == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "tarce_data is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_PARAM;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_TRACEITEM_NUMBER, number);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_trace_dump(bm_handle_t handle, struct bm_trace_item_data *trace_data) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(trace_data);
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  if (trace_data == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "tarce_data is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_PARAM;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_TRACE_DUMP, trace_data);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_trace_dump_all(bm_handle_t handle,
                               struct bm_trace_item_data *trace_data) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(trace_data);
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  if (trace_data == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "tarce_data is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_PARAM;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_TRACE_DUMP_ALL, trace_data);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_get_misc_info(bm_handle_t handle, bm_misc_info *pmisc_info) {
   int ret;
@@ -1009,56 +866,18 @@ bm_status_t bm_set_clk_tpu_divider(bm_handle_t handle, int divider) {
   }
 
 bm_status_t bm_set_clk_tpu_freq(bm_handle_t handle, int freq) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(freq);
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_SET_TPU_FREQ, &freq);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_get_clk_tpu_freq(bm_handle_t handle, int *freq) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(freq);
   *freq = 1000;
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_GET_TPU_FREQ, freq);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_set_module_reset(bm_handle_t handle, MODULE_ID module) {
   int ret;
@@ -1096,30 +915,11 @@ bm_status_t bm_set_module_reset(bm_handle_t handle, MODULE_ID module) {
   }
 
 bm_status_t bm_get_device_time_us(bm_handle_t handle, unsigned long *time_us) {
-  int ret;
-  #ifdef USING_CMODEL
   UNUSED(handle);
   *time_us = 0;
 
   return BM_SUCCESS;
-  #else
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "handle is nullptr %s: %s: %d\n",
-            __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  ret = platform_ioctl(handle, BMDEV_GET_DEVICE_TIME, time_us);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
+}
 
 bm_status_t bm_set_reg(bm_handle_t handle, struct bm_reg *reg) {
   int ret;
@@ -1829,28 +1629,9 @@ bm_status_t bm_get_handle_fd(bm_handle_t handle, FD_ID id, int *fd) {
 }
 
 bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(bm_api_cfg_pwr_ctrl);
   return BM_SUCCESS;
-  #else
-  int ret;
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-      "handle is nullptr %s: %s: %d\n",
-      __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  // ret = platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl);
-  if (ret == 0) {
-    return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d, ioclt ret = %d %d\n", __func__, __LINE__ , ret, __LINE__);
-  return BM_ERR_FAILURE;
-  }
-  #endif
 }
 
 DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {
@@ -1872,7 +1653,7 @@ bm_status_t bm_memcpy_s2s(uint64_t u64PhyDst, uint64_t u64PhySrc, uint64_t u64Si
   void *mapped_memory;
   sg_api_1d_memcpy api_mem_param;
 
-  bmcpu_app_live.fetch_add(1);
+  __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
   ret = bm_dev_request(&handle, 0);
   if ((ret != BM_SUCCESS) || (handle == NULL)) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1953,7 +1734,7 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   void *mapped_memory;
 
 
-  bmcpu_app_live.fetch_add(1);
+  __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
   ret = bm_dev_request(&handle, 0);
   if ((ret != BM_SUCCESS) || (handle == NULL)) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "bm_dev_request error, ret = %d\r\n", ret);

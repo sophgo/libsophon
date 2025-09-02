@@ -521,7 +521,7 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
     (unsigned long long)alloc_data.paddr, alloc_data.fd, (unsigned long long)alloc_data.len, alloc_data.heap_id_mask);
 
   if (ret) {
-    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "%s:%d alloc failed\n", __func__, __LINE__);
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "%s:%d alloc failed. check ion size.\n", __func__, __LINE__);
     pmem->u.device.device_addr = BM_MEM_ADDR_NULL;
     pmem->u.device.dmabuf_fd = -1;
     return BM_ERR_FAILURE;
@@ -1267,7 +1267,7 @@ void bm_free_device_u64(bm_handle_t ctx, bm_device_mem_u64_t mem) {
   #endif
 }
 
-void bm_set_device_mem(bm_device_mem_t *pmem, unsigned int size, u64 addr) {
+void bm_set_device_mem(bm_device_mem_t *pmem, unsigned int size, u64 addr = 0) {
   pmem->u.device.device_addr = addr;
   pmem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
   pmem->size = size;
@@ -1279,11 +1279,12 @@ void bm_set_device_mem(bm_device_mem_t *pmem, unsigned int size, u64 addr) {
     }
   }
   lock.unlock();
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
+  if (pmem->u.device.device_addr != 0)
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
   pmem->u.device.dmabuf_fd = -1; // Assign a default or error value
 }
 
-void sg_set_device_mem(sg_device_mem_t *pmem, unsigned long long size, u64 addr) {
+void sg_set_device_mem(sg_device_mem_t *pmem, unsigned long long size, u64 addr = 0) {
   pmem->u.device.device_addr = addr;
   pmem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
   pmem->size = size;
@@ -1295,11 +1296,12 @@ void sg_set_device_mem(sg_device_mem_t *pmem, unsigned long long size, u64 addr)
     }
   }
   lock.unlock();
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
+  if (pmem->u.device.device_addr != 0)
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
   pmem->u.device.dmabuf_fd = -1; // Assign a default or error value
 }
 
-void bm_set_device_mem_u64(bm_device_mem_u64_t *pmem, unsigned long long size, u64 addr) {
+void bm_set_device_mem_u64(bm_device_mem_u64_t *pmem, unsigned long long size, u64 addr = 0) {
   pmem->u.device.device_addr = addr;
   pmem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
   pmem->size = size;
@@ -1311,7 +1313,8 @@ void bm_set_device_mem_u64(bm_device_mem_u64_t *pmem, unsigned long long size, u
     }
   }
   lock.unlock();
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
+  if (pmem->u.device.device_addr != 0)
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_WARNING, "%s:%d Address not found in ht_addr_fd map: 0x%llx\n", __func__, __LINE__, addr);
   pmem->u.device.dmabuf_fd = -1; // Assign a default or error value
 }
 
@@ -2931,10 +2934,6 @@ bm_status_t bm_memcpy_d2s(bm_handle_t handle, void *dst, bm_device_mem_t src) {
   #ifdef USING_CMODEL
   return handle->bm_dev->bm_device_memcpy_d2s(dst, src);
   #else
-  // uint32_t *read_buffer = (uint32_t *)malloc(elem_size * sizeof(uint32_t));
-  // if (read_buffer == NULL) {
-  // 		perror("malloc failed11");
-  // }
   bm_status_t read_status = bm_mem_read_data_from_ion(handle, &src, dst, bm_mem_get_size(src));
   if (read_status != BM_SUCCESS) {
     fprintf(stderr, "Failed to read data from device memory, error code: %d\n", read_status);

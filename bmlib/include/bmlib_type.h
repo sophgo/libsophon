@@ -21,10 +21,10 @@ void print_trace(void);
 #ifndef USING_CMODEL
         #ifdef __arm__
                 extern jmp_buf error_stat;
-                void fw_log(int level, const char *fmt, ...);
+                void fw_printf(int level, const char *fmt, ...);
                 #define hang(_ret)               \
                 {                                \
-                        fw_log(0, "%s assert\n", __func__); \
+                        fw_printf(0, "%s assert\n", __func__); \
                         longjmp(error_stat,1);   \
                 }
         #else

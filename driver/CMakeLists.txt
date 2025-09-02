@@ -1,18 +1,13 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0048 NEW)
 
-set(SOC_MODE 1)
-
-set(SYNC_API_INT_MODE 1)
 set(FW_SIMPLE 0)
 set(TARGET_PROJECT "sg_aarch_soc_device")
 set(DKMS_NAME "bmtpu")
 
 set(DRIVER_BIN_TARGET "${TARGET_PROJECT}/${DKMS_NAME}.ko")
 add_custom_command(OUTPUT ${DRIVER_BIN_TARGET}
-                COMMAND make SOC_MODE=${SOC_MODE}
-                        PLATFORM=asic
-                        SYNC_API_INT_MODE=${SYNC_API_INT_MODE}
+                COMMAND make PLATFORM=asic
                         TARGET_PROJECT=${TARGET_PROJECT}
                         FW_SIMPLE=${FW_SIMPLE}
                         SOC_LINUX_DIR=${SOC_LINUX_DIR}
@@ -28,9 +23,8 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "PACKAGE_NAME=\"${DKMS_NAME}\"" > dkms.conf
     COMMAND echo "PACKAGE_VERSION=${PROJECT_VERSION}" >> dkms.conf
     COMMAND echo "BUILT_MODULE_NAME[0]=\"${DKMS_NAME}\"" >> dkms.conf VERBATIM
-    COMMAND echo "MAKE[0]=\"make SOC_MODE=${SOC_MODE}"
+    COMMAND echo "MAKE[0]=\"make "
                  "PLATFORM=asic"
-                 "SYNC_API_INT_MODE=${SYNC_API_INT_MODE}"
                  "TARGET_PROJECT=${TARGET_PROJECT}"
                  "FW_SIMPLE=${FW_SIMPLE}"
                  "-C \${kernel_source_dir} M=\${dkms_tree}/\${PACKAGE_NAME}/\${PACKAGE_VERSION}/build \"" >> dkms.conf

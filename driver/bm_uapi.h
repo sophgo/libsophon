@@ -33,7 +33,6 @@ typedef struct bm_heap_stat_byte {
 /*
  * bm misc info
  */
-#define BM_DRV_SOC_MODE 1
 struct bm_misc_info {
 	int pcie_soc_mode; /*0---pcie; 1---soc*/
 	unsigned int chipid;
@@ -111,7 +110,7 @@ struct bm_reg {
 #define BMDEV_TOTAL_GMEM		_IOWR('p', 0x12, unsigned long)
 #define BMDEV_AVAIL_GMEM		_IOWR('p', 0x13, unsigned long)
 #define BMDEV_REQUEST_ARM_RESERVED	_IOWR('p', 0x14, unsigned long)
-#define BMDEV_RELEASE_ARM_RESERVED	_IOW('p',  0x15, unsigned long)
+
 #define BMDEV_MAP_GMEM			_IOWR('p', 0x16, unsigned long) //not used, map in mmap
 #define BMDEV_INVALIDATE_GMEM		_IOWR('p', 0x17, unsigned long)
 #define BMDEV_FLUSH_GMEM		_IOWR('p', 0x18, unsigned long)
@@ -120,14 +119,11 @@ struct bm_reg {
 
 #define BMDEV_SEND_API			_IOW('p', 0x20, unsigned long)
 #define BMDEV_READ_API		_IOW('p', 0x21, unsigned long)
-#define BMDEV_DEVICE_SYNC_API		_IOW('p', 0x23, unsigned long)
-#define BMDEV_HANDLE_SYNC_API		_IOW('p', 0x27, unsigned long)
 #define BMDEV_SEND_API_RESULT		_IOW('p', 0x28, unsigned long)
 #define BMDEV_READ_API_RESULT		_IOW('p', 0x29, unsigned long)
 
 #define BMDEV_GET_MISC_INFO            _IOWR('p', 0x30, unsigned long)
 // #define BMDEV_UPDATE_FW_A9         _IOW('p',  0x31, unsigned long)
-#define BMDEV_GET_PROFILE		_IOWR('p', 0x32, unsigned long)
 #define BMDEV_PROGRAM_A53               _IOWR('p', 0x33, unsigned long)
 #define BMDEV_GET_BOOT_INFO		_IOWR('p', 0x34, unsigned long)
 #define BMDEV_UPDATE_BOOT_INFO		_IOWR('p', 0x35, unsigned long)
@@ -141,19 +137,8 @@ struct bm_reg {
 #define BMDEV_GET_REG                   _IOWR('p', 0x3d, unsigned long)
 #define BMDEV_GET_DEV_STAT              _IOWR('p', 0x3e, unsigned long)
 
-#define BMDEV_TRACE_ENABLE		_IOW('p',  0x40, unsigned long)
-#define BMDEV_TRACE_DISABLE		_IOW('p',  0x41, unsigned long)
-#define BMDEV_TRACEITEM_NUMBER		_IOWR('p', 0x42, unsigned long)
-#define BMDEV_TRACE_DUMP		_IOWR('p', 0x43, unsigned long)
-#define BMDEV_TRACE_DUMP_ALL		_IOWR('p', 0x44, unsigned long)
-#define BMDEV_ENABLE_PERF_MONITOR       _IOWR('p', 0x45, unsigned long)
-#define BMDEV_DISABLE_PERF_MONITOR      _IOWR('p', 0x46, unsigned long)
-#define BMDEV_GET_DEVICE_TIME           _IOWR('p', 0x47, unsigned long)
-
 #define BMDEV_SET_TPU_DIVIDER		_IOWR('p', 0x50, unsigned long)
 #define BMDEV_SET_MODULE_RESET		_IOWR('p', 0x51, unsigned long)
-#define BMDEV_SET_TPU_FREQ		_IOWR('p', 0x52, unsigned long)
-#define BMDEV_GET_TPU_FREQ		_IOWR('p', 0x53, unsigned long)
 
 // #define BMDEV_TRIGGER_SPACC             _IOWR('p', 0x61, unsigned long)
 // #define BMDEV_SECKEY_VALID              _IOWR('p', 0x62, unsigned long)
@@ -188,7 +173,7 @@ struct bm_reg {
 #define BMDEV_FORCE_RESET_TPU           _IOWR('p', 0xAE, unsigned long)
 
 #define BMDEV_GET_TPUC                  _IOWR('p', 0x81, unsigned long)
-#define BMDEV_GET_MAXP                  _IOWR('p', 0x82, unsigned long)
+
 #define BMDEV_GET_BOARDP                _IOWR('p', 0x83, unsigned long)
 #define BMDEV_GET_FAN                   _IOWR('p', 0x84, unsigned long)
 #define BMDEV_GET_CORRECTN              _IOR('p', 0x85, unsigned long)
@@ -206,11 +191,9 @@ struct bm_reg {
 #define BMDEV_GET_CARD_ID               _IOR('p', 0x91, unsigned long)
 #define BMDEV_GET_DYNFREQ_STATUS        _IOR('p', 0x92, unsigned long)
 #define BMDEV_CHANGE_DYNFREQ_STATUS     _IOR('p', 0x93, unsigned long)
-#define BMDEV_GET_VERSION               _IOR('p', 0x94, unsigned long)
 #define BMDEV_LOADED_LIB                _IOR('p', 0x95, unsigned long)
 #define BMDEV_GET_SMI_ATTR              _IOR('p', 0x96, unsigned long)
-#define BMDEV_PWR_CTRL                  _IOR('p', 0x97, unsigned long)
-#define BMDEV_GET_PHYS_ADDR             _IOWR('p', 0x98, unsigned long)
+
 #define BMDEV_SET_IOMAP_TPYE            _IOWR('p', 0x99, u_int)
 #define BMDEV_READL                     _IOWR('p', 0x100, unsigned long)
 #define BMDEV_MEMCPY_ASYNC              _IOW('p', 0x104, unsigned long)

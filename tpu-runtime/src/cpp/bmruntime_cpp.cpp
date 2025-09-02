@@ -104,7 +104,7 @@ static std::string chip_name_by_id(unsigned int chipid) {
   } else if (chipid == 0x2260) {
     chip_name = "BM1690";
   } else if (chipid == 0x184) {
-    chip_name = "MARS3";
+    chip_name = "CV184X";
   } else if (chipid == 0x8000) {
     chip_name = "SGTPUV8";
   } else if (chipid == 0x2380) {

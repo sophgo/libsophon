@@ -165,13 +165,7 @@ bm_status_t bm_enable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_m
           "bm_enable_perf_monitor param err\n");
     return BM_ERR_PARAM;
   }
-  ret = platform_ioctl(handle, BMDEV_ENABLE_PERF_MONITOR, perf_monitor);
-  if (0 == ret)
-    return BM_SUCCESS;
-  else
-    bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm_enable_perf_monitor ioclt err, ret = %d:%d\n", ret, __LINE__);
-  return BM_ERR_FAILURE;
+  return BM_SUCCESS;
 #endif
 }
 
@@ -193,13 +187,8 @@ bm_status_t bm_disable_perf_monitor(bm_handle_t handle, bm_perf_monitor_t *perf_
           "bm_disable_perf_monitor param err\n");
     return BM_ERR_PARAM;
   }
-  ret = platform_ioctl(handle, BMDEV_DISABLE_PERF_MONITOR, perf_monitor);
-  if (0 == ret)
-    return BM_SUCCESS;
-  else
-    bmlib_log(BMLIB_LOG_LOG_TAG, BMLIB_LOG_ERROR,
-          "bm_disable_perf_monitor ioclt err, ret = %d:%d\n", ret, __LINE__);
-  return BM_ERR_FAILURE;
+  
+  return BM_SUCCESS;
 #endif
 }
 

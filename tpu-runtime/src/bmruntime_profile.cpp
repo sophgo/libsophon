@@ -5,6 +5,7 @@
 #include "bm1684_profile.h"
 #include "bm1684x_profile.h"
 #include "bm1688_profile.h"
+#include "cv184x_profile.h"
 #ifndef __linux__
 #include <direct.h>
 #endif
@@ -63,6 +64,8 @@ BMProfile::BMProfile(Bmruntime* p_bmrt): p_bmrt(p_bmrt), enabled(false) {
       device = decltype(device)(new bm1684x_profile::BMProfileDevice(this));
     } else if (arch == BM1688) {
       device = decltype(device)(new bm1688_profile::BMProfileDevice(this));
+    } else if (arch == CV184X) {
+      device = decltype(device)(new cv184x_profile::BMProfileDevice(this));
     } else {
       BMRT_LOG(WARNING, "Not support profile for arch=%d",  arch);
     }

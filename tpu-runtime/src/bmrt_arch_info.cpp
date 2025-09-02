@@ -33,8 +33,8 @@ bmrt_arch_info::bmrt_arch_info(const string& arch_name)
       target_bmtpu_arch = BM1690;
       } else if (arch_name == "SG2380") {
       target_bmtpu_arch = SG2380;
-    } else if (arch_name == "MARS3") {
-      target_bmtpu_arch = MARS3;
+    } else if (arch_name == "CV184X") {
+      target_bmtpu_arch = CV184X;
     } else if (arch_name == "SGTPUV8") {
       target_bmtpu_arch = SGTPUV8;
     } else {
@@ -218,7 +218,7 @@ u64 bmrt_arch_info::get_gmem_cmd_start_offset()
     case BM1684:
     case BM1880:
     case BM1684X:
-    case MARS3:
+    case CV184X:
     case SGTPUV8:
     case BM1688:
     case BM1690:
@@ -338,6 +338,22 @@ u32 bmrt_arch_info::get_gdma_cmd_num()
   return num;
 }
 
+int bmrt_arch_info::max_gaddr_bits()
+{
+  switch(sta_bmtpu_ptr->target_bmtpu_arch) {
+    case BM1688:
+      return 36;
+    case BM1690:
+    case SG2380:
+    case CV184X:
+    case SGTPUV8:
+      return 40;
+    default:
+      BMRT_LOG(FATAL, "Unknown bmtpu arch");
+  }
+  return 0;
+}
+
 u64 bmrt_arch_info::addr_mask() {
   u64 mask = 0xffffffffffffffff;
   if (sta_bmtpu_ptr->target_bmtpu_arch == BM1688) {
@@ -345,7 +361,7 @@ u64 bmrt_arch_info::addr_mask() {
     mask = (1ull << 35) - 1;
   } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690 ||
              sta_bmtpu_ptr->target_bmtpu_arch == SG2380 ||
-             sta_bmtpu_ptr->target_bmtpu_arch == MARS3 ||
+             sta_bmtpu_ptr->target_bmtpu_arch == CV184X ||
              sta_bmtpu_ptr->target_bmtpu_arch == SGTPUV8) {
     mask = (1ull << 40) - 1;
   }

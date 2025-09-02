@@ -142,9 +142,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd)
 	{
-	case BMDEV_GET_PHYS_ADDR:
-		break;
-
 	case BMDEV_READL:
 		printk("readl reg addr=%lx\n", (u_long)arg);
 		reg_addr = ioremap(arg, 4);
@@ -179,17 +176,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_FORCE_RESET_TPU:
 		break;
 
-	case BMDEV_HANDLE_SYNC_API:
-		break;
-
-	case BMDEV_DEVICE_SYNC_API:
-		break;
-
 	case BMDEV_REQUEST_ARM_RESERVED:
 		ret = put_user(bmdi->gmem_info.resmem_info.armreserved_addr, (unsigned long __user *)arg);
-		break;
-
-	case BMDEV_RELEASE_ARM_RESERVED:
 		break;
 
 	case BMDEV_GET_STATUS:
@@ -287,34 +275,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	}
 
-	case BMDEV_ENABLE_PERF_MONITOR:
-	{
-		break;
-	}
-
-	case BMDEV_DISABLE_PERF_MONITOR:
-	{
-		break;
-	}
-
-	case BMDEV_GET_DEVICE_TIME:
-	{
-		break;
-	}
-
-	case BMDEV_GET_PROFILE:
-	{
-		break;
-	}
-	case BMDEV_GET_VERSION:
-	{
-		ret = copy_to_user(((struct bootloader_version __user *)arg)->bl1_version, bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE);
-		ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl2_version, bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
-		ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl31_version, bmdi->cinfo.version.bl31_version, BL31_VERSION_SIZE);
-		ret |= copy_to_user(((struct bootloader_version __user *)arg)->uboot_version, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_SIZE);
-		ret |= copy_to_user(((struct bootloader_version __user *)arg)->chip_version, bmdi->cinfo.version.chip_version, CHIP_VERSION_SIZE);
-		break;
-	}
 
 	case BMDEV_GET_DEV_STAT:
 	{
@@ -329,21 +289,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = copy_to_user((unsigned long __user *)arg, &stat, sizeof(bm_dev_stat_t));
 		break;
 	}
-
-	case BMDEV_TRACE_ENABLE:
-		break;
-
-	case BMDEV_TRACE_DISABLE:
-		break;
-
-	case BMDEV_TRACEITEM_NUMBER:
-		break;
-
-	case BMDEV_TRACE_DUMP:
-		break;
-
-	case BMDEV_TRACE_DUMP_ALL:
-		break;
 
 	case BMDEV_GET_MISC_INFO:
 		ret = copy_to_user((unsigned long __user *)arg, &bmdi->misc_info,
@@ -362,14 +307,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		{
 			return -EFAULT;
 		}
-		break;
-	}
-
-	case BMDEV_GET_MAXP:
-	{
-		struct bm_boot_info *boot_info = &bmdi->boot_info;
-
-		ret = copy_to_user((unsigned int __user *)arg, &boot_info->max_board_power, sizeof(unsigned int));
 		break;
 	}
 
@@ -427,12 +364,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			mutex_unlock(&bmdi->clk_reset_mutex);
 		break;
 
-	case BMDEV_SET_TPU_FREQ:
-		break;
-
-	case BMDEV_GET_TPU_FREQ:
-		break;
-
 	case BMDEV_SET_MODULE_RESET:
 		break;
 
@@ -455,10 +386,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 										 sizeof(struct bm_gmem_addr)))
 			return -EFAULT;
 
-		break;
-	}
-	case BMDEV_PWR_CTRL:
-	{
 		break;
 	}
 
@@ -586,10 +513,6 @@ static int bmdev_mmap(struct file *file, struct vm_area_struct *vma) {
 			PR_TRACE("bmdev_mmap: size > SYS size\n");
 			return -EINVAL;
 		}
-		// if (bm_ioremapy(&mapped_io_sys, TPU_SYS_BASE, TPU_SYS_SIZE) < 0) {
-		//	return -ENOMEM;
-		// }
-		// PR_TRACE("bm_ioremapy: ioremap success for phys_addr=%lx, phys_size=%lu\n", TPU_SYS_BASE >> PAGE_SHIFT, length);
 		if (remap_pfn_range(vma, vma->vm_start, TPU_SYS_BASE >> PAGE_SHIFT, length, vma->vm_page_prot)) {
 			PR_TRACE("bmdev_mmap: remap_pfn_range failed\n");
 			return -EAGAIN;
@@ -599,9 +522,6 @@ static int bmdev_mmap(struct file *file, struct vm_area_struct *vma) {
 			PR_TRACE("bmdev_mmap: size > REG size\n");
 			return -EINVAL;
 		}
-		// if (bm_ioremapy(&mapped_io_reg, TPU_REG_BASE, TPU_REG_SIZE) < 0) {
-		//	return -ENOMEM;
-		// }
 		if (remap_pfn_range(vma, vma->vm_start, TPU_REG_BASE >> PAGE_SHIFT, length, vma->vm_page_prot)) {
 			PR_TRACE("bmdev_mmap: remap_pfn_range failed\n");
 			return -EAGAIN;
@@ -611,9 +531,6 @@ static int bmdev_mmap(struct file *file, struct vm_area_struct *vma) {
 			PR_TRACE("bmdev_mmap: size > SMEM size\n");
 			return -EINVAL;
 		}
-		// if (bm_ioremapy(&mapped_io_smem, TPU_SMEM_BASE, TPU_SMEM_SIZE) < 0) {
-		//	return -ENOMEM;
-		// }
 		if (remap_pfn_range(vma, vma->vm_start, TPU_SMEM_BASE >> PAGE_SHIFT, length, vma->vm_page_prot)) {
 			PR_TRACE("bmdev_mmap: remap_pfn_range failed\n");
 			return -EAGAIN;
@@ -623,9 +540,6 @@ static int bmdev_mmap(struct file *file, struct vm_area_struct *vma) {
 			PR_TRACE("bmdev_mmap: size > LMEM size\n");
 			return -EINVAL;
 		}
-		// if (bm_ioremapy(&mapped_io_lmem, TPU_LMEM_BASE, TPU_LMEM_SIZE) < 0) {
-		//	return -ENOMEM;
-		// }
 		if (remap_pfn_range(vma, vma->vm_start, TPU_LMEM_BASE >> PAGE_SHIFT, length, vma->vm_page_prot)) {
 			PR_TRACE("bmdev_mmap: remap_pfn_range failed\n");
 			return -EAGAIN;
