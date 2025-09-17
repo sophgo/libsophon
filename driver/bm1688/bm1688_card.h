@@ -9,7 +9,9 @@ int bm1688_l2_sram_init(struct bm_device_info *bmdi);
 #ifdef SOC_MODE
 void bm1688_tpu_reset(struct bm_device_info *bmdi);
 void bm1688_gdma_reset(struct bm_device_info *bmdi);
+void bm1688_tc906_reset(struct bm_device_info *bmdi);
 void bm1688_hau_reset(struct bm_device_info *bmdi);
+void bm1688_tpusys_reset(struct bm_device_info *bmdi);
 void bm1688_top_fab0_clk_enable(struct bm_device_info *bmdi);
 void bm1688_top_fab0_clk_disable(struct bm_device_info *bmdi);
 void bm1688_tc906b_clk_enable(struct bm_device_info *bmdi);

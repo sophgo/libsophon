@@ -883,3 +883,24 @@ bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_mod
 	free(p_module);
 	return BM_SUCCESS;
 }
+
+bm_status_t tpu_kernel_get_fw_version(bm_handle_t handle, int core_id)
+{
+	bm_status_t ret = BM_SUCCESS;
+
+	ret = bm_send_api_to_core(handle,
+							  BM_API_ID_A53LITE_GET_FW_VERSION,
+							  NULL,
+							  0,
+							  core_id);
+	if (ret != 0) {
+		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+				  BMLIB_LOG_ERROR,
+				  "launch function api error, ret %d\n",
+				  ret);
+		return ret;
+	}
+
+	ret = bm_sync_api_from_core(handle, core_id);
+	return ret;
+}

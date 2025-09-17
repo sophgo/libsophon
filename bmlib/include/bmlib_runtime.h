@@ -485,6 +485,18 @@ bm_status_t tpu_kernel_launch_sync_multi_cores(bm_handle_t handle, const char *f
 bm_status_t tpu_kernel_sync(bm_handle_t handle);
 
 /**
+ * @name    tpu_kernel_get_fw_version
+ * @brief   To sync
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  core_id         core id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+bm_status_t tpu_kernel_get_fw_version(bm_handle_t handle, int core_id);
+
+/**
  * @name    tpu_kernel_sync_from_core
  * @brief   To sync
  * @ingroup bmlib_runtime

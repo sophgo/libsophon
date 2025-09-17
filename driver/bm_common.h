@@ -351,13 +351,13 @@ struct bin_buffer {
 
 #define PR_TRACE(fmt, ...)					\
 	do {									\
-		if (tpu_log_lv && tpu_log_lv <= 2)	\
-			pr_info(fmt, ##__VA_ARGS__);	\
+		if (tpu_log_lv && tpu_log_lv >= 2)	\
+			pr_err(fmt, ##__VA_ARGS__);	\
 	}while (0)
 
 #define PR_DEBUG(fmt, ...)                  \
 	do {									\
-		if (tpu_log_lv && tpu_log_lv <= 1)	\
+		if (tpu_log_lv && tpu_log_lv >= 1)	\
 			pr_err(fmt, ##__VA_ARGS__);	\
 	}while (0)
 

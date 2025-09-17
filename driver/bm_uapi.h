@@ -259,6 +259,7 @@ struct bm_reg {
 #define BMDEV_GET_LIB_INFO             _IOWR('p', 0x98, unsigned long)
 
 #define BMDEV_GET_IDLE_COREID          _IOR('p', 0xB0, unsigned long)
+#define BMDEV_GET_FW_VERSION           _IOR('p', 0xB1, unsigned long)
 
 #define BMCTL_GET_DEV_CNT               _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR              _IOWR('q', 0x01, unsigned long)
