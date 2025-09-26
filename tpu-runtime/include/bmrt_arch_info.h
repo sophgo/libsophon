@@ -24,6 +24,7 @@ typedef enum bmtpu_arch {
   SGTPUV8,
   CV184X,
   SG2380,
+  BM1684X2,
   UNKOWN_ARCH
 } bmtpu_arch_t;
 

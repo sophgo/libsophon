@@ -392,7 +392,7 @@ void* timer_tpu_usage_thread(void* arg) {
         return NULL;
     }
 
-    uint64_t interval_us = 1000;  // default 1000 us
+    uint64_t interval_us = 5000;  // default 1000 us
     const char* interval_env = getenv("SET_TPU_WINDOWS");
     if (interval_env != nullptr) {
       uint64_t val = strtoull(interval_env, nullptr, 10);
@@ -402,6 +402,15 @@ void* timer_tpu_usage_thread(void* arg) {
         bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_WARNING, "Invalid value for SET_TPU_WINDOWS(0~20000), using default value 1000 us\n");
       }
     }
+    int interval_write = 0; // every interval_write, write to file
+    int average_tpu_usage = 0;
+    // open /tmp/tpu_usage.log
+    int fd_tmp = open("/tmp/tpu_usage.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd_tmp < 0) {
+        perror("File open failed");
+        return NULL;
+    }
+
 
     while (1) {
         uint64_t exp;
@@ -409,6 +418,7 @@ void* timer_tpu_usage_thread(void* arg) {
         uint64_t tpu_start = start_bm_profile_timestamp;
         uint64_t tpu_end = 0;
         uint64_t window_end = get_timestamp_us();
+        interval_write += interval_us / 1000;
 
         if (flag==1) {
             tpu_end = get_timestamp_us();
@@ -439,7 +449,7 @@ void* timer_tpu_usage_thread(void* arg) {
                                     ? tpu_start : current_timestamp;
             uint64_t overlap_end = (tpu_end < window_end) 
                                   ? tpu_end : window_end;
-            
+
             if (overlap_end > overlap_start) {
                 uint64_t overlap_duration = overlap_end - overlap_start;
                 tpu_usage = (overlap_duration * 100) / interval_us;
@@ -447,14 +457,30 @@ void* timer_tpu_usage_thread(void* arg) {
                 tpu_usage = 0;
             }
         }
+        if (average_tpu_usage == 0 && tpu_usage != 0) {
+            average_tpu_usage = tpu_usage;
+            // “TPU usage average_tpu_usage”
+            dprintf(fd_tmp, "tpu_usage: %d\n", average_tpu_usage);
+            fsync(fd_tmp);
+        } else if (tpu_usage != 0) {
+            average_tpu_usage = (average_tpu_usage + tpu_usage) / 2;
+            // “TPU usage average_tpu_usage”
+            dprintf(fd_tmp, "tpu_usage: %d\n", average_tpu_usage);
+            fsync(fd_tmp);
+        }
         // printf("TPU usage in the last 0.005 seconds: %d%%\n", tpu_usage);
-
-        lseek(fd_file, 0, SEEK_SET);
-        dprintf(fd_file, "%d\n", tpu_usage);
-        fsync(fd_file);
-
+        if (interval_write >= 1000) {
+          // caculate avrage tpu usage
+          lseek(fd_file, 0, SEEK_SET);
+          dprintf(fd_file, "%d\n", average_tpu_usage);
+          fsync(fd_file);
+          dprintf(fd_tmp, "=============interval:1s==========\n");
+          fsync(fd_tmp);
+          interval_write = 0;
+          average_tpu_usage = 0;
+        }
     }
-    
+
     close(tfd);
     close(fd_file);
     return NULL;

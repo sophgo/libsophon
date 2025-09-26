@@ -30,6 +30,8 @@ bmfunc::bmfunc(const string &arch_name) {
     bmdnn_fn = new bmdnn_func_cv184x();
   } else if (arch == SGTPUV8) {
     bmdnn_fn = new bmdnn_func_sgtpuv8();
+  } else if (arch == BM1684X2) {
+    bmdnn_fn = new bmdnn_func_bm1684x2();
   } else {
     BMRT_LOG(FATAL, "Error: unkown architecture [%d]", arch);
   }

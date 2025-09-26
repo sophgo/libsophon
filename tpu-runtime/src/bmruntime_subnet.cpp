@@ -315,7 +315,7 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
     user_input_shapes[idx] = (int*)input_tensors[idx].shape.dims;
     input_dims[idx] = input_tensors[idx].shape.num_dims;
     auto input_dtype = 0;
-    if (arch == BM1684X || arch == BM1688 || arch == BM1690 || arch == SG2380) {
+    if (arch == BM1684X || arch == BM1688 || arch == BM1690 || arch == SG2380 || arch == BM1684X2) {
       input_dtype = input_tensors[idx].dtype;
     } else {
       if(input_tensors[idx].dtype == BM_FLOAT32){
@@ -572,6 +572,23 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
         stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
         output_shape_global_addr,
         core_list);
+  } else if (arch == BM1684X2) {
+    std::vector<u64> dyn_offset;
+    if (m_flags & BM_RUNTIME_SHARE_MEM) {
+      dyn_offset = stage->dynamic_ctx_offset;
+    } else {
+      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+      dyn_offset = dyn_neuron->dynamic_ctx_offset;
+    }
+    status = bmfunc::bmdnn_bm1684x2()->_bmdnn_dynamic_fullnet_(
+        m_handles[devid], stage->core_commands[0].ir_mem.addr + subnet->tpu_info.core_commands[0].ir_offset,
+         ((subnet->tpu_info.core_commands[0].ir_len + 3) / 4), input_num, user_input_global_addrs,
+        user_input_shapes, input_elem_num, input_dims, output_num,
+        user_output_global_addrs, stage->dynamic_ctx_start,
+        stage->ctx_borders, dyn_offset,
+        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
+        output_shape_global_addr,
+        core_list);
   } else {
     BMRT_LOG(FATAL, "Error: unknown BM TPU");
   }
@@ -666,6 +683,22 @@ void Bmruntime::fill_tpu_tensor_info(
   }
 }
 
+static void fix_tensor_addr_for_io_reloc(std::vector<tpu_tensor_info_t> &tensor_info,
+                                         const std::map<string, tensor_ext_t> &subnet_tensor_v,
+                                         const SUBNET_INFO_T *subnet,
+                                         const std::vector<u64> *user_io_addrs, bool is_input) {
+  const auto &ref_tensors =
+      is_input ? subnet->input_tensor_name_v : subnet->output_tensor_name_v;
+  for (int idx = 0; idx < ref_tensors.size(); ++idx) {
+    const auto &tensor_name = ref_tensors.at(idx);
+    const auto &tensor_ext = subnet_tensor_v.find(tensor_name)->second;
+    if (tensor_ext.do_reloc) {
+      tensor_info[idx].compiled_global_addr = user_io_addrs->at(tensor_ext.reloc_info[0])
+                                              + tensor_ext.reloc_info[1];
+    }
+  }
+}
+
 template <typename T_stage>
 void Bmruntime::fill_tpu_tensor_info(
     std::vector<tpu_tensor_info_t> &tensor_info, const T_stage *stage,
@@ -706,10 +739,18 @@ bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const 
   if (m_flags & BM_RUNTIME_SHARE_MEM) {
     fill_tpu_tensor_info(input_info, stage, subnet, input_tensors, true);
     fill_tpu_tensor_info(output_info, stage, subnet, output_tensors, false);
+    if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC) {
+      fix_tensor_addr_for_io_reloc(input_info, stage->subnet_tensor_v, subnet, user_io_addrs, true);
+      fix_tensor_addr_for_io_reloc(output_info, stage->subnet_tensor_v, subnet, user_io_addrs, false);
+    }
   } else {
     dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
     fill_tpu_tensor_info(input_info, dyn_neuron.get(), subnet, input_tensors, true);
     fill_tpu_tensor_info(output_info, dyn_neuron.get(), subnet, output_tensors, false);
+    if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC) {
+      fix_tensor_addr_for_io_reloc(input_info, dyn_neuron->subnet_tensor_v, subnet, user_io_addrs, true);
+      fix_tensor_addr_for_io_reloc(output_info, dyn_neuron->subnet_tensor_v, subnet, user_io_addrs, false);
+    }
   }
 
   // auto core_list = get_core_list_from_core_mask(dyn_core_mask);

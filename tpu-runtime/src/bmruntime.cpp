@@ -298,6 +298,9 @@ void Bmruntime::init()
   case BM1690:
     m_core_num = 8;
     break;
+  case BM1684X2:
+    m_core_num = 4;
+    break;
   }
 
   // init mem
@@ -927,6 +930,8 @@ void Bmruntime::convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_ad
       break;
     case SGTPUV8:
       break;
+    case BM1684X2:
+      break;
     default:
       BMRT_LOG(FATAL, "Unkown BM TPU");
   }
@@ -1051,7 +1056,7 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
     user_input_shapes[idx] = (int*)input_tensors[idx].shape.dims;
     input_dims[idx] = input_tensors[idx].shape.num_dims;
     auto input_dtype = 0;
-    if (arch == BM1684X || arch == BM1688 || arch == BM1690 || arch == SG2380) {
+    if (arch == BM1684X || arch == BM1688 || arch == BM1690 || arch == SG2380 || arch == BM1684X2) {
       input_dtype = input_tensors[idx].dtype;
     } else {
       if (input_tensors[idx].dtype == BM_FLOAT32) {
@@ -1228,6 +1233,22 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
       dyn_offset = dyn_neuron->dynamic_ctx_offset;
     }
     status = bmfunc::bmdnn_2380()->_bmdnn_dynamic_fullnet_(
+        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
+        user_input_shapes, input_elem_num, input_dims, output_num,
+        user_output_global_addrs, stage->dynamic_ctx_start,
+        stage->ctx_borders, dyn_offset,
+        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
+        output_shape_global_addr,
+        core_list);
+  } else if (arch == BM1684X2) {
+    std::vector<u64> dyn_offset;
+    if (m_flags & BM_RUNTIME_SHARE_MEM) {
+      dyn_offset = stage->dynamic_ctx_offset;
+    } else {
+      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
+      dyn_offset = dyn_neuron->dynamic_ctx_offset;
+    }
+    status = bmfunc::bmdnn_bm1684x2()->_bmdnn_dynamic_fullnet_(
         m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
         user_input_shapes, input_elem_num, input_dims, output_num,
         user_output_global_addrs, stage->dynamic_ctx_start,

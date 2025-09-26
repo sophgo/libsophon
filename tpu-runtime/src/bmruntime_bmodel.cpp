@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #define SP(D, T) (std::shared_ptr<T>((D), std::default_delete<T []>()))
+#define CV184X_SYSTEM_KERNEL_PATH "/system/lib/libtpu_kernel_module.so"
 
 // typedef struct bm_module
 // {
@@ -265,7 +266,8 @@ static uint32_t get_bdc_cmd_len(const u8 *bdc_buffer, u64 start_offset,
   case BM1688:
   case CV184X:
   case SGTPUV8:
-  case BM1684X: {
+  case BM1684X:
+  case BM1684X2: {
     u32 cmd_buf[2];
     memcpy(cmd_buf, bdc_buffer + start_offset, sizeof(cmd_buf));
     u32 tsk_type = (cmd_buf[1] >> 9) & 0xf;
@@ -307,7 +309,7 @@ static uint32_t get_gdma_cmd_len(const u8 *gdma_buffer, u64 start_offset,
   uint32_t len = 96; // default: common gdma instrution size
 
   bmtpu_arch_t arch = bmrt_arch_info::get_bmtpu_arch();
-  if (BM1688 == arch || BM1690 == arch || CV184X == arch || SGTPUV8 == arch || SG2380 == arch) {
+  if (BM1688 == arch || BM1690 == arch || CV184X == arch || SGTPUV8 == arch || SG2380 == arch || BM1684X2 == arch) {
     u32 cmd_head[2] = {0};
     memcpy(cmd_head, gdma_buffer + start_offset, sizeof(cmd_head));
     u32 tsk_type = cmd_head[1] & 0xf;
@@ -686,7 +688,7 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
     memset(&bm_tensor_ext, 0 , sizeof(bm_tensor_ext));
     bm_tensor_ext.mem_type = MEM_TYPE_INVALID;
     bm_tensor_ext.host_mem.type = HOST_MEM_INVALID;
-
+    bm_tensor_ext.do_reloc = false;
     /* tensor could be from net input/output/immediate/relocated */
     auto iter = std::find(net_ctx->input_name_v.begin(),
                           net_ctx->input_name_v.end(), tensor_name);
@@ -705,12 +707,17 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
       } else if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC && tensor->relentry() != nullptr) {
         /* for imm tensor which are relocated to user space */
         bm_tensor_ext.io_type = TENSOR_TYPE_IMM_RELOC;
-        bm_tensor_ext.reloc_info[0] = tensor->relentry()->base_addr_id();
-        bm_tensor_ext.reloc_info[1] = tensor->relentry()->addr_offset();
       } else {
         /* tensor is not net input/output */
         bm_tensor_ext.io_type  = TENSOR_TYPE_IMM_IO;
       }
+    }
+
+    // fill reloc info for io reloc mode.
+    if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC && tensor->relentry() != nullptr) {
+      bm_tensor_ext.do_reloc = true;
+      bm_tensor_ext.reloc_info[0] = tensor->relentry()->base_addr_id();
+      bm_tensor_ext.reloc_info[1] = tensor->relentry()->addr_offset();
     }
 
     bm_tensor_ext.tensor_info.dtype   = (bm_data_type_t)tensor->data_type();
@@ -2314,7 +2321,12 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
   #endif
 
   vector<unsigned char> external_firmware;
-  const char* kernel_path = getenv("BMRUNTIME_USING_FIRMWARE");
+  auto kernel_path_env = getenv("BMRUNTIME_USING_FIRMWARE");
+#if defined(LITE_BUILD)
+  const char* kernel_path = kernel_path_env ? kernel_path_env : CV184X_SYSTEM_KERNEL_PATH;
+#else
+  const char* kernel_path = kernel_path_env;
+#endif
   if(!using_inner_firmware && kernel_path){
     BMRT_LOG(INFO, "loading firmare from ENV BMRUNTIME_USING_FIRMWARE=%s", kernel_path);
     string real_kernel_path = kernel_path;

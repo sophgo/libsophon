@@ -37,7 +37,9 @@ bmrt_arch_info::bmrt_arch_info(const string& arch_name)
       target_bmtpu_arch = CV184X;
     } else if (arch_name == "SGTPUV8") {
       target_bmtpu_arch = SGTPUV8;
-    } else {
+    } else if (arch_name == "BM1684X2") {
+      target_bmtpu_arch = BM1684X2;
+    }  else {
       BMRT_LOG(FATAL, "Error: unknown processor name [%s]",  arch_name.c_str());
     }
 }
@@ -223,6 +225,7 @@ u64 bmrt_arch_info::get_gmem_cmd_start_offset()
     case BM1688:
     case BM1690:
     case SG2380:
+    case BM1684X2:
       gmem_start = 0x0;
       break;
     default:
@@ -362,7 +365,8 @@ u64 bmrt_arch_info::addr_mask() {
   } else if (sta_bmtpu_ptr->target_bmtpu_arch == BM1690 ||
              sta_bmtpu_ptr->target_bmtpu_arch == SG2380 ||
              sta_bmtpu_ptr->target_bmtpu_arch == CV184X ||
-             sta_bmtpu_ptr->target_bmtpu_arch == SGTPUV8) {
+             sta_bmtpu_ptr->target_bmtpu_arch == SGTPUV8 ||
+             sta_bmtpu_ptr->target_bmtpu_arch == BM1684X2) {
     mask = (1ull << 40) - 1;
   }
   return mask;

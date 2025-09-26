@@ -196,6 +196,7 @@ typedef struct {
   SUBNET_INFO_T*      src_subnet; /* src subnet for imm i/o tensor */
   int                 record_elem_num; /*if 0, do not use it, the real elem num can be compute from shape. if not 0, use it*/
   unsigned int        pad_h; /* pad_h for conv 3ic */
+  bool                do_reloc;
   u32                 reloc_info[2];  /* (base_addr_id, addr-offset). IMM_RELOC tensors should be relocated to user-io-addrs. */  
 } tensor_ext_t;
 
