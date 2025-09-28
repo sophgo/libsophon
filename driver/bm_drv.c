@@ -254,7 +254,7 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 
 	bmdrv_print_cardinfo(cinfo);
 
-	bmdi->enable_dyn_freq = 1;
+	bmdi->enable_dyn_freq = 0;
 
 	// init thermal
 #ifndef SOC_MODE

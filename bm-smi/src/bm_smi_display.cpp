@@ -92,7 +92,7 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 #endif
     g_attr[dev_id].dev_id = dev_id;
     unsigned long ion_mem_total, ion_mem_alloc;
-	unsigned long vpp_mem_total, vpp_mem_alloc, npu_mem_total, npu_mem_alloc;
+    unsigned long vpp_mem_total, vpp_mem_alloc, npu_mem_total, npu_mem_alloc;
 #ifdef __linux__
     if (ioctl(bmctl_fd, BMCTL_GET_SMI_ATTR, &g_attr[dev_id]) < 0) {
 #else
@@ -120,14 +120,13 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 #endif
         g_attr[dev_id].chip_id = ATTR_FAULT_VALUE;
         g_attr[dev_id].status  = ATTR_FAULT_VALUE;
-        g_attr[dev_id].chip_mode =
-            ATTR_FAULT_VALUE;  // 0---pcie = ATTR_FAULT_VALUE; 1---soc
+        g_attr[dev_id].chip_mode = ATTR_FAULT_VALUE;  // 0---pcie, 1---soc
         g_attr[dev_id].domain_bdf        = ATTR_FAULT_VALUE;
         g_attr[dev_id].mem_used          = 0;
         g_attr[dev_id].mem_total         = 0;
         g_attr[dev_id].tpu_util          = ATTR_FAULT_VALUE;
-		g_attr[dev_id].tpu_util0         = ATTR_FAULT_VALUE;
-		g_attr[dev_id].tpu_util1         = ATTR_FAULT_VALUE;
+        g_attr[dev_id].tpu_util0         = ATTR_FAULT_VALUE;
+        g_attr[dev_id].tpu_util1         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_temp        = ATTR_FAULT_VALUE;
         g_attr[dev_id].chip_temp         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_power       = ATTR_FAULT_VALUE;
@@ -149,7 +148,7 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 	int ret = 0;
 	struct bitmain_heap_info heap_info;
 	struct ion_custom_data custom_data;
-    if (handle->ion_fd > 0) {
+	if (handle->ion_fd > 0) {
 		heap_info.id = NPU_HEAP_ID;
 		custom_data.cmd = ION_IOC_CVITEK_GET_HEAP_INFO;
 		custom_data.arg = (unsigned long)&heap_info;
@@ -174,11 +173,11 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 		ion_mem_total = vpp_mem_total + npu_mem_total;
 		ion_mem_alloc = vpp_mem_alloc + npu_mem_alloc;
 
-        g_attr[dev_id].ion_mem_total = ion_mem_total / 1024 / 1024;
-        g_attr[dev_id].ion_mem_used  = ion_mem_alloc / 1024 / 1024;
+        g_attr[dev_id].mem_total = ion_mem_total / 1024 / 1024;
+        g_attr[dev_id].mem_used  = ion_mem_alloc / 1024 / 1024;
         g_attr[dev_id].npu_mem_total = npu_mem_total / 1024 / 1024;
         g_attr[dev_id].npu_mem_used  = npu_mem_alloc / 1024 / 1024;
-		g_attr[dev_id].vpp_mem_total = vpp_mem_total / 1024 / 1024;
+        g_attr[dev_id].vpp_mem_total = vpp_mem_total / 1024 / 1024;
         g_attr[dev_id].vpp_mem_used  = vpp_mem_alloc / 1024 / 1024;
     }
 #endif
@@ -755,8 +754,8 @@ static void bm_smi_display_attr(int            dev_id,
 							BUFFER_LEN,
 							"   %7s %5dMB/%5dMB      |\n",
 							tpuc_s,
-							g_attr[dev_id].ion_mem_used,
-							g_attr[dev_id].ion_mem_total);
+							g_attr[dev_id].mem_used,
+							g_attr[dev_id].mem_total);
 				snprintf(whole_str,
 							BUFFER_LEN,
 							"|%6s %5s  %4s  %4s  %7s %5s|%11s%7s %7s   "
@@ -771,8 +770,8 @@ static void bm_smi_display_attr(int            dev_id,
 							status_s,
 							currclk_s,
 							tpuc_s,
-							g_attr[dev_id].ion_mem_used,
-							g_attr[dev_id].ion_mem_total);
+							g_attr[dev_id].mem_used,
+							g_attr[dev_id].mem_total);
 			} else {
 				snprintf(
 					line_str,
@@ -785,8 +784,8 @@ static void bm_smi_display_attr(int            dev_id,
 							BUFFER_LEN,
 							"   %7s %5dMB/%5dMB      |\n",
 							tpuc_s,
-							g_attr[dev_id].ion_mem_used,
-							g_attr[dev_id].ion_mem_total);
+							g_attr[dev_id].mem_used,
+							g_attr[dev_id].mem_total);
 				snprintf(whole_str,
 							BUFFER_LEN,
 							"|                                       |%11s%7s "
@@ -795,8 +794,8 @@ static void bm_smi_display_attr(int            dev_id,
 							status_s,
 							currclk_s,
 							tpuc_s,
-							g_attr[dev_id].ion_mem_used,
-							g_attr[dev_id].ion_mem_total);
+							g_attr[dev_id].mem_used,
+							g_attr[dev_id].mem_total);
 			}
 			break;
 		case 2:
@@ -1259,8 +1258,8 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
         printf("%s ", maxclk_s);
         printf("%s ", currclk_s);
         printf("%s ", tpuc_s);
-        printf("%dMB ", g_attr[i].ion_mem_used);
-        printf("%dMB \n", g_attr[i].ion_mem_total);
+        printf("%dMB ", g_attr[i].mem_used);
+        printf("%dMB \n", g_attr[i].mem_total);
     }
 }
 #endif

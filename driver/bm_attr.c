@@ -2526,7 +2526,6 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 
 		if (c_attr->fan_control && is_setspeed == 1)
 			bmdrv_adjust_fan_speed(bmdi, c_attr->chip_temp);
-
 		mutex_lock(&bmdi->clk_reset_mutex);
 		if (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) {
 			bmdrv_thermal_update_status_sc7p(bmdi, c_attr->chip_temp);
