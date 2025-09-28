@@ -115,7 +115,6 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	u32 api_duration = 0;
 	u32 api_result = 0;
 	u32 func_id = 0;
-	u32 duration = 0;
 
 	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, api_id) / sizeof(u32));
 	api_id = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
@@ -175,7 +174,6 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 		}
 		mutex_unlock(&ti->trace_mutex);
 	}
-	pr_err("read regs spend %d us\n", duration);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)
