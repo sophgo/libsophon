@@ -165,12 +165,18 @@ int test_cdma_ptop_transfer(unsigned long long src_addr, int src_num,
   }
 
   for (int i = 0; i < 10; i++) {
+    bm_trace_enable(handle_src);
     gettimeofday(&tv_start, NULL);
+    bm_get_profile(handle_src, &profile_start);
     ret = bm_memcpy_p2p(handle_src, dev_buffer_src, handle_dst, dev_buffer_dst);
     gettimeofday(&tv_end, NULL);
     timersub(&tv_end, &tv_start, &timediff);
     consume = timediff.tv_sec * 1000000 + timediff.tv_usec;
     consume_sys += consume;
+    bm_get_profile(handle_src, &profile_end);
+    consume = profile_end.cdma_in_time - profile_start.cdma_in_time;
+    consume_real += consume;
+    bm_trace_disable(handle_src);
   }
 
   consume = consume_sys / 10;
@@ -181,6 +187,18 @@ int test_cdma_ptop_transfer(unsigned long long src_addr, int src_num,
             consume,
             bandwidth);
   }
+
+  consume = consume_real / 10;
+  if (consume > 0) {
+    float bandwidth = (float)transfer_size / (1024.0*1024.0) / (consume / 1000000.0);
+    printf("P2P real:Transfer size:0x%x byte. Cost time:%ld us, Write Bandwidth:%.2f MB/s\n",
+            transfer_size,
+            consume,
+            bandwidth);
+  }
+
+  consume_sys = 0x0;
+  consume_real = 0x0;
 
   for (int i = 0; i < 10; i++) {
     bm_trace_enable(handle_dst);

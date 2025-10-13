@@ -44,7 +44,7 @@ typedef enum {
 #define GP_REG_TEMPSMI                         4
 
 #define GP_REG_DEV_STA			       96
-#define PROBE_DONE			       1
+#define	START_PROBE			       1
 #define NOT_PROBE			       0
 struct bm_io_bar_vaddr {
 	void __iomem *mcu_info_bar_vaddr;

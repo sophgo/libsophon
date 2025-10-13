@@ -77,7 +77,7 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	//todo, print a log for tmp;
 	if (api_result != 0){
 		bmdi->api_process_status = api_result;
-		// pr_err("bm-sophon%d api process fail, error id is 0x%x\n", bmdi->dev_index, api_id);
+		pr_err("bm-sophon%d api process fail, error id is 0x%x\n", bmdi->dev_index, api_id);
 	}
 
 	if (ti) {

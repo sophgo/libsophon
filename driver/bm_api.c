@@ -13,7 +13,7 @@
 #include "bm_thread.h"
 
 DEFINE_SPINLOCK(msg_dump_lock);
-void bmdev_dump_reg(struct bm_device_info *bmdi, u32 channel)
+static void bmdev_dump_reg(struct bm_device_info *bmdi, u32 channel)
 {
     int i=0;
     spin_lock(&msg_dump_lock);
@@ -126,7 +126,7 @@ void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 channel)
 #define LIB_MAX_NAME_LEN 64
 #define FUNC_MAX_NAME_LEN 64
 
-int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
+static int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 {
 	int ret = 0;
 	struct bmcpu_lib *lib_node;
@@ -196,7 +196,7 @@ int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 	return 0;
 }
 
-int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
+static int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 {
 	int ret = 0;
 	int i;
@@ -258,7 +258,7 @@ int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_ap
 	return 0;
 }
 
-int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
+static int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
 {
 	int ret;
 	static int f_id = 22;
@@ -312,7 +312,7 @@ int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	return ret;
 }
 
-int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
+static int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -370,7 +370,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	return 0;
 }
 
-int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
+static int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -539,7 +539,7 @@ int bmdrv_send_api_close(struct bm_device_info *bmdi, struct file *file, u8 *pro
 	return ret;
 }
 
-int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg)
+static int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg)
 {
 	int ret = 0;
 	struct bm_thread_info *thd_info;

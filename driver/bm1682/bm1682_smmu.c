@@ -96,6 +96,8 @@
  * Data structure to store user address, Pages, sg table mapping
  */
 int bm1682_disable_iommu(struct iommu_ctrl *ctrl);
+void bm1682_smmu_get_irq_status(struct bm_device_info *bmdi, u32 *status);
+
 static int bm_bo_create(struct bm_buffer_object **bo, struct iommu_region *iommu)
 {
     struct bm_buffer_object *bbo = NULL;

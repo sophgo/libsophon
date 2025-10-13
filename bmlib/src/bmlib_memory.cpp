@@ -427,18 +427,11 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
 #ifdef __linux__
   if (ctx->ion_fd) {
     // try all heaps as heap_id_mask set
-    for (int i = 0; i < ctx->heap_cnt; i++) {
-      if (((heap_id_mask >> i) & 0x1) == 0x1) {
-          pmem->flags.u.gmem_heapid = ctx->carveout_heap_id[i];
-          alloc_data.heap_id_mask = (1 << ctx->carveout_heap_id[i]);
-          ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
+    alloc_data.heap_id_mask = heap_id_mask;
+    ret = ioctl(ctx->ion_fd, ION_IOC_ALLOC, &alloc_data);
 
-          if (ret == 0) {
-            ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION, pmem);
-            break;
-          }
-        }
-      }
+    if (ret == 0)
+      ioctl(ctx->dev_fd, BMDEV_ALLOC_GMEM_ION, pmem);
   } else
 #endif
   {
@@ -4312,9 +4305,13 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+  int src_devid = bm_get_devid(src_handle);
+  int dst_devid = bm_get_devid(dst_handle);
   u32 size = bm_mem_get_size(src);
   u64 src_addr = bm_mem_get_device_addr(src);
   u64 dst_addr = bm_mem_get_device_addr(dst);
+
+  force_use_dst_cdma = src_devid < dst_devid ? true : false;
   if (BM_SUCCESS != bm_calculate_cdma_addr(src_handle, dst_handle, &src_addr,
                                            &dst_addr, force_use_dst_cdma))
     return BM_ERR_FAILURE;

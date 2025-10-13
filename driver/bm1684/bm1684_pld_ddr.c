@@ -12,7 +12,7 @@
 #include "bm_memcpy.h"
 #include "bm1684_ddr.h"
 
-void ddr_phy_init(struct bm_device_info *bmdi, u32 cfg_base)
+static void ddr_phy_init(struct bm_device_info *bmdi, u32 cfg_base)
 {
 	u32 read_data = 0;
 	// phy register, original is APB address which is half word based

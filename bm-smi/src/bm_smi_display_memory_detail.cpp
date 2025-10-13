@@ -187,8 +187,8 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                     snprintf(
                         line_str,
                         BUFFER_LEN,
-                        "| Lib Version:%9s LTS SP4     Driver Version:  "
-                        "%1d.%1d.%1d LTS SP4                                 |\n",
+                        "| Lib Version:%9s LTS SP5     Driver Version:  "
+                        "%1d.%1d.%1d LTS SP5                                 |\n",
                         bm_smi_version,
                         (g_driver_version >> 16) & 0xff,
                         (g_driver_version >> 8) & 0xff,
@@ -197,7 +197,7 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                     snprintf(
                         line_str,
                         BUFFER_LEN,
-                        "| Lib Version:%9s LTS SP4     Driver Version:  "
+                        "| Lib Version:%9s LTS SP5     Driver Version:  "
                         "%1d.%1d.%1d                                         |\n",
                         bm_smi_version,
                         (g_driver_version >> 16) & 0xff,
@@ -378,9 +378,9 @@ static void bm_smi_sn_to_str(int dev_id, char *s) {
 static void bm_smi_board_type_to_str(int dev_id, char *s) {
     int length = strlen(g_attr[dev_id].board_type);
     if (g_attr[dev_id].chip_mode == 0 && length < 5){
-        snprintf(s, 10, "%s%s", "  ",g_attr[dev_id].board_type);
+        snprintf(s, 11, "%s%s", "  ",g_attr[dev_id].board_type);
     } else {
-	snprintf(s, 10, "%s", g_attr[dev_id].board_type);
+	snprintf(s, 11, "%s", g_attr[dev_id].board_type);
     }
 }
 
@@ -555,7 +555,7 @@ static void bm_smi_display_attr(int            dev_id,
     char tpuc_s[6];
     char fan_s[4];
     char tpu_util_s[6];
-    char board_type_s[10];
+    char board_type_s[11];
 
     bm_smi_chipid_to_str(dev_id, chip_id_s);
     bm_smi_card_index_to_str(dev_id, card_index_s);
@@ -591,7 +591,7 @@ static void bm_smi_display_attr(int            dev_id,
 		    if (g_attr[dev_id].chip_mode == 0){
                         snprintf(line_str,
                                  BUFFER_LEN,
-                                 "|%2s  %-10s %5s %17s |%2d   %4s    %4s",
+                                 "|%2s %-11s %5s %17s |%2d   %4s    %4s",
                                  card_index_s,
                                  board_type_s,
                                  mode_s,
@@ -1115,7 +1115,7 @@ static void bm_smi_print_text_info(HANDLE bmctl_device, int start_dev, int last_
     char currclk_s[13];
     char tpuc_s[6];
     char tpu_util_s[6];
-    char board_type_s[10];
+    char board_type_s[11];
 
 #ifdef __linux__
     bm_smi_fetch_all(fd, last_dev - start_dev + 1, start_dev);

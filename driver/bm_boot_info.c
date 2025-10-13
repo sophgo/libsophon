@@ -370,6 +370,7 @@ int bmdrv_check_bootinfo(struct bm_device_info *bmdi)
 			}
 			break;
 		case BOARD_TYPE_SC7_PLUS:
+		case BOARD_TYPE_SC7_HP75_1:
 			if (bmdi->boot_info.board_power_sensor_exist != 1 ||
 				bmdi->boot_info.fan_exist != 0 ||
 				bmdi->boot_info.max_board_power != 75 ||
@@ -506,6 +507,7 @@ static int bmdrv_set_1684x_default_boot_info(struct bm_device_info *bmdi)
 	}else if(board_type == BOARD_TYPE_SC7_FP150){
 		bmdi->boot_info.max_board_power = 150;
 	} else if ((board_type == BOARD_TYPE_SC7_PLUS) ||
+		  (board_type == BOARD_TYPE_SC7_HP75_1) ||
 		  (board_type == BOARD_TYPE_AIV01X) ||
 		  (board_type == BOARD_TYPE_AIV02X) ||
 		  (board_type == BOARD_TYPE_AIV03X)){

@@ -53,8 +53,8 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     # post-install
     COMMAND echo "if [ ! -d \"/lib/firmware\" ]; then mkdir -p /lib/firmware; fi" > postinst
     COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/a53lite_pkg.bin /lib/firmware/bm1684x_firmware.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_ddr.bin_v3.1.2-3dfbe057-221128 /lib/firmware/bm1684_ddr_firmware.bin" >> postinst
-    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_tcm.bin_v3.1.2-3dfbe057-221128 /lib/firmware/bm1684_tcm_firmware.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_ddr.bin_v3.1.7-e74df266-250226 /lib/firmware/bm1684_ddr_firmware.bin" >> postinst
+    COMMAND echo "ln -s /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1684_tcm.bin_v3.1.7-e74df266-250226 /lib/firmware/bm1684_tcm_firmware.bin" >> postinst
     COMMAND echo >> postinst
 
     COMMAND echo "if [ -e \"/usr/share/misc/pci.ids\" ]; then" >> postinst

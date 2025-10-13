@@ -9,12 +9,15 @@
 #define VFS_MAX_LEVEL_SC7_PRO    19
 #define VFS_MAX_LEVEL_SC7_FP150    16
 #define VFS_MAX_LEVEL_SC7_PLUS   8
+#define VFS_MAX_LEVEL_CP24   9
 #define VFS_MAX_LEVEL_AIV02X   9
 #define VFS_INIT_LEVEL_SC7_PLUS   0
+#define VFS_INIT_LEVEL_CP24   0
 #define VFS_INIT_LEVEL_AIV02X   0
 #define VFS_INIT_LEVEL_SC7_PRO   0
 #define VFS_INIT_LEVEL_SC7_FP150   0
 #define VFS_RELBL_LEVEL_SC7_PLUS   4
+#define VFS_RELBL_LEVEL_CP24   1
 #define VFS_RELBL_LEVEL_AIV02X   5
 #define VFS_RELBL_LEVEL_SC7_PRO   5
 #define VFS_RELBL_LEVEL_SC7_FP150  5
@@ -197,6 +200,7 @@ int bmdrv_set_sc7_pro_tpu_volt_freq(struct bm_device_info *, u32, u32, enum bm_f
 int bmdrv_volt_freq_scaling_controller(struct bm_device_info *);
 int bmdrv_volt_freq_scaling(struct bm_device_info *);
 int bmdrv_get_tpu_target_freq(struct bm_device_info *bmdi, enum bm_freq_scaling_caller caller, int *target);
+int bmdrv_set_vfs_volt(struct bm_device_info *bmdi);
 #endif
 int bm_read_tmp451_local_temp_by_mcu(struct bm_device_info *bmdi, int *temp);
 int bm_read_tmp451_remote_temp_by_mcu(struct bm_device_info *bmdi, int *temp);
