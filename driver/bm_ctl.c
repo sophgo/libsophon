@@ -652,7 +652,7 @@ int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg)
 		}
 
 		if (bmdi->misc_info.chipid == 0x1684 || bmdi->misc_info.chipid == 0x1686) {
-			if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO ||
+			if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO &&
 				BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150) {
 				pr_info("to reboot chip, devid is %d\n", dev_id);
 				bmdrv_wdt_start(bmdi);

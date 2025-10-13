@@ -1,5 +1,6 @@
 #include <linux/ioctl.h>
 #include "bm_common.h"
+#include "bm1684/bm1684_base64.h"
 
 static unsigned long int base64_compute_dstlen(uint64_t len, bool enc)
 {

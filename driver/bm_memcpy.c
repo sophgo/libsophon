@@ -14,6 +14,8 @@
 #include "bm1684/bm1684_pcie.h"
 #include "bm1684/bm1684_card.h"
 
+int caculate_stage_index(int *bitmap, int *index);
+
 int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 {
 	int ret = 0;
@@ -101,7 +103,7 @@ int caculate_stage_index(int *bitmap, int *index)
 	return -1;
 }
 
-int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
+static int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 
 	if (dir == HOST2CHIP) {
@@ -119,7 +121,7 @@ int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) 
 	return 0;
 }
 
-int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
+static int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
 		void **pvaddr, MEMCPY_DIR dir, int *index)
 {
 
@@ -267,7 +269,7 @@ void bmdev_construct_cdma_arg(pbm_cdma_arg parg,
 	parg->use_iommu = use_iommu;
 }
 
-void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
+static void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
 		u64 user_start,
 		u64 user_size,
 		u32 is_dst,
@@ -502,7 +504,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 	return ret;
 }
 
-int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
+static int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u64 dst, u32 size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode)
 {
 	int ret = 0;
@@ -563,6 +565,7 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 	int i;
 	int size, trans_size;
 	int init_index;
+	void __iomem *cfg_base_addr;
 
 	ret = copy_from_user(&memcpy_param, (const struct bm_memcpy_p2p_param __user *)arg,
 			sizeof(memcpy_param));
@@ -573,8 +576,11 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 
 	init_index = bmdi->bmcd->card_bmdi[0]->dev_index;
 
-	chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
-	bar4_addr = chip_bmdi->cinfo.bar_info.bar4_start;
+	// chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
+	chip_bmdi = bmdi_array[memcpy_param.dst_num];
+	cfg_base_addr = chip_bmdi->cinfo.bar_info.bar0_vaddr;
+	bar4_addr = (REG_READ32(cfg_base_addr, 0x20) & ~0xf) | ((u64)(REG_READ32(cfg_base_addr, 0x24)) << 32);
+	// bar4_addr = chip_bmdi->cinfo.bar_info.bar4_start;
 	size = memcpy_param.size;
 
 	mutex_lock(&chip_bmdi->memcpy_info.p2p_mutex);
@@ -601,7 +607,7 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 	return ret;
 }
 
-int bmdev_memcpy_p2p_test(struct bm_device_info *bmdi_src, struct bm_device_info *bmdi_dst)
+static int bmdev_memcpy_p2p_test(struct bm_device_info *bmdi_src, struct bm_device_info *bmdi_dst)
 {
 	int size = 0x1000;
 	void *vaddr_src = NULL, *vaddr_dst = NULL;
@@ -658,7 +664,8 @@ int bmdev_test_p2p_available(struct bm_device_info *bmdi)
 	int chip_num;
 
 	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO &&
-		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150)
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150 &&
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_AIV02X)
 		return -1;
 
 	chip_num = bmdi->bmcd->chip_num;

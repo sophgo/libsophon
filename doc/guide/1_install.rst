@@ -168,13 +168,10 @@ x86_64机器对应的安装包名称为：
 
 .. parsed-literal::
 
-  sudo ln -s /opt/sophon/driver-\ |ver|\ /$bin /lib/firmware/bm1684x_firmware.bin
-  sudo ln -s /opt/sophon/driver-\ |ver|\ /$bin /lib/firmware/bm1684_ddr_firmware.bin
-  sudo ln -s /opt/sophon/driver-\ |ver|\ /$bin /lib/firmware/bm1684_tcm_firmware.bin
+  sudo ln -s /opt/sophon/driver-\ |ver|\ /a53lite_pkg.bin /lib/firmware/bm1684x_firmware.bin
+  sudo ln -s /opt/sophon/driver-\ |ver|\ /bm1684_ddr.bin* /lib/firmware/bm1684_ddr_firmware.bin
+  sudo ln -s /opt/sophon/driver-\ |ver|\ /bm1684_tcm.bin* /lib/firmware/bm1684_tcm_firmware.bin
   cd /opt/sophon/driver-\ |ver|
-
-
-此处“$bin”是bin文件全名, 对于bm1684x板卡，为a53lite_pkg.bin, 对于bm1684板卡，如bm1684_ddr.bin_v3.1.2-3dfbe057-221128和bm1684_tcm.bin_v3.1.2-3dfbe057-221128。
 
 之后就可以编译驱动了（这里不依赖于dkms）：
 

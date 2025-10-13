@@ -29,6 +29,7 @@
 
 #define DW_WDT_DEFAULT_SECONDS	2
 
+int bmdrv_wdt_start(struct bm_device_info *bmdi);
 static inline int bmdrv_wdt_is_enabled(struct bm_device_info *bmdi)
 {
 	return wdt_reg_read(bmdi, WDOG_CONTROL_REG_OFFSET) &

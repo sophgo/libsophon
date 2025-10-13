@@ -117,7 +117,7 @@ exit:
     return skb;
 }
 
-int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
+static int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
     u32 value;
 
     value = (1 << 2);
@@ -125,7 +125,7 @@ int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
     return 0;
 }
 
-void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
+static void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
     struct eth_dev_info *eth = &bmdi->vir_eth;
 
     bm1684_clear_ethirq(bmdi);
@@ -169,13 +169,13 @@ static netdev_tx_t eth_ndo_start_xmit(struct sk_buff *   skb,
 
 #ifndef CENTOS_KERNEL_FIX
 	#if  LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
-void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
+static void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 	#else
 static void eth_ndo_tx_timeout(struct net_device *ndev)
 	#endif
 #else
 	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0) && CENTOS_KERNEL_FIX >= 240)
-void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
+static void eth_ndo_tx_timeout(struct net_device *ndev, unsigned int txqueue)
 	#else
 static void eth_ndo_tx_timeout(struct net_device *ndev)
 	#endif
@@ -346,7 +346,7 @@ exit:
     return ret;
 }
 
-int napi_handle_irq(struct eth_dev_info *info) {
+static int napi_handle_irq(struct eth_dev_info *info) {
     napi_schedule(&info->napi);
     return 0;
 }
@@ -445,21 +445,9 @@ static void host_queue_set_tail_veth(struct host_queue *q, u32 tail) {
 
 void bmdrv_clear_veth(struct bm_device_info *bmdi) {
     struct eth_dev_info *veth = &bmdi->vir_eth;
-    struct pt *pt = veth->ring_buffer;
 
     bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + 0x60, 0);
     eth_set_handshake(veth, 0);
-
-    // veth->ring_buffer
-    host_queue_set_head_veth(&pt->tx.hq, 0);
-    host_queue_set_tail_veth(&pt->tx.hq, 0);
-    pt->tx.lq.head = 0;
-    pt->tx.lq.tail = 0;
-
-    host_queue_set_head_veth(&pt->rx.hq, 0);
-    host_queue_set_tail_veth(&pt->rx.hq, 0);
-    pt->rx.lq.head = 0;
-    pt->rx.lq.tail = 0;
 }
 
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {

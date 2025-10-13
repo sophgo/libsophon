@@ -29,6 +29,7 @@
 #include "bm_napi.h"
 #include "bm_pt.h"
 #include "efuse.h"
+#include "bm1684_reg.h"
 #endif
 
 extern dev_t bm_devno_base;
@@ -749,10 +750,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_thread_sync_api(bmdi, file);
 			bmdi->status_sync_api = ret;
-			if(bmdi->api_process_status != 0){
-				ret = -EBUSY;
-				bmdi->api_process_status = 0;
-			}
+			// if(bmdi->api_process_status != 0){
+			// 	ret = -EBUSY;
+			// 	bmdi->api_process_status = 0;
+			// }
 		} else {
 			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
 			ret = -EBUSY;
@@ -886,6 +887,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
+				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				if (bmdi->bmcd->sc5p_mcu_bmdi != NULL && bmdi->bmcd != NULL)
 					ctx.uart.bmdi= bmdi->bmcd->sc5p_mcu_bmdi;
@@ -961,6 +963,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
+				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 				pr_err("bmsophon %d, sc5p not support mcu sheck sum\n", bmdi->dev_index);
 				return -ENOSYS;
@@ -1594,6 +1597,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_BASE64_CODEC:
 		{
 			struct ce_base test_base;
+			u32 timeout_ms = bmdi->cinfo.delay_ms;
+			u32 lock_timeout = timeout_ms * 1000;
 
 			switch (bmdi->cinfo.chip_id) {
 			case 0x1682:
@@ -1607,10 +1612,22 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					pr_err("s2d failed\n");
 					return -EFAULT;
 				}
+
+				while (top_reg_read(bmdi, TOP_SPACC_TPU_LOCK)) {
+					udelay(1);
+					if (--lock_timeout == 0) {
+						pr_err("SPACC resource wait timeout\n");
+						return -EFAULT;
+					}
+				}
+
 				mutex_lock(&bmdi->spaccdrvctx.spacc_mutex);
 				base64_prepare(bmdi, test_base);
 				base64_start(bmdi);
 				mutex_unlock(&bmdi->spaccdrvctx.spacc_mutex);
+
+				top_reg_write(bmdi, TOP_SPACC_TPU_LOCK, 0);
+
 				if (ret)
 					return -EFAULT;
 				break;

@@ -80,8 +80,17 @@ static jpudrv_register_info_t bm_jpu_en_apb_clk_1684x[] = {
 	{JPU_TOP_CLK_EN_REG2, CLK_EN_APB_VD1_JPEG0_GEN_REG2},
 };
 
-
-
+/* Structure for parsing JPU core status updates */
+typedef struct {
+    int core_id;            // Processing core identifier
+    int instance_id;        // Associated instance ID
+    int state;              // Current operation state
+    int width;              // Frame width
+    int height;             // Frame height
+    long long timestamp;    // Event timestamp
+    int decode_err;         // Decoding error code
+    int encode_err;         // Encoding error code
+} JPUCoreStatus;
 
 static unsigned int get_max_num_jpu_core(struct bm_device_info *bmdi) {
 	if(bmdi->cinfo.chip_id == 0x1686) {
@@ -388,6 +397,16 @@ long bm_jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 		dprintk("[jpudrv]:JDI_IOCTL_RESET_ALL\n");
 		break;
 	}
+
+	case JDI_IOCTL_GET_CARD: {
+		u32 card_index;
+		card_index = bmdi->bmcd->card_index;
+		ret = copy_to_user((u32 __user *)arg, &card_index, sizeof(card_index));
+		if (ret != 0)
+			ret = -EFAULT;
+		break;
+	}
+
 	default:
 		pr_err("[jpudrv]:No such ioctl, cmd is %d\n", cmd);
 		ret = -EFAULT;
@@ -651,85 +670,181 @@ int bmdrv_jpu_exit(struct bm_device_info *bmdi)
 static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 {
 	int len = 0, err = 0, i = 0;
-	char data[512] = { 0 };
+	char *outputBuf = vmalloc(1024 * sizeof(char));
+	int bytesWritten = 0, coreIndex = 0;
 	struct bm_device_info *bmdi;
 	jpu_statistic_info_t *jpu_usage_info = NULL;
 
 	bmdi = PDE_DATA(file_inode(file));
 	jpu_usage_info = &bmdi->jpudrvctx.s_jpu_usage_info;
 
-	len = strlen(data);
-	sprintf(data + len, "\njpu ctl reg base addr:0x%x\n", JPU_CONTROL_REG);
-	len = strlen(data);
+	len = strlen(outputBuf);
+	sprintf(outputBuf + len, "\njpu ctl reg base addr:0x%x\n", JPU_CONTROL_REG);
+	len = strlen(outputBuf);
 	for (i = 0; i < get_max_num_jpu_core(bmdi); i++) {
-		sprintf(data + len, "\njpu core[%d] base addr:0x%x, size: 0x%x\n",
+		sprintf(outputBuf + len, "\njpu core[%d] base addr:0x%x, size: 0x%x\n",
 				i, jpu_reg_base[i], JPU_REG_SIZE);
-		len = strlen(data);
+		len = strlen(outputBuf);
 	}
 
-	len = strlen(data);
-	sprintf(data + len, "\"core\" : [\n");
-	for (i = 0; i < get_max_num_jpu_core(bmdi) - 1; i++) {
-		len = strlen(data);
-		sprintf(data + len, "{\"id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}, ", i, jpu_usage_info->jpu_open_status[i], \
-                jpu_usage_info->jpu_core_usage[i], jpu_usage_info->jpu_working_time_in_ms[i]*100/jpu_usage_info->jpu_total_time_in_ms[i]);
-	}
-	len = strlen(data);
-	sprintf(data + len, "{\"id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}]\n", i, jpu_usage_info->jpu_open_status[i], \
-			jpu_usage_info->jpu_core_usage[i], jpu_usage_info->jpu_working_time_in_ms[i]*100/jpu_usage_info->jpu_total_time_in_ms[i]);
+    // Generate per-core status reports
+	for (coreIndex = 0; coreIndex < get_max_num_jpu_core(bmdi); coreIndex++) {
+        bytesWritten = strlen(outputBuf);
 
-	len = strlen(data);
-	if (*ppos >= len)
-		return 0;
-	err = copy_to_user(buf, data, len);
-	if (err)
-		return 0;
-	*ppos = len;
+        // Add core utilization information
+        sprintf(outputBuf + bytesWritten,
+               "{\"core id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}, \n",
+               coreIndex,
+               jpu_usage_info->jpu_open_status[coreIndex],
+               jpu_usage_info->jpu_core_usage[coreIndex],
+               jpu_usage_info->jpu_working_time_in_ms[coreIndex] * 100 /
+               jpu_usage_info->jpu_total_time_in_ms[coreIndex]);
 
-	return len;
+        // Add detailed instance information
+        bytesWritten = strlen(outputBuf);
+        if ((err = mutex_lock_interruptible(&s_jpu_proc_lock)) == 0) {
+            sprintf(outputBuf + bytesWritten,
+                   "{\"instance\":%d, \"status\":%d, \"res\":\"%d*%d\", "
+                   "\"decoded\":%llu, \"dec_errors\":%llu, \"last_dec_err\":%d, "
+                   "\"encoded\":%llu, \"enc_errors\":%llu, \"last_enc_err\":%d, "
+                   "\"fps\":%d}, \n",
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].instance_id,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].state,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].width,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].height,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].total_decoded,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].decode_errors,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].last_decode_err,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].total_encoded,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].encode_errors,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].last_encode_err,
+                   bmdi->jpudrvctx.s_jpu_inst_info[coreIndex].fps);
+            mutex_unlock(&s_jpu_proc_lock);
+        }
+    }
+
+    bytesWritten = strlen(outputBuf) + 1;
+    if (size < bytesWritten) {
+        printk("read buffer too small\n");
+        return -EIO;
+    }
+
+    if (*ppos >= bytesWritten) return 0;
+
+    err = copy_to_user(buf, outputBuf, bytesWritten);
+    if (err) return 0;
+
+    *ppos = bytesWritten;
+	vfree(outputBuf);
+    return bytesWritten;
+}
+
+
+/**
+ * Parses JPU core status information from formatted string data
+ * @param data Input string containing status information
+ * @param status Output structure to store parsed values
+ * @return 0 on success, negative error code on failure
+ */
+static int parse_jpu_core_status(const char *data, JPUCoreStatus *status) {
+    char *token, *dataCopy;
+    char *originalCopy;
+
+    dataCopy = kstrdup(data, GFP_KERNEL);
+    if (!dataCopy) {
+        return -ENOMEM;
+    }
+
+    originalCopy = dataCopy;
+    memset(status, 0, sizeof(JPUCoreStatus));
+
+    // Parse key-value pairs separated by commas
+    while ((token = strsep(&dataCopy, ",")) != NULL) {
+        if (sscanf(token, " core_idx:%d", &status->core_id) == 1) continue;
+        if (sscanf(token, " inst_idx:%d", &status->instance_id) == 1) continue;
+        if (sscanf(token, " status:%d", &status->state) == 1) continue;
+        if (sscanf(token, " width:%d", &status->width) == 1) continue;
+        if (sscanf(token, " height:%d", &status->height) == 1) continue;
+        if (sscanf(token, " time:%lld", &status->timestamp) == 1) continue;
+        if (sscanf(token, " dec_err_code:%d", &status->decode_err) == 1) continue;
+        if (sscanf(token, " enc_err_code:%d", &status->encode_err) == 1) continue;
+    }
+
+    kfree(originalCopy);
+    return 0;
 }
 
 static ssize_t info_write(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
 {
-	int err = 0, i = 0;
-	char data[256] = { 0 };
-	unsigned long val = 0, addr = 0;
+	int err = 0, coreId = 0;
+	char *inputBuf = vmalloc(1024 * sizeof(char));
+	JPUCoreStatus statusUpdate;
 	struct bm_device_info *bmdi;
 
 	bmdi = PDE_DATA(file_inode(file));
 
-	err = copy_from_user(data, buf, size);
+	err = copy_from_user(inputBuf, buf, size);
 	if (err)
 		return -EFAULT;
 
-	err = kstrtoul(data, 16, &val);
-	if (err < 0)
-		return -EFAULT;
-	if (val == 1)
-		dbg_enable = 1;
-	else if (val == 0)
-		dbg_enable = 0;
-	else
-		addr = val;
+	inputBuf[size] = '\0';
 
-	if (val == 0 || val == 1)
-		return size;
+	// Parse received status update
+	if (parse_jpu_core_status(inputBuf, &statusUpdate) < 0) {
+		printk(KERN_ERR "Failed to parse JPU status\n");
+	}
 
-	if (addr == JPU_CONTROL_REG)
-		goto valid_address;
+	if ((err = mutex_lock_interruptible(&s_jpu_proc_lock)) == 0) {
+		coreId = statusUpdate.core_id;
 
-	for (i = 0; i < get_max_num_jpu_core(bmdi); i++)
-		if (addr >= jpu_reg_base[i] &&
-				(addr <= jpu_reg_base[i] + JPU_REG_SIZE))
-			goto valid_address;
+		// Update instance information
+		bmdi->jpudrvctx.s_jpu_inst_info[coreId].instance_id = statusUpdate.instance_id;
+		bmdi->jpudrvctx.s_jpu_inst_info[coreId].state = statusUpdate.state;
+		bmdi->jpudrvctx.s_jpu_inst_info[coreId].width = statusUpdate.width;
+		bmdi->jpudrvctx.s_jpu_inst_info[coreId].height = statusUpdate.height;
+		bmdi->jpudrvctx.s_jpu_inst_info[coreId].timestamp = statusUpdate.timestamp;
 
-	pr_err("jpu proc get addres: 0x%lx invalid\n", addr);
-	return -EFAULT;
+		// Handle decoding errors
+		if (statusUpdate.decode_err != 0) {
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].decode_errors++;
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].last_decode_err = statusUpdate.decode_err;
+		}
 
-valid_address:
-	val = bm_read32(bmdi, addr);
-	pr_info("jpu get address :0x%lx value: 0x%lx\n", addr, val);
-	return size;
+		// Handle encoding errors
+		if (statusUpdate.encode_err != 0) {
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].encode_errors++;
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].last_encode_err = statusUpdate.encode_err;
+		}
+
+		// Update frame counters based on state
+		if (bmdi->jpudrvctx.s_jpu_inst_info[coreId].state == 1) {
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_decoded++;
+		} else if (bmdi->jpudrvctx.s_jpu_inst_info[coreId].state == 2) {
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_encoded++;
+		}
+
+		// Calculate FPS every second
+		if (bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_timestamp + 1000 <
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].timestamp) {
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_timestamp =
+				bmdi->jpudrvctx.s_jpu_inst_info[coreId].timestamp;
+
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].fps =
+				(bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_decoded -
+				bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_decoded) +
+				(bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_encoded -
+				bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_encoded);
+
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_decoded =
+				bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_decoded;
+			bmdi->jpudrvctx.s_jpu_inst_info[coreId].prev_encoded =
+				bmdi->jpudrvctx.s_jpu_inst_info[coreId].total_encoded;
+		}
+
+		mutex_unlock(&s_jpu_proc_lock);
+	}
+	vfree(inputBuf);
+    return size;
 }
 
 const struct BM_PROC_FILE_OPS  bmdrv_jpu_file_ops = {

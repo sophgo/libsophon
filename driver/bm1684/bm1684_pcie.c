@@ -7,7 +7,7 @@
 #include "bm_common.h"
 #include "bm_card.h"
 
-int bm1684_get_pcie_func_index(struct bm_device_info *bmdi)
+static int bm1684_get_pcie_func_index(struct bm_device_info *bmdi)
 {
 	void __iomem *atu_base_addr;
 	int mode = 0x0;
@@ -608,7 +608,7 @@ int bm1684_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE typ
 	return -1;
 }
 
-int bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
+static int bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	void __iomem *atu_base_addr;
 	void __iomem *cfg_base_addr;
@@ -731,7 +731,7 @@ int bmdrv_pcie_get_mode(struct bm_device_info *bmdi)
 	return mode;
 }
 
-void bmdrv_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
+static void bmdrv_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	void __iomem *atu_base_addr;
 	int value = 0x0;
@@ -847,7 +847,7 @@ void bmdrv_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm_device
 
 }
 
-void bmdrv_pcie_set_function2_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
+static void bmdrv_pcie_set_function2_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	void __iomem *atu_base_addr;
 	int function_num = 0x0;
@@ -939,7 +939,7 @@ void bmdrv_pcie_set_function2_iatu_config(struct pci_dev *pdev, struct bm_device
 
 }
 
-void bmdrv_pcie_set_function3_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
+static void bmdrv_pcie_set_function3_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	void __iomem *atu_base_addr;
 	int function_num = 0x0;
@@ -1031,7 +1031,7 @@ void bmdrv_pcie_set_function3_iatu_config(struct pci_dev *pdev, struct bm_device
 	REG_WRITE32(atu_base_addr, 0x1804, 0x80000000); //address match
 }
 
-int bmdrv_calculate_chip_num(int mode, int function_num)
+static int bmdrv_calculate_chip_num(int mode, int function_num)
 {
 	int chip_seqnum = 0;
 
@@ -1068,7 +1068,7 @@ int bmdrv_calculate_chip_num(int mode, int function_num)
 	return chip_seqnum;
 }
 
-void bmdrv_set_chip_num(int chip_seqnum, struct bm_device_info *bmdi)
+static void bmdrv_set_chip_num(int chip_seqnum, struct bm_device_info *bmdi)
 {
 	void __iomem *abp_addr;
 	int temp_value = 0x0;
@@ -1080,7 +1080,7 @@ void bmdrv_set_chip_num(int chip_seqnum, struct bm_device_info *bmdi)
 	REG_WRITE32(abp_addr, 0, temp_value);
 }
 
-void bmdrv_pcie_perst(struct bm_device_info *bmdi)
+static void bmdrv_pcie_perst(struct bm_device_info *bmdi)
 {
 	int value = 0;
 
@@ -1095,7 +1095,7 @@ void bmdrv_pcie_perst(struct bm_device_info *bmdi)
 	mdelay(300);
 }
 
-int bmdrv_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info *bari)
+static int bmdrv_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	int loop = 200;
 	int ret = 0;
@@ -1119,7 +1119,7 @@ int bmdrv_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info *bari)
 	return ret;
 }
 
-int bmdrv_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_info *bari)
+static int bmdrv_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	int loop = 200;
 	int ret = 0;
@@ -1141,7 +1141,7 @@ int bmdrv_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_info *bar
 	return ret;
 }
 
-void bmdrv_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen_speed)
+static void bmdrv_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen_speed)
 {
 	int value = 0;
 
@@ -1173,7 +1173,7 @@ void bmdrv_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen_speed)
 	REG_READ32(bari->bar0_vaddr + REG_OFFSET_PCIE_iATU, 0xb14);      //dst addr
 }
 
-void bmdrv_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
+static void bmdrv_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
 {
 	int value = 0;
 
@@ -1189,12 +1189,12 @@ void bmdrv_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
 	REG_READ32(bari->bar0_vaddr + REG_OFFSET_PCIE_iATU, 0xb14);      //dst addr
 }
 
-void bmdrv_pcie_enable_rc(struct bm_bar_info *bari)
+static void bmdrv_pcie_enable_rc(struct bm_bar_info *bari)
 {
 	REG_WRITE32(bari->bar0_vaddr + REG_OFFSET_PCIE_APB, 0x258,  REG_READ32(bari->bar0_vaddr + REG_OFFSET_PCIE_APB, 0x258) | 0x1); //enable rc LTSSM
 }
 
-int bmdrv_pcie_polling_rc_link_state(struct bm_bar_info *bari)
+static int bmdrv_pcie_polling_rc_link_state(struct bm_bar_info *bari)
 {
 	int value = 0x0;
 	int count = 0x20;
@@ -1222,7 +1222,7 @@ int bmdrv_pcie_polling_rc_link_state(struct bm_bar_info *bari)
 	return ret;
 }
 
-int try_to_link_as_gen1_speed(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
+static int try_to_link_as_gen1_speed(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
 {
 	int ret = 0;
 
@@ -1240,7 +1240,7 @@ int try_to_link_as_gen1_speed(struct pci_dev *pdev, struct bm_device_info *bmdi,
 	return ret;
 }
 
-int bmdrv_pcie_rc_init(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
+static int bmdrv_pcie_rc_init(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
 {
 	int count = 0x5;
 	int ret = 0;
@@ -1342,12 +1342,12 @@ int config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_info *bmdi
 	return ret;
 }
 
-u32 bmdrv_read_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
+static u32 bmdrv_read_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
 {
 	return bm_read32(bmdi, cfg_base_addr + offset);
 }
 
-void bmdrv_write_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset, u32 value, u32 mask)
+static void bmdrv_write_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset, u32 value, u32 mask)
 {
 	u32 val = 0;
 	val = bmdrv_read_config(bmdi, cfg_base_addr, offset);
@@ -1355,16 +1355,16 @@ void bmdrv_write_config(struct bm_device_info *bmdi, int cfg_base_addr, int offs
 	bm_write32(bmdi, cfg_base_addr + offset, val);
 }
 
-void bmdrv_pci_busmaster_memory_enable(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
+static void bmdrv_pci_busmaster_memory_enable(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
 {
 	bmdrv_write_config(bmdi, cfg_base_addr, 0x4,0x7,0x7);
 }
 
-void bmdrv_pci_msi_enable(struct bm_device_info *bmdi, int cfg_base_addr)
+static void bmdrv_pci_msi_enable(struct bm_device_info *bmdi, int cfg_base_addr)
 {
 	bmdrv_write_config(bmdi, cfg_base_addr, 0x50,0x1 << 16,0x1<<16);
 }
-void bmdrv_pci_max_payload_setting(struct bm_device_info *bmdi, int cfg_base_addr)
+static void bmdrv_pci_max_payload_setting(struct bm_device_info *bmdi, int cfg_base_addr)
 {
 	bmdrv_write_config(bmdi, cfg_base_addr, 0x78, 0x1 << 5,(0x7 << 5));
 }

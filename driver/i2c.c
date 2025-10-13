@@ -158,6 +158,7 @@ void bmdrv_power_and_temp_i2c_init(struct bm_device_info  *bmdi)
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X) ||
+		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||
 		(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS)) {
 		i2c_addr = 0x4c;
 		rx_level = 0;
@@ -188,7 +189,7 @@ int bm_i2c_set_target_addr(struct bm_device_info *bmdi, u32 i2c_index, u32 targe
 	return 0;
 }
 
-void bm_i2c_recovery(struct bm_device_info *bmdi, u32 i2c_index)
+static void bm_i2c_recovery(struct bm_device_info *bmdi, u32 i2c_index)
 {
 	u32 i2c_addr = 0;
 	u32 tx_level = 0;
@@ -590,7 +591,7 @@ int bm_mcu_read_reg(struct bm_device_info *bmdi, u8 cmd, u8 *data)
 	return ret;
 }
 
-int bm_mcu_send_u32(struct bm_device_info *bmdi, u8 cmd, u32 data)
+static int bm_mcu_send_u32(struct bm_device_info *bmdi, u8 cmd, u32 data)
 {
 	u8 buf[4];
 	int ret = 0;

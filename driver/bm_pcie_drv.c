@@ -60,6 +60,11 @@ typedef struct bm_api_reset_cpu {
 } __attribute__((packed)) bm_api_reset_cpu_t;
 #endif
 
+void bmdrv_modules_request_irq(struct bm_device_info *bmdi);
+void bmdrv_modules_free_irq(struct bm_device_info *bmdi);
+
+int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
+
 static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *cinfo)
 {
 	int rc;
@@ -495,6 +500,7 @@ retry1:
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 			(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
@@ -659,7 +665,7 @@ static u32 bmdrv_get_a53_boot_args(struct bm_device_info *bmdi)
 	return flag;
 }
 
-int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
+static int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	int                  ret = 0;
 	u32                  flag  = 0xabcdabcd;
 	int                  retry = 3;
@@ -742,7 +748,7 @@ int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi) {
 	return ret;
 }
 
-int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
+static int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
 	int                  ret = 0;
 	u32                  flag  = 0xabcdabcd;
 	int                  retry = 3;
@@ -782,7 +788,7 @@ int bmdrv_force_reset_bmcpu_pcie(struct bm_device_info *bmdi) {
 	return ret;
 }
 
-void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
+static void bmdrv_fw_unload_mix(struct bm_device_info *bmdi)
 {
 	// u32 ctrl_word;
 	int value = 0x0;
@@ -926,7 +932,7 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 }
 #endif
 
-void bmdrv_init_devid_array(void)
+static void bmdrv_init_devid_array(void)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -940,7 +946,7 @@ void bmdrv_init_devid_array(void)
 	}
 }
 
-int bmdrv_check_domain_bdf(int domain_bdf)
+static int bmdrv_check_domain_bdf(int domain_bdf)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -955,7 +961,7 @@ int bmdrv_check_domain_bdf(int domain_bdf)
 	return -1;
 }
 
-void bmdrv_dump_pcie_record(void)
+static void bmdrv_dump_pcie_record(void)
 {
 	int i = 0;
 	struct bm_pcie_record *p = bm_record;
@@ -968,7 +974,7 @@ void bmdrv_dump_pcie_record(void)
 	}
 }
 
-int bmdrv_alloc_dev_index(struct pci_dev *pdev)
+static int bmdrv_alloc_dev_index(struct pci_dev *pdev)
 {
 	int dev_index = 0;
 	int i = 0;
@@ -1054,7 +1060,7 @@ static int bmdrv_convert_and_check_bl2_version(struct bm_device_info *bmdi, u32 
 	strncpy(tmp_string, bmdi->cinfo.version.bl2_version,4);
 	versionStart = strstr(tmp_string, "v");
 
-	if (tmp_string != NULL){
+	if (tmp_string[0] == 'v'){
 		versionStart++;
 		if (sscanf(versionStart, "%u.%u",
 			  &bmdi->cinfo.version.bl2_major_version, &bmdi->cinfo.version.bl2_minor_version) != 2) {
@@ -1084,12 +1090,6 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE);
 	if(ret)
 		return -EBUSY;
-
-	bmdi->cinfo.version.need_update = bmdrv_convert_and_check_bl2_version(bmdi,2,8);
-	if (bmdi->cinfo.chip_id == 0x1686) {
-		pr_info("bl2_version = %s, need_update = %d\n",
-			bmdi->cinfo.version.bl2_version, bmdi->cinfo.version.need_update);
-	}
 
 	return ret;
 }
@@ -1122,6 +1122,7 @@ static void bmdrv_driver_status_update(struct bm_device_info *bmdi, int status)
 extern int sg_comm_init(struct pci_dev *pdev, struct bm_device_info *bmdi);
 extern void sg_comm_deinit(struct bm_device_info *bmdi);
 
+struct bm_device_info *bmdi_array[64];
 static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rc = 0x0;
@@ -1149,12 +1150,16 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	cinfo = &bmdi->cinfo;
 	bmdi->dev_index = dev_index;
+	bmdi_array[dev_index] = bmdi;
 
 	bmdrv_cinfo_init(bmdi, pdev);
 
 	rc = bmdrv_pci_init(bmdi, pdev);
 	if (rc)
 		return rc;
+
+	/* set 1 to gp24 as driver start probe, bl2 stop update data */
+	bmdrv_driver_status_update(bmdi,START_PROBE);
 
 	bmdrv_modules_reset(bmdi);
 
@@ -1249,10 +1254,13 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		goto err_card_init;
 
-	if (bmdi->cinfo.version.need_update == 0){
-		/* set 1 to gp24 as driver probe done, bl2 stop update data */
-		bmdrv_driver_status_update(bmdi,PROBE_DONE);
+#ifndef SOC_MODE
+	if (bmdi->bmcd->running_chip_num == bmdi->bmcd->chip_num){
+		rc = bmdrv_set_vfs_volt(bmdi);
+		if (rc)
+			dev_err(&pdev->dev,"not supprt board type for vfs\n");
 	}
+#endif
 
 	dev_info(cinfo->device, "Card %d(type:%s) probe done\n", bmdi->dev_index,
 			cinfo->chip_type);
@@ -1294,10 +1302,6 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	dev_info(cinfo->device, "remove\n");
 	i2c2_deinit(bmdi);
 	bm_monitor_thread_deinit(bmdi);
-	if (bmdi->cinfo.version.need_update == 0){
-		/* set 0 to gp24 as driver not probe, bl2 start update data */
-		bmdrv_driver_status_update(bmdi,NOT_PROBE);
-	}
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686) {
 		if ((bmdi->misc_info.a53_enable == 1)
@@ -1347,6 +1351,9 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	bmdrv_hardware_deinit(bmdi);
 
 	bmdrv_software_deinit(bmdi);
+
+	/* set 0 to gp24 as driver not probe, bl2 start update data */
+	// bmdrv_driver_status_update(bmdi,NOT_PROBE);
 
 	bmdrv_pci_deinit(bmdi, pdev);
 
@@ -1413,7 +1420,7 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 
 	dev_info(bmdi->cinfo.device, "shutdown\n");
 	/* set 0 to gp24 as driver not probe, bl2 start update data */
-	bmdrv_driver_status_update(bmdi,NOT_PROBE);
+	// bmdrv_driver_status_update(bmdi,NOT_PROBE);
 	///TODO:
 
 }

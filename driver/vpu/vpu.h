@@ -57,6 +57,7 @@
 #define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
 #define VDI_IOCTL_SET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 36)
 #define VDI_IOCTL_GET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 37)
+#define VDI_IOCTL_GET_CARD_ID                    _IO(VDI_IOCTL_MAGIC, 38)
 typedef struct vpudrv_syscxt_info_s {
 	unsigned int core_idx;
 	unsigned int inst_idx;
@@ -197,6 +198,29 @@ typedef struct vpudrv_reset_flag_node_t {
     struct list_head list;
 } vpudrv_reset_flag_node_t;
 
+typedef struct vpu_inst_info
+{
+        int core_idx;
+        int inst_idx;
+        int channel;
+        int width;
+        int height;
+        int fps;
+        int curfps;
+        unsigned long long inframenums;
+        unsigned long long outframenums;
+        unsigned long long outframenumsold;
+        unsigned long long outframefailnums;
+        long long time;
+        long long timeold;
+        unsigned char url[256];
+        int status;
+        // int flag;
+        int pid;
+} vpu_inst_info_t;
+
+
+
 typedef struct vpu_drv_context {
 	struct fasync_struct *async_queue;
 	struct mutex s_vpu_lock;
@@ -224,7 +248,7 @@ typedef struct vpu_drv_context {
 	vpudrv_buffer_t s_common_memory[MAX_NUM_VPU_CORE];
 	vpudrv_buffer_t s_vpu_register[MAX_NUM_VPU_CORE];
 	vpu_reset_ctrl vpu_rst_ctrl;
-    vpu_statistic_info_t s_vpu_usage_info;
+	vpu_statistic_info_t s_vpu_usage_info;
 	vpu_bit_firmware_info_t s_bit_firmware_info[MAX_NUM_VPU_CORE];
 
 	// must allocate them
@@ -241,6 +265,8 @@ typedef struct vpu_drv_context {
 	struct list_head s_core_idx_head;
 	int reset_vpu_core_disable[MAX_NUM_VPU_CORE];
 	int reset_core_flag[MAX_NUM_VPU_CORE];
+
+	vpu_inst_info_t s_vpu_inst_info[MAX_NUM_VPU_CORE * MAX_NUM_INSTANCE_VPU];
 } vpu_drv_context_t;
 
 //#define DUMP_FLAG_MEM_SIZE_VPU (MAX_NUM_VPU_CORE*MAX_NUM_INSTANCE_VPU*sizeof(unsigned int)*5 + MAX_NUM_VPU_CORE*2*sizeof(unsigned int)_)

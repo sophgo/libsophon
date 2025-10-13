@@ -3,6 +3,7 @@
 #include "bm1684_reg.h"
 #include "bm1684_card.h"
 
+void bmdrv_smbus_set_default_value(struct pci_dev *pdev, struct bm_device_info *bmdi);
 void bmdrv_smbus_set_default_value(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	u32 value = 0;

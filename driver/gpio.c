@@ -16,7 +16,7 @@
 #define GPIO_INT_STAUS		 0x040
 #define GPIO_PORTA_EOI		 0x04c
 
-void bmdrv_gpio_irq(struct bm_device_info *bmdi)
+static void bmdrv_gpio_irq(struct bm_device_info *bmdi)
 {
 	int reg_val;
 

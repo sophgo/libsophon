@@ -26,6 +26,7 @@
 #define JDI_IOCTL_READ_VMEM                      _IO(JDI_IOCTL_MAGIC, 17)
 #define JDI_IOCTL_GET_MAX_NUM_JPU_CORE           _IO(JDI_IOCTL_MAGIC, 19)
 #define JDI_IOCTL_RESET_ALL                      _IO(JDI_IOCTL_MAGIC, 20)
+#define JDI_IOCTL_GET_CARD                       _IO(JDI_IOCTL_MAGIC, 21)
 
 #define MAX_NUM_BOARD    128
 #define MAX_NUM_JPU_CORE 4
@@ -121,6 +122,25 @@ typedef struct jpu_statistic_info {
 	int jpu_instant_interval;
 }jpu_statistic_info_t;
 
+/* Structure representing JPU instance statistics */
+typedef struct jpu_instance_stats {
+    int instance_id;         // Instance identifier
+    int state;               // Current state (1: decoding, 2: encoding)
+    int width;               // Frame width
+    int height;              // Frame height
+    int fps;                 // Calculated frames per second
+    unsigned long long total_decoded;    // Total decoded frames
+    unsigned long long prev_decoded;     // Previous decoded frame count
+    unsigned long long decode_errors;    // Total decoding errors
+    int last_decode_err;     // Last decoding error code
+    unsigned long long total_encoded;    // Total encoded frames
+    unsigned long long prev_encoded;     // Previous encoded frame count
+    unsigned long long encode_errors;    // Total encoding errors
+    int last_encode_err;     // Last encoding error code
+    long long timestamp;     // Current timestamp
+    long long prev_timestamp;// Previous timestamp for FPS calculation
+} jpu_inst_info_t;
+
 typedef struct jpu_drv_context {
 	struct semaphore jpu_sem;
 	struct mutex jpu_mem_lock;
@@ -137,6 +157,7 @@ typedef struct jpu_drv_context {
 	jpudrv_buffer_t jpu_register[MAX_NUM_JPU_CORE];
 	wait_queue_head_t interrupt_wait_q[MAX_NUM_JPU_CORE];
 	jpu_statistic_info_t s_jpu_usage_info;
+	jpu_inst_info_t s_jpu_inst_info[MAX_NUM_JPU_CORE];
 } jpu_drv_context_t;
 
 extern const struct BM_PROC_FILE_OPS bmdrv_jpu_file_ops;

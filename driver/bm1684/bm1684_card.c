@@ -50,6 +50,7 @@ int bm1684_card_get_chip_index(struct bm_device_info *bmdi)
 		else
 			bmdi->cinfo.chip_index = 0x0;
 	} else if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
+		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||
 		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV01X) ||
 		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV02X) ||
 		   (BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_AIV03X)) {
@@ -150,7 +151,7 @@ static void bm1684_init_i2c_for_mcu(struct bm_device_info *bmdi)
 	bmdrv_i2c_init(bmdi, i2c_index, rx_level, tx_level, target_addr);
 }
 
-int bm1684_correct_hw_version(struct bm_device_info *bmdi, u8 hw_version)
+static int bm1684_correct_hw_version(struct bm_device_info *bmdi, u8 hw_version)
 {
 	static u8 chip0_hw_version = 0;
 
@@ -278,13 +279,16 @@ int bm1684_get_board_type_by_id(struct bm_device_info *bmdi, char *s_board_type,
 		strncpy(s_board_type, "SC7-FP150", 10);
 		break;
 	case BOARD_TYPE_SC7_PLUS:
-		strncpy(s_board_type, "SC7+", 10);
+		strncpy(s_board_type, "SC7-HP75", 10);
+		break;
+	case BOARD_TYPE_SC7_HP75_1:
+		strncpy(s_board_type, "SC7-HP75-1", 11);
 		break;
 	case BOARD_TYPE_AIV03X:
 		strncpy(s_board_type, "AIV03X", 10);
 		break;
 	case BOARD_TYPE_AIV02X:
-		strncpy(s_board_type, "AIV02X", 10);
+		strncpy(s_board_type, "SC7-HP75-2", 11);
 		break;
 	case BOARD_TYPE_AIV01X:
 		strncpy(s_board_type, "AIV01X", 10);
@@ -397,6 +401,9 @@ int bm1684_get_board_version_by_id(struct bm_device_info *bmdi, char *s_board_ve
 		else
 			snprintf(s_board_version, 10, "V1_%d", board_version);
 		break;
+	case BOARD_TYPE_SC7_HP75_1:
+		strncpy(s_board_version, "V0_0",10);
+		break;
 	case BOARD_TYPE_AIV01X:
 		strncpy(s_board_version, "V0_0", 10);
 		break;
@@ -482,7 +489,7 @@ void bm1684_get_fusing_temperature(struct bm_device_info *bmdi, int *max_tmp, in
 #endif
 
 #ifndef SOC_MODE
-void bm1684_stop_smbus(struct bm_device_info *bmdi)
+static void bm1684_stop_smbus(struct bm_device_info *bmdi)
 {
 /* mask i2c2*/
 	int value = 0x0;

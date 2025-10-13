@@ -16,6 +16,8 @@
 #define SPI_INT_STS            0x028
 #define SPI_INT_EN             0x02c
 
+u32 bm_spi_read_id(struct bm_device_info *bmdi);
+
 static int spi_data_in_tran(struct bm_device_info *bmdi, u8 *dst_buf, u8 *cmd_buf,
 	int with_cmd, int addr_bytes, int data_bytes)
 {
