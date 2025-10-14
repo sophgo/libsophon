@@ -21,6 +21,8 @@ else ifeq ($(PRODUCTFORM),pcie_mips64) # pcie mode
     CROSS_CC_PREFIX = mips-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64) # pcie mode
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis) # pcie mode
+    CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64) # pcie mode
@@ -82,7 +84,13 @@ ifeq ($(PRODUCTFORM), pcie_loongarch64)
     LDLIBS += -lstdc++
 endif
 
+ifeq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+    LDFLAGS += -Wl,-melf64loongarch
+    LDLIBS += -lstdc++
+endif
+
 ifeq ($(PRODUCTFORM), pcie_sw64)
+    CFLAGS += --sysroot=$(CMAKE_SYSROOT)
     LDLIBS += -lstdc++
 endif
 

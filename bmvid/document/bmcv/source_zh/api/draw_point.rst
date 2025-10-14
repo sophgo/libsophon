@@ -13,14 +13,14 @@ bmcv_image_draw_point
     .. code-block:: c
 
         bm_status_t bmcv_image_draw_point(
-                bm_handle_t   handle,
-                bm_image      image,
-                int           point_num,
-                bmcv_point_t *coord,
-                int           length,
-                unsigned char r,
-                unsigned char g,
-                unsigned char b)
+                    bm_handle_t handle,
+                    bm_image image,
+                    int point_num,
+                    bmcv_point_t* coord,
+                    int length,
+                    unsigned char r,
+                    unsigned char g,
+                    unsigned char b);
 
 
 **传入参数说明:**
@@ -62,11 +62,10 @@ bmcv_image_draw_point
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **数据类型说明：**
-
 
     .. code-block:: c
 
@@ -118,3 +117,63 @@ bmcv_image_draw_point
 4. 所有输入point对象区域必须在图像以内。
 
 5. 当输入是FORMAT_YUV420P、FORMAT_NV12、FORMAT_NV21时，length必须为偶数。
+
+
+**代码示例：**
+
+    .. code-block:: c
+
+        #include "bmcv_api_ext.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bmcv_point_t rect = {100, 100};
+            int length = 10;
+            bm_image img;
+            bm_handle_t handle;
+            unsigned char* data_ptr = new unsigned char[channel * width * height];
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+
+            bm_dev_request(&handle, dev_id);
+            readBin(input_path, data_ptr, channel * width * height);
+
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &img);
+            bm_image_alloc_dev_mem(img);
+            bm_image_copy_host_to_device(img, (void**)&data_ptr);
+            bmcv_image_draw_point(handle, img, 1, &rect, length, 255, 255, 255);
+            bm_image_copy_device_to_host(img, (void**)&data_ptr);
+            writeBin(output_path, data_ptr, channel * width * height);
+
+            bm_image_destroy(img);
+            bm_dev_free(handle);
+            delete[] data_ptr;
+            return 0;
+        }

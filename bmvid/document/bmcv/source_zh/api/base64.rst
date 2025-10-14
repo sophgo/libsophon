@@ -3,6 +3,7 @@ bmcv_base64_enc(dec)
 
 base64 网络传输中常用的编码方式，利用64个常用字符来对6位二进制数编码。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -13,14 +14,14 @@ base64 网络传输中常用的编码方式，利用64个常用字符来对6位�
     .. code-block:: c
 
         bm_status_t bmcv_base64_enc(bm_handle_t handle,
-                bm_device_mem_t src,
-                bm_device_mem_t dst,
-                unsigned long len[2])
+                    bm_device_mem_t src,
+                    bm_device_mem_t dst,
+                    unsigned long len[2]);
 
         bm_status_t bmcv_base64_dec(bm_handle_t handle,
-                bm_device_mem_t src,
-                bm_device_mem_t dst,
-                unsigned long len[2])
+                    bm_device_mem_t src,
+                    bm_device_mem_t dst,
+                    unsigned long len[2]);
 
 
 **参数说明:**
@@ -49,41 +50,55 @@ base64 网络传输中常用的编码方式，利用64个常用字符来对6位�
 * 其他: 失败
 
 
-
 **代码示例：**
 
     .. code-block:: c
 
-        int original_len[2];
-        int encoded_len[2];
-        int original_len[0] = (rand() % 134217728) + 1;
-        int encoded_len[0] = (original_len + 2) / 3 * 4;
-        char *src = (char *)malloc((original_len + 3) * sizeof(char));
-        char *dst = (char *)malloc((encoded_len + 3) * sizeof(char));
-        for (j = 0; j < original_len; j++)
-            src[j] = (char)((rand() % 100) + 1);
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <assert.h>
+        #include <math.h>
+        #include "bmcv_api_ext.h"
 
-        bm_handle_t handle;
-        ret = bm_dev_request(&handle, 0);
-        if (ret != BM_SUCCESS) {
-            printf("Create bm handle failed. ret = %d\n", ret);
-            exit(-1);
+        static void test_base64_enc(int len, char *src, char *dst)
+        {
+            bm_handle_t handle;
+            unsigned long lenth[2];
+
+            lenth[0] = (unsigned long)len;
+            bm_dev_request(&handle, 0);
+            bmcv_base64_enc(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
+            bm_dev_free(handle);
         }
-        bmcv_base64_enc(
-            handle,
-            bm_mem_from_system(src),
-            bm_mem_from_system(dst),
-            original_len);
 
-        bmcv_base64_dec(
-            handle,
-            bm_mem_from_system(dst),
-            bm_mem_from_system(src),
-            original_len);
+        static void test_base64_dec(int len, char *src, char *dst)
+        {
+            bm_handle_t handle;
+            unsigned long lenth[2];
 
-        bm_dev_free(handle);
-        free(src);
-        free(dst);
+            lenth[0] = (unsigned long)len;
+            bm_dev_request(&handle, 0);
+            bmcv_base64_dec(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
+            bm_dev_free(handle);
+        }
+        int main()
+        {
+            int original_len = (rand() % 134217728) + 1;
+            int encoded_len = (original_len + 2) / 3 * 4;
+            char* a = (char *)malloc((original_len + 3) * sizeof(char));
+            char* b = (char *)malloc((encoded_len + 3) * sizeof(char));
+            for (int j = 0; j < original_len; j++) {
+                a[j] = (char)((rand() % 100) + 1);
+            }
+
+            test_base64_enc(original_len, a, b);
+            test_base64_dec(encoded_len, b, a);
+
+            free(a);
+            free(b);
+            return 0;
+        }
 
 
 **注意事项：**

@@ -3,6 +3,7 @@ bmcv_image_gaussian_blur
 
 该接口用于对图像进行高斯滤波。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -12,14 +13,14 @@ bmcv_image_gaussian_blur
 
     .. code-block:: c
 
-         bm_status_t bmcv_image_gaussian_blur(
-                 bm_handle_t handle,
-                 bm_image input,
-                 bm_image output,
-                 int kw,
-                 int kh,
-                 float sigmaX,
-                 float sigmaY = 0);
+        bm_status_t bmcv_image_gaussian_blur(
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output,
+                    int kw,
+                    int kh,
+                    float sigmaX,
+                    float sigmaY = 0);
 
 
 **参数说明：**
@@ -57,7 +58,7 @@ bmcv_image_gaussian_blur
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **格式支持：**
@@ -104,51 +105,63 @@ bmcv_image_gaussian_blur
 
     .. code-block:: c
 
+        #include <stdio.h>
+        #include "bmcv_api_ext.h"
+        #include "stdlib.h"
+        #include "string.h"
+        #include <assert.h>
+        #include <float.h>
+        #include <math.h>
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src_data = src_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * width * height; i++) {
-            src_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bm_image input, output;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &input);
-        bm_image_alloc_dev_mem(input);
-        bm_image_copy_host_to_device(input, (void **)&src_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_gaussian_blur(handle, input, output, 3, 3, 0.1)) {
-            std::cout << "bmcv gaussian blur error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bm_handle_t handle;
+            bm_image input, output;
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+            unsigned char* src_data = new unsigned char[channel * width * height];
+            unsigned char* res_data = new unsigned char[channel * width * height];
+
+            readBin(input_path, src_data, channel * width * height);
+            bm_dev_request(&handle, dev_id);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_copy_host_to_device(input, (void**)&src_data);
+            bm_image_create(handle, height,width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &output);
+            bm_image_alloc_dev_mem(output);
+            bmcv_image_gaussian_blur(handle, input, output, 3, 3, 0.1);
+            bm_image_copy_device_to_host(output, (void**)&res_data);
+            writeBin(output_path, res_data, channel * width * height);
+
             bm_image_destroy(input);
             bm_image_destroy(output);
+            free(src_data);
+            free(res_data);
             bm_dev_free(handle);
-            exit(-1);
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
-
-

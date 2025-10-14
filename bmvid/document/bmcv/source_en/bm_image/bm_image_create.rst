@@ -1,7 +1,7 @@
 bm_image_create
 ===============
 
-We do not recommend that users directly fill bm_image structure, but create/destroy bm_image structure through the following API:
+We do not recommend that users directly fill bm_image structure, but create bm_image structure through the following API:
 
 **Interface form:**
 
@@ -11,10 +11,10 @@ We do not recommend that users directly fill bm_image structure, but create/dest
            bm_handle_t handle,
            int img_h,
            int img_w,
-           bmcv_image_format_ext image_format,
-           bmcv_data_format_ext data_type,
+           bm_image_format_ext image_format,
+           bm_image_data_format_ext data_type,
            bm_image *image,
-           int* stride);
+           int* stride=nullptr);
 
 **Description of incoming parameters:**
 

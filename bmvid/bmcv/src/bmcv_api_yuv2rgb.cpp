@@ -2,6 +2,7 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_common_bm1684.h"
 #include "bmcv_internal.h"
+#include "bm1684/bmcv_1684_vpp_internal.h"
 #include "bm1684x/bmcv_1684x_vpp_ext.h"
 #include <stdio.h>
 
@@ -226,7 +227,8 @@ bm_status_t bmcv_image_yuv2bgr_ext_(bm_handle_t  handle,
         for (int i = 0; i < image_num; i++)
         {
             #ifdef __linux__
-            if (bmcv_image_vpp_convert(handle, 1, input[i], output + i, &rect) != BM_SUCCESS)
+            if (bm1684_vpp_convert_internal(handle, 1, input[i], output + i,
+                    &rect, BMCV_INTER_LINEAR, NULL, BMLIB_LOG_INFO) != BM_SUCCESS)
             {
                 bmlib_log("BMCV", BMLIB_LOG_INFO, "can't use vpp, go through tpu path\n");
                 success = false;

@@ -609,6 +609,7 @@ typedef struct bm_api_cv_add_weighted {
   int input1_str[3];
   int input2_str[3];
   int output_str[3];
+  int data_type;
   float alpha;
   float beta;
   float gamma;

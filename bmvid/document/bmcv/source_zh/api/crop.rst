@@ -14,12 +14,11 @@ bmcv_image_crop
     .. code-block:: c
 
         bm_status_t bmcv_image_crop(
-                bm_handle_t         handle,
-                int                 crop_num,
-                bmcv_rect_t*        rects,
-                bm_image            input,
-                bm_image*           output
-        );
+                    bm_handle_t handle,
+                    int crop_num,
+                    bmcv_rect_t* rects,
+                    bm_image input,
+                    bm_image* output);
 
 
 **参数说明：**
@@ -63,7 +62,6 @@ bmcv_image_crop
             int crop_w;
             int crop_h;
         } bmcv_rect_t;
-
 
 * start_x 描述了 crop 图像在原图中所在的起始横坐标。自左而右从 0 开始，取值范围 [0, width)。
 
@@ -123,63 +121,78 @@ bm1684x crop 目前支持以下data_type：
 3、为了避免内存越界, start_x + crop_w 必须小于等于输入图像的 width， start_y + crop_h 必须小于等于输入图像的 height。
 
 
-
 **代码示例：**
 
     .. code-block:: c
 
+        #include <cfloat>
+        #include <cstdio>
+        #include <cstdlib>
+        #include <iostream>
+        #include <math.h>
+        #include <string.h>
+        #include <vector>
+        #include "bmcv_api.h"
+        #include "test_misc.h"
 
-        int channel   = 3;
-        int in_w      = 400;
-        int in_h      = 400;
-        int out_w     = 800;
-        int out_h     = 800;
-        int    dev_id = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src_ptr(
-                new unsigned char[channel * in_w * in_h],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * out_w * out_h],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src_data = src_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * in_w * in_h; i++) {
-            src_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bmcv_rect_t crop_attr;
-        crop_attr.start_x   = 0;
-        crop_attr.start_y   = 0;
-        crop_attr.crop_w    = 50;
-        crop_attr.crop_h    = 50;
-        bm_image input, output;
-        bm_image_create(handle,
-                in_h,
-                in_w,
-                FORMAT_RGB_PLANAR,
-                DATA_TYPE_EXT_1N_BYTE,
-                &input);
-        bm_image_alloc_dev_mem(input);
-        bm_image_copy_host_to_device(input, (void **)&src_data);
-        bm_image_create(handle,
-                out_h,
-                out_w,
-                FORMAT_RGB_PLANAR,
-                DATA_TYPE_EXT_1N_BYTE,
-                &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_crop(handle, 1, &crop_attr, input, &output)) {
-            std::cout << "bmcv_copy_to error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 3;
+            int in_w = 1024;
+            int in_h = 1024;
+            int out_w = 64;
+            int out_h = 64;
+            int dev_id = 0;
+            bm_handle_t handle;
+            bmcv_rect_t crop_attr;
+            bm_image input, output;
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+            unsigned char* src_data = new unsigned char[channel * in_w * in_h];
+            unsigned char* res_data = new unsigned char[channel * out_w * out_h];
+
+            bm_dev_request(&handle, dev_id);
+            readBin(input_path, src_data, channel * in_w * in_h);
+
+            crop_attr.start_x = 0;
+            crop_attr.start_y = 0;
+            crop_attr.crop_w = 50;
+            crop_attr.crop_h = 50;
+
+            bm_image_create(handle, in_h, in_w, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_copy_host_to_device(input, (void **)&src_data);
+            bm_image_create(handle, out_h, out_w, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output);
+            bm_image_alloc_dev_mem(output);
+            bmcv_image_crop(handle, 1, &crop_attr, input, &output);
+            bm_image_copy_device_to_host(output, (void **)&res_data);
+            writeBin(output_path, res_data, channel * out_w * out_h);
+
             bm_image_destroy(input);
             bm_image_destroy(output);
             bm_dev_free(handle);
-            exit(-1);
+            delete[] src_data;
+            delete[] res_data;
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
-
-

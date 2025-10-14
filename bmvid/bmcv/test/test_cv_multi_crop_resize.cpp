@@ -699,7 +699,7 @@ vector<shared_ptr<Blob> > convert_crop_and_resize_native(
         resized_outputs.push_back(resized_output);
     }
     if((int)resized_outputs.size() != roi_num) {
-        std::cout << "Number of resized outputs doesn't match number of roi's." << std::endl;
+        printf("Number of resized outputs doesn't match number of roi's.\n");
         exit(-1);
     }
 
@@ -875,15 +875,16 @@ void single_test(bm_image_format_ext src_format,
                  int  roi_w,
                  int  dst_h,
                  int  dst_w) {
-    std::cout << "[BMKERNEL-MULTI_CROP_RESIZE] src_format: " << src_format << " dst_format: " <<
-             dst_format << " roi_num: " << roi_num << " src_h: " << src_h <<
-             " src_w: " << src_w << " roi_h: " << roi_h << " roi_w: " << roi_w <<
-             " dst_h: " << dst_h << " dst_w: " << dst_w << std::endl;
+    printf("[BMKERNEL-MULTI_CROP_RESIZE INFO]:\n");
+    printf("src_format %d, src_w %d, src_h %d\n", src_format, src_w, src_h);
+    printf("roi_num %d, roi_h %d, roi_w %d\n", roi_num, roi_h, roi_w);
+    printf("dst_format %d, dst_h %d, dst_w %d\n", dst_format, dst_h, dst_w);
+
 
     // rect check
     for(int i = 0; i < roi_num; i++) {
         if(start_x[i] >= src_w || start_y[i] >= src_h){
-            std::cout << "roi not valid!" << std::endl;
+            printf("roi not valid!\n");
             exit(-1);
         }
     }
@@ -907,7 +908,7 @@ void single_test(bm_image_format_ext src_format,
     else if(src_format == FORMAT_RGB_PLANAR) {
         src_format_input = gen_random_rgb_data(1, src_h, src_w);
     } else {
-        std::cout << "Src format not supported." << std::endl;
+        printf("Src format not supported.\n");
         exit(-1);
     }
 
@@ -966,7 +967,7 @@ void single_test(bm_image_format_ext src_format,
     gettimeofday_(&t2);
 
 
-    cout << "multi crop resize using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop << "us" << endl;
+    printf("multi crop resize using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop);
 
     if (ret != BM_SUCCESS) {
         printf("run bmkernel_multi_crop_resize failed ret = %d\n", ret);
@@ -1060,7 +1061,7 @@ int main() {
 
     bm_dev_free(handle);
 
-    std::cout << "------[TEST MULTI_CROP_AND_RESIZE WITH BMKERNEL] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST MULTI_CROP_AND_RESIZE WITH BMKERNEL] ALL TEST PASSED!------\n");
 
     return 0;
 }

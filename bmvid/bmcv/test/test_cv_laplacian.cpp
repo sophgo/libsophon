@@ -137,15 +137,15 @@ int main(int argc, char* argv[]) {
 
             unsigned int seed = tp.tv_nsec;
             srand(seed);
-            cout << "seed = " << seed << endl;
+            printf("seed = %d\n", seed);
             iw = 100 + rand() % 1900;
             ih = 100 + rand() % 2048;
         }
 
-        cout << "the "<< i << " loop " <<"---------------parameter-------------" << endl;
-        cout << "format: " << fmt << endl;
-        cout << "input size: " << iw << " * " << ih << endl;
-        cout << "ksize: " << ksize << endl;
+        printf("-------------the %d loop parameter-------------\n", i);
+        printf("format: %d\n", fmt);
+        printf("input size: %d * %d\n", iw, ih);
+        printf("kszie: %d\n", ksize);
 
 
         bm_image_data_format_ext data_type = DATA_TYPE_EXT_1N_BYTE;
@@ -174,11 +174,10 @@ int main(int argc, char* argv[]) {
         gettimeofday_(&t1);
         ret = bmcv_image_laplacian(handle, input, output, ksize);
         gettimeofday_(&t2);
-        cout << "image_laplacian using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec)  << "us" << endl;
-        cout <<endl;
+        printf("image_laplacian using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
         if (ret) {
-            cout << "test laplacian failed" << endl;
+            printf("test laplacian failed \n");
             bm_image_destroy(input);
             bm_image_destroy(output);
             bm_dev_free(handle);
@@ -187,9 +186,9 @@ int main(int argc, char* argv[]) {
             host_ptr[0] = *tpu_res_ptr.get();
             bm_image_copy_device_to_host(output, (void **)host_ptr);
             if (compare_result(*tpu_res_ptr.get(), *cpu_res_ptr.get(), iw*ih) ==0 ){
-                std::cout <<"the " << i <<" loop: "<<"equal" <<endl;
+                printf("the %d loop equal\n", i);
             } else {
-                std::cout <<"the " << i <<" loop: "<<"not equal" <<endl;
+                printf("the %d loop not equal\n", i);
             }
         }
 

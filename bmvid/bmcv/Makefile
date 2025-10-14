@@ -19,6 +19,13 @@ BMION_DIR ?= $(OUT_DIR)/decode
 USING_CMODEL ?= 0
 CHIP ?= bm1684
 
+USING_OPENBLAS ?= 0
+ifeq ($(PRODUCTFORM), pcie) # pcie mode
+    USING_OPENBLAS = 1
+else ifeq ($(PRODUCTFORM), soc)
+    USING_OPENBLAS = 1
+endif
+
 BMCV_SRC_DIR = $(BMVID_ROOT)/bmcv/
 
 ifneq ($(PRODUCTFORM), soc)
@@ -41,6 +48,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_COMPILE = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
     CROSS_COMPILE = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+    CROSS_COMPILE = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
     CROSS_COMPILE =
 else # pcie_arm64 and soc mode
@@ -75,12 +84,19 @@ CXXFLAGS += -mips64r2 -mabi=64 -march=gs464e -D_GLIBCXX_USE_CXX11_ABI=0
 else ifeq ($(PRODUCTFORM), pcie_loongarch64)
 CFLAGS +=
 CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation
-else ifeq ($(PRODUCTFORM), pcie_sw64)
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
 CFLAGS +=
-CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation --machine=sw6b
+CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation
+else ifeq ($(PRODUCTFORM), pcie_sw64)
+CFLAGS += --sysroot=$(CMAKE_SYSROOT)
+CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation --machine=sw6b --sysroot=$(CMAKE_SYSROOT)
 else  # pcie_x86
 CFLAGS +=
 CXXFLAGS +=
+endif
+
+ifeq ($(USING_OPENBLAS),1)
+CXXFLAGS        += -DUSING_OPENBLAS
 endif
 
 LDFLAGS         += 	-pthread \
@@ -99,6 +115,9 @@ DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
 else ifeq ($(PRODUCTFORM),soc)
 LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
 DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else ifeq ($(PRODUCTFORM),pcie_loongarch64)
+LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
+DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
 else
     $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif
@@ -108,7 +127,7 @@ DYN_LDFLAGS     +=  -L$(JPU_DIR)/lib/ \
 					-L$(BMION_DIR)/lib \
 					-L$(OUT_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
-					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl -lvpp_cmodel
+					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl
 
 ifeq ($(DEBUG),1)
 CFLAGS          += -g -DDEBUG
@@ -184,7 +203,7 @@ else ifeq ($(PRODUCTFORM), pcie_arm64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/libturbojpeg.a
 else ifeq ($(PRODUCTFORM), pcie_mips64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/mips/libturbojpeg.a
-else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+else ifneq (,$(filter $(PRODUCTFORM), pcie_loongarch64 pcie_loongarch64_anolis))
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/libturbojpeg.a
 else ifeq ($(PRODUCTFORM), pcie_sw64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/libturbojpeg.a
@@ -233,7 +252,7 @@ $(BMCV_STATIC): $(BMCV_CXX_OBJS)
 	@echo ar $(BMCV_STATIC)
 	@mkdir -p $(OUT_DIR)/bmcv/lib
 	@$(AR) x $(BMVPP_INSTALL)
-	@$(AR) rcs $(BMCV_STATIC) $(BMCV_CXX_OBJS)
+	@$(AR) rcs $(BMCV_STATIC) $(BMCV_CXX_OBJS) && rm -r *.o
 
 $(BMCV_DYN): $(BMCV_CXX_OBJS)
 	@echo cc $(BMCV_DYN)
@@ -297,6 +316,8 @@ ifeq ($(PRODUCTFORM), pcie)
 	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/x86/* $(OUT_DIR)/bmcv/lib/
 else ifeq ($(PRODUCTFORM), soc)
 	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/arm/* $(OUT_DIR)/bmcv/lib/
+else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch/* $(OUT_DIR)/bmcv/lib/
 else
 	$(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif

@@ -9,21 +9,22 @@ This interface is used to fill one or more points on an image。
 This interface only supports BM1684X.
 
 
-**接口形式：**
+**Interface form:**
+
     .. code-block:: c
 
         bm_status_t bmcv_image_draw_point(
-                bm_handle_t   handle,
-                bm_image      image,
-                int           point_num,
-                bmcv_point_t *coord,
-                int           length,
-                unsigned char r,
-                unsigned char g,
-                unsigned char b)
+                    bm_handle_t handle,
+                    bm_image image,
+                    int point_num,
+                    bmcv_point_t* coord,
+                    int length,
+                    unsigned char r,
+                    unsigned char g,
+                    unsigned char b);
 
 
-**传入参数说明:**
+**Parameter Description:**
 
 * bm_handle_t handle
 
@@ -75,13 +76,12 @@ This interface only supports BM1684X.
             int y;
         } bmcv_point_t;
 
-
 * x describes the starting abscissa of the point in the original image. Starting from 0 from left to right, the value range is [0, width).
 
 * y describes the starting ordinate of the point in the original image. Starting from 0 from top to bottom, the value range is [0, height).
 
 
-**注意事项:**
+**Note:**
 
 1. bm1684x supports the following formats of bm_image:
 
@@ -118,3 +118,63 @@ If the input/output format requirements are not met, a failure will be returned.
 4. All input point object areas must be within the image.
 
 5. When the input is FORMAT_YUV420P, FORMAT_NV12, FORMAT_NV21, length must be an even number.
+
+
+**Code example:**
+
+    .. code-block:: c
+
+        #include "bmcv_api_ext.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bmcv_point_t rect = {100, 100};
+            int length = 10;
+            bm_image img;
+            bm_handle_t handle;
+            unsigned char* data_ptr = new unsigned char[channel * width * height];
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+
+            bm_dev_request(&handle, dev_id);
+            readBin(input_path, data_ptr, channel * width * height);
+
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &img);
+            bm_image_alloc_dev_mem(img);
+            bm_image_copy_host_to_device(img, (void**)&data_ptr);
+            bmcv_image_draw_point(handle, img, 1, &rect, length, 255, 255, 255);
+            bm_image_copy_device_to_host(img, (void**)&data_ptr);
+            writeBin(output_path, data_ptr, channel * width * height);
+
+            bm_image_destroy(img);
+            bm_dev_free(handle);
+            delete[] data_ptr;
+            return 0;
+        }

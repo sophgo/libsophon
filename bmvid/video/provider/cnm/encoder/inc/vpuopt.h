@@ -44,9 +44,11 @@
 #define MAX_INST_HANDLE_SIZE            48              /* DO NOT CHANGE THIS VALUE */
 #define MAX_NUM_INSTANCE                32
 #ifdef PRO_VERSION
-# define LIMITED_INSTANCE_NUM           24              /* pro version */
+//# define LIMITED_INSTANCE_NUM           24              /* pro version */
+# define LIMITED_INSTANCE_NUM           32              /* pro version */
+
 #else
-# define LIMITED_INSTANCE_NUM           18              /* lite version */
+# define LIMITED_INSTANCE_NUM           32              /* lite version */
 #endif
 
 #if defined(BM_PCIE_MODE)

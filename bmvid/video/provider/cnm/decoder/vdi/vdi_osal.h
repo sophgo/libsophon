@@ -32,7 +32,23 @@
 
 #include "vputypes.h"
 
-enum {NONE=0, ERR, WARN, INFO, TRACE, MAX_LOG_LEVEL};
+typedef enum
+{
+    ERR     = 0,
+    WARN    = 1,
+    INFO    = 2,
+    DEBUG   = 3,
+    LOG     = 4,
+    TRACE   = 5,
+    MAX_LOG_LEVEL
+} VpuDecLogLevel;
+
+typedef void (*VpuDecLoggingFunc)(VpuDecLogLevel log_level, char const *file, int const line,
+                                    char const *fn, const char *format, ...);
+
+extern VpuDecLogLevel dec_cur_log_level_threshold;
+extern VpuDecLoggingFunc dec_cur_logging_fn;
+
 enum
 {
     LOG_HAS_DAY_NAME   =    1, /**< Include day name [default: no]           */
@@ -65,7 +81,7 @@ enum {
 #define LOG_TAG "VPUAPI"
 #endif
 
-#define VLOG LogMsg
+#define VLOG(level, ...) do{ if (level <= dec_cur_log_level_threshold) { dec_cur_logging_fn(level, __FILE__, __LINE__, __func__, __VA_ARGS__); } } while(0)
 
 #define LOG_ENABLE_FILE    SetLogDecor(GetLogDecor()|LOG_HAS_FILE);
 
@@ -102,6 +118,9 @@ typedef void* osal_cond_t;
 #if defined (__cplusplus)
 extern "C" {
 #endif
+
+    void SetLoggingFunc(VpuDecLoggingFunc logging_fn);
+    VpuDecLogLevel GetLoggingFunc(void);
 
     int InitLog(void);
     void DeInitLog(void);

@@ -1352,7 +1352,34 @@ RetCode Wave5VpuDecode(CodecInst* instance, DecParam* option)
     default:
         return RETCODE_INVALID_PARAM;
     }
+#ifdef _WIN32
+    vpu_dec_start_buffer_t buf;
+    buf.write_W5_BS_RD_PTR       = pDecInfo->streamRdPtr;
+    buf.write_W5_BS_WR_PTR       = pDecInfo->streamWrPtr;
 
+    if (pDecInfo->streamEndflag == 1)
+        bsOption = 3;   // (streamEndFlag<<1) | EXPLICIT_END
+    if (pOpenParam->bitstreamMode == BS_MODE_PIC_END || pDecInfo->rdPtrValidFlag == TRUE)
+        rdptr_valid = 1;
+    buf.write_W5_BS_OPTION       = (rdptr_valid<<31) | bsOption;
+
+    pDecInfo->rdPtrValidFlag = FALSE;       // reset rdptrValidFlag.
+    /* Secondary AXI */
+    regVal = (pDecInfo->secAxiInfo.u.wave.useBitEnable<<0)    |
+             (pDecInfo->secAxiInfo.u.wave.useIpEnable<<9)     |
+             (pDecInfo->secAxiInfo.u.wave.useLfRowEnable<<15);
+    regVal |= (pDecInfo->secAxiInfo.u.wave.useSclEnable<<5);
+    buf.write_W5_USE_SEC_AXI           = regVal;
+    buf.write_W5_CMD_DEC_USER_MASK     = pDecInfo->userDataEnable;
+    buf.write_W5_CMD_DEC_TEMPORAL_ID_PLUS1      = pDecInfo->targetSubLayerId+1;
+    buf.write_W5_CMD_SEQ_CHANGE_ENABLE_FLAG     = pDecInfo->seqChangeMask;
+    buf.write_W5_CMD_DEC_FORCE_FB_LATENCY_PLUS1 = forceLatency+1;
+    buf.write_W5_COMMAND_OPTION        = modeOption;
+
+
+    vdi_dec_start_register(instance->coreIdx, &buf);
+
+#else
     VpuWriteReg(instance->coreIdx, W5_BS_RD_PTR,     pDecInfo->streamRdPtr);
     VpuWriteReg(instance->coreIdx, W5_BS_WR_PTR,     pDecInfo->streamWrPtr);
     if (pDecInfo->streamEndflag == 1)
@@ -1384,6 +1411,7 @@ RetCode Wave5VpuDecode(CodecInst* instance, DecParam* option)
 #endif
     VpuWriteReg(instance->coreIdx, W5_CMD_DEC_FORCE_FB_LATENCY_PLUS1, forceLatency+1);
     VpuWriteReg(instance->coreIdx, W5_COMMAND_OPTION, modeOption);
+#endif
 
     Wave5BitIssueCommand(instance, W5_DEC_PIC);
 
@@ -1485,6 +1513,246 @@ static RetCode GetDecResult(CodecInst* instance, DecOutputInfo* result)
         else
             return RETCODE_QUERY_FAILURE;
     }
+#ifdef _WIN32
+    vpu_dec_getresult_buffer_t buf;
+
+
+
+    vdi_dec_getresult_register(instance->coreIdx, &buf);
+
+    if (instance->loggingEnable)
+        vdi_log(instance->coreIdx, W5_DEC_PIC, 0);
+
+    // regVal = VpuReadReg(instance->coreIdx, W5_RET_QUEUE_STATUS);
+    regVal = buf.read_W5_RET_QUEUE_STATUS;
+
+    pDecInfo->instanceQueueCount = (regVal>>16)&0xff;
+    pDecInfo->totalQueueCount    = (regVal & 0xffff);
+
+
+    // result->decodingSuccess = VpuReadReg(instance->coreIdx, W5_RET_DEC_DECODING_SUCCESS);
+    result->decodingSuccess = buf.read_W5_RET_DEC_DECODING_SUCCESS;
+#ifdef SUPPORT_SW_UART
+#else
+    if (result->decodingSuccess == FALSE) {
+        // result->errorReason = VpuReadReg(instance->coreIdx, W5_RET_DEC_ERR_INFO);
+        result->errorReason = buf.read_W5_RET_DEC_ERR_INFO;
+    }
+    else {
+        // result->warnInfo = VpuReadReg(instance->coreIdx, W5_RET_DEC_WARN_INFO);
+        result->warnInfo = buf.read_W5_RET_DEC_WARN_INFO;
+    }
+#endif
+
+    result->decOutputExtData.userDataSize   = 0;
+    result->decOutputExtData.userDataNum    = 0;
+    result->decOutputExtData.userDataBufFull= 0;
+    // result->decOutputExtData.userDataHeader = VpuReadReg(instance->coreIdx, W5_RET_DEC_USERDATA_IDC);
+    result->decOutputExtData.userDataHeader = buf.read_W5_RET_DEC_USERDATA_IDC;
+    if (result->decOutputExtData.userDataHeader != 0) {
+        regVal = result->decOutputExtData.userDataHeader;
+        for (index=0; index<32; index++) {
+            if (index == 1) {
+                if (regVal & (1<<index))
+                    result->decOutputExtData.userDataBufFull = 1;
+            }
+            else {
+                if (regVal & (1<<index))
+                    result->decOutputExtData.userDataNum++;
+            }
+        }
+        result->decOutputExtData.userDataSize = pDecInfo->userDataBufSize;
+    }
+
+    // regVal = VpuReadReg(instance->coreIdx, W5_RET_DEC_PIC_TYPE);
+    regVal = buf.read_W5_RET_DEC_PIC_TYPE;
+    if (instance->codecMode == W_VP9_DEC) {
+        if      (regVal&0x01) result->picType = PIC_TYPE_I;
+        else if (regVal&0x02) result->picType = PIC_TYPE_P;
+        else if (regVal&0x04) result->picType = PIC_TYPE_REPEAT;
+        else                  result->picType = PIC_TYPE_MAX;
+    }
+    else if (instance->codecMode == W_HEVC_DEC) {
+        if      (regVal&0x04) result->picType = PIC_TYPE_B;
+        else if (regVal&0x02) result->picType = PIC_TYPE_P;
+        else if (regVal&0x01) result->picType = PIC_TYPE_I;
+        else                  result->picType = PIC_TYPE_MAX;
+    }
+    else if (instance->codecMode == W_AVC_DEC) {
+        if      (regVal&0x04) result->picType = PIC_TYPE_B;
+        else if (regVal&0x02) result->picType = PIC_TYPE_P;
+        else if (regVal&0x01) result->picType = PIC_TYPE_I;
+        else                  result->picType = PIC_TYPE_MAX;
+    }
+    else if (instance->codecMode == W_SVAC_DEC) {
+        if (regVal&0x01)      result->picType = PIC_TYPE_KEY;
+        else if(regVal&0x02)  result->picType = PIC_TYPE_INTER;
+        else                  result->picType = PIC_TYPE_MAX;
+    }
+    else {  // AVS2
+        switch(regVal&0x07) {
+        case 0: result->picType = PIC_TYPE_I;      break;
+        case 1: result->picType = PIC_TYPE_P;      break;
+        case 2: result->picType = PIC_TYPE_B;      break;
+        case 3: result->picType = PIC_TYPE_AVS2_F; break;
+        case 4: result->picType = PIC_TYPE_AVS2_S; break;
+        case 5: result->picType = PIC_TYPE_AVS2_G; break;
+        case 6: result->picType = PIC_TYPE_AVS2_GB;break;
+        default:
+             result->picType = PIC_TYPE_MAX; break;
+        }
+    }
+    result->outputFlag      = (regVal>>31)&0x1;
+    nalUnitType = (regVal & 0x3f0) >> 4;
+    if ((nalUnitType == 19 || nalUnitType == 20) && result->picType == PIC_TYPE_I) {
+        /* IDR_W_RADL, IDR_N_LP */
+        result->picType = PIC_TYPE_IDR;
+    }
+    result->nalType                   = nalUnitType;
+    result->ctuSize                   = 16<<((regVal>>10)&0x3);
+    // index                             = VpuReadReg(instance->coreIdx, W5_RET_DEC_DISPLAY_INDEX);
+    index                             = buf.read_W5_RET_DEC_DISPLAY_INDEX;
+    result->indexFrameDisplay         = index;
+    result->indexFrameDisplayForTiled = index;
+    // index                             = VpuReadReg(instance->coreIdx, W5_RET_DEC_DECODED_INDEX);
+    index                             = buf.read_W5_RET_DEC_DECODED_INDEX;
+    result->indexFrameDecoded         = index;
+    result->indexFrameDecodedForTiled = index;
+
+    if (instance->codecMode == W_HEVC_DEC) {
+        result->h265Info.decodedPOC = -1;
+        result->h265Info.displayPOC = -1;
+        if (result->indexFrameDecoded >= 0 || result->indexFrameDecoded  == DECODED_IDX_FLAG_SKIP)
+            // result->h265Info.decodedPOC = VpuReadReg(instance->coreIdx, W5_RET_DEC_PIC_POC);
+            result->h265Info.decodedPOC = buf.read_W5_RET_DEC_PIC_POC;
+        // result->h265Info.temporalId = VpuReadReg(instance->coreIdx, W5_RET_DEC_SUB_LAYER_INFO) & 0xff;
+        result->h265Info.temporalId = buf.read_W5_RET_DEC_SUB_LAYER_INFO & 0xff;
+    }
+    else if (instance->codecMode == W_SVAC_DEC) {
+        // regVal = VpuReadReg(instance->coreIdx, W5_RET_DEC_SUB_LAYER_INFO);
+        regVal = buf.read_W5_RET_DEC_SUB_LAYER_INFO;
+        result->svacInfo.temporalId     = regVal & 0xff;
+        result->svacInfo.maxTemporalId  = (regVal >>8) & 0xff;
+        result->svacInfo.spatialSvcFlag = (regVal >>16) & 0x1;
+        result->svacInfo.spatialSvcMode = (regVal >> 17) & 0x1;
+        result->svacInfo.spatialSvcLayer= (regVal >> 18) & 0x1;
+    }
+    else if (instance->codecMode == W_AVS2_DEC) {
+        result->avs2Info.decodedPOI = -1;
+        result->avs2Info.displayPOI = -1;
+        if (result->indexFrameDecoded >= 0)
+            // result->avs2Info.decodedPOI = VpuReadReg(instance->coreIdx, W5_RET_DEC_PIC_POC);
+            result->avs2Info.decodedPOI = buf.read_W5_RET_DEC_PIC_POC;
+
+        // result->avs2Info.temporalId = VpuReadReg(instance->coreIdx, W5_RET_DEC_SUB_LAYER_INFO) & 0xff;
+        result->avs2Info.temporalId = buf.read_W5_RET_DEC_SUB_LAYER_INFO & 0xff;
+    }
+    else if (instance->codecMode == W_AVC_DEC) {
+        // need to implement
+    }
+
+    // result->sequenceChanged   = VpuReadReg(instance->coreIdx, W5_RET_DEC_NOTIFICATION);
+    result->sequenceChanged   = buf.read_W5_RET_DEC_NOTIFICATION;
+
+    /*
+     * If current picture is the last of the current sequence and sequence-change flag is not 0, then
+     * the width and height of the current picture is set to the width and height of the current sequence.
+     */
+    if (result->sequenceChanged == 0) {
+        // regVal = VpuReadReg(instance->coreIdx, W5_RET_DEC_PIC_SIZE);
+        regVal = buf.read_W5_RET_DEC_PIC_SIZE;
+        result->decPicWidth   = regVal>>16;
+        result->decPicHeight  = regVal&0xffff;
+    }
+    else {
+        if (result->indexFrameDecoded < 0) {
+            result->decPicWidth   = 0;
+            result->decPicHeight  = 0;
+        }
+        else {
+            result->decPicWidth   = pDecInfo->initialInfo.picWidth;
+            result->decPicHeight  = pDecInfo->initialInfo.picHeight;
+        }
+        if ( instance->codecMode == W_VP9_DEC ) {
+            if ( result->sequenceChanged & SEQ_CHANGE_INTER_RES_CHANGE) {
+                // regVal = VpuReadReg(instance->coreIdx, W5_RET_DEC_PIC_SIZE);
+                regVal = buf.read_W5_RET_DEC_PIC_SIZE;
+                result->decPicWidth   = regVal>>16;
+                result->decPicHeight  = regVal&0xffff;
+                // result->indexInterFrameDecoded = VpuReadReg(instance->coreIdx, W5_RET_DEC_REALLOC_INDEX);
+                result->indexInterFrameDecoded = buf.read_W5_RET_DEC_REALLOC_INDEX;
+            }
+        }
+        osal_memcpy((void*)&pDecInfo->newSeqInfo, (void*)&pDecInfo->initialInfo, sizeof(DecInitialInfo));
+        GetDecSequenceResult(instance, &pDecInfo->newSeqInfo);
+    }
+    // result->numOfErrMBs       = VpuReadReg(instance->coreIdx, W5_RET_DEC_ERR_CTB_NUM)>>16;
+    // result->numOfTotMBs       = VpuReadReg(instance->coreIdx, W5_RET_DEC_ERR_CTB_NUM)&0xffff;
+    // result->bytePosFrameStart = VpuReadReg(instance->coreIdx, W5_RET_DEC_AU_START_POS);
+    // result->bytePosFrameEnd   = VpuReadReg(instance->coreIdx, W5_RET_DEC_AU_END_POS);
+    result->numOfErrMBs       = buf.read_W5_RET_DEC_ERR_CTB_NUM>>16;
+    result->numOfTotMBs       = buf.read_W5_RET_DEC_ERR_CTB_NUM&0xffff;
+    result->bytePosFrameStart = buf.read_W5_RET_DEC_AU_START_POS;
+    result->bytePosFrameEnd   = buf.read_W5_RET_DEC_AU_END_POS;
+    result->bytePosFrameStart = VPU_MapToAddr40Bit(instance->coreIdx, result->bytePosFrameStart);
+    result->bytePosFrameEnd = VPU_MapToAddr40Bit(instance->coreIdx, result->bytePosFrameEnd);
+    pDecInfo->prevFrameEndPos = VPU_MapToAddr40Bit(instance->coreIdx, result->bytePosFrameEnd);
+
+    // regVal = VpuReadReg(instance->coreIdx, W5_RET_DEC_RECOVERY_POINT);
+    regVal = buf.read_W5_RET_DEC_RECOVERY_POINT;
+    result->h265RpSei.recoveryPocCnt = regVal & 0xFFFF;            // [15:0]
+    result->h265RpSei.exactMatchFlag = (regVal >> 16)&0x01;        // [16]
+    result->h265RpSei.brokenLinkFlag = (regVal >> 17)&0x01;        // [17]
+    result->h265RpSei.exist =  (regVal >> 18)&0x01;                // [18]
+    if(result->h265RpSei.exist == 0) {
+        result->h265RpSei.recoveryPocCnt = 0;
+        result->h265RpSei.exactMatchFlag = 0;
+        result->h265RpSei.brokenLinkFlag = 0;
+    }
+
+    // result->decHostCmdTick     = VpuReadReg(instance->coreIdx, W5_RET_DEC_HOST_CMD_TICK);
+    // result->decSeekStartTick   = VpuReadReg(instance->coreIdx, W5_RET_DEC_SEEK_START_TICK);
+    // result->decSeekEndTick     = VpuReadReg(instance->coreIdx, W5_RET_DEC_SEEK_END_TICK);
+    // result->decParseStartTick  = VpuReadReg(instance->coreIdx, W5_RET_DEC_PARSING_START_TICK);
+    // result->decParseEndTick    = VpuReadReg(instance->coreIdx, W5_RET_DEC_PARSING_END_TICK);
+    // result->decDecodeStartTick = VpuReadReg(instance->coreIdx, W5_RET_DEC_DECODING_START_TICK);
+    // result->decDecodeEndTick   = VpuReadReg(instance->coreIdx, W5_RET_DEC_DECODING_ENC_TICK);
+    result->decHostCmdTick     = buf.read_W5_RET_DEC_HOST_CMD_TICK;
+    result->decSeekStartTick   = buf.read_W5_RET_DEC_SEEK_START_TICK;
+    result->decSeekEndTick     = buf.read_W5_RET_DEC_SEEK_END_TICK;
+    result->decParseStartTick  = buf.read_W5_RET_DEC_PARSING_START_TICK;
+    result->decParseEndTick    = buf.read_W5_RET_DEC_PARSING_END_TICK;
+    result->decDecodeStartTick = buf.read_W5_RET_DEC_DECODING_START_TICK;
+    result->decDecodeEndTick   = buf.read_W5_RET_DEC_DECODING_ENC_TICK;
+
+    if ( pDecInfo->firstCycleCheck == FALSE ) {
+        result->frameCycle          = (result->decDecodeEndTick - result->decHostCmdTick)*pDecInfo->cyclePerTick;
+        pDecInfo->PrevDecodeEndTick = result->decDecodeEndTick;
+        pDecInfo->firstCycleCheck   = TRUE;
+    }
+    else {
+        if ( result->indexFrameDecodedForTiled != -1 ) {
+            result->frameCycle          = (result->decDecodeEndTick - pDecInfo->PrevDecodeEndTick)*pDecInfo->cyclePerTick;
+            pDecInfo->PrevDecodeEndTick = result->decDecodeEndTick;
+            if ( pDecInfo->PrevDecodeEndTick < result->decHostCmdTick)
+                result->frameCycle   = (result->decDecodeEndTick - result->decHostCmdTick);
+        }
+    }
+    result->seekCycle    = (result->decSeekEndTick   - result->decSeekStartTick)*pDecInfo->cyclePerTick;
+    result->parseCycle   = (result->decParseEndTick  - result->decParseStartTick)*pDecInfo->cyclePerTick;
+    result->DecodedCycle = (result->decDecodeEndTick - result->decDecodeStartTick)*pDecInfo->cyclePerTick;
+    // static unsigned int cycle_seek = 0;
+    // if (cycle_seek++ %1000 == 0) {
+    //     printf("decSeekEndTick=%ld  decSeekStartTick=%ld decParseEndTick=%ld decParseStartTick=%ld decDecodeEndTick=%ld decDecodeStartTick=%ld pDecInfo->cyclePerTick=%ld  \n", result->decSeekEndTick, result->decSeekStartTick, result->decParseEndTick, result->decParseStartTick, result->decDecodeEndTick, result->decDecodeStartTick, pDecInfo->cyclePerTick);
+    //     printf("seekCycle=%ld parseCycle=%ld DecodedCycle=%ld \n", result->seekCycle, result->parseCycle, result->DecodedCycle);
+    // }
+    if ( result->sequenceChanged  && (instance->codecMode != W_VP9_DEC)) {
+        pDecInfo->scaleWidth  = pDecInfo->newSeqInfo.picWidth;
+        pDecInfo->scaleHeight = pDecInfo->newSeqInfo.picHeight;
+    }
+
+
+#else  // linux
 
     if (instance->loggingEnable)
         vdi_log(instance->coreIdx, W5_DEC_PIC, 0);
@@ -1685,6 +1953,7 @@ static RetCode GetDecResult(CodecInst* instance, DecOutputInfo* result)
         pDecInfo->scaleWidth  = pDecInfo->newSeqInfo.picWidth;
         pDecInfo->scaleHeight = pDecInfo->newSeqInfo.picHeight;
     }
+#endif
 
     return RETCODE_SUCCESS;
 }
@@ -2318,7 +2587,7 @@ RetCode Wave5DecSetDispFlag(CodecInst* instance, Uint32 index)
     return ret;
 }
 
-Int32 Wave5VpuWaitInterrupt(CodecInst* instance, Int32 timeout, BOOL pending)
+Int32 Wave5VpuWaitInterrupt2(CodecInst* instance, Int32 timeout, BOOL pending)
 {
     Int32  reason = -1;
 #ifdef SUPPORT_MULTI_INST_INTR
@@ -2431,6 +2700,28 @@ Int32 Wave5VpuWaitInterrupt(CodecInst* instance, Int32 timeout, BOOL pending)
     }
     LeaveLock(instance->coreIdx);
 #endif
+
+    return reason;
+}
+
+Int32 Wave5VpuWaitInterrupt(CodecInst* instance, Int32 timeout, BOOL pending)
+{
+    Int32  reason = -1;
+
+    while (timeout > 0) {
+        if (timeout < 100) {
+            reason = Wave5VpuWaitInterrupt2(instance, timeout, pending);
+            if (reason > 0) {
+                break;
+            }
+        } else {
+            reason = Wave5VpuWaitInterrupt2(instance, 100, pending);
+            if (reason > 0) {
+                break;
+            }
+        }
+        timeout -= 100;
+    }
 
     return reason;
 }

@@ -366,7 +366,6 @@ static bm_status_t per_image_deal(bm_handle_t handle,
         param.m.m[i] = matrix.matrix->m[i];
     }
 
-
     bm_image_get_stride(input, &(param.src_w_stride));
     ret = bm_malloc_device_byte(handle, &tensor_S, index_size_temp * index_size_temp * image_c * 4);
     // ret = bm_malloc_device_byte(handle, &tensor_S, image_dh * image_dw * image_c * 4);

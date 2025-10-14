@@ -36,6 +36,9 @@ extern "C" {
 #define MOSAIC_SIZE 8
 #define VPPALIGN(x, mask)  (((x) + ((mask)-1)) & ~((mask)-1))
 
+#define BITMAP_1BIT 1
+#define BITMAP_8BIT 0
+
 typedef enum {
     DT_INT8   = (0 << 1) | 1,
     DT_UINT8  = (0 << 1) | 0,
@@ -512,6 +515,7 @@ struct bm_image_private {
     bool            attached       = false;
     bool            data_owned     = false;
     bool            default_stride = true;
+    bool            owned_mem      = false;
 #ifndef USING_CMODEL
     BmJpuJPEGDecoder *decoder      = NULL;
 #endif

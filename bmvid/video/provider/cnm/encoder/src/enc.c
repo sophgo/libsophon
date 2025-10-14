@@ -161,7 +161,7 @@ static int CheckEncRcParamValid(VpuEncOpenParam* pop);
 static int CheckEncCustomGopParamValid(VpuEncOpenParam* pop);
 
 static int InitCodecInstancePool(uint32_t coreIdx);
-static int GetCodecInstance(uint32_t coreIdx, EncHandle* ppInst);
+static int GetCodecInstance(uint32_t coreIdx, EncHandle* ppInst, VpuEncOpenParam* pop);
 static int FreeCodecInstance(EncHandle pInst);
 
 static int CheckEncInstanceValidity(EncHandle handle);
@@ -727,16 +727,16 @@ static int VpuHandlingInterruptFlag(EncHandle handle, int intrWaitTime)
 #ifdef __linux__
     startTime = vpu_gettime();
 #elif _WIN32
-	startTime = GetTickCount();
+    startTime = GetTickCount();
 #endif
     reason = Wave5VpuWaitInterrupt(handle, intrWaitTime);
     if (reason == -1) {
 #ifdef __linux__
         uint64_t currentTime = vpu_gettime();
 #elif _WIN32
-		uint64_t currentTime = GetTickCount();
+        uint64_t currentTime = GetTickCount();
 #endif
-		if ((currentTime - startTime) > VPU_ENC_TIMEOUT) { // TODO
+        if ((currentTime - startTime) > VPU_ENC_TIMEOUT) { // TODO
             VLOG(ERR, "Instance %d, startTime(%lld), currentTime(%lld), diff(%d)\n",
                  handle->instIndex,
                  startTime, currentTime, (uint32_t)(currentTime - startTime));
@@ -961,6 +961,7 @@ int vpu_EncGetOutputInfo(VpuEncoder* h, VpuEncOutputInfo* info)
         return ret;
     }
 
+    bm_vdi_vpuinfo_get_outputinfo(handle->coreIdx, handle->instIndex);
     if (info->bitstreamSize > 0 && info->encSrcIdx >= 0) {
         for (i=0; i<32; i++) {
             if (h->inputMap[i].idx == info->encSrcIdx) {
@@ -1232,15 +1233,18 @@ int vpu_EncWaitForInt(VpuEncoder* h, int timeout_in_ms)
 
     int status = VpuHandlingInterruptFlag(handle, timeout_in_ms);
     if (status == VPU_ENC_INTR_STATUS_NONE) {
+        bm_vdi_vpuinfo_get_failed(handle->coreIdx, handle->instIndex);
         VLOG(ERR, "Instance #%d: interrupt none\n", handle->instIndex);
         return VPU_RET_FAILURE;
     }
     if (status == VPU_ENC_INTR_STATUS_TIMEOUT) {
         VLOG(ERR, "Instance #%d: interrupt timeout\n", handle->instIndex);
+        bm_vdi_vpuinfo_get_failed(handle->coreIdx, handle->instIndex);
         return VPU_RET_FAILURE;
     }
     if (status != VPU_ENC_INTR_STATUS_DONE) {
         VLOG(ERR, "Instance #%d: Unknown interrupt status: %d\n", handle->instIndex, status);
+        bm_vdi_vpuinfo_get_failed(handle->coreIdx, handle->instIndex);
         return VPU_RET_FAILURE;
     }
 
@@ -1664,7 +1668,7 @@ static int enc_open(EncHandle* pHandle, VpuEncOpenParam* pop)
         return VPU_RET_NOT_INITIALIZED;
     }
 
-    ret = GetCodecInstance(pop->coreIdx, pHandle);
+    ret = GetCodecInstance(pop->coreIdx, pHandle, pop);
     if (ret != VPU_RET_SUCCESS) {
         *pHandle = 0;
         LeaveLock(pop->coreIdx);
@@ -1885,7 +1889,7 @@ static int enc_start_one_frame(EncHandle handle, VpuEncParam* param)
 #endif
 
     ret = Wave5VpuEncode(handle, param);
-
+    bm_vdi_vpuinfo_start_one_frame(handle->coreIdx, handle->instIndex);
     LeaveLock(handle->coreIdx);
 
     VLOG(DEBUG, "instance Index: %d. instance Queue Count: %d, total Queue Count: %d\n",
@@ -3129,7 +3133,7 @@ static int Wave5VpuReset(uint32_t coreIdx, SWResetMode resetMode)
     return ret;
 }
 
-static int Wave5VpuWaitInterrupt(EncHandle handle, int32_t timeout)
+static int Wave5VpuWaitInterrupt2(EncHandle handle, int32_t timeout)
 {
     int reason = -1;
 
@@ -3251,6 +3255,26 @@ static int Wave5VpuWaitInterrupt(EncHandle handle, int32_t timeout)
     LeaveLock(handle->coreIdx);
 #endif
 
+    return reason;
+}
+
+static int Wave5VpuWaitInterrupt(EncHandle handle, int32_t timeout)
+{
+    int reason = -1;
+    while (timeout > 0) {
+        if (timeout < 100) {
+            reason = Wave5VpuWaitInterrupt2(handle, timeout);
+            if (reason > 0) {
+                break;
+            }
+        } else {
+            reason = Wave5VpuWaitInterrupt2(handle, 100);
+            if (reason > 0) {
+                break;
+            }
+        }
+        timeout -= 100;
+    }
     return reason;
 }
 
@@ -4934,7 +4958,7 @@ static int InitCodecInstancePool(uint32_t coreIdx)
 /**
  * Obtains a instance and stores a pointer to the allocated instance in *pHandlel
  */
-static int GetCodecInstance(uint32_t coreIdx, EncHandle* pHandle)
+static int GetCodecInstance(uint32_t coreIdx, EncHandle* pHandle, VpuEncOpenParam* pop)
 {
     EncHandle handle = NULL;
     vpu_instance_pool_t* vip;
@@ -4979,7 +5003,7 @@ static int GetCodecInstance(uint32_t coreIdx, EncHandle* pHandle)
 
     *pHandle = handle;
 
-    ret = bm_vdi_open_instance(handle->coreIdx, handle->instIndex);
+    ret = bm_vdi_open_instance(handle->coreIdx, handle->instIndex, pop->picWidth, pop->picHeight, pop->frameRateInfo);
     if (ret < 0) {
         VLOG(ERR, "bm_vdi_open_instance failed\n");
         return VPU_RET_FAILURE;

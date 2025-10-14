@@ -46,7 +46,7 @@ class perf_cal {
         unsigned long long used =
             (tmp_end.tv_sec - tmp_start.tv_sec) * 1000000 + tmp_end.tv_usec -
             tmp_start.tv_usec;
-        std::cout << "Used time: " << (float)used / 1000 << " ms" << std::endl;
+        printf("Used time: %.3f(ms)\n", (float)used / 1000);
         start.pop();
         return used;
     }
@@ -57,7 +57,7 @@ class perf_cal {
         unsigned long long used =
             (tmp_end.tv_sec - tmp_start.tv_sec) * 1000000 + tmp_end.tv_usec -
             tmp_start.tv_usec;
-        std::cout << "Used time: %.3f us" << used << " us" << std::endl;
+        printf("Used time: %.3f us\n)", (float)used);
         start.pop();
         return used;
     }
@@ -313,7 +313,7 @@ bool compare_pred(float opd1, float opd2) {
     if (fabs(opd1 - opd2) < ERR_THRESHOLD) {
         return true;
     }
-    cout << "opd1 " << opd1 << " opd2 " << opd2 << endl;
+    printf("opd1 %f, opd2 %f\n", opd1, opd2);
 
     return false;
 }
@@ -345,16 +345,10 @@ bool res_compare(val_type_t *               tpu_res_similarity,
             if (fabs((float)
                          tpu_res_similarity[batch_cnt * sort_cnt + sort_indx] -
                      (float)ref_similarity) > ERR_THRESHOLD) {
-                cout << "tpu_res[" << batch_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << tpu_res_index[batch_cnt * sort_cnt + sort_indx]
-                     << "] "
-                     << tpu_res_similarity[batch_cnt * ref_res.size() +
-                                           sort_indx]
-                     << " ref_res[" << batch_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << ref_index_origin << "] "
-                     << tmp_ref_res[batch_cnt][ref_index] << endl;
+                printf("tpu_res[%ld][%d][%d] %d, ref_res[%ld][%d][%d] %d \n",
+                       batch_cnt, sort_indx, tpu_res_index[batch_cnt * sort_cnt + sort_indx],
+                       (int)tpu_res_similarity[batch_cnt * ref_res.size() +sort_indx],
+                       batch_cnt, sort_indx, ref_index_origin, (int)tmp_ref_res[batch_cnt][ref_index]);
                 return false;
             }
             tmp_ref_res[batch_cnt].erase(tmp_ref_res[batch_cnt].begin() +
@@ -405,7 +399,7 @@ static int gen_test_size(int &batch_size,
             break;
         }
         default: {
-            cout << "gen mode error" << endl;
+            printf("gen mode error\n");
             exit(-1);
         }
     }
@@ -483,7 +477,7 @@ int32_t cv_feature_match_test_rand(bm_handle_t handle) {
                                 feature_size,
                                 db_size);
     gettimeofday_(&t2);
-        cout << "feature match using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("feature match using time: %ld(us)", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
 
     vector<vector<float>> ref_res(batch_size);
@@ -491,14 +485,13 @@ int32_t cv_feature_match_test_rand(bm_handle_t handle) {
 #if PRINT_SWITCH
     for (int i = 0; i < batch_size; i++) {
         for (int j = 0; j < db_size; j++) {
-            cout << "output_similarity[" << i << "][" << j
-                 << "]: " << output_similarity[i * db_size + j] << " ";
+            printf("output_similarity[%d][%d]:%f ", i, j, output_similarity[i * db_size + j]);
         }
-        cout << endl;
+        printf("\n");
     }
 #endif
     if (false == res_compare<float>(output_similarity, output_index, ref_res)) {
-        cout << "FEATURE MATCHING COMPARE ERROR" << endl;
+        printf("FEATURE MATCHING COMPARE ERROR\n");
         delete[] input_data;
         delete[] db_data;
         delete[] db_feature;
@@ -511,7 +504,7 @@ int32_t cv_feature_match_test_rand(bm_handle_t handle) {
     delete[] db_feature;
     delete[] output_similarity;
     delete[] output_index;
-    std::cout << "FEATURE MATCHING FP32 COMPARE PASSED" << std::endl;
+    printf("FEATURE MATCHING FP32 COMPARE PASSED\n");
 
     return FEATURE_MATCH_SUCCESS;
 }
@@ -546,12 +539,12 @@ int32_t cv_feature_match_fix8b_test_rand(bm_handle_t handle) {
             std::shared_ptr<Blob<int>> output_index =
                 std::make_shared<Blob<int>>(batch_size * sort_cnt);
 
-            std::cout << "[FIX8B] rand_mode: " << rand_mode << std::endl;
-            std::cout << "db size: " << db_size << std::endl;
-            std::cout << "batch size: " << batch_size << std::endl;
-            std::cout << "feature size: " << feature_size << std::endl;
-            std::cout << "sort_cnt: " << sort_cnt << std::endl;
-            std::cout << "rshiftbits: " << rshiftbits << std::endl;
+            printf("[FIX8B] rand_mode: %d\n", rand_mode);
+            printf("db size: %d\n", db_size);
+            printf("batch size: %d\n", batch_size);
+            printf("feature size: %d\n", feature_size);
+            printf("sort_cnt: %d\n", sort_cnt);
+            printf("rshiftbits: %d\n", rshiftbits);
             vector<vector<signed char>> db_content_vec(feature_size);
             for (int i = 0; i < feature_size; i++) {
                 for (int j = 0; j < db_size; j++) {
@@ -625,23 +618,22 @@ int32_t cv_feature_match_fix8b_test_rand(bm_handle_t handle) {
 #if PRINT_SWITCH
             for (int i = 0; i < batch_size; i++) {
                 for (int j = 0; j < db_size; j++) {
-                    cout << "output_similarity[" << i << "][" << j
-                         << "]: " << output_similarity[i * db_size + j] << " ";
+                    printf("output_similarity[%d][%d]:%f \n", i, j, output_similarity[i * db_size + j]);
                 }
-                cout << endl;
+                printf("\n");
             }
 #endif
             if (false == res_compare<short>(output_similarity.get()->data,
                                             output_index.get()->data,
                                             ref_res,
                                             sort_cnt)) {
-                cout << "FEATURE MATCHING FIX8B COMPARE ERROR" << endl;
+                printf("FEATURE MATCHING FIX8B COMPARE ERROR\n");
 
                 exit(-1);
             }
         }
     }
-    std::cout << "FEATURE MATCHING FIX8B COMPARE PASSED" << std::endl;
+    printf("FEATURE MATCHING FIX8B COMPARE PASSED\n");
 
     return FEATURE_MATCH_SUCCESS;
 }
@@ -654,14 +646,12 @@ DWORD WINAPI test_feature_match_thread(LPVOID arg) {
         (feature_match_thread_arg_t *)arg;
     int test_loop_times = feature_match_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld ----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST FEATURE_MATCH] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST FEATURE_MATCH] test starts... LOOP times will be %d\n", test_loop_times);
     int         dev_id = 0;
     bm_handle_t handle;
     bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
@@ -670,10 +660,9 @@ DWORD WINAPI test_feature_match_thread(LPVOID arg) {
         exit(-1);
     }
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST FEATURE_MATCH] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST FEATURE_MATCH] LOOP %d ------\n", loop_idx);
         unsigned int seed = (unsigned)time(NULL);
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         bm_handle_t handle;
         int         dev_id = 0;
         bm_status_t ret    = bm_dev_request(&handle, dev_id);
@@ -682,14 +671,14 @@ DWORD WINAPI test_feature_match_thread(LPVOID arg) {
             exit(-1);
         }
         // cv_feature_match_test_file(handle);
-        std::cout << "--------------fp32 test------------------" << std::endl;
+        printf("--------------fp32 test------------------\n");
         cv_feature_match_test_rand(handle);
-        std::cout << "--------------fix8b test------------------" << std::endl;
+        printf("--------------fix8b test------------------\n");
         cv_feature_match_fix8b_test_rand(handle);
-        cout << "FEATURE MATCHING PASSED" << endl;
+        printf("FEATURE MATCHING PASSED\n");
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST FEATURE MATCH] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST FEATURE MATCH] ALL TEST PASSED!------\n");
 
     return FEATURE_MATCH_SUCCESS;
 }
@@ -707,19 +696,15 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_feature_match loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_feature_match loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST FEATURE_MATCH] loop times should be 1~1500"
-                  << std::endl;
+        printf("[TEST FEATURE_MATCH] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST FEATURE_MATCH] thread nums should be 1~4 "
-                  << std::endl;
+        printf("[TEST FEATURE_MATCH] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -798,7 +783,7 @@ int main(int argc, char **argv) {
         CloseHandle(hThreadArray[i]);
     #endif
 
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     #ifdef __linux__
     delete[] pid;
     #endif

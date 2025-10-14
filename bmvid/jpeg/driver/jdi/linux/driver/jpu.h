@@ -48,17 +48,19 @@
 #define JDI_IOCTL_CLOSE_INSTANCE_CORE_INDEX      _IO(JDI_IOCTL_MAGIC, 13)
 #define JDI_IOCTL_INVAL_DCACHE_RANGE             _IO(JDI_IOCTL_MAGIC, 14)
 #define JDI_IOCTL_FLUSH_DCACHE_RANGE             _IO(JDI_IOCTL_MAGIC, 15)
+#define JDI_IOCTL_GET_RWLOCK                     _IO(JDI_IOCTL_MAGIC, 16)
+#define JDI_IOCTL_RELEASE_RWLOCK                 _IO(JDI_IOCTL_MAGIC, 17)
+
 
 #ifdef BM_PCIE_MODE
 #define JDI_IOCTL_WRITE_VMEM                     _IO(JDI_IOCTL_MAGIC, 16)
 #define JDI_IOCTL_READ_VMEM                      _IO(JDI_IOCTL_MAGIC, 17)
 #define JDI_IOCTL_READ_REG                       _IO(JDI_IOCTL_MAGIC, 18)
+#define JDI_IOCTL_GET_CARD                       _IO(JDI_IOCTL_MAGIC, 21)
 #endif
 #define JDI_IOCTL_GET_MAX_NUM_JPU_CORE           _IO(JDI_IOCTL_MAGIC, 19)
 #define JDI_IOCTL_RESET_ALL                      _IO(JDI_IOCTL_MAGIC, 20)
 #endif
-
-
 
 
 typedef struct jpudrv_buffer_t {

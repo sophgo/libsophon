@@ -25,38 +25,36 @@ bm_status_t bmcv_overlay_check(bm_handle_t handle, bm_image input_base_img, bm_i
     int overlay_width = input_overlay_img.image_private->memory_layout[0].W / 4;
     int overlay_height = input_overlay_img.image_private->memory_layout[0].H;
 
-    if (input_base_format != FORMAT_RGB_PACKED &&
-        input_base_format != FORMAT_BGR_PACKED) {
+    if (input_base_format != FORMAT_RGB_PACKED) {
         bmlib_log("OVERLAY", BMLIB_LOG_ERROR, "Not supported base_img format");
         return BM_NOT_SUPPORTED;
     }
-    if (input_overlay_format != FORMAT_ARGB_PACKED &&
-        input_overlay_format != FORMAT_ABGR_PACKED) {
+    if (input_overlay_format != FORMAT_ABGR_PACKED &&
+        input_overlay_format != FORMAT_ARGB4444_PACKED &&
+        input_overlay_format != FORMAT_ARGB1555_PACKED) {
         bmlib_log("OVERLAY", BMLIB_LOG_ERROR, "Not supported overlay_img format");
         return BM_NOT_SUPPORTED;
     }
     if (input_base_dtype != DATA_TYPE_EXT_1N_BYTE ||
         input_overlay_dtype != DATA_TYPE_EXT_1N_BYTE) {
-        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "Not supported image data type");
+        bmlib_log("OVERLAY", BMLIB_LOG_ERROR, "Not supported image data type");
         return BM_NOT_SUPPORTED;
     }
     if (pos_x + overlay_width > base_width || pos_y + overlay_height > base_height) {
-        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "The specified position of the overlay image is out of bounds");
+        bmlib_log("OVERLAY", BMLIB_LOG_ERROR, "The specified position of the overlay image is out of bounds");
         return BM_ERR_PARAM;
     }
     return BM_SUCCESS;
 }
 
-bm_status_t bmcv_image_overlay(bm_handle_t handle,
-                               bm_image input_base_img,
-                               int overlay_num,
-                               bmcv_rect_t* overlay_info,
-                               bm_image* input_overlay_img) {
+bm_status_t bmcv_image_overlay(bm_handle_t handle, bm_image input_base_img, int overlay_num,
+                            bmcv_rect_t* overlay_info, bm_image* input_overlay_img)
+{
     bm_status_t ret = BM_SUCCESS;
-
     for (int i = 0; i < overlay_num; i++) {
         ret = bmcv_overlay_check(handle, input_base_img, input_overlay_img[i], overlay_info[i].start_x, overlay_info[i].start_y);
-            if (BM_SUCCESS != ret) {
+        if (BM_SUCCESS != ret) {
+            printf("bmcv_overlay_check failed!\n");
             return ret;
         }
     }
@@ -84,6 +82,7 @@ bm_status_t bmcv_image_overlay(bm_handle_t handle,
     api.base_addr = bm_mem_get_device_addr(input_base_mem);
     api.base_width = input_base_img.image_private->memory_layout[0].W / 3;
     api.base_height = input_base_img.image_private->memory_layout[0].H;
+    api.format = input_overlay_img->image_format;
 
     unsigned int chipid;
     bm_get_chipid(handle, &chipid);
@@ -99,5 +98,6 @@ bm_status_t bmcv_image_overlay(bm_handle_t handle,
             printf("ChipID is NOT supported\n");
             break;
     }
+
     return BM_SUCCESS;
 };

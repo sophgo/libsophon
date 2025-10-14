@@ -37,23 +37,6 @@ typedef struct
     int input_dtype;
     int output_dtype;
 } faiss_api_indexPQ_SDC_t;
-typedef struct
-{
-    unsigned long long vector_input_global_addr;
-    unsigned long long centroids_global_addr;
-    unsigned long long buffer_table_global_addr;
-    unsigned long long buffer_table_global_tmp_addr;
-    unsigned long long codes_output_global_addr;
-    int nv;
-    int d;
-    int m;
-    int ksub;
-    int IP_metric;
-    int input_dtype;
-    int output_dtype;
-} faiss_api_indexPQ_encode_t;
-
-#define UNUSED(x) (void)(x)
 
 static inline int dtype_size(data_type_t data_type) {
     int size = 0;
@@ -72,6 +55,23 @@ static inline int dtype_size(data_type_t data_type) {
     return size;
 }
 #pragma pack(pop)
+
+typedef struct {
+    unsigned long long vector_input_global_addr;
+    unsigned long long centroids_global_addr;
+    unsigned long long buffer_table_global_addr;
+    unsigned long long buffer_table_global_tmp_addr;
+    unsigned long long topk_data_global_addr;
+    unsigned long long codes_output_global_addr;
+    unsigned long long output_int32_global_addr;
+    int                encode_num;
+    int                d;
+    int                m;
+    int                ksub;
+    int                IP_metric;
+    int                input_dtype;
+    int                output_dtype;
+} __attribute__((packed)) faiss_api_indexPQ_encode_t;
 
 bm_status_t bmcv_faiss_indexPQ_ADC_ext(bm_handle_t handle,
                                    bm_device_mem_t centroids_input_dev,
@@ -274,66 +274,75 @@ bm_status_t bmcv_faiss_indexPQ_SDC(bm_handle_t handle,
 }
 
 bm_status_t bmcv_faiss_indexPQ_encode_ext(bm_handle_t handle,
-                                      bm_device_mem_t vector_input_dev,
-                                      bm_device_mem_t centroids_input_dev,
-                                      bm_device_mem_t buffer_table_dev,
-                                      bm_device_mem_t nvcodes_output_dev,
-                                      int encode_vec_num,
-                                      int vec_dims,
-                                      int slice_num,
-                                      int centroids_num,
-                                      int IP_metric,
-                                      int input_dtype,
-                                      int output_dtype)
-{
+                                          bm_device_mem_t vector_input_dev,
+                                          bm_device_mem_t centroids_input_dev,
+                                          bm_device_mem_t buffer_table_dev,
+                                          bm_device_mem_t nvcodes_output_dev,
+                                          int encode_vec_num,
+                                          int vec_dims,
+                                          int slice_num,
+                                          int centroids_num,
+                                          int IP_metric,
+                                          int input_dtype,
+                                          int output_dtype) {
     faiss_api_indexPQ_encode_t api;
-    bm_device_mem_t buffer_table_dev_32byte;
+    bm_device_mem_t buffer_table_dev_32byte, topk_data_global_addr, output_int32_global_addr;
 
-    if (bm_mem_get_type(buffer_table_dev) == BM_MEM_TYPE_DEVICE) {
-        if (BM_SUCCESS !=
-            bm_malloc_device_byte(handle, &buffer_table_dev_32byte, encode_vec_num * slice_num * centroids_num * sizeof(float))) {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_indexPQ_encode bm_malloc_device_byte error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-            return BM_ERR_FAILURE;
-        }
+    if (BM_SUCCESS != bm_malloc_device_byte(handle, &buffer_table_dev_32byte, encode_vec_num * slice_num * centroids_num * dtype_size((data_type_t)input_dtype))) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_indexPQ_SDC bm_malloc_device_byte buffer_table_dev_32byte error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+    if (BM_SUCCESS != bm_malloc_device_byte(handle, &topk_data_global_addr, encode_vec_num * slice_num * dtype_size((data_type_t)input_dtype))) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_indexPQ_SDC bm_malloc_device_byte topk_data_global_addr error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+        bm_free_device(handle, buffer_table_dev_32byte);
+        return BM_ERR_FAILURE;
+    }
+    if (BM_SUCCESS != bm_malloc_device_byte(handle, &output_int32_global_addr, encode_vec_num * slice_num * dtype_size((data_type_t)input_dtype))) {
+        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_indexPQ_SDC bm_malloc_device_byte output_int32_global_addr error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+        bm_free_device(handle, buffer_table_dev_32byte);
+        bm_free_device(handle, topk_data_global_addr);
+        return BM_ERR_FAILURE;
     }
     api.vector_input_global_addr = bm_mem_get_device_addr(vector_input_dev);
     api.centroids_global_addr = bm_mem_get_device_addr(centroids_input_dev);
+    api.topk_data_global_addr = bm_mem_get_device_addr(topk_data_global_addr);
     api.buffer_table_global_addr = bm_mem_get_device_addr(buffer_table_dev);
     api.buffer_table_global_tmp_addr = bm_mem_get_device_addr(buffer_table_dev_32byte);
+    api.output_int32_global_addr = bm_mem_get_device_addr(output_int32_global_addr);
     api.codes_output_global_addr = bm_mem_get_device_addr(nvcodes_output_dev);
-    api.nv = encode_vec_num;
+    api.encode_num = encode_vec_num;
     api.d = vec_dims;
     api.m = slice_num;
     api.ksub = centroids_num;
     api.IP_metric = IP_metric;
     api.input_dtype = input_dtype;
     api.output_dtype = output_dtype;
+
     bm_status_t ret = BM_SUCCESS;
     unsigned int chipid;
     ret = bm_get_chipid(handle, &chipid);
     if (BM_SUCCESS != ret) {
-        if (bm_mem_get_type(buffer_table_dev) == BM_MEM_TYPE_DEVICE) {
-            bm_free_device(handle, buffer_table_dev_32byte);
-        }
+        bm_free_device(handle, buffer_table_dev_32byte);
+        bm_free_device(handle, topk_data_global_addr);
+        bm_free_device(handle, output_int32_global_addr);
         return ret;
     }
 
-    switch (chipid)
-    {
-    case BM1684X:
-        ret = bm_tpu_kernel_launch(handle, "faiss_api_indexPQ_encode", &api, sizeof(api));
-        if (BM_SUCCESS != ret)
-        {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_indexPQ_encode launch_sync api error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
-        }
-        break;
-    default:
-        ret = BM_NOT_SUPPORTED;
-        break;
+    switch (chipid) {
+        case BM1684X:
+            ret = bm_tpu_kernel_launch(handle, "faiss_api_indexPQ_encode", &api, sizeof(api));
+            if (BM_SUCCESS != ret) {
+                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "faiss_api_indexPQ_encode launch_sync api error!, %s: %s: %d\n", filename(__FILE__), __func__, __LINE__);
+            }
+            break;
+        default:
+            ret = BM_NOT_SUPPORTED;
+            break;
     }
-    if (bm_mem_get_type(buffer_table_dev) == BM_MEM_TYPE_DEVICE) {
-        bm_free_device(handle, buffer_table_dev_32byte);
-    }
+
+    bm_free_device(handle, buffer_table_dev_32byte);
+    bm_free_device(handle, topk_data_global_addr);
+    bm_free_device(handle, output_int32_global_addr);
     return ret;
 }
 
@@ -346,18 +355,17 @@ bm_status_t bmcv_faiss_indexPQ_encode(bm_handle_t handle,
                                       int vec_dims,
                                       int slice_num,
                                       int centroids_num,
-                                      int IP_metric)
-{
+                                      int IP_metric) {
     return bmcv_faiss_indexPQ_encode_ext(handle,
-                                      vector_input_dev,
-                                      centroids_input_dev,
-                                      buffer_table_dev,
-                                      nvcodes_output_dev,
-                                      encode_vec_num,
-                                      vec_dims,
-                                      slice_num,
-                                      centroids_num,
-                                      IP_metric,
-                                      DT_FP32,
-                                      DT_FP32);
+                                         vector_input_dev,
+                                         centroids_input_dev,
+                                         buffer_table_dev,
+                                         nvcodes_output_dev,
+                                         encode_vec_num,
+                                         vec_dims,
+                                         slice_num,
+                                         centroids_num,
+                                         IP_metric,
+                                         DT_FP32,
+                                         DT_FP32);
 }

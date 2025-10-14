@@ -149,8 +149,6 @@ typedef struct BMVidCodInst {
     int64_t dec_idx;
     int perf;
     BMVidFrame cache_bmframe[32];
-    int enable_decode_order;
-    int decode_index_map[MAX_REG_FRAME];
     int timeout;
     int timeout_count;
 

@@ -60,7 +60,7 @@ bm_status_t test() {
                             batch,
                             L));
         gettimeofday(&t2, NULL);
-        std::cout << "cmulp TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+        printf("cmulp TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime_win(0, &tp1);
@@ -74,7 +74,7 @@ bm_status_t test() {
                             batch,
                             L));
         clock_gettime_win(0, &tp2);
-        std::cout << "cmulp TPU using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "us" << std::endl;
+        printf("cmulp TPU using time: %ld(us)\n", ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000));
     #endif
     BM_CHECK_RET(bm_memcpy_d2s(handle, YRHost, YRDev));
     BM_CHECK_RET(bm_memcpy_d2s(handle, YIHost, YIDev));
@@ -89,10 +89,8 @@ bm_status_t test() {
             float errR = std::abs(YRRef[idx_ref] - YRHost[idx_cal]) / std::max(std::max(std::abs(YRRef[idx_ref]), std::abs(YRHost[idx_cal])), 1.f);
             float errI = std::abs(YIRef[idx_ref] - YIHost[idx_cal]) / std::max(std::max(std::abs(YIRef[idx_ref]), std::abs(YIHost[idx_cal])), 1.f);
             if (errR > tol || errI > tol) {
-                std::cout << "<" << b << ", " << i << ">: ";
-                std::cout << "(" << YRRef[idx_ref] << ", " << YIRef[idx_ref] << ") vs ";
-                std::cout << "(" << YRHost[idx_cal] << ", " << YIHost[idx_cal] << ")";
-                std::cout << std::endl;
+                printf("<%d, %d>: (%f, %f) vs (%f, %f)\n",
+                    b, i, YRRef[idx_ref], YIRef[idx_ref], YRHost[idx_cal], YIHost[idx_cal]);
                 //exit(-1);
             }
         }
@@ -125,7 +123,7 @@ int main(int argc, char *argv[]) {
         clock_gettime_win(0, &tp);
         #endif
         srand(tp.tv_nsec);
-        std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+        printf("test %d random seed %ld\n", i, tp.tv_nsec);
         test();
     }
     return 0;

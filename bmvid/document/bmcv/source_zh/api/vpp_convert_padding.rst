@@ -6,21 +6,23 @@ bmcv_image_vpp_convert_padding
 一次crop的数量不能超过256。
 
 
-    .. code-block:: c
-
-        bm_status_t bmcv_image_vpp_convert_padding(
-            bm_handle_t           handle,
-            int                   output_num,
-            bm_image              input,
-            bm_image *            output,
-            bmcv_padding_atrr_t * padding_attr,
-            bmcv_rect_t *         crop_rect = NULL,
-            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
-
-
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
+
+
+**接口形式:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_vpp_convert_padding(
+                    bm_handle_t handle,
+                    int output_num,
+                    bm_image input,
+                    bm_image* output,
+                    bmcv_padding_atrr_t* padding_attr,
+                    bmcv_rect_t* crop_rect = NULL,
+                    bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
 
 
 **传入参数说明:**
@@ -88,11 +90,12 @@ bmcv_image_vpp_convert_padding
 
   bm1684x 支持BMCV_INTER_NEAREST， BMCV_INTER_LINEAR。
 
+
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **注意事项:**
@@ -118,3 +121,108 @@ bmcv_image_vpp_convert_padding
 2. 该 API 所需要满足的格式以及部分要求与 bmcv_image_vpp_basic 一致。
 
 
+**代码示例**
+
+    .. code-block:: c
+
+        #include <limits.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include "bmcv_api_ext_c.h"
+
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            const char *filename_src = "path/to/src";
+            const char *filename_dst = "path/to/dst";
+            int in_width = 1920;
+            int in_height = 1080;
+            int out_width = 1920;
+            int out_height = 1080;
+            bm_image_format_ext src_format = FORMAT_YUV420P0;
+            bm_image_format_ext dst_format = FORMAT_YUV420P;
+            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR;
+
+            bmcv_rect_t crop_rect = {
+                .start_x = 100,
+                .start_y = 100,
+                .crop_w = 500,
+                .crop_h = 500
+                };
+
+            bmcv_padding_atrr_t padding_rect = {
+                .dst_crop_stx = 0,
+                .dst_crop_sty = 0,
+                .dst_crop_w = 1000,
+                .dst_crop_h = 1000,
+                .padding_r = 155,
+                .padding_g = 20,
+                .padding_b = 36,
+                .if_memset = 1
+                };
+
+            bm_status_t ret = BM_SUCCESS;
+            int src_size = in_height * in_width * 3 / 2;
+            int dst_size = in_height * in_width * 3 / 2;
+            unsigned char *src_data = (unsigned char *)malloc(src_size);
+            unsigned char *dst_data = (unsigned char *)malloc(dst_size);
+
+            readBin(filename_src, src_data, src_size);
+            bm_handle_t handle = NULL;
+            int dev_id = 0;
+            bm_image src, dst;
+
+            ret = bm_dev_request(&handle, dev_id);
+            bm_image_create(handle, in_height, in_width, src_format, DATA_TYPE_EXT_1N_BYTE, &src, NULL);
+            bm_image_create(handle, out_height, out_width, dst_format, DATA_TYPE_EXT_1N_BYTE, &dst, NULL);
+            bm_image_alloc_dev_mem(src, BMCV_HEAP1_ID);
+            bm_image_alloc_dev_mem(dst, BMCV_HEAP1_ID);
+
+            int src_image_byte_size[4] = {0};
+            bm_image_get_byte_size(src, src_image_byte_size);
+            void *src_in_ptr[4] = {(void *)src_data,
+                                    (void *)((char *)src_data + src_image_byte_size[0]),
+                                    (void *)((char *)src_data + src_image_byte_size[0] + src_image_byte_size[1]),
+                                    (void *)((char *)src_data + src_image_byte_size[0] + src_image_byte_size[1] + src_image_byte_size[2])};
+
+            bm_image_copy_host_to_device(src, (void **)src_in_ptr);
+            ret = bmcv_image_vpp_convert_padding(handle, 1, src, &dst, &padding_rect, &crop_rect, algorithm);
+
+            int dst_image_byte_size[4] = {0};
+            bm_image_get_byte_size(dst, dst_image_byte_size);
+            void *dst_in_ptr[4] = {(void *)dst_data,
+                                    (void *)((char *)dst_data + dst_image_byte_size[0]),
+                                    (void *)((char *)dst_data + dst_image_byte_size[0] + dst_image_byte_size[1]),
+                                    (void *)((char *)dst_data + dst_image_byte_size[0] + dst_image_byte_size[1] + dst_image_byte_size[2])};
+
+            bm_image_copy_device_to_host(dst, (void **)dst_in_ptr);
+            writeBin(filename_dst, dst_data, dst_size);
+
+            bm_image_destroy(src);
+            bm_image_destroy(dst);
+            bm_dev_free(handle);
+            free(src_data);
+            free(dst_data);
+            return ret;
+        }

@@ -1,23 +1,23 @@
 bmcv_image_csc_convert_to
 =========================
 
-
 该 API 可以实现对多张图片的 crop、color-space-convert、resize、padding、convert_to及其任意若干个功能的组合。
 
     .. code-block:: c
 
         bm_status_t bmcv_image_csc_convert_to(
-            bm_handle_t           handle,
-            int                   in_img_num,
-            bm_image*             input,
-            bm_image*             output,
-            int*                  crop_num_vec = NULL,
-            bmcv_rect_t*          crop_rect = NULL,
-            bmcv_padding_atrr_t*  padding_attr = NULL,
-            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
-            csc_type_t            csc_type = CSC_MAX_ENUM,
-            csc_matrix_t*         matrix = NULL,
-            bmcv_convert_to_attr* convert_to_attr);
+                    bm_handle_t handle,
+                    int in_img_num,
+                    bm_image* input,
+                    bm_image* output,
+                    int* crop_num_vec = NULL,
+                    bmcv_rect_t* crop_rect = NULL,
+                    bmcv_padding_atrr_t* padding_attr = NULL,
+                    bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
+                    csc_type_t csc_type = CSC_MAX_ENUM,
+                    csc_matrix_t* matrix = NULL,
+                    bmcv_convert_to_attr* convert_to_attr);
+
 
 **处理器型号支持：**
 
@@ -174,7 +174,7 @@ bmcv_image_csc_convert_to
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **注意事项:**
@@ -363,13 +363,8 @@ bm1684支持的要求如下：
     .. code-block:: c
 
         bm_device_mem_t src_plane_device[4];
-        src_plane_device[0] = bm_mem_from_device((u64)avframe->data[6],
-                avframe->linesize[6]);
-        src_plane_device[1] = bm_mem_from_device((u64)avframe->data[4],
-                avframe->linesize[4] * avframe->h);
-        src_plane_device[2] = bm_mem_from_device((u64)avframe->data[7],
-                avframe->linesize[7]);
-        src_plane_device[3] = bm_mem_from_device((u64)avframe->data[5],
-                avframe->linesize[4] * avframe->h / 2);
-
+        src_plane_device[0] = bm_mem_from_device((u64)avframe->data[6], avframe->linesize[6]);
+        src_plane_device[1] = bm_mem_from_device((u64)avframe->data[4], avframe->linesize[4] * avframe->h);
+        src_plane_device[2] = bm_mem_from_device((u64)avframe->data[7], avframe->linesize[7]);
+        src_plane_device[3] = bm_mem_from_device((u64)avframe->data[5], avframe->linesize[4] * avframe->h / 2);
         bm_image_attach(*compressed_image, src_plane_device);

@@ -14,10 +14,10 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_transpose(
-                bm_handle_t handle,
-                bm_image input,
-                bm_image output
-        );
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output);
+
 
 **Description of incoming parameters:**
 
@@ -34,13 +34,11 @@ This interface supports BM1684/BM1684X.
   Output parameter. The bm_image structure of the output image.
 
 
-
 **Return value description:**
 
 * BM_SUCCESS: success
 
 * Other: failed
-
 
 
 **Code example**
@@ -50,37 +48,60 @@ This interface supports BM1684/BM1684X.
         #include <iostream>
         #include <vector>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
-        #include "common.h"
         #include "stdio.h"
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
 
-         int main(int argc, char *argv[]) {
-             bm_handle_t handle;
-             bm_dev_request(&handle, 0);
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-             int image_n = 1;
-             int image_h = 1080;
-             int image_w = 1920;
-             bm_image src, dst;
-             bm_image_create(handle, image_h, image_w, FORMAT_RGB_PLANAR,
-                     DATA_TYPE_EXT_1N_BYTE, &src);
-             bm_image_create(handle, image_w, image_h, FORMAT_RGB_PLANAR,
-                     DATA_TYPE_EXT_1N_BYTE, &dst);
-             std::shared_ptr<u8*> src_ptr = std::make_shared<u8*>(
-                     new u8[image_h * image_w * 3]);
-             memset((void *)(*src_ptr.get()), 148, image_h * image_w * 3);
-             u8 *host_ptr[] = {*src_ptr.get()};
-             bm_image_copy_host_to_device(src, (void **)host_ptr);
-             bmcv_image_transpose(handle, src, dst);
-             bm_image_destroy(src);
-             bm_image_destroy(dst);
-             bm_dev_free(handle);
-             return 0;
-         }
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            bm_handle_t handle;
+            int image_h = 1080;
+            int image_w = 1920;
+            int channel = 3;
+            bm_image src, dst;
+            unsigned char* src_data = new unsigned char[image_h * image_w * channel];
+            unsigned char* res_data = new unsigned char[image_h * image_w * channel];
+            const char *src_name = "/path/to/src";
+            const char *dst_name = "path/to/dst";
+
+            bm_dev_request(&handle, 0);
+            readBin(src_name, src_data, image_h * image_w * channel);
+            bm_image_create(handle, image_h, image_w, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, image_w, image_h, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &dst);
+            bm_image_copy_host_to_device(src, (void **)&src_data);
+            bmcv_image_transpose(handle, src, dst);
+            bm_image_copy_device_to_host(dst, (void**)&res_data);
+            writeBin(dst_name, res_data, image_h * image_w * channel);
+
+            bm_image_destroy(src);
+            bm_image_destroy(dst);
+            bm_dev_free(handle);
+            delete[] src_data;
+            delete[] res_data;
+            return 0;
+        }
 
 
 **Note:**
@@ -122,4 +143,3 @@ This interface supports BM1684/BM1684X.
 6. The input bm_image must attach device memory, otherwise, a failure will be returned.
 
 7. If the output object does not attach device memory, it will internally call bm_image_alloc_dev_mem to apply for internally managed device memory and fill the transposed data into device memory.
-

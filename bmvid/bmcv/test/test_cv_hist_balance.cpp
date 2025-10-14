@@ -217,10 +217,10 @@ int main(int argc, char *argv[])
     for (i = 0; i < loop; ++i) {
         ret = test_hist_balance(height, width);
         if (ret) {
-            std::cout << "test_hist_balance failed" << std::endl;
+            printf("test_hist_balance failed\n");
             return ret;
         }
     }
-    std::cout << "Compare TPU result with CPU successfully!" << std::endl;
+    printf("Compare TPU result with CPU successfully!\n");
     return 0;
 }

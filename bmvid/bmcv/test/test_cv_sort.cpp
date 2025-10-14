@@ -334,16 +334,14 @@ int32_t main(int32_t argc, char **argv) {
         dev_id = atoi(argv[3]);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST SORT] loop times should be 1~1500" << std::endl;
+        printf("[TEST SORT] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST SOER] thread nums should be 1~4 "
-                  << std::endl;
+        printf("[TEST SOER] thread nums should be 1~4\n");
         exit(-1);
     }
-    std::cout << "[TEST SORT] test starts... LOOP times = " << test_loop_times
-              << " threads num = " << test_loop_times << std::endl;
+    printf("[TEST SORT] test starts... LOOP times = %d, threads num = %d\n", test_loop_times, test_loop_times);
 
     unsigned int seed = (unsigned)time(NULL);
     srand(seed);
@@ -351,8 +349,7 @@ int32_t main(int32_t argc, char **argv) {
     int dev_cnt;
     bm_dev_getcount(&dev_cnt);
     if (dev_id >= dev_cnt) {
-        std::cout << "[TEST SOER] dev_id should less than device count, only detect "<< dev_cnt << " devices "
-                  << std::endl;
+        printf("[TEST SOER] dev_id should less than device count, only detect %d devices\n", dev_cnt);
         exit(-1);
     }
     printf("device count = %d\n", dev_cnt);
@@ -509,7 +506,7 @@ int32_t main(int32_t argc, char **argv) {
         bm_dev_free(handle);
     }
 #endif
-    std::cout << "------[TEST SORT] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST SORT] ALL TEST PASSED!------\n");
 
     return SORT_SUCCESS;
 }

@@ -904,6 +904,31 @@ int vdi_get_instance_num(u64 core_idx)
     return inst_num;
 }
 
+int vdi_vpuinfo_set_status(uint32_t core_idx, uint32_t inst_idx, int status)
+{
+    return 0;
+}
+
+int vdi_vpuinfo_set_seqinfo(uint32_t core_idx, uint32_t inst_idx, int width, int height, int fps)
+{
+    return 0;
+}
+
+int vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx)
+{
+    return 0;
+}
+
+int vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx)
+{
+    return 0;
+}
+
+int vdi_vpuinfo_get_failed(uint32_t core_idx, uint32_t inst_idx)
+{
+    return 0;
+}
+
 int vdi_hw_reset(u64 core_idx) // DEVICE_ADDR_SW_RESET
 {
     vdi_info_t *vdi;
@@ -1343,6 +1368,51 @@ unsigned int vdi_read_register(u64 core_idx, u64 addr)
     }
     return vri.data;
 }
+
+void vdi_dec_start_register(u64 core_idx, vpu_dec_start_buffer_t *buf)
+{
+
+    vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->hDevice == INVALID_HANDLE_VALUE || !(vdi->hDevice))
+        return;
+
+    buf->core_idx = core_idx % MAX_NUM_VPU_CORE_CHIP;
+
+    if(winDeviceIoControl(vdi->hDevice , VDI_IOCTL_CTRL_DEC_START, buf) == -1){
+        return;
+    }
+
+    return;
+}
+
+unsigned int vdi_dec_getresult_register(u64 core_idx, vpu_dec_getresult_buffer_t *buf)
+{
+    vdi_info_t *vdi;
+
+    if (core_idx >= MAX_NUM_VPU_CORE)
+        return (unsigned int)-1;
+
+    vdi = &s_vdi_info[core_idx];
+
+    if(!vdi || vdi->hDevice == INVALID_HANDLE_VALUE || !(vdi->hDevice))
+        return (unsigned int)-1;
+
+    buf->core_idx = core_idx% MAX_NUM_VPU_CORE_CHIP;
+
+    if(winDeviceIoControl(vdi->hDevice, VDI_IOCTL_CTRL_DEC_GETRESULT, buf) == -1 ){
+        return (unsigned int)-1;
+    }
+
+    return;
+}
+
+
 
 #define FIO_TIMEOUT         100
 
@@ -2829,6 +2899,20 @@ int winDeviceIoControl(HANDLE devHandle, u32 cmd, void* param) {
         status = DeviceIoControl(devHandle, VDI_IOCTL_WRIET_REGISTER, param, sizeof(vpu_register_info_t), param, sizeof(vpu_register_info_t), &bytesReceived, NULL);
         if (!status) {
             VLOG(ERR, "[VDI] fail write reg info\n");
+            return -1;
+        }
+        break;
+    case VDI_IOCTL_CTRL_DEC_START:
+        status = DeviceIoControl(devHandle, VDI_IOCTL_CTRL_DEC_START, param, sizeof(vpu_dec_start_buffer_t), param, sizeof(vpu_dec_start_buffer_t), &bytesReceived, NULL);
+        if (!status) {
+            VLOG(ERR, "[VDI] ioctl fail dec start.\n");
+            return -1;
+        }
+        break;
+    case VDI_IOCTL_CTRL_DEC_GETRESULT:
+        status = DeviceIoControl(devHandle, VDI_IOCTL_CTRL_DEC_GETRESULT, param, sizeof(vpu_dec_getresult_buffer_t), param, sizeof(vpu_dec_getresult_buffer_t), &bytesReceived, NULL);
+        if (!status) {
+            VLOG(ERR, "[VDI] ioctl fail dec getresult.\n");
             return -1;
         }
         break;

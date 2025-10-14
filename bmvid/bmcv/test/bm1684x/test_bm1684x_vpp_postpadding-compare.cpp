@@ -20,7 +20,7 @@ char opencvFile_path[200] = "./";
 
 using namespace std;
 
-void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+void bm_write_bin(bm_image dst, const char *output_name);
 
 void read_image(unsigned char **input_ptr, int *src_len, const char * src_name)
 {
@@ -150,7 +150,7 @@ int test_vpp_postpadding(void)
     os << "+postpadding+";
     os << j;
     os << ".bin";
-    bm1684x_vpp_write_bin(dst[j], os.str().c_str());
+    bm_write_bin(dst[j], os.str().c_str());
 
     free(output_ptr);
   }

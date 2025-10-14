@@ -493,9 +493,10 @@ RetCode VPU_DecOpen(DecHandle* pHandle, DecOpenParam* pop)
     pDecInfo->streamBufSize      = pop->bitstreamBufferSize;
     pDecInfo->streamBufEndAddr   = pop->bitstreamBuffer + pop->bitstreamBufferSize;
     pDecInfo->reorderEnable      = VPU_REORDER_ENABLE;
+    if(pop->decodeOrder)
+        pDecInfo->reorderEnable  = 0;
     pDecInfo->mirrorDirection    = MIRDIR_NONE;
     pDecInfo->prevFrameEndPos    = pop->bitstreamBuffer;
-    pDecInfo->enableDecodeOrder  = pop->decodeOrder;
 
     if ((ret=ProductVpuDecBuildUpOpenParam(pCodecInst, pop)) != RETCODE_SUCCESS) {
         *pHandle = 0;
@@ -875,7 +876,11 @@ RetCode VPU_DecCompleteSeqInit(DecHandle handle, DecInitialInfo * info)
     pDecInfo->initialInfo = *info;
 
     SetPendingInst(pCodecInst->coreIdx, NULL);
-
+    if ((info->fRateNumerator == 0) || (info->fRateDenominator == 0)) {
+        vdi_vpuinfo_set_seqinfo(pCodecInst->coreIdx, pCodecInst->instIndex, info->picWidth, info->picHeight, 0);
+    } else {
+        vdi_vpuinfo_set_seqinfo(pCodecInst->coreIdx, pCodecInst->instIndex, info->picWidth, info->picHeight, info->fRateNumerator/info->fRateDenominator);
+    }
     LeaveLock(pCodecInst->coreIdx);
 
     return ret;
@@ -1414,7 +1419,9 @@ RetCode VPU_DecStartOneFrame(DecHandle handle, DecParam *param)
     else {
         SetPendingInst(pCodecInst->coreIdx, pCodecInst);
     }
-
+    if (RETCODE_SUCCESS == ret) {
+        vdi_vpuinfo_start_one_frame(pCodecInst->coreIdx, pCodecInst->instIndex);
+    }
     return ret;
 }
 
@@ -1672,12 +1679,7 @@ RetCode VPU_DecGetOutputInfo(DecHandle handle, DecOutputInfo* info)
 
         maxDecIndex = (pDecInfo->numFbsForDecoding > pDecInfo->numFbsForWTL) ? (SvacSvcFlag ? pDecInfo->numFbsForDecoding*2 : pDecInfo->numFbsForDecoding) : pDecInfo->numFbsForWTL;
 
-        if (pDecInfo->enableDecodeOrder && (0 <= info->indexFrameDecoded && info->indexFrameDecoded < (int)maxDecIndex))
-        {
-            info->dispFrame = pDecInfo->frameBufPool[val+info->indexFrameDecoded];
-        }
-        else if (0 <= info->indexFrameDisplay && info->indexFrameDisplay < (int)maxDecIndex)
-        {
+        if (0 <= info->indexFrameDisplay && info->indexFrameDisplay < (int)maxDecIndex) {
             info->dispFrame = pDecInfo->frameBufPool[val+info->indexFrameDisplay];
         }
     }
@@ -1713,7 +1715,7 @@ RetCode VPU_DecGetOutputInfo(DecHandle handle, DecOutputInfo* info)
     }
 
     SetPendingInst(pCodecInst->coreIdx, 0);
-
+    vdi_vpuinfo_get_outputinfo(pCodecInst->coreIdx, pCodecInst->instIndex);
     LeaveLock(pCodecInst->coreIdx);
 
     return RETCODE_SUCCESS;

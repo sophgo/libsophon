@@ -67,7 +67,7 @@ static vector<int> get_image_size(int format, int width, int height) {
             size.push_back(width * height);
             break;
         default:
-            cout << "format error" << endl;
+            printf("format error\n");
     }
     return size;
 }
@@ -96,7 +96,7 @@ static void get_image_default_step(int format, int width, int* step) {
             step[1] = ALIGN(width, 2);
             break;
         default:
-            cout << "not support format" << endl;
+            printf("not support format\n");
             break;
     }
 }
@@ -169,7 +169,7 @@ static int put_text_cpu(
     put_text(mat, text, org, fontFace, fontScale, rgb, thickness);
     #ifdef __linux__
         gettimeofday(&t2, NULL);
-        cout << "Put-Text cpu using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("Put-Text cpu using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         clock_gettime(0, &tp2);
         cout << "Put-Text cpu using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "us" << endl;
@@ -207,13 +207,13 @@ static int put_text_bmcv(
         gettimeofday(&t1, NULL);
         bmcv_image_put_text(handle, input_img, text, org, rgb, fontScale, thickness);
         gettimeofday(&t2, NULL);
-        cout << "Put-Text bmcv using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "um" << endl;
+        printf("Put-Text bmcv using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime(0, &tp1);
         bmcv_image_put_text(handle, input_img, text, org, rgb, fontScale, thickness);
         clock_gettime(0, &tp2);
-        cout << "Put-Text bmcv using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "um" << endl;
+        cout << "Put-Text bmcv using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "us" << endl;
     #endif
     bm_image_copy_device_to_host(input_img, (void **)in_ptr);
     bm_image_destroy(input_img);
@@ -237,7 +237,7 @@ static int test_put_text_random(
         #endif
         unsigned int seed = tp.tv_nsec;
         srand(seed);
-        cout << "seed = " << seed << endl;
+        printf("seed = %d\n", seed);
         width = 100 + rand() % 1900;
         height = 100 + rand() % 2048;
         format = rand() % 7;
@@ -248,8 +248,8 @@ static int test_put_text_random(
     const char text[30] = "Hello, world!";
     unsigned char color[3] = {255, 0, 0};
     int thickness = 2;
-    cout << "format: " << format << endl;
-    cout << "width: " << width << "  height: " << height << endl;
+    printf("format: %d\n", format);
+    printf("width: %d, height: %d\n", width, height);
     unsigned char* data_cpu = new unsigned char [width * height * 3];
     unsigned char* data_bmcv = new unsigned char [width * height * 3];
     if (random) {
@@ -311,10 +311,10 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_put_text_random(random, height, width, format, enable_cpu);
         if (ret) {
-            cout << "test put_text failed" << endl;
+            printf( "test put_text failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with CPU successfully!" << endl;
+    printf("Compare TPU result with CPU successfully!\n");
     return 0;
 }

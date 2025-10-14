@@ -1,2 +1,2 @@
-SO_VERSION=".0.12.0"
+SO_VERSION=".0.14.0"
 SO_NAME=".0"

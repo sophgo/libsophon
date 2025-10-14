@@ -36,6 +36,8 @@
 #include "bm_vpudec_interface.h"
 #include "bmlib_runtime.h"
 
+extern void bmvpu_dec_set_logging_function(BmVpuDecLoggingFunc logging_fn);
+
 #define VPU_ALIGN16(_x)             (((_x)+0x0f)&~0x0f)
 #define VPU_ALIGN32(_x)             (((_x)+0x1f)&~0x1f)
 #define VPU_ALIGN256(_x)            (((_x)+0xff)&~0xff)
@@ -128,6 +130,37 @@ int my_memcmp(const void* src, const void* dst, int size)
 
 int global_ret = 0;
 
+void LogFunc(BmVpuDecLogLevel level, char const *file,
+                int const line, char const *fn,
+                const char *format, ...)
+{
+    va_list args;
+    struct timeval tv;
+
+    char const *lvlstr = "";
+    switch (level)
+    {
+        case ERR:       lvlstr = "ERROR";   break;
+        case WARN:      lvlstr = "WARNING"; break;
+        case INFO:      lvlstr = "INFO";    break;
+        case DEBUG:     lvlstr = "DEBUG";   break;
+        case TRACE:     lvlstr = "TRACE";   break;
+        case LOG:       lvlstr = "LOG";     break;
+        default: break;
+    }
+
+    gettimeofday(&tv, NULL);
+    fprintf(stderr, "[%ld.%ld] (%s:%d) %s: ",
+            tv.tv_sec, tv.tv_usec/1000,
+            fn, line, lvlstr);
+
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
+    fprintf(stderr, "\n");
+}
+
 static int parse_args(int argc, char **argv, BMTestConfig* par);
 
 static void stat_pthread(void *arg)
@@ -141,11 +174,16 @@ static void stat_pthread(void *arg)
     if (display) dis_mode = atoi(display);
     printf("BMVPUDEC_DISPLAY_FRAMERATE=%d  thread_num=%d g_exit_flag=%d \n", dis_mode, thread_num, g_exit_flag);
     while(!g_exit_flag) {
+        for(i = 0; i < INTERVAL; i++){
+            if(g_exit_flag)
+                break;
 #ifdef __linux__
-        sleep(INTERVAL);
+            sleep(1);
 #elif _WIN32
-        Sleep(INTERVAL*1000);
+            Sleep(1000);
 #endif
+        }
+
         if (dis_mode == 1) {
             for (i = 0; i < thread_num; i++) {
                 if (i == 0) {
@@ -767,6 +805,8 @@ static void dec_test(void* arg)
     int height, width, stride;
     uint32_t heap_num;
     uint32_t heap_mask = 0;
+    int frame_size_coeff = 1;
+    int eof_flag = 0;
 
     fpIn = testConfigPara->fpIn;
 
@@ -840,10 +880,17 @@ static void dec_test(void* arg)
             }
         }
 
-        compress_count = testConfigPara->min_frame_cnt + testConfigPara->extraFrame;
-        linear_count = 0;
         if(testConfigPara->wtlFormat != BMDEC_OUTPUT_COMPRESSED)
+        {
+            compress_count = testConfigPara->min_frame_cnt;
             linear_count = testConfigPara->frame_delay + testConfigPara->extraFrame + 1;
+        }
+        else
+        {
+            compress_count = testConfigPara->min_frame_cnt + testConfigPara->extraFrame;
+            linear_count = 0;
+        }
+
         framebuffer_cnt = compress_count + linear_count;
         frame_buf = (bm_device_mem_t *)malloc(framebuffer_cnt * sizeof(bm_device_mem_t));
         Ytab_buf = (bm_device_mem_t *)malloc(compress_count * sizeof(bm_device_mem_t));
@@ -1081,11 +1128,14 @@ static void dec_test(void* arg)
                 bFindEnd = 0;
                 int i;
 
+GET_BITSTREAM_DATA:
                 osal_fseek(fpIn, UsedBytes, SEEK_SET);
-                readLen = osal_fread(pInMem, 1, defaultReadBlockLen, fpIn);
+                readLen = osal_fread(pInMem, 1, defaultReadBlockLen * frame_size_coeff, fpIn);
                 if(readLen == 0){
                     break;
                 }
+                if (readLen < (defaultReadBlockLen * frame_size_coeff))
+                    eof_flag = 1;
 
                 if(testConfigPara->streamFormat == BMDEC_AVC) { /* H264 */
                     for (i = 0; i < readLen - 8; i++) {
@@ -1158,6 +1208,17 @@ static void dec_test(void* arg)
                     }
                 }
 
+                if (bFindEnd==0 && eof_flag==0) {
+                    frame_size_coeff++;
+                    printf("chn %d need more data to analyze! coeff=%d\n", testConfigPara->instanceNum, frame_size_coeff);
+                    if (pInMem)
+                        free(pInMem);
+
+                    pInMem = (unsigned char *)malloc(defaultReadBlockLen * frame_size_coeff);
+                    vidStream.buf = pInMem;
+                    memset(pInMem, 0, defaultReadBlockLen * frame_size_coeff);
+                    goto GET_BITSTREAM_DATA;
+                }
                 vidStream.length = readLen;
             }
 
@@ -1183,6 +1244,8 @@ static void dec_test(void* arg)
             }
         }
         osal_fseek(fpIn, 0, SEEK_SET);
+        UsedBytes = 0;
+        eof_flag = 0;
     }
 OUT1:
     while((bmvpu_dec_flush(vidHandle)) != 0){
@@ -1208,6 +1271,7 @@ OUT1:
 
     osal_thread_join(vpu_thread, NULL);
     printf("EXIT\n");
+    bmvpu_dec_delete(vidHandle);
     if(testConfigPara->mem_alloc_type == 1)
     {
         if(bitstream_buf.size > 0)
@@ -1220,7 +1284,6 @@ OUT1:
         bm_dev_free(bm_handle);
         bm_handle = NULL;
     }
-    bmvpu_dec_delete(vidHandle);
     free(pInMem);
 }
 
@@ -1303,6 +1366,7 @@ int main(int argc, char **argv)
     }
     parse_args(argc, argv, &testConfigOption);
     bmvpu_dec_set_logging_threshold(testConfigOption.log_level);
+    bmvpu_dec_set_logging_function(LogFunc);
 
     printf("compareNum: %d\n", testConfigOption.compareNum);
     printf("instanceNum: %d\n", testConfigOption.instanceNum);
@@ -1526,7 +1590,7 @@ static int parse_args(int argc, char **argv, BMTestConfig* par)
         exit(1);
     }
 
-    if (par->log_level < BMVPU_DEC_LOG_LEVEL_NONE || par->log_level > BMVPU_DEC_LOG_LEVEL_TRACE)
+    if (par->log_level < BMVPU_DEC_LOG_LEVEL_ERROR || par->log_level > BMVPU_DEC_LOG_LEVEL_TRACE)
     {
         fprintf(stderr, "Wrong log level: %d\n", par->log_level);
         Help(argv[0]);

@@ -386,12 +386,8 @@ static int bmcv_img_scale_cmp(T1 *p_exp,
                                              find_x_index;
                                 if ((got - src[find_index] > data_threshold) ||
                                     (src[find_index] - got > data_threshold)) {
-                                    std::cout
-                                        << "h: " << y << " w: " << x
-                                        << " c: " << c_idx << " n: " << n_idx
-                                        << " got: " << (int)(got)
-                                        << " exp: " << (int)(exp) << std::endl;
-
+                                    printf("h %d, w %d, c %d, n %d, got %d, exp %d\n",
+                                           y, x, c_idx, n_idx, (int)got, (int)exp);
                                     return -1;
                                 }
                             }
@@ -510,9 +506,9 @@ static int img_scale_test_rand(bm_handle_t      handle,
                    bias_r,
                    output);
     if (pixel_weight_bias) {
-        cout << "weight_r: " << weight_r << " beta_r: " << bias_r
-             << "weight_g: " << weight_g << " beta_g: " << bias_g
-             << "weight_b: " << weight_b << " beta_b: " << bias_b << endl;
+        printf("weight_r: %f, beta_r: %f, ", weight_r, bias_r);
+		printf("weight_g: %f, beta_g: %f, ", weight_g, bias_g);
+		printf("weight_b: %f, beta_b: %f\n", weight_b, bias_b);
         if ((BGR4N == input.image_format) || (RGB4N == input.image_format)) {
             u8 *temp_src       = (u8 *)img_ref_data;
             u8 *temp_dst       = (u8 *)img_ref_data;
@@ -548,7 +544,7 @@ static int img_scale_test_rand(bm_handle_t      handle,
     bmcv_resize_t*                 img_scale_img_attr = img_scale_img_attr_.get();
     #endif
     if (do_crop) {
-        cout << "top: " << top << " left: " << left << endl;
+        printf("top: %d, left: %d\n", top, left);
     }
     for (int img_idx = 0; img_idx < image_num; img_idx++) {
         img_scale_img_attr[img_idx].start_x = 0;
@@ -568,8 +564,7 @@ static int img_scale_test_rand(bm_handle_t      handle,
         }
     }
     if (!stretch_fit) {
-        cout << "padding_r: " << padding_r << " padding_b: " << padding_b
-             << " padding_g: " << padding_g << endl;
+        printf("padding_r:%d, padding_g:%d, padding_b:%d\n", padding_r, padding_g, padding_b);
         int out_data_format = DATA_TYPE_EXT_1N_BYTE;
         if (((data_format == DATA_TYPE_BYTE) && (image_format == BGR4N)) ||
             ((data_format == DATA_TYPE_BYTE) && (image_format == RGB4N))) {
@@ -655,21 +650,18 @@ DWORD WINAPI test_img_scale_thread(LPVOID arg) {
         (img_scale_thread_arg_t *)arg;
     int test_loop_times = img_scale_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST IMG SCALE] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST IMG SCALE] test starts... LOOP times will be %d\n", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST IMG SCALE] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST IMG SCALE] LOOP %d------\n", loop_idx);
         bm_handle_t  handle;
         unsigned int seed = (unsigned)time(NULL);
         // seed = 1567772785;
-        cout << "seed: " << seed << endl;
+        printf("seed: %d\n", seed);
         srand(seed);
         int         dev_id = 0;
         bm_status_t ret    = bm_dev_request(&handle, dev_id);
@@ -692,9 +684,8 @@ DWORD WINAPI test_img_scale_thread(LPVOID arg) {
             if (img_scale_w == 0) {
                 img_scale_w = crop_w / 2;
             }
-            cout << "[IMG_SCALE TEST]: 1n_int8->1n_int8 starts: n: "
-                 << image_num << ", img_scale_w:" << img_scale_w
-                 << ", img_scale_h:" << img_scale_h << endl;
+            printf("[IMG_SCALE TEST]: 1n_int8->1n_int8 starts: n: %d, img_scale_w: %d, img_scale_h: %d\n",
+                    image_num, img_scale_w, img_scale_h);
             img_scale_test_rand<uint8_t, uint8_t>(handle,
                                                   BGR,
                                                   DATA_TYPE_BYTE,
@@ -702,9 +693,8 @@ DWORD WINAPI test_img_scale_thread(LPVOID arg) {
                                                   image_channel,
                                                   img_scale_h,
                                                   img_scale_w);
-            cout << "[IMG_SCALE TEST]: 1n_fp32->1n_fp32 starts: n: "
-                 << image_num << ", img_scale_w:" << img_scale_w
-                 << ", img_scale_h:" << img_scale_h << endl;
+            printf("[IMG_SCALE TEST]: 1n_fp32->1n_fp32 starts: n: %d, img_scale_w: %d, img_scale_h: %d\n",
+                    image_num, img_scale_w, img_scale_h);
             img_scale_test_rand<float, float>(handle,
                                               BGR,
                                               DATA_TYPE_FLOAT,
@@ -712,9 +702,8 @@ DWORD WINAPI test_img_scale_thread(LPVOID arg) {
                                               image_channel,
                                               img_scale_h,
                                               img_scale_w);
-            cout << "[IMG_SCALE TEST]: 4n_int8->4n_int8 starts: n: "
-                 << image_num << ", img_scale_w:" << img_scale_w
-                 << ", img_scale_h:" << img_scale_h << endl;
+            printf("[IMG_SCALE TEST]: 4n_int8->4n_int8 starts: n: %d, img_scale_w: %d, img_scale_h: %d\n",
+                    image_num, img_scale_w, img_scale_h);
             img_scale_test_rand<int, int>(handle,
                                               BGR4N,
                                               DATA_TYPE_BYTE,
@@ -725,7 +714,7 @@ DWORD WINAPI test_img_scale_thread(LPVOID arg) {
         }
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST IMG SCALE] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST IMG SCALE] ALL TEST PASSED!------\n");
 
     return NULL;
 }
@@ -743,13 +732,11 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_img_scale loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_img_scale loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST IMG SCALE] thread nums should be 1~4 " << std::endl;
+        printf("[TEST IMG SCALE] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -778,7 +765,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] img_scale_thread_arg;
     #else

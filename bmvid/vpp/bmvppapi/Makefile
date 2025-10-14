@@ -23,6 +23,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+    CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
     CROSS_CC_PREFIX =
 else # pcie_arm64 and soc mode
@@ -51,7 +53,13 @@ LDFLAGS += -Wl,-melf64loongarch
 LDLIBS += -lm -lstdc++
 endif
 
+ifeq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+LDFLAGS += -Wl,-melf64loongarch
+LDLIBS += -lm -lstdc++
+endif
+
 ifeq ($(PRODUCTFORM), pcie_sw64)
+CFLAGS += --sysroot=$(CMAKE_SYSROOT)
 LDFLAGS +=
 LDLIBS += -lstdc++
 endif
@@ -59,10 +67,10 @@ endif
 LDFLAGS += -L$(INSTALL_DIR)/lib -L$(BMCV_PATH)/lib/$(PRODUCTFORM) -L../driver/release -L. -L$(ION_DIR)/lib
 
 ifneq ($(PRODUCTFORM), soc)
-	TEST_LDLIBS += -lbmvppapi -lbmion -lbmlib -ldl -lvpp_cmodel
-    TARGET_LDLIBS += -lbmion -Wl,-Bstatic -lvpp -Wl,-Bdynamic
+	TEST_LDLIBS += -lbmvppapi -lbmion -lbmlib -ldl -lm
+	TARGET_LDLIBS += -lbmion -Wl,-Bstatic -lvpp -Wl,-Bdynamic
 else
-	TEST_LDLIBS += -lbmvppapi -lbmion -lvpp_cmodel
+	TEST_LDLIBS += -lbmvppapi -lbmion
 	TARGET_LDLIBS += -lbmion -Wl,-Bstatic -lvpp -Wl,-Bdynamic -lm
 endif
 

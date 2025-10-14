@@ -2,6 +2,15 @@
 //#define BMCV_COMMON_H
 
 #include "bmcv_api_ext.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef _MSC_VER
+    #define ALIGN_STRUCT __declspec(align(4))
+#else
+    #define ALIGN_STRUCT __attribute__((aligned(4)))
+#endif
+
 #if defined (__cplusplus)
 extern "C" {
 #endif
@@ -105,10 +114,29 @@ typedef struct sg_api_cv_warp_perspective_1684x {
   int type;
 } sg_api_cv_warp_perspective_1684x_t;
 
+typedef struct sg_api_cv_remap {
+    u64 input_addr[3];
+    u64 output_addr[3];
+    u64 mapx_addr;
+    u64 mapy_addr;
+    u64 bilinear_y0x0_buffer_addr;
+    u64 bilinear_y0x1_buffer_addr;
+    u64 bilinear_y1x0_buffer_addr;
+    u64 bilinear_y1x1_buffer_addr;
+    u64 bilinear_flag_buffer_addr;
+    int channel;
+    int input_width;
+    int input_height;
+    int output_width;
+    int output_height;
+    int interpolation_mode;
+} sg_api_cv_remap_t;
+
 typedef struct sg_api_yolo_detect_out{
     u64 b0_global_addr;
     u64 b1_global_addr;
     u64 b2_global_addr;
+    u64 buffer_global_offset;
     u64 top_global_addr;
     u64 all_mask_ddr_addr; //for to support large box, need to alloc ddr at outside
     int input_num;
@@ -199,7 +227,7 @@ struct sg_api_cv_fft_t {
     bool  realInput;
     int  trans;
     int   factorSize;
-    int   factors[10];
+    int   factors[15];
     bool normalize;
 };
 #pragma pack(pop)
@@ -290,6 +318,58 @@ typedef struct bm_api_cv_hist_balance2 {
     u64 Yaddr;
 } bm_api_cv_hist_balance_t2;
 
+typedef struct bm_api_cv_lap_matrix {
+    u64 input_device_addr;
+    u64 output_device_addr;
+    u64 const_val_addr;
+    u64 res_addr;
+    int row;
+    int col;
+} bm_api_cv_lap_matrix;
+
+#define FW_MAX_SHAPE_DIMS 8
+typedef struct bm_api_cv_knn {
+    u64 centroids_global_addr;
+    u64 labels_global_addr;
+    u64 input_global_addr;
+    u64 weight_global_addr;
+    u64 buffer_global_addr;
+    int  Shape_Input[FW_MAX_SHAPE_DIMS];
+    int  Shape_Weight[FW_MAX_SHAPE_DIMS];
+    int dims_Input;
+    int dims_Weight;
+    int k;
+    int num_iter;
+    int dtype;
+} bm_api_cv_knn_t;
+
+typedef struct bm_api_cv_knn2 {
+    u64 ref_data_dev_mem;
+    u64 test_data_dev_mem;
+    u64 dist_to_sort_dev_mem;
+    u64 distance_tpu_dev_mem;
+    u64 indices_tpu_dev_mem;
+    int n_test;
+    int n_ref;
+    int n_feat;
+    int k;
+} bm_api_cv_knn2_t;
+
+typedef struct bm_api_cv_knn_match {
+    u64 ref_data_dev_mem;
+    u64 test_data_dev_mem;
+    u64 dist_to_sort_dev_mem;
+    u64 distance_tpu_dev_mem;
+    u64 good_match_dev_mem;
+    u64 index_sorted_dev_mem;
+    int n_ref;
+    int n_ref_feat;
+    int n_test_feat;
+    int n_descriptor;
+    int k;
+    float ratio_thresh;
+} bm_api_cv_knn_match_t;
+
 typedef struct sg_api_cv_rotate {
   int channel;
   int rotation_angle;
@@ -298,6 +378,25 @@ typedef struct sg_api_cv_rotate {
   int width;
   int height;
 } sg_api_cv_rotate_t;
+
+typedef struct sg_api_cv_cos_similarity {
+    unsigned long long input_data_global_addr;
+    unsigned long long output_data_global_addr;
+    unsigned long long normalized_data_global_addr;
+    int vec_num;
+    int vec_dims;
+} sg_api_cv_cos_similarity_t;
+
+typedef struct sg_api_cv_matrix_prune {
+    unsigned long long input_data_global_addr;
+    unsigned long long output_data_global_addr;
+    unsigned long long sort_data_global_addr;
+    unsigned long long sort_index_global_addr;
+    unsigned long long sort_trans_global_addr;
+    int matrix_dims;
+    float p;
+} sg_api_cv_matrix_prune_t;
+
 
 typedef struct sg_api_cv_overlay {
   int overlay_num;
@@ -309,6 +408,7 @@ typedef struct sg_api_cv_overlay {
   int overlay_height[10];
   int pos_x[10];
   int pos_y[10];
+  int format;
 } sg_api_cv_overlay_t;
 
 typedef struct sg_api_cv_sobel_t {
@@ -342,7 +442,68 @@ typedef struct sg_api_cv_gaussian_blur {
   int is_packed;
   int out_type;
 } sg_api_cv_gaussian_blur_t;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct sg_api_cv_surf_response {
+	int width;
+	int height;
+	unsigned long long surf_img_addr;
+	int rl_width[12];
+	int rl_height[12];
+	int rl_step[12];
+	int rl_filter[12];
+	unsigned long long responses_addr[12];
+	unsigned long long laplacian_addr[12];
+	unsigned long long BoxFilterKernel_addr[12];
+}sg_api_cv_surf_response;
 
 #pragma pack(pop)
 }
+
+#pragma pack(push, 1)
+typedef struct sg_api_cv_assigned_area_blur {
+    int base_width;
+    int base_height;
+    int ksize;
+    int channel;
+    int assigned_area_num;
+    int assigned_area_width[200];
+    int assigned_area_height[200];
+    int start_x[200];
+    int start_y[200];
+    unsigned long long base_addr[3];
+    unsigned long long output_addr[3];
+    unsigned long long kernel_sys_addr;
+} sg_api_cv_assigned_area_blur_t;
+#pragma pack(pop)
+
+typedef struct sg_api_cv_canny_sobel_t {
+    int channel;
+    unsigned long long input_addr[3];
+    unsigned long long kernel_addr;
+    unsigned long long output_addr[3];
+    int width[3];
+    int height[3];
+    int kw;
+    int kh;
+    int stride_i[3];
+    int stride_o[3];
+    float delta;
+    int is_packed;
+}ALIGN_STRUCT sg_api_cv_canny_sobel_t;
+typedef struct sg_api_cv_canny_mag_t {
+    u64 dx_addr;
+    u64 dy_addr;
+    u64 d_addr;
+    bool l2gradient;
+    int size;
+}ALIGN_STRUCT sg_api_cv_canny_mag_t;
+
+typedef struct sg_api_cv_canny_double_thred_t {
+    u64 mag_addr;
+    float low_threshold;
+    float high_threshold;
+    int size;
+}ALIGN_STRUCT sg_api_cv_canny_double_thred_t;
 // #endif

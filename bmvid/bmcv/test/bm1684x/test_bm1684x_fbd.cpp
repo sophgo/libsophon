@@ -110,7 +110,7 @@ void read_image(unsigned char **input_ptr, int *src_len, const char * src_name)
 
 }
 
-void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+void bm_write_bin(bm_image dst, const char *output_name);
 
 #ifndef USING_CMODEL
 static int test_vpp_fbd_compressed_to_yuv() {
@@ -213,7 +213,7 @@ static int test_vpp_fbd_compressed_to_yuv() {
     os << "_BT601_";
     os << i;
     os << ".bin";
-    bm1684x_vpp_write_bin(dst[i], os.str().c_str());
+    bm_write_bin(dst[i], os.str().c_str());
   }
 #endif
 
@@ -369,7 +369,7 @@ static int test_vpp_fbd_compressed_to_rgb() {
     os << "_BT601_";
     os << i;
     os << ".bin";
-    bm1684x_vpp_write_bin(dst[i], os.str().c_str());
+    bm_write_bin(dst[i], os.str().c_str());
   }
 #endif
 

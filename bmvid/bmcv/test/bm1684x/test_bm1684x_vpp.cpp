@@ -7,7 +7,7 @@
 #include <string.h>
 
 static bm_handle_t handle;
-void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+void bm_write_bin(bm_image dst, const char *output_name);
 char opencvFile_path[200] = "./";
 #define UNUSED_VARIABLE(x)  ((x) = (x))
 
@@ -76,12 +76,12 @@ static void test_vpp_yuv2rgb() {
         os << "_BT601_";
         os << i;
         os << ".bgr24";
-        bm1684x_vpp_write_bin(dst[i], os.str().c_str());
+        bm_write_bin(dst[i], os.str().c_str());
     }
 
     bmcv_image_vpp_csc_matrix_convert(handle, 1, src, dst, CSC_YCbCr2RGB_BT709);
 
-    bm1684x_vpp_write_bin(dst[0], "yuv2rgb_BT709.bgr24");
+    bm_write_bin(dst[0], "yuv2rgb_BT709.bgr24");
 
     for (int i = 0; i < 8; i++) {
         bm_image_destroy(dst[i]);
@@ -127,8 +127,8 @@ static void test_vpp_yuv_crop_to_odd_num_height() {
     bmcv_image_vpp_convert(handle, 1, src, &dst, &rect);
     bmcv_image_vpp_convert(handle, 1, src, &dst_bgr, &rect2);
 
-    bm1684x_vpp_write_bin(dst, "odd_yuv1.bgr24");
-    bm1684x_vpp_write_bin(dst_bgr, "odd_yuv2.bgr24");
+    bm_write_bin(dst, "odd_yuv1.bgr24");
+    bm_write_bin(dst_bgr, "odd_yuv2.bgr24");
 
     bm_image_destroy(dst);
     bm_image_destroy(src);
@@ -193,11 +193,11 @@ static void test_vpp_compressed2rgb() {
         os << "_BT601_";
         os << i;
         os << ".bgr24";
-        bm1684x_vpp_write_bin(dst[i], os.str().c_str());
+        bm_write_bin(dst[i], os.str().c_str());
     }
 
     bmcv_image_vpp_csc_matrix_convert(handle, 1, src, dst, CSC_YCbCr2RGB_BT709);
-    bm1684x_vpp_write_bin(dst[0], "fbd_BT709.bgr24");
+    bm_write_bin(dst[0], "fbd_BT709.bgr24");
 
     for (int i = 0; i < 32; i++)
     {

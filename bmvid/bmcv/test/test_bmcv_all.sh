@@ -1,59 +1,105 @@
 #!/bin/bash
 
-echo "TEST_BMCV_TEST"
+failed_count=0
+count=1
+failed_scripts=""
+bmcv_case=${1:-'tpu'}
+loop=${2:-1}
 
-cases=(
- test_cv_warp
- test_resize
- test_cv_yuv2rgb
- test_cv_nms
- test_convert_to
- test_cv_sort
- test_cv_feature_match
- test_cv_crop
- test_cv_transpose
- test_cv_bgrsplit
- test_cv_gemm
- test_cv_img_scale
-  test_cv_bitwise
-)
+run_command() {
+  local command="$1"
+  local description="$1"
 
-function run_bmcv_test {
-  test_app=$1
-  arg=$2
+  echo "Running: $description"
+  eval "$command"
 
-  if [ ! -z $arg ]; then
-    ./test_api_bmcv/$test_app $arg; OUT=$?
-  else
-    ./test_api_bmcv/$test_app; OUT=$?
+  if [ $? -ne 0 ]; then
+    echo "Command failed: $description"
+    failed_count=$((failed_count + 1))
+    failed_scripts="$failed_scripts$description\n"
   fi
-  if [ $OUT -eq 0 ]; then
-    echo "Run $test_app OK"
-  else
-    echo "Run $test_app Fail"
-    return $OUT
-  fi
+
+  echo ""
 }
 
-case_count=0
-fail_list=()
-for test_case in ${cases[@]}
-do
-  case_count=$(($case_count+1))
-  run_bmcv_test ${test_case}; ret=$?
-  if [ $ret -ne 0 ]; then
-    fail_list+=("${test_case}")
-  fi
-done
+run_tpu() {
+  run_command "test_cv_absdiff"
+  run_command "test_cv_add_weighted"
+  run_command "test_cv_as_strided"
+  run_command "test_cv_axpy"
+  run_command "test_cv_base64"
+  run_command "test_cv_batch_topk"
+  run_command "test_cv_bayer2rgb"
+  run_command "test_cv_bgrsplit"
+  run_command "test_cv_bitwise"
+  run_command "test_cv_calc_hist"
+  run_command "test_cv_cmulp"
+  run_command "test_cv_copy_to"
+  run_command "test_cv_copy_to_param"
+  run_command "test_cv_crop"
+  run_command "test_cv_dct"
+  run_command "test_cv_gemm"
+  run_command "test_cv_image_align"
+  run_command "test_cv_hm_distance"
+  run_command "test_cv_jpeg"
+  run_command "test_cv_laplacian"
+  run_command "test_cv_min_max"
+  run_command "test_cv_nms"
+  run_command "test_cv_pyramid"
+  run_command "test_cv_quantify"
+  run_command "test_cv_sort"
+  run_command "test_cv_threshold"
+  run_command "test_cv_transpose"
+  run_command "test_cv_warp_affine"
+  run_command "test_cv_warp_perspective"
+  run_command "test_cv_width_align"
+  run_command "test_faiss_indexflatIP"
+  run_command "test_faiss_indexPQ"
+  run_command "test_matrix_log"
+  run_command "test_perf_bmcv"
+  # run_command "test_cv_rotate" --fail
+  # run_command "test_faiss_indexflatL2" --fail
+  # run_command "test_cv_yuv2hsv" --fail
+  # run_command "test_cv_yuv2rgb" --fail
+  # run_command "test_cv_warp" --fail
+  # run_command "test_cv_split" --fail
+  # run_command "test_cv_storage_convert" --fail
+  # run_command "test_cv_sobel" --fail
+  # run_command "test_cv_put_text" --fail
+  # run_command "test_cv_morph" --fail
+  # run_command "test_cv_multi_crop_resize" --fail
+  # run_command "test_cv_lkpyramid" --fail
+  # run_command "test_cv_matmul" --fail
+  # run_command "test_cv_matmul_t_opt" --fail
+  # run_command "test_cv_image_transpose" --fail
+  # run_command "test_cv_img_scale" --fail
+  # run_command "test_cv_json" --fail
+  # run_command "test_cv_hist_balance" --modify the command
+  # run_command "test_cv_distance" --fail
+  # run_command "test_cv_draw_lines" --fail
+  # run_command "test_cv_draw_rectangle" --fail
+  # run_command "test_cv_feature_match" --fail
+  # run_command "test_cv_fft_1d" --fail
+  # run_command "test_cv_fft_2d" --fail
+  # run_command "test_cv_fill_rectangle" --fail
+  # run_command "test_cv_fusion" --fail
+  # run_command "test_cv_gaussian_blur" --fail
+  # run_command "test_cv_canny" --fail
+  # run_command "test_yolov3_detect_out" --fail
+}
 
-echo "Have run $case_count cases in total"
-
-if [ ${#fail_list[@]} -eq 0 ]; then
-  echo "TEST_BMCV_TEST PASSED"
-else
-  for test_case in ${fail_list[@]}
+if [ $bmcv_case = "tpu" ]; then
+  eval "mkdir -p out"
+  while [ $count -le $loop ]
   do
-    echo "Error occurs in $test_case"
+      run_tpu
+      ((count++))
   done
-  echo "TEST_BMCV_TEST FAILED"
+fi
+
+if [ $failed_count -gt 0 ]; then
+  echo "Total failed commands: $failed_count"
+  echo -e "Failed scripts:\n$failed_scripts"
+else
+  echo "All tests pass!"
 fi

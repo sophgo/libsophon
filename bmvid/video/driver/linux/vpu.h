@@ -58,6 +58,7 @@
 #define VDI_IOCTL_GET_KERNEL_RESET_STATUS        _IO(VDI_IOCTL_MAGIC, 35)
 #define VDI_IOCTL_SET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 36)
 #define VDI_IOCTL_GET_RESET_FLAG                 _IO(VDI_IOCTL_MAGIC, 37)
+#define VDI_IOCTL_GET_CARD_ID                    _IO(VDI_IOCTL_MAGIC, 38)
 
 typedef struct vpudrv_syscxt_info_s {
     unsigned int core_idx;

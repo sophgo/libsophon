@@ -63,11 +63,8 @@ static bool res_ref_comp(T ** res_1n_planner,
     for (int c_idx = 0; c_idx < plane_num; c_idx++) {
         for (int idx = 0; idx < plane_len[c_idx]; idx++) {
             if (res_1n_planner[c_idx][idx] != ref_1n_planner[c_idx][idx]) {
-                std::cout << " res: " << (int)res_1n_planner[c_idx][idx]
-                          << " ref: " << (int)ref_1n_planner[c_idx][idx]
-                          << " plane_num: " << c_idx << " idx: " << idx
-                          << std::endl;
-
+                printf("res: %d, ref: %d, plane_num: %d, idx: %d\n",
+                      (int)res_1n_planner[c_idx][idx], (int)ref_1n_planner[c_idx][idx], c_idx, idx);
                 return false;
             }
         }
@@ -117,7 +114,7 @@ static int get_plane_num(int image_format, int w, int h, int *plane_num) {
             break;
         }
         default: {
-            std::cout << "image format not support\n" << std::endl;
+            printf("image format not support\n");
 
             return -1;
         }
@@ -170,7 +167,7 @@ static int image_align_test_rand(bm_handle_t handle,
     bm_image_alloc_dev_mem(output);
     bm_image_copy_host_to_device(input, (void **)src_data);
     if (BM_SUCCESS != bm_shape_align(input, &aligned_image, align_option)) {
-        std::cout << "bmcv_image_align error !!!" << std::endl;
+        printf("bmcv_image_align error !!!\n");
         bm_image_destroy(input);
         bm_image_destroy(output);
         bm_image_destroy(aligned_image);
@@ -187,7 +184,7 @@ static int image_align_test_rand(bm_handle_t handle,
     }
     bm_image_copy_device_to_host(aligned_image, (void **)aligned_data);
     if (BM_SUCCESS != bm_shape_dealign(aligned_image, output, align_option)) {
-        std::cout << "bmcv_image_align error !!!" << std::endl;
+        printf("bmcv_image_align error !!!\n");
         bm_image_destroy(input);
         bm_image_destroy(output);
 
@@ -196,7 +193,7 @@ static int image_align_test_rand(bm_handle_t handle,
     bm_image_copy_device_to_host(output, (void **)dst_data);
     if (false ==
         res_ref_comp<T>(src_data, aligned_data, plane_num, plane_len)) {
-        std::cout << "aligned_data compare error!!!" << std::endl;
+        printf("aligned_data compare error!!!\n");
         bm_image_destroy(input);
         bm_image_destroy(output);
         bm_image_destroy(aligned_image);
@@ -204,14 +201,14 @@ static int image_align_test_rand(bm_handle_t handle,
         exit(-1);
     }
     if (false == res_ref_comp<T>(src_data, dst_data, plane_num, plane_len)) {
-        std::cout << "dst_data compare error!!!" << std::endl;
+        printf("dst_data compare error!!!\n");
         bm_image_destroy(input);
         bm_image_destroy(output);
         bm_image_destroy(aligned_image);
 
         exit(-1);
     }
-    std::cout << "COMPARE PASSED" << std::endl;
+    printf("COMPARE PASSED\n");
     bm_image_destroy(input);
     bm_image_destroy(output);
     bm_image_destroy(aligned_image);
@@ -228,14 +225,12 @@ DWORD WINAPI test_image_align_thread(LPVOID arg) {
         (image_align_thread_arg_t *)arg;
     int test_loop_times = image_align_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST IMAGE ALIGN] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST IMAGE ALIGN] test starts... LOOP times will be %d\n", test_loop_times);
     int         dev_id = 0;
     bm_handle_t handle;
     bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
@@ -244,22 +239,21 @@ DWORD WINAPI test_image_align_thread(LPVOID arg) {
         exit(-1);
     }
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST IMAGE ALIGN] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST IMAGE ALIGN] LOOP %d------\n", loop_idx);
         unsigned int seed = (unsigned)time(NULL);
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         srand(seed);
         int in_w = 400;
         int in_h = 399;
-        std::cout << "---------IMAGE ALIGN CLASSICAL SIZE TEST----------"
-                  << std::endl;
-        std::cout << "[IMAGE ALIGN TEST] nv12: " << std::endl;
+        printf("---------IMAGE ALIGN CLASSICAL SIZE TEST----------\n");
+        printf("[IMAGE ALIGN TEST] nv12: \n");
+
         image_align_test_rand<unsigned char>(
             handle, FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE, in_h, in_w);
-        std::cout << "----------IMAGE ALIGN TEST OVER---------" << std::endl;
+        printf("----------IMAGE ALIGN TEST OVER---------\n");
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST IMAGE ALIGN] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST IMAGE ALIGN] ALL TEST PASSED!------\n");
     return NULL;
 }
 
@@ -276,17 +270,15 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_image_align loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_image_align loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST IMAGE ALIGN] loop times should be 1~1500" << std::endl;
+        printf("[TEST IMAGE ALIGN] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST IMAGE ALIGN] thread nums should be 1~4 " << std::endl;
+        printf("[TEST IMAGE ALIGN] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -315,7 +307,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] image_align_thread_arg;
     #else

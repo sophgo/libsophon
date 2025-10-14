@@ -54,9 +54,9 @@ typedef struct {
 } EncParameter;
 
 typedef struct {
-    char *input_filename;
+    char input_filename[256];
     FILE *fin;
-    char *output_filename;
+    char output_filename[256];
 
     int   log_level;
     int   thread_number; /* at most 24 threads for now */
@@ -78,7 +78,7 @@ typedef struct {
     BmVpuEncInitialInfo initial_info;
 
     BmVpuFramebuffer* src_fb_list;
-    BmVpuEncDMABuffer* src_fb_dmabuffers;
+    BmEncDmaBufferYUV* src_fb_dmabuffers_yuv;
     void*             frame_unused_queue;
     int num_src_fb;
     BmVpuFramebuffer* src_fb;
@@ -265,12 +265,20 @@ static void cleanup_task(void* arg)
     /* Free all allocated memory (both regular and DMA memory) */
     if (ctx->src_fb_list)
         free(ctx->src_fb_list);
-    if (ctx->src_fb_dmabuffers)
+    if (ctx->src_fb_dmabuffers_yuv)
     {
-        for (i = 0; i < ctx->num_src_fb; ++i)
-            bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->src_fb_dmabuffers[i]));
-
-        free(ctx->src_fb_dmabuffers);
+        for (i = 0; i < ctx->num_src_fb; ++i) {
+            if (ctx->src_fb_dmabuffers_yuv[i].dmabuffers_y.size != 0) {
+                bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_y));
+            }
+            if (ctx->src_fb_dmabuffers_yuv[i].dmabuffers_u.size != 0) {
+                bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_u));
+            }
+            if (ctx->src_fb_dmabuffers_yuv[i].dmabuffers_v.size != 0) {
+                bmvpu_enc_dma_buffer_deallocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_v));
+            }
+        }
+        free(ctx->src_fb_dmabuffers_yuv);
     }
 
     if (&(ctx->bs_dma_buffer))
@@ -396,7 +404,6 @@ static int run_once(InputParameter* par)
 
     /* in unit of 4k bytes */
     ctx->bs_buffer_size = (ctx->bs_buffer_size +(4*1024-1)) & (~(4*1024-1));
-
     /* Create bs buffer */
     ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->bs_dma_buffer), ctx->bs_buffer_size);
     if (ret != 0)
@@ -405,7 +412,6 @@ static int run_once(InputParameter* par)
         ret = -1;
         goto cleanup;
     }
-
     /* Open an encoder instance, using the previously allocated bitstream buffer */
     ret = bmvpu_enc_open(&(ctx->video_encoder), eop, &(ctx->bs_dma_buffer), &(ctx->initial_info));
     if (ret != BM_VPU_ENC_RETURN_CODE_OK)
@@ -431,8 +437,8 @@ static int run_once(InputParameter* par)
         ret = -1;
         goto cleanup;
     }
-    ctx->src_fb_dmabuffers = (BmVpuEncDMABuffer*)malloc(sizeof(BmVpuEncDMABuffer) * ctx->num_src_fb);
-    if (ctx->src_fb_dmabuffers == NULL)
+    ctx->src_fb_dmabuffers_yuv = (BmEncDmaBufferYUV*)malloc(sizeof(BmEncDmaBufferYUV) * ctx->num_src_fb);
+    if (ctx->src_fb_dmabuffers_yuv == NULL)
     {
         fprintf(stderr, "malloc failed\n");
         ret = -1;
@@ -440,22 +446,48 @@ static int run_once(InputParameter* par)
     }
     for (i = 0; i < ctx->num_src_fb; ++i)
     {
+        ctx->src_fb_dmabuffers_yuv[i].dmabuffers_y.size = 0;
+        ctx->src_fb_dmabuffers_yuv[i].dmabuffers_u.size = 0;
+        ctx->src_fb_dmabuffers_yuv[i].dmabuffers_v.size = 0;
         int src_id = 0x100 + (tid<<5) + i;
 
         /* Allocate DMA buffers for the raw input frames. */
-        ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &ctx->src_fb_dmabuffers[i], ctx->initial_info.src_fb.size);
+        ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_y), ctx->initial_info.src_fb.y_size);
         if(ret != 0){
             fprintf(stderr, "bmvpu_malloc_device_byte_heap for src_buffer failed\n");
             ret = -1;
             goto cleanup;
         }
+        if (eop->pix_format == BM_VPU_ENC_PIX_FORMAT_YUV420P) {
+            ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_u), ctx->initial_info.src_fb.c_size);
+            if(ret != 0){
+                fprintf(stderr, "bmvpu_malloc_device_byte_heap for src_buffer failed\n");
+                ret = -1;
+                goto cleanup;
+            }
 
-        ret = bmvpu_fill_framebuffer_params(&(ctx->src_fb_list[i]),
+            ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_v), ctx->initial_info.src_fb.c_size);
+            if(ret != 0){
+                fprintf(stderr, "bmvpu_malloc_device_byte_heap for src_buffer failed\n");
+                ret = -1;
+                goto cleanup;
+            }
+        } else if (eop->pix_format == BM_VPU_ENC_PIX_FORMAT_NV12) {
+            ret = bmvpu_enc_dma_buffer_allocate(ctx->core_idx, &(ctx->src_fb_dmabuffers_yuv[i].dmabuffers_u), ctx->initial_info.src_fb.c_size*2);
+            if(ret != 0){
+                fprintf(stderr, "bmvpu_malloc_device_byte_heap for src_buffer failed\n");
+                ret = -1;
+                goto cleanup;
+            }
+            ctx->src_fb_dmabuffers_yuv[i].dmabuffers_v.size = 0;
+        }
+
+        ret = bmvpu_fill_framebuffer_params_yuv(&(ctx->src_fb_list[i]),
                                       &(ctx->initial_info.src_fb),
-                                      &(ctx->src_fb_dmabuffers[i]),
+                                      &(ctx->src_fb_dmabuffers_yuv[i]),
                                       src_id, NULL);
         if(ret != 0){
-            fprintf(stderr, "bmvpu_fill_framebuffer_params failed\n");
+            fprintf(stderr, "bmvpu_fill_framebuffer_params_yuv failed\n");
             ret = -1;
             goto cleanup;
         }
@@ -572,9 +604,20 @@ static int run_once(InputParameter* par)
             }
 
             // TODO
-            u64 vpu_pa = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer);
-            ret = bmvpu_enc_upload_data(ctx->core_idx, host_va, frame_size,
-                                    vpu_pa, frame_size, frame_size, 1);
+            u64 vpu_pa_y = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer_y);
+            ret = bmvpu_enc_upload_data(ctx->core_idx, host_va, ctx->initial_info.src_fb.y_size, vpu_pa_y, ctx->initial_info.src_fb.y_size, ctx->initial_info.src_fb.y_size, 1);
+
+
+            if (eop->pix_format == BM_VPU_ENC_PIX_FORMAT_YUV420P) {
+                u64 vpu_pa_u = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer_u);
+                ret = bmvpu_enc_upload_data(ctx->core_idx, host_va + ctx->initial_info.src_fb.y_size, ctx->initial_info.src_fb.c_size, vpu_pa_u, ctx->initial_info.src_fb.c_size, ctx->initial_info.src_fb.c_size, 1);
+                u64 vpu_pa_v = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer_v);
+                ret = bmvpu_enc_upload_data(ctx->core_idx, host_va + ctx->initial_info.src_fb.y_size + ctx->initial_info.src_fb.c_size, ctx->initial_info.src_fb.c_size, vpu_pa_v, ctx->initial_info.src_fb.c_size, ctx->initial_info.src_fb.c_size, 1);
+            } else if (eop->pix_format == BM_VPU_ENC_PIX_FORMAT_NV12) {
+                u64 vpu_pa_u = bmvpu_enc_dma_buffer_get_physical_address(ctx->src_fb->dma_buffer_u);
+                ret = bmvpu_enc_upload_data(ctx->core_idx, host_va + ctx->initial_info.src_fb.y_size, ctx->initial_info.src_fb.c_size*2, vpu_pa_u, ctx->initial_info.src_fb.c_size*2, ctx->initial_info.src_fb.c_size*2, 1);
+
+            }
             if (ret != 0)
             {
                 fprintf(stderr, "%s:%d(%s) bmvpu_enc_upload_data failed\n", __FILE__, __LINE__, __func__);
@@ -899,10 +942,10 @@ static int parse_args(int argc, char **argv, InputParameter* par)
             par->frame_number = atoi(optarg);
             break;
         case 'i':
-            par->input_filename = optarg;
+            strcpy(par->input_filename, optarg);
             break;
         case 'o':
-            par->output_filename = optarg;
+            strcpy(par->output_filename, optarg);
             break;
         case 'a':
             par->enc.fps = atoi(optarg);
@@ -1000,13 +1043,13 @@ static int parse_args(int argc, char **argv, InputParameter* par)
     }
 #endif
 
-    if (par->input_filename == NULL)
+    if (strlen(par->input_filename) <= 0)
     {
         fprintf(stderr, "Missing input filename\n\n");
         usage(argv[0]);
         return RETVAL_ERROR;
     }
-    if (par->output_filename == NULL)
+    if (strlen(par->output_filename) <= 0)
     {
         fprintf(stderr, "Missing output filename\n\n");
         usage(argv[0]);
@@ -1287,7 +1330,7 @@ static void* sigmgr_thread(void* argument)
                     {
                         printf("Thread 0x%lx is canceling...\n", ptid);
                         pthread_cancel(ptid);
-                        threads->handles[i] = NULL;
+                        threads->handles[i] = 0;
                     }
                 }
             }

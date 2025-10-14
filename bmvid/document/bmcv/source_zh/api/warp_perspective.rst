@@ -1,9 +1,7 @@
 bmcv_image_warp_perspective
 ===========================
 
-
 该接口实现图像的透射变换，又称投影变换或透视变换。透射变换将图片投影到一个新的视平面，是一种二维坐标 (:math:`x_0` , :math:`y_0`) 到二维坐标(:math:`x` , :math:`y`)的非线性变换，该接口的实现是针对输出图像的每一个像素点坐标得到对应输入图像的坐标，然后构成一幅新的图像，其数学表达式形式如下：
-
 
 .. math::
 
@@ -19,7 +17,6 @@ bmcv_image_warp_perspective
 
 对应的齐次坐标矩阵表示形式为：
 
-
 .. math::
 
      \left[\begin{matrix} x' \\ y' \\ w' \end{matrix} \right]=\left[\begin{matrix} a_1&b_1&c_1 \\ a_2&b_2&c_2 \\ a_3&b_3&c_3 \end{matrix} \right]\times \left[\begin{matrix} x \\ y \\ 1 \end{matrix} \right]
@@ -32,8 +29,6 @@ bmcv_image_warp_perspective
     y_0 = y' / w'   \\
     \end{array}
     \right.
-
-
 
 坐标变换矩阵是一个 9 点的矩阵（通常c3 = 1），利用该变换矩阵可以从输出图像坐标推导出对应的输入原图坐标，该变换矩阵可以通过输入输出图像对应的 4 个点的坐标来获取。
 
@@ -56,13 +51,12 @@ bmcv_image_warp_perspective
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
 其中，bmcv_perspective_matrix 定义了一个坐标变换矩阵，其顺序为 float m[9] = {a1, b1, c1, a2, b2, c2, a3, b3, c3}。
 而 bmcv_perspective_image_matrix 定义了一张图片里面有几个变换矩阵，可以实现对一张图片里的多个小图进行透射变换。
@@ -79,19 +73,17 @@ bmcv_image_warp_perspective
         } bmcv_perspective_image_matrix;
 
 
-
 **接口形式二:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective_with_coordinate(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_coordinate coord[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_coordinate coord[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
 其中，bmcv_perspective_coordinate 定义了四边形四个顶点的坐标，按照左上、右上、左下、右下的顺序存储。
 而 bmcv_perspective_image_coordinate 定义了一张图片里面有几组四边形的坐标，可以实现对一张图片里的多个小图进行透射变换。
@@ -109,19 +101,17 @@ bmcv_image_warp_perspective
         } bmcv_perspective_image_coordinate;
 
 
-
 **接口形式三:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective_similar_to_opencv(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
 本接口中bmcv_perspective_image_matrix 定义的变换矩阵与opencv的warpPerspective接口要求输入的变换矩阵相同，且与接口一中同名结构体定义的矩阵互为逆矩阵，其余参数与接口一相同。
 
@@ -168,12 +158,11 @@ bmcv_image_warp_perspective
   输入参数。是否使用 bilinear 进行插值，若为 0 则使用 nearest 插值，若为 1 则使用 bilinear 插值，默认使用 nearest 插值。选择 nearest 插值的性能会优于 bilinear，因此建议首选 nearest 插值，除非对精度有要求时可选择使用 bilinear 插值。1684x 尚不支持 bilinear 插值。
 
 
-
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **注意事项**
@@ -189,7 +178,6 @@ bmcv_image_warp_perspective
    +-----+------------------------+
    |  2  | FORMAT_RGB_PLANAR      |
    +-----+------------------------+
-
 
 3. bm1684中，该接口所支持的 data_type 包括：
 
@@ -220,31 +208,52 @@ bmcv_image_warp_perspective
 
     .. code-block:: c
 
-        #inculde "common.h"
         #include "stdio.h"
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
         #include <iostream>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
 
-        int main(int argc, char *argv[]) {
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
             bm_handle_t handle;
-
             int image_h = 1080;
             int image_w = 1920;
-
             int dst_h = 1080;
             int dst_w = 1920;
             int use_bilinear = 0;
-            bm_dev_request(&handle, 0);
+            bm_image src, dst;
             bmcv_perspective_image_matrix matrix_image;
             matrix_image.matrix_num = 1;
-            std::shared_ptr<bmcv_perspective_matrix> matrix_data
-                    = std::make_shared<bmcv_perspective_matrix>();
-            matrix_image.matrix = matrix_data.get();
+            bmcv_perspective_matrix* matrix_data = (bmcv_perspective_matrix*)malloc(sizeof(bmcv_perspective_matrix) * 1);
+            unsigned char* src_data = new unsigned char[image_h * image_w * 3];
+            unsigned char* res_data = new unsigned char[dst_h * dst_w * 3];
+            const char *filename_src = "path/to/src";
+            const char *filename_dst = "path/to/dst";
 
+            matrix_image.matrix = matrix_data;
             matrix_image.matrix->m[0] = 0.529813;
             matrix_image.matrix->m[1] = -0.806194;
             matrix_image.matrix->m[2] = 1000.000;
@@ -255,26 +264,20 @@ bmcv_image_warp_perspective
             matrix_image.matrix->m[7] = -0.000686;
             matrix_image.matrix->m[8] = 1.000000;
 
-            bm_image src, dst;
-            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &src);
-            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &dst);
-
-            std::shared_ptr<u8*> src_ptr = std::make_shared<u8*>(
-                    new u8[image_h * image_w * 3]);
-            memset((void *)(*src_ptr.get()), 148, image_h * image_w * 3);
-            u8 *host_ptr[] = {*src_ptr.get()};
-            bm_image_copy_host_to_device(src, (void **)host_ptr);
-
+            bm_dev_request(&handle, 0);
+            readBin(filename_src, src_data, image_h * image_w * 3);
+            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &dst);
+            bm_image_copy_host_to_device(src, (void **)&src_data);
             bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst, use_bilinear);
+            bm_image_copy_device_to_host(dst, (void**)&res_data);
+            writeBin(filename_dst, res_data, dst_h * dst_w * 3);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);
             bm_dev_free(handle);
-
+            delete[] src_data;
+            delete[] res_data;
+            free(matrix_data);
             return 0;
         }
-
-
-

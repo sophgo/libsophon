@@ -1,7 +1,7 @@
 bm_image_create
 ===============
 
-我们不建议用户直接填充 bm_image 结构，而是通过以下 API 来创建/销毁一个 bm_image 结构。
+我们不建议用户直接填充 bm_image 结构，而是通过以下 API 来创建一个 bm_image 结构。
 
 **接口形式:**
 
@@ -11,10 +11,11 @@ bm_image_create
            bm_handle_t handle,
            int img_h,
            int img_w,
-           bmcv_image_format_ext image_format,
-           bmcv_data_format_ext data_type,
+           bm_image_format_ext image_format,
+           bm_image_data_format_ext data_type,
            bm_image *image,
-           int* stride);
+           int* stride=nullptr);
+
 
 **传入参数说明:**
 

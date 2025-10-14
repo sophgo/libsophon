@@ -11,13 +11,14 @@ _____
     .. code-block:: c
 
         bm_status_t bmcv_image_lkpyramid_create_plan(
-                bm_handle_t handle,
-                void*& plan,
-                int width,
-                int height,
-                int winW = 21,
-                int winH = 21,
-                int maxLevel = 3);
+                    bm_handle_t handle,
+                    void*& plan,
+                    int width,
+                    int height,
+                    int winW = 21,
+                    int winH = 21,
+                    int maxLevel = 3);
+
 
 **处理器型号支持：**
 
@@ -81,15 +82,15 @@ _____
         } bmcv_term_criteria_t;
 
         bm_status_t bmcv_image_lkpyramid_execute(
-                bm_handle_t handle,
-                void* plan,
-                bm_image prevImg,
-                bm_image nextImg,
-                int ptsNum,
-                bmcv_point2f_t* prevPts,
-                bmcv_point2f_t* nextPts,
-                bool* status,
-                bmcv_term_criteria_t criteria = {3, 30, 0.01});
+                    bm_handle_t handle,
+                    void* plan,
+                    bm_image prevImg,
+                    bm_image nextImg,
+                    int ptsNum,
+                    bmcv_point2f_t* prevPts,
+                    bmcv_point2f_t* nextPts,
+                    bool* status,
+                    bmcv_term_criteria_t criteria = {3, 30, 0.01});
 
 
 **输入参数说明：**
@@ -135,7 +136,7 @@ _____
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 销毁
@@ -166,59 +167,86 @@ ______
 | 1   | DATA_TYPE_EXT_1N_BYTE          |
 +-----+--------------------------------+
 
+
 示例代码
 ___________
 
     .. code-block:: c
 
-        bm_handle_t handle;
-        bm_status_t ret = bm_dev_request(&handle, 0);
-        if (ret != BM_SUCCESS) {
-            printf("Create bm handle failed. ret = %d\n", ret);
-            return -1;
-        }
-        ret = bmcv_open_cpu_process(handle);
-        if (ret != BM_SUCCESS) {
-            printf("BMCV enable Processor failed. ret = %d\n", ret);
-            bm_dev_free(handle);
-            return -1;
-        }
-        bm_image_format_ext fmt = FORMAT_GRAY;
-        bm_image prevImg;
-        bm_image nextImg;
-        bm_image_create(handle, height, width, fmt, DATA_TYPE_EXT_1N_BYTE, &prevImg);
-        bm_image_create(handle, height, width, fmt, DATA_TYPE_EXT_1N_BYTE, &nextImg);
-        bm_image_alloc_dev_mem(prevImg);
-        bm_image_alloc_dev_mem(nextImg);
-        bm_image_copy_host_to_device(prevImg, (void **)(&prevPtr));
-        bm_image_copy_host_to_device(nextImg, (void **)(&nextPtr));
-        void *plan = nullptr;
-        bmcv_image_lkpyramid_create_plan(
-                handle,
-                plan,
-                width,
-                height,
-                kw,
-                kh,
-                maxLevel);
-        bmcv_image_lkpyramid_execute(
-                handle,
-                plan,
-                prevImg,
-                nextImg,
-                ptsNum,
-                prevPts,
-                nextPts,
-                status,
-                criteria);
-        bmcv_image_lkpyramid_destroy_plan(handle, plan);
-        bm_image_destroy(prevImg);
-        bm_image_destroy(nextImg);
-        ret = bmcv_close_cpu_process(handle);
-        if (ret != BM_SUCCESS) {
-            printf("BMCV disable Processor failed. ret = %d\n", ret);
-            bm_dev_free(handle);
-            return -1;
-        }
-        bm_dev_free(handle);
+        #include <iostream>
+        #include <fstream>
+        #include <thread>
+        #include <mutex>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <assert.h>
+        #include <math.h>
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
 
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        int main()
+        {
+            bm_handle_t handle;
+            int width = 1024;
+            int height = 1024;
+            bm_image_format_ext fmt = FORMAT_GRAY;
+            bm_image prevImg;
+            bm_image nextImg;
+            void *plan = nullptr;
+            unsigned char* prevPtr = new unsigned char[width * height];
+            unsigned char* nextPtr = new unsigned char[width * height];
+            bmcv_term_criteria_t criteria = {3, 10, 0.03};
+            int ptsNum = 10;
+            int kw = 41;
+            int kh = 47;
+            int maxLevel = 3;
+            bool* status = new bool [ptsNum];
+            bmcv_point2f_t* prevPts = new bmcv_point2f_t [ptsNum];
+            bmcv_point2f_t* nextPts = new bmcv_point2f_t [ptsNum];
+            const char *src_names[2] = {"path/to/src0", "path/to/src1"};
+
+            readBin(src_names[0], prevPtr, width * height);
+            readBin(src_names[1], nextPtr, width * height);
+
+            for (int i = 0; i < ptsNum; ++i) {
+                prevPts[i].x = (float)rand() / RAND_MAX;
+                nextPts[i].y = (float)rand() / RAND_MAX;
+            }
+
+            bm_dev_request(&handle, 0);
+            bmcv_open_cpu_process(handle);
+            bm_image_create(handle, height, width, fmt, DATA_TYPE_EXT_1N_BYTE, &prevImg);
+            bm_image_create(handle, height, width, fmt, DATA_TYPE_EXT_1N_BYTE, &nextImg);
+            bm_image_alloc_dev_mem(prevImg);
+            bm_image_alloc_dev_mem(nextImg);
+            bm_image_copy_host_to_device(prevImg, (void **)(&prevPtr));
+            bm_image_copy_host_to_device(nextImg, (void **)(&nextPtr));
+
+            bmcv_image_lkpyramid_create_plan(handle, plan, width, height, kw, kh, maxLevel);
+            bmcv_image_lkpyramid_execute(handle, plan, prevImg, nextImg, ptsNum,
+                                        prevPts, nextPts, status, criteria);
+            bmcv_image_lkpyramid_destroy_plan(handle, plan);
+            bmcv_close_cpu_process(handle);
+
+            bm_image_destroy(prevImg);
+            bm_image_destroy(nextImg);
+            bm_dev_free(handle);
+            delete[] prevPtr;
+            delete[] nextPtr;
+            delete[] prevPts;
+            delete[] nextPts;
+            delete[] status;
+            return 0;
+        }

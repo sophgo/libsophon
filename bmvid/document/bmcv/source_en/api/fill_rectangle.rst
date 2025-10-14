@@ -13,13 +13,13 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_fill_rectangle(
-                bm_handle_t   handle,
-                bm_image      image,
-                int           rect_num,
-                bmcv_rect_t * rects,
-                unsigned char r,
-                unsigned char g,
-                unsigned char b)
+                    bm_handle_t handle,
+                    bm_image image,
+                    int rect_num,
+                    bmcv_rect_t* rects,
+                    unsigned char r,
+                    unsigned char g,
+                    unsigned char b);
 
 
 **Description of incoming parameters::**
@@ -62,7 +62,6 @@ This interface supports BM1684/BM1684X.
 
 **Data type description:**
 
-
     .. code-block:: c
 
         typedef struct bmcv_rect {
@@ -72,7 +71,6 @@ This interface supports BM1684/BM1684X.
             int crop_h;
         } bmcv_rect_t;
 
-
 * start_x describes the starting horizontal coordinate of where the crop image is located in the original image. It starts at 0 from left to right and takes values in the range [0, width).
 
 * start_y describes the starting vertical coordinate of where the crop image is located in the original image. It starts at 0 from top to bottom and takes values in the range [0, height).
@@ -80,7 +78,6 @@ This interface supports BM1684/BM1684X.
 * crop_w describes the width of the crop image, that is, the width of the corresponding output image.
 
 * crop_h describes the height of the crop image, that is, the height of the corresponding output image.
-
 
 
 **Note:**
@@ -154,37 +151,60 @@ If the input/output format requirements are not met, a failure will be returned.
         #include <iostream>
         #include <vector>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
-        #include "common.h"
-        #include "stdio.h"
-        #include "stdlib.h"
-        #include "string.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
         #include <memory>
 
-         int main(int argc, char *argv[]) {
-             bm_handle_t handle;
-             bm_dev_request(&handle, 0);
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-             int image_h = 1080;
-             int image_w = 1920;
-             bm_image src;
-             bm_image_create(handle, image_h, image_w, FORMAT_NV12,
-                     DATA_TYPE_EXT_1N_BYTE, &src);
-             std::shared_ptr<u8*> y_ptr = std::make_shared<u8*>(
-                     new u8[image_h * image_w]);
-             memset((void *)(*y_ptr.get()), 148, image_h * image_w);
-             memset((void *)(*uv_ptr.get()), 158, image_h * image_w / 2);
-             u8 *host_ptr[] = {*y_ptr.get(), *uv_ptr.get()};
-             bm_image_copy_host_to_device(src, (void **)host_ptr);
-             bmcv_rect_t rect;
-             rect.start_x = 100;
-             rect.start_y = 100;
-             rect.crop_w = 200;
-             rect.crop_h = 300;
-             bmcv_image_fill_rectangle(handle, src, 1, &rect, 255, 0, 0);
-             bm_image_destroy(src);
-             bm_dev_free(handle);
-             return 0;
-         }
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_src);
+        }
 
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            bm_handle_t handle;
+            int image_h = 1080;
+            int image_w = 1920;
+            bm_image src;
+            int src_size = image_h * image_w * 3 / 2;
+            unsigned char* input_data = (unsigned char*)malloc(src_size);
+            unsigned char* in_ptr[3] = {input_data, input_data + image_h * image_w, input_data + 2 * image_h * image_w};
+            bmcv_rect_t rect;
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+
+            readBin(input_path, input_data, src_size);
+            bm_dev_request(&handle, 0);
+            bm_image_create(handle, image_h, image_w, FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_alloc_dev_mem(src);
+            bm_image_copy_host_to_device(src, (void**)in_ptr);
+            rect.start_x = 100;
+            rect.start_y = 100;
+            rect.crop_w = 200;
+            rect.crop_h = 300;
+            bmcv_image_fill_rectangle(handle, src, 1, &rect, 255, 0, 0);
+            bm_image_copy_device_to_host(src, (void**)in_ptr);
+            writeBin(output_path, input_data, src_size);
+
+            bm_image_destroy(src);
+            free(input_data);
+            bm_dev_free(handle);
+            return 0;
+        }

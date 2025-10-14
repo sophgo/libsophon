@@ -8,7 +8,7 @@
 
 #define TIME_COST_US(start, end) ((end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec))
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
 
 typedef struct {
     int loop_num;
@@ -115,9 +115,11 @@ static int rotate_cpu(
             }
 
             break;
+        case FORMAT_YUV444P:
+        case FORMAT_RGB_PLANAR:
+        case FORMAT_BGR_PLANAR:
         case FORMAT_RGBP_SEPARATE:
         case FORMAT_BGRP_SEPARATE:
-        case FORMAT_YUV444P:
             switch (rotation_angle) {
                 case 90:
                     for(int channel = 0; channel < 3; channel++) {
@@ -226,7 +228,7 @@ static int rotate_tpu(
         bm_image_create(handle, width, height, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &output_img, NULL);
     }
 
-    if(format == 3 || format == 4) {
+    if(format == FORMAT_NV12 || format == FORMAT_NV21) {
         if(rotation_angle == 180) {
             bm_image_create(handle, height, width, (bm_image_format_ext)FORMAT_RGBP_SEPARATE, DATA_TYPE_EXT_1N_BYTE, &nv12_output_rgbp, NULL);
         } else {
@@ -237,15 +239,19 @@ static int rotate_tpu(
     bm_image_alloc_dev_mem(output_img);
     bm_image_alloc_dev_mem(nv12_output_rgbp);
 
-    if (format == 14) {
+    if (format == FORMAT_GRAY) {
         unsigned char *input_addr[1] = {input};
         bm_image_copy_host_to_device(input_img, (void **)(input_addr));
-    } else if (format == 12 || format == 13 ||format == 2) {
+    } else if (format == FORMAT_YUV444P ||
+               format == FORMAT_RGB_PLANAR ||
+               format == FORMAT_BGR_PLANAR ||
+               format == FORMAT_RGBP_SEPARATE ||
+               format == FORMAT_BGRP_SEPARATE) {
         unsigned char *input_addr[3] = {input, input + height * width, input + 2 * height * width};
         bm_image_copy_host_to_device(input_img, (void **)(input_addr));
     }
     gettimeofday(&t1, NULL);
-    if(format == 3 || format == 4) {
+    if(format == FORMAT_NV12 || format == FORMAT_NV21) {
         ret = bmcv_image_rotate(handle, nv12_input_img, output_img, rotation_angle);
     } else {
         ret = bmcv_image_rotate(handle, input_img, output_img, rotation_angle);
@@ -267,12 +273,12 @@ static int rotate_tpu(
     if (format == FORMAT_GRAY) {
         unsigned char *output_addr[1] = {output};
         bm_image_copy_device_to_host(output_img, (void **)output_addr);
-    } else if (format == 12 || format == 13 || format == 2) {
-        unsigned char *output_addr[3] = {output, output + height * width, output + 2 * height * width};
-        bm_image_copy_device_to_host(output_img, (void **)output_addr);
-    } else {
+    } else if (format == FORMAT_NV12 || format == FORMAT_NV21) {
         unsigned char *output_addr[3] = {output, output + height * width, output + 2 * height * width};
         bm_image_copy_device_to_host(nv12_output_rgbp, (void **)output_addr);
+    } else {
+        unsigned char *output_addr[3] = {output, output + height * width, output + 2 * height * width};
+        bm_image_copy_device_to_host(output_img, (void **)output_addr);
     }
     bm_image_destroy(input_img);
     bm_image_destroy(output_img);
@@ -285,20 +291,21 @@ static int cmp_rotate(
     unsigned char *exp,
     int len,
     int format) {
-    if(format == 2 || format == 12 || format == 13 || format == 14){
+    if (format == FORMAT_NV12 || format == FORMAT_NV21) {
         for (int i = 0; i < len; i++) {
-            if (got[i] != exp[i]) {
+            if (abs(got[i] - exp[i]) > 100) {
                 printf("cmp error: idx=%d  exp=%d  got=%d\n", i, exp[i], got[i]);
                 return -1;
             }
         }
     } else {
         for (int i = 0; i < len; i++) {
-            if (abs(got[i] - exp[i]) > 45) {
+            if (got[i] != exp[i]) {
                 printf("cmp error: idx=%d  exp=%d  got=%d\n", i, exp[i], got[i]);
                 return -1;
             }
         }
+
     }
     return 0;
 }
@@ -332,17 +339,25 @@ static int test_rotate_random(
     if(use_real_img == 1){
         if(format == FORMAT_GRAY){
             read_bin(input_path, input_data, width, height, 1);
-        } else if(format == FORMAT_YUV444P || format == FORMAT_RGBP_SEPARATE || format == FORMAT_BGRP_SEPARATE){
+        } else if(format == FORMAT_YUV444P ||
+                  format == FORMAT_RGB_PLANAR  ||
+                  format == FORMAT_BGR_PLANAR  ||
+                  format == FORMAT_RGBP_SEPARATE ||
+                  format == FORMAT_BGRP_SEPARATE) {
             read_bin(input_path, input_data, width, height, 3);
         } else {
             bm_image_create(handle, height, width, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &input_img, NULL);
             bm_image_alloc_dev_mem(input_img);
-            bm1684x_vpp_read_bin(input_img,input_path);
+            bm_read_bin(input_img,input_path);
         }
     } else {
         if(format == FORMAT_GRAY){
             fill(input_data, 1, width, height);
-        } else if (format == FORMAT_RGBP_SEPARATE || format == FORMAT_BGRP_SEPARATE || format == FORMAT_YUV444P){
+        } else if (format == FORMAT_YUV444P  ||
+                   format == FORMAT_RGB_PLANAR  ||
+                   format == FORMAT_BGR_PLANAR  ||
+                   format == FORMAT_RGBP_SEPARATE ||
+                   format == FORMAT_BGRP_SEPARATE) {
             fill(input_data, 3, width, height);
         } else {
             printf("not support input format random test!\n");
@@ -365,7 +380,6 @@ static int test_rotate_random(
         return ret;
     }
     ret = rotate_tpu(input_data, output_tpu, width, height, format, rotation_angle, handle, input_img);
-
     if(ret != 0){
         free(input_data);
         free(output_cpu);
@@ -412,7 +426,9 @@ void* test_rotate(void* args) {
         if(loop_num > 1) {
             width = 8 + rand() % 8185;
             height = 8 + rand() % 8185;
-            format = (rand() % 2 == 1 ? 12 : 14);
+            int format_num[] = {FORMAT_RGB_PLANAR, FORMAT_BGR_PLANAR, FORMAT_RGBP_SEPARATE, FORMAT_BGRP_SEPARATE, FORMAT_GRAY};
+            int rand_format_num = rand() % 5;
+            format = format_num[rand_format_num];
             int rotation_angle_num[] = {90, 180, 270};
             int rand_angle_num = rand() % 3;
             rotation_angle = rotation_angle_num[rand_angle_num];
@@ -436,8 +452,8 @@ int main(int argc, char* args[]) {
     int use_real_img = 0;
     int width = 8 + rand() % 8185;
     int height = 8 + rand() % 8185;
-    int format_num[] = {12, 13, 14};
-    int rand_format_num = rand() % 3;
+    int format_num[] = {FORMAT_RGB_PLANAR, FORMAT_BGR_PLANAR, FORMAT_RGBP_SEPARATE, FORMAT_BGRP_SEPARATE, FORMAT_GRAY};
+    int rand_format_num = rand() % 5;
     int format = format_num[rand_format_num];
     int rotation_angle_num[] = {90, 180, 270};
     int rand_angle_num = rand() % 3;

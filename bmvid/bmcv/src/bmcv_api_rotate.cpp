@@ -48,7 +48,7 @@ bm_status_t bmcv_image_rotate2(
         bm_image output,
         int rotation_angle) {
     bm_status_t ret = BM_SUCCESS;
-    // bm_handle_check_2(handle, input, output);
+    bm_handle_check_2(handle, input, output);
     ret = bmcv_rotate_check(handle, input, output, rotation_angle);
     if (BM_SUCCESS != ret) {
         return ret;
@@ -66,6 +66,9 @@ bm_status_t bmcv_image_rotate2(
     bm_image_get_device_mem(output, output_mem);
     bm_image_get_device_mem(input, input_mem);
     int channel = bm_image_get_plane_num(input);
+    if(input.image_format == FORMAT_RGB_PLANAR || input.image_format == FORMAT_BGR_PLANAR) {
+        channel = 3;
+    }
     api.channel = channel;
     api.rotation_angle = rotation_angle;
     for (int i = 0; i < channel; i++) {
@@ -117,7 +120,7 @@ bm_status_t bmcv_image_rotate(
         case FORMAT_RGBP_SEPARATE:
         case FORMAT_BGRP_SEPARATE:
         case FORMAT_YUV444P:
-            bmcv_image_rotate2(handle, input, output, rotation_angle);
+            ret = bmcv_image_rotate2(handle, input, output, rotation_angle);
             break;
         default:
             bm_image_create(handle, input.height, input.width, FORMAT_RGBP_SEPARATE, DATA_TYPE_EXT_1N_BYTE, &temp_in, NULL);

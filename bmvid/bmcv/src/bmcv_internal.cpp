@@ -36,10 +36,22 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #else
 #define DLLEXPORT __attribute__((visibility("default")))
 #endif
-#define COMMIT_HASH "826782c8"
+#define COMMIT_HASH "e6abb2da"
 #define BRANCH_NAME "HEAD"
-#define COMMIT_COUNT "2170"
+#define COMMIT_COUNT "2424"
 #define FIRMWARE_NAME "libbm1684x_kernel_module.so"
+
+const  char* fw_fname = FIRMWARE_NAME;
+#ifdef _WIN32
+#include <Windows.h>
+static INIT_ONCE fw_path_once = INIT_ONCE_STATIC_INIT;
+static char fw_path[512] = {0};
+static int fw_path_status = -1;
+#else
+static pthread_once_t fw_path_once = PTHREAD_ONCE_INIT;
+static char fw_path[512] = {0};
+static int fw_path_status = -1;
+#endif
 
 bm_status_t sg_malloc_device_mem(bm_handle_t handle, sg_device_mem_st *pmem, unsigned int size) {
     if (BM_SUCCESS != bm_malloc_device_byte(handle, &(pmem->bm_device_mem), size)) {
@@ -225,7 +237,7 @@ static std::map<std::pair<bm_image_format_ext, bm_image_format_ext>, vpp_limitat
 extern "C" {
     //__attribute__((visibility("default")))
     DLLEXPORT const char* libbmcv_version() {
-        static const char* version_string = "libbmcv_version:1.0.0, branch:" BRANCH_NAME ", commit:" COMMIT_HASH ", compiled on " __DATE__ " at " __TIME__", ";
+        static const char* version_string = "libbmcv_version:1.0.0, branch:" BRANCH_NAME ", minor version:" COMMIT_COUNT ", commit:" COMMIT_HASH ", compiled on " __DATE__ " at " __TIME__", ";
         return version_string;
     }
 }
@@ -638,17 +650,7 @@ int find_tpufirmaware_path(char fw_path[512], const char* name){
         return ret;
     }
 
-    /* 2. test /system/data/lib/vpu_firmware/chagall.bin */
-    memset(fw_path, 0, 512);
-    strcpy(fw_path, path1);
-    strcat(fw_path, name);
-    ret = access(fw_path, F_OK);
-    if (ret == 0)
-    {
-        return ret;
-    }
-
-    /* 3.test libbmcv_so_path/libbm1684x_kernel_module.so */
+    /* 2.test libbmcv_so_path/libbm1684x_kernel_module.so */
     ret = dladdr((void*)find_tpufirmaware_path, &dl_info);
     if (ret == 0){
         printf("dladdr() failed: %s\n", dlerror());
@@ -673,8 +675,12 @@ int find_tpufirmaware_path(char fw_path[512], const char* name){
 
     memset(fw_path, 0, 512);
     strncpy(fw_path, dl_info.dli_fname, dirname_len);
-    strcat(fw_path, "tpu_module/");
     strcat(fw_path, name);
+    ret = access(fw_path, F_OK);
+    if (ret == 0)
+    {
+        return ret;
+    }
 
     /* 3.test libbmcv_so_path/tpu_module/libbm1684x_kernel_module.so */
     memset(fw_path, 0, 512);
@@ -735,17 +741,32 @@ int find_tpufirmaware_path(char fw_path[512], const char* name){
 #endif
 }
 
+#ifdef _WIN32
+BOOL CALLBACK init_fw_path(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context) {
+    (void)InitOnce; (void)Parameter; (void)Context;
+    fw_path_status = find_tpufirmaware_path(fw_path, fw_fname);
+    return TRUE;
+}
+#else
+static void init_fw_path() {
+    fw_path_status = find_tpufirmaware_path(fw_path, fw_fname);
+}
+#endif
+
 bm_status_t bm_load_tpu_module(bm_handle_t handle, tpu_kernel_module_t *tpu_module){
-    const  char* fw_fname = FIRMWARE_NAME;
-    static char fw_path[512] = {0};
-    static bool first = true;
-    if(first){
-        if(0 != find_tpufirmaware_path(fw_path, fw_fname)){
-            printf("libbm1684x_kernel_module.so does not exist\n");
-            return BM_ERR_FAILURE;
-        }
-        first = false;
+#ifdef _WIN32
+    if (!InitOnceExecuteOnce(&fw_path_once, init_fw_path, NULL, NULL)) {
+        printf("Failed to initialize fw_path\n");
+        return BM_ERR_FAILURE;
     }
+#else
+    pthread_once(&fw_path_once, init_fw_path);
+#endif
+    if (fw_path_status != 0) {
+        printf("libbm1684x_kernel_module.so does not exist\n");
+        return BM_ERR_FAILURE;
+    }
+
     int key_size = strlen(FIRMWARE_NAME);
     *tpu_module = tpu_kernel_load_module_file_key(handle,
                                                  fw_path,
@@ -2228,5 +2249,3 @@ void data_type_conversion(bm_image_data_format_ext bmcv_data_type, int *tpu_data
       break;
     }
 }
-
-

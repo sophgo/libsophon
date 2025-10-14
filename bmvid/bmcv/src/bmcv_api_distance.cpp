@@ -8,64 +8,6 @@
 
 typedef data_type_t bm_data_type_t;
 
-typedef struct
-{
-    unsigned short  manti : 10;
-    unsigned short  exp : 5;
-    unsigned short  sign : 1;
-} fp16;
-
-union fp16_data
-{
-    unsigned short idata;
-    fp16 ndata;
-};
-
-union {
-    float f;
-    uint32_t i;
-} conv_;
-
-float fp16tofp32_(fp16 val) {
-    fp16_data dfp16;
-    dfp16.ndata = val;
-    uint32_t sign = (dfp16.idata & 0x8000) << 16;
-    uint32_t mantissa = (dfp16.idata & 0x03FF);
-    uint32_t exponent = (dfp16.idata & 0x7C00) >> 10;
-
-    if (exponent == 0) {
-        if (mantissa == 0) {
-            return *((float*)(&sign));
-        }
-        else {
-            exponent = 1;
-            while ((mantissa & 0x0400) == 0) {
-                mantissa <<= 1;
-                exponent++;
-            }
-            mantissa &= 0x03FF;
-            exponent = (127 - 15 - exponent) << 23;
-            mantissa <<= 13;
-            conv_.i = *((uint32_t*)(&sign)) | (*((uint32_t*)(&mantissa))) | (*((uint32_t*)(&exponent)));
-            return conv_.f;
-        }
-    }
-    else if (exponent == 0x1F) {
-        if (mantissa == 0) {
-            return *((float*)(&sign)) / 0.0f;
-        }
-        else {
-            return *((float*)(&sign)) / 0.0f;
-        }
-    }
-    else {
-        exponent = (exponent + (127 - 15)) << 23;
-        mantissa <<= 13;
-        conv_.i = *((uint32_t*)(&sign)) | (*((uint32_t*)(&mantissa))) | (*((uint32_t*)(&exponent)));
-        return conv_.f;
-    }
-}
-
 bm_status_t bmcv_distance_1684x(bm_handle_t handle,
                           bm_device_mem_t input,
                           bm_device_mem_t output,
@@ -88,7 +30,7 @@ bm_status_t bmcv_distance_1684x(bm_handle_t handle,
     if(dtype == DT_FP16) {
         fp16 *pnt16 = (fp16 *)pnt;
         for (int i = 0; i < dim; ++i)
-            api.pnt[i] = fp16tofp32_(pnt16[i]);
+            api.pnt[i] = fp16tofp32(pnt16[i]);
     } else {
         float *pnt32 = (float *)pnt;
         for (int i = 0; i < dim; ++i)

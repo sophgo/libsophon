@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 cmake_policy(SET CMP0046 NEW)
 Project(bmcv)
-
 message(STATUS "CMAKE_CURRENT_SOURCE_DIR  ${CMAKE_CURRENT_SOURCE_DIR}")
 message(STATUS "PROJECT_ROOT  ${PROJECT_ROOT}")
 message(STATUS "$ENV{TARGET_PROJECT}_CMAKE ")
@@ -56,6 +55,7 @@ if(WIN32)
         src/bmcv_api_batch_topk.cpp
         src/bmcv_api_bgrsplit.cpp
         src/bmcv_api_calc_hist.cpp
+        src/bmcv_api_lap_matrix.cpp
         src/bmcv_api_canny.cpp
         src/bmcv_api_cmulp.cpp
         src/bmcv_api_convert_to.cpp
@@ -67,6 +67,8 @@ if(WIN32)
         src/bmcv_api_draw_lines.cpp
         src/bmcv_api_feature_match.cpp
         src/bmcv_api_fft.cpp
+        src/bmcv_api_stft.cpp
+        src/bmcv_api_istft.cpp
         src/bmcv_api_fill_rectangle.cpp
         src/bmcv_api_gaussian_blur.cpp
         src/bmcv_api_gemm.cpp

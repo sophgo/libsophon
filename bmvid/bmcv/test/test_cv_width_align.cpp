@@ -338,7 +338,7 @@ static bm_status_t test_cv_width_align(int trials) {
             break;
         }
         gettimeofday_(&t2);
-        cout << "width align using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("width align using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
         ret = bm_image_copy_device_to_host(dst_img, (void **)(host_ptr_dst));
         if (ret != BM_SUCCESS) {
@@ -397,15 +397,12 @@ int main(int argc, char *argv[]) {
         test_loop_times = atoi(argv[1]);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST WIDTH ALIGN] loop times should be 1~1500"
-                  << std::endl;
+        printf("[TEST WIDTH ALIGN] loop times should be 1~1500\n");
         exit(-1);
     }
-    std::cout << "[TEST WIDTH ALIGN] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST WIDTH ALIGN] test starts... LOOP times will be %d", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST WIDTH ALIGN] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST WIDTH ALIGN] LOOP %d------\n", loop_idx);
         struct timespec tp;
         clock_gettime_(0, &tp);
 
@@ -414,7 +411,7 @@ int main(int argc, char *argv[]) {
         if(BM_SUCCESS != test_cv_width_align(100))
             return -1;
     }
-    std::cout << "------[TEST WIDTH ALIGN] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST WIDTH ALIGN] ALL TEST PASSED!------\n");
 
     return 0;
 }

@@ -3,6 +3,7 @@ bmcv_image_bitwise_and
 
 两张大小相同的图片对应像素值进行按位与操作。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -12,11 +13,11 @@ bmcv_image_bitwise_and
 
     .. code-block:: c
 
-         bm_status_t bmcv_image_bitwise_and(
-                 bm_handle_t handle,
-                 bm_image input1,
-                 bm_image input2,
-                 bm_image output);
+        bm_status_t bmcv_image_bitwise_and(
+                    bm_handle_t handle,
+                    bm_image input1,
+                    bm_image input2,
+                    bm_image output);
 
 
 **参数说明：**
@@ -42,7 +43,7 @@ bmcv_image_bitwise_and
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **格式支持：**
@@ -99,71 +100,78 @@ bmcv_image_bitwise_and
 2、input output 的 data_type，image_format必须相同。
 
 
-
 **代码示例：**
 
     .. code-block:: c
 
+        #include "bmcv_api_ext.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <math.h>
+        #include <string.h>
 
-        int channel   = 3;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src1_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> src2_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src1_data = src1_ptr.get();
-        unsigned char * src2_data = src2_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * width * height; i++) {
-            src1_data[i] = rand() % 255;
-            src2_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bm_image input1, input2, output;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_RGB_PLANAR,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &input1);
-        bm_image_alloc_dev_mem(input1);
-        bm_image_copy_host_to_device(input1, (void **)&src1_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_RGB_PLANAR,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &input2);
-        bm_image_alloc_dev_mem(input2);
-        bm_image_copy_host_to_device(input2, (void **)&src2_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_RGB_PLANAR,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_bitwise_and(handle, input1, input2, output)) {
-            std::cout << "bmcv bitwise and error !!!" << std::endl;
-            bm_image_destroy(input1);
-            bm_image_destroy(input2);
-            bm_image_destroy(output);
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 3;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bm_handle_t handle;
+            bm_image input1_img, input2_img, output_img;
+            unsigned char* input1 = (unsigned char*)malloc(width * height * channel);
+            unsigned char* input2 = (unsigned char*)malloc(width * height * channel);
+            unsigned char* output = (unsigned char*)malloc(width * height * channel);
+            const char* src1_name = "path/to/src1";
+            const char* src2_name = "path/to/src2";
+            const char* dst_name = "path/to/dst";
+            unsigned char* in1_ptr[3] = {input1, input1 + height * width, input1 + 2 * height * width};
+            unsigned char* in2_ptr[3] = {input2, input2 + height * width, input2 + 2 * height * width};
+            unsigned char* out_ptr[3] = {output, output + height * width, output + 2 * height * width};
+            int img_size = height * width * 3;
+
+            readBin(src1_name, input1, img_size);
+            readBin(src2_name, input2, img_size);
+
+            bm_dev_request(&handle, dev_id);
+            bm_image_create(handle, height, width, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &input1_img);
+            bm_image_alloc_dev_mem(input1_img);
+            bm_image_copy_host_to_device(input1_img, (void **)in1_ptr);
+            bm_image_create(handle, height, width, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &input2_img);
+            bm_image_alloc_dev_mem(input2_img);
+            bm_image_copy_host_to_device(input2_img, (void **)in2_ptr);
+            bm_image_create(handle, height, width, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output_img);
+            bm_image_alloc_dev_mem(output_img);
+            bmcv_image_bitwise_and(handle, input1_img, input2_img, output_img);
+            bm_image_copy_device_to_host(output_img, (void **)out_ptr);
+            writeBin(dst_name, output, img_size);
+
+            bm_image_destroy(input1_img);
+            bm_image_destroy(input2_img);
+            bm_image_destroy(output_img);
             bm_dev_free(handle);
-            exit(-1);
+            free(input1);
+            free(input2);
+            free(output);
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input1);
-        bm_image_destroy(input2);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
-
-

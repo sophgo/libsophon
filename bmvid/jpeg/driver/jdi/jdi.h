@@ -124,6 +124,9 @@ extern "C" {
     int jdi_invalidate_region(jpu_buffer_t* vb, unsigned long long phys_addr, unsigned long long size);
     int jdi_flush_region(jpu_buffer_t* vb, unsigned long long phys_addr, unsigned long long size);
 
+    int jdi_get_rwlock(int device_index);
+    int jdi_release_rwlock(int device_index);
+
     int jdi_wait_interrupt(int device_index, Uint32 coreIdx,int timeout);
 
     int jdi_hw_reset();
@@ -138,6 +141,7 @@ extern "C" {
     int jdi_get_core_index(int device_index,unsigned long long readAddr, unsigned long long writeAddr);
 
     int jdi_get_dump_info(void* dump_info);
+    int jdi_get_card_index(int device_index);
     void jdi_clear_dump_info();
 
     void jdi_write_register(unsigned int addr, unsigned int data);

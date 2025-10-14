@@ -69,7 +69,7 @@ BMCV API
    api/yuv2bgr
    api/warp_affine
    api/warp_perspective
-   api/watermask_superpose
+   api/watermark_superpose
    api/crop
    api/resize
    api/convert_to
@@ -99,6 +99,8 @@ BMCV API
    api/canny
    api/yuv2hsv
    api/gaussian_blur
+   api/median_blur
+   api/assigned_area_blur
    api/transpose
    api/morph
    api/mosaic
@@ -107,13 +109,15 @@ BMCV API
    api/debug_savedata
    api/sort
    api/base64
-   api/feature_match_fix8b
+   api/feature_match_normalized
+   api/feature_match
    api/gemm
    api/gemm_ext
    api/matmul
    api/distance
    api/min_max
    api/fft
+   api/stft
    api/calc_hist
    api/nms
    api/nms_ext
@@ -121,6 +125,9 @@ BMCV API
    api/cmulp
    api/faiss_indexflatIP
    api/faiss_indexflatL2
+   api/faiss_indexPQ_adc
+   api/faiss_indexPQ_encode
+   api/faiss_indexPQ_sdc
    api/batch_topk
    api/hm_distance
    api/axpy
@@ -128,6 +135,17 @@ BMCV API
    api/bayer2rgb
    api/as_strided
    api/quantify
+   api/rotate
+   api/remap
+   api/cos_similarity
+   api/matrix_prune
+   api/lapmatrix
+   api/knn
+   api/knn2
+   api/knn_match
+   api/qr
+   api/cluster
+   api/cv_overlay
 
 PCIe CPU
 --------

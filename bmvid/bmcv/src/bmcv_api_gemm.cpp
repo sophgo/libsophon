@@ -1,4 +1,4 @@
-#include "bmcv_api.h"
+#include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
 

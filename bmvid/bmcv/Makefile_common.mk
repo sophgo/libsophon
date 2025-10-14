@@ -281,6 +281,10 @@ CONFIG_FLAGS    += -DCMODEL_CHIPID=0x1686
 endif
 endif
 
+ifeq ($(USING_OPENBLAS),1)
+CONFIG_FLAGS    += -DUSING_OPENBLAS
+endif
+
 ifeq ($(FAST_GEN_CMD),1)
 CONFIG_FLAGS    += -DFAST_GEN_CMD
 endif

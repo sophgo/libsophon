@@ -10,8 +10,7 @@ bm_image 结构需要关联相关 device memory，并且 device memory 中有你
     .. code-block:: c
 
         bool bm_image_is_attached(
-                bm_image image
-        );
+            bm_image image);
 
 
 **传入参数说明:**

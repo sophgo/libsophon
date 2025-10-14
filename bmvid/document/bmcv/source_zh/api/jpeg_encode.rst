@@ -3,18 +3,19 @@ bmcv_image_jpeg_enc
 
 该接口可以实现对多张 bm_image 的 JPEG 编码过程。
 
+
 **接口形式:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_jpeg_enc(
-                bm_handle_t handle,
-                int         image_num,
-                bm_image *  src,
-                void *      p_jpeg_data[],
-                size_t *    out_size,
-                int         quality_factor = 85
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bm_image* src,
+                    void* p_jpeg_data[],
+                    size_t* out_size,
+                    int quality_factor = 85);
+
 
 **处理器型号支持：**
 
@@ -48,12 +49,11 @@ bmcv_image_jpeg_enc
   输入参数。编码后图片的质量因子。取值 0～100 之间，值越大表示图片质量越高，但数据量也就越大，反之值越小图片质量越低，数据量也就越少。该参数为可选参数，默认值为85。
 
 
-
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 .. note::
@@ -72,41 +72,51 @@ bmcv_image_jpeg_enc
      | DATA_TYPE_EXT_1N_BYTE
 
 
-
 **示例代码**
-
 
     .. code-block:: c
 
-        int image_h     = 1080;
-        int image_w     = 1920;
-        int size        = image_h * image_w;
-        int format      = FORMAT_YUV420P;
-        bm_image src;
-        bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format,
-                DATA_TYPE_EXT_1N_BYTE, &src);
-        std::unique_ptr<unsigned char[]> buf1(new unsigned char[size]);
-        memset(buf1.get(), 0x11, size);
+        #include <stdio.h>
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <memory.h>
+        #include "bmcv_api_ext.h"
+        #include <assert.h>
+        #include <math.h>
 
-        std::unique_ptr<unsigned char[]> buf2(new unsigned char[size / 4]);
-        memset(buf2.get(), 0x22, size / 4);
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-        std::unique_ptr<unsigned char[]> buf3(new unsigned char[size / 4]);
-        memset(buf3.get(), 0x33, size / 4);
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
-        unsigned char *buf[] = {buf1.get(), buf2.get(), buf3.get()};
-        bm_image_copy_host_to_device(src, (void **)buf);
-
-        void* jpeg_data = NULL;
-        size_t out_size = 0;
-        int ret = bmcv_image_jpeg_enc(handle, 1, &src, &jpeg_data, &out_size);
-        if (ret == BM_SUCCESS) {
-            FILE *fp = fopen("test.jpg", "wb");
-            fwrite(jpeg_data, out_size, 1, fp);
-            fclose(fp);
+            fclose(fp_src);
         }
-        free(jpeg_data);
-        bm_image_destroy(src);
 
+        int main()
+        {
+            int format = FORMAT_YUV420P;
+            int image_h = 1080;
+            int image_w = 1920;
+            bm_image src;
+            bm_handle_t handle;
+            size_t byte_size = image_w * image_h * 3 / 2;
+            unsigned char* input_data = (unsigned char*)malloc(byte_size);
+            unsigned char* in_ptr[3] = {input_data, input_data + image_h * image_w, input_data + 2 * image_h * image_w};
+            void* jpeg_data[4] = {NULL, NULL, NULL, NULL};
+            const char *src_name = "path/to/src";
 
+            readBin(src_name, input_data, byte_size);
+            bm_dev_request(&handle, 0);
+            bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &src, NULL);
+            bm_image_alloc_dev_mem(src, BMCV_HEAP1_ID);
+            bm_image_copy_host_to_device(src, (void**)in_ptr);
+            bmcv_image_jpeg_enc(handle, 1, &src, jpeg_data, &byte_size, 95);
 
+            bm_image_destroy(src);
+            free(input_data);
+            bm_dev_free(handle);
+            return 0;
+        }

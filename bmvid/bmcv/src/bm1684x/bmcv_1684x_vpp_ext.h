@@ -11,6 +11,8 @@
 #include "bmlib_runtime.h"
 #include "bmcv_api_ext.h"
 
+#define VPP1684X_MAX_CROP_NUM    (512)
+
 DECL_EXPORT bm_status_t bm1684x_vpp_basic(
     bm_handle_t             handle,
     int                     in_img_num,

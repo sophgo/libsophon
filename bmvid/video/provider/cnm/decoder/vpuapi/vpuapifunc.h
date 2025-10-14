@@ -303,7 +303,6 @@ typedef struct {
     Uint32          PrevDecodeEndTick;
     Uint32          cyclePerTick;
     Uint32          productCode;
-    Uint32          enableDecodeOrder;
     int             framebuf_from_user;
 } DecInfo;
 typedef struct {

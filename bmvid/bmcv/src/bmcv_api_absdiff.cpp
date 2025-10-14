@@ -113,7 +113,14 @@ bm_status_t bmcv_image_absdiff(
         input1.image_format == FORMAT_BGR_PLANAR) {
         api.height[0] *= 3;
     }
-
+    //transform nv24 second planar width*2->height*2
+    if (input1.image_format == FORMAT_NV24) {
+        api.height[1] *= 2;
+        api.width[1] /= 2;
+        api.input1_str[1] /= 2;
+        api.input2_str[1] /= 2;
+        api.output_str[1] /= 2;
+    }
     unsigned int chipid;
     bm_get_chipid(handle, &chipid);
 

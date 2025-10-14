@@ -9,28 +9,31 @@ bmcv_gemm
 
 其中，A、B、C均为矩阵，:math:`\alpha` 和 :math:`\beta` 均为常系数
 
-接口的格式如下：
-
-    .. code-block:: c
-
-         bm_status_t bmcv_gemm(bm_handle_t     handle,
-                               bool            is_A_trans,
-                               bool            is_B_trans,
-                               int             M,
-                               int             N,
-                               int             K,
-                               float           alpha,
-                               bm_device_mem_t A,
-                               int             lda,
-                               bm_device_mem_t B,
-                               int             ldb,
-                               float           beta,
-                               bm_device_mem_t C,
-                               int             ldc);
 
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
+
+
+**接口形式：**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_gemm(
+                    bm_handle_t handle,
+                    bool is_A_trans,
+                    bool is_B_trans,
+                    int M,
+                    int N,
+                    int K,
+                    float alpha,
+                    bm_device_mem_t A,
+                    int lda,
+                    bm_device_mem_t B,
+                    int ldb,
+                    float beta,
+                    bm_device_mem_t C,
+                    int ldc);
 
 
 **输入参数说明：**
@@ -96,77 +99,53 @@ bmcv_gemm
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
-
+* 其他: 失败
 
 
 **示例代码**
 
-
     .. code-block:: c
 
-        int M = 3, N = 4, K = 5;
-        float alpha = 0.4, beta = 0.6;
-        bool is_A_trans = false;
-        bool is_B_trans = false;
-        float *A     = new float[M * K];
-        float *B     = new float[K * N];
-        float *C     = new float[M * N];
+        #include "bmcv_api_ext.h"
+        #include "bmcv_api.h"
+        #include <stdio.h>
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <math.h>
 
-        for (int i = 0; i < M * K; ++i) {
-            A[i] = 1.0f;
-        }
+        int main()
+        {
+            int M = 3, N = 4, K = 5;
+            float alpha = 0.4, beta = 0.6;
+            bool if_A_trans = false;
+            bool if_B_trans = false;
+            float* A = new float[M * K];
+            float* B = new float[K * N];
+            float* C = new float[M * N];
+            bm_handle_t handle;
+            int lda = if_A_trans ? M : K;
+            int ldb = if_B_trans ? K : N;
 
-        for (int i = 0; i < N * K; ++i) {
-            B[i] = 2.0f;
-        }
-
-        for (int i = 0; i < M * N; ++i) {
-            C[i] = 3.0f;
-        }
-
-        bm_handle_t handle;
-        bm_dev_request(&handle, 0);
-        bmcv_gemm(handle,
-                  is_A_trans,
-                  is_B_trans,
-                  M,
-                  N,
-                  K,
-                  alpha,
-                  bm_mem_from_system((void *)A),
-                  is_A_trans ? M : K,
-                  bm_mem_from_system((void *)B),
-                  is_B_trans ? K : N,
-                  beta,
-                  bm_mem_from_system((void *)C),
-                  N);
-
-            std::cout << "Matrix A:" << std::endl;
-            for (int i = 0; i < M; i++) {
-                for (int j = 0; j < K; j++) {
-                    std::cout << A[i * K + j] << " ";
-                }
-                std::cout << std::endl;
+            for (int i = 0; i < M * K; ++i) {
+                A[i] = 1.0f;
             }
 
-            std::cout << "Matrix B:" << std::endl;
-            for (int i = 0; i < K; i++) {
-                for (int j = 0; j < N; j++) {
-                    std::cout << B[i * N + j] << " ";
-                }
-                std::cout << std::endl;
+            for (int i = 0; i < N * K; ++i) {
+                B[i] = 2.0f;
             }
 
-            std::cout << "Matrix C:" << std::endl;
-            for (int i = 0; i < M; i++) {
-                for (int j = 0; j < N; j++) {
-                    std::cout << C[i * N + j] << " ";
-                }
-                std::cout << std::endl;
+            for (int i = 0; i < M * N; ++i) {
+                C[i] = 3.0f;
             }
 
-        delete A;
-        delete B;
-        delete C;
+            bm_dev_request(&handle, 0);
+            bmcv_gemm(handle, if_A_trans, if_B_trans, M, N, K, alpha, bm_mem_from_system((void *)A),
+                    lda, bm_mem_from_system((void *)B), ldb, beta, bm_mem_from_system((void *)C), N);
 
+            delete[] A;
+            delete[] B;
+            delete[] C;
+            bm_dev_free(handle);
+            return 0;
+        }

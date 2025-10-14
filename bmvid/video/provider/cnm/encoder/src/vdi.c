@@ -71,11 +71,29 @@ typedef struct {
     int inuse;
 } vpudrv_buffer_pool_t;
 
+typedef struct vpu_inst_info {
+    int core_idx;
+    int inst_idx;
+    int channel;
+    int width;
+    int height;
+    int fps;
+    unsigned long long inframenums;
+    unsigned long long outframenums;
+    unsigned long long outframefailnums;
+    long long time;
+    unsigned char url[256];
+    int status;
+    int pid;
+} vpu_inst_info_t;
+
 typedef struct  {
     uint32_t             core_idx;
     uint32_t             product_code;
 
     int                  vpu_fd;
+    FILE                 *vpuinfo_fd;
+    vpu_inst_info_t      vpuinfo[MAX_NUM_INSTANCE];
     int                  task_num;
 
     int                  clock_state;
@@ -108,6 +126,76 @@ static int bm_vdi_allocate_common_memory(uint32_t core_idx);
 static bm_vdi_info_t* bm_vdi_get_info_ptr(uint32_t core_idx);
 static int            bm_vdi_free_info_ptr(uint32_t core_idx);
 static bm_vdi_info_t* bm_vdi_check_info_ptr(uint32_t core_idx);
+
+
+static long long get_formatted_time() {
+
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        perror("clock_gettime");
+        return -1;
+    }
+
+    long long milliseconds = (long long)(ts.tv_sec) * 1000 + (ts.tv_nsec) / 1000000;
+    return milliseconds;
+}
+
+static char* buildjson_vpuinfo(char *json, int len, int *write_len, const vpu_inst_info_t* info) {
+    if (!info) {
+        return NULL;
+    }
+
+    if (!json) {
+        return NULL;
+    }
+
+    int written = snprintf(json, len,
+        "{"
+        "\"ci\":%d,"
+        "\"ii\":%d,"
+        "\"ch\":%d,"
+        "\"w\":%d,"
+        "\"h\":%d,"
+        "\"f\":%d,"
+        "\"ifn\":%llu,"
+        "\"ofn\":%llu,"
+        "\"oen\":%llu,"
+        "\"t\":%lld,"
+        "\"u\":\"%s\","
+        "\"s\":%d,"
+        "\"p\":%d"
+        "}",
+        info->core_idx,
+        info->inst_idx,
+        info->channel,
+        info->width,
+        info->height,
+        info->fps,
+        info->inframenums,
+        info->outframenums,
+        info->outframefailnums,
+        info->time,
+        info->url,
+        info->status,
+        info->pid
+    );
+    if (written >= len) {
+        if (len > 0) {
+            json[len - 1] = '\0';
+        }
+        return NULL;
+    }
+
+    if (written < len) {
+        json[written] = '\0';
+    } else if (len > 0) {
+        json[len - 1] = '\0';
+    }
+
+    *write_len = written;
+    return json;
+}
 
 int bm_vdi_init(uint32_t core_idx)
 {
@@ -155,8 +243,30 @@ int bm_vdi_init(uint32_t core_idx)
 #endif
         goto ERR_VDI_INIT0;
     }
-
     VLOG(INFO,"[VDI] Open device %s, fd=%d\n", vpu_dev_name, vdi->vpu_fd);
+
+    char vpu_info_name[64] = {0};
+#if defined(BM_PCIE_MODE)
+    int card_chip_id = 0;
+    if (ioctl(vdi->vpu_fd, VDI_IOCTL_GET_CARD_ID, &card_chip_id) < 0){
+        VLOG(INFO, "[VDI] fail to get card chip id \n");
+        goto ERR_VDI_INIT;
+    }
+    sprintf(vpu_info_name,"/proc/bmsophon/card%d/bmsophon%d/media", card_chip_id, soc_idx);
+#else
+    sprintf(vpu_info_name,"/proc/vpuinfo");
+#endif
+    vdi->vpuinfo_fd = fopen(vpu_info_name, "w");
+    if (vdi->vpuinfo_fd == NULL) {
+#ifndef BM_PCIE_MODE
+        VLOG(ERR, "[VDI] Can't open vpu driver. [error=%s]. try to load ko again\n", strerror(errno));
+#else
+        VLOG(ERR, "[VDI] Can't open device driver. [error=%s]. try to load ko again\n", strerror(errno));
+#endif
+        goto ERR_VDI_INIT0;
+    }
+    VLOG(INFO,"[VDI] Open device %s, fd=%d\n", vpu_info_name, vdi->vpuinfo_fd);
+
     vdi->pid    = getpid();
     bm_vdi_disable_kernel_reset(core_idx);
 
@@ -360,9 +470,14 @@ int bm_vdi_release(uint32_t core_idx)
     }
 
 
-    if (vdi->vpu_fd >= 0)
+    if (vdi->vpu_fd >= 0) {
         close(vdi->vpu_fd);
-
+        vdi->vpu_fd = 0;
+    }
+    if (vdi->vpuinfo_fd != NULL) {
+        fclose(vdi->vpuinfo_fd);
+        vdi->vpuinfo_fd = NULL;
+    }
     if (vdi->buffer_pool_lock != NULL) {
         pthread_mutex_destroy((pthread_mutex_t *)vdi->buffer_pool_lock);
         free(vdi->buffer_pool_lock);
@@ -899,7 +1014,7 @@ vpu_instance_pool_t* bm_vdi_get_instance_pool(uint32_t core_idx)
     return (vpu_instance_pool_t *)vdi->pvip;
 }
 
-int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx)
+int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx, uint32_t width, uint32_t height, uint32_t fps)
 {
     bm_vdi_info_t *vdi;
     vpudrv_inst_info_t inst_info = {0};
@@ -934,6 +1049,28 @@ int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx)
 
     vdi->pvip->vpu_instance_num = inst_info.inst_open_count;
 
+    if (vdi->vpuinfo_fd  != NULL) {
+        int json_len = 512;
+        char json[512] = {0};
+        int writelen = 0;
+        memset(&vdi->vpuinfo[inst_info.inst_idx], 0, sizeof(vpu_inst_info_t));
+        vdi->vpuinfo[inst_info.inst_idx].core_idx = inst_info.core_idx;
+        vdi->vpuinfo[inst_info.inst_idx].inst_idx = inst_info.inst_idx;
+        vdi->vpuinfo[inst_info.inst_idx].width    = width;
+        vdi->vpuinfo[inst_info.inst_idx].height   = height;
+        vdi->vpuinfo[inst_info.inst_idx].fps      = fps;
+        vdi->vpuinfo[inst_info.inst_idx].inframenums = 0;
+        vdi->vpuinfo[inst_info.inst_idx].outframenums = 0;
+        vdi->vpuinfo[inst_info.inst_idx].time = get_formatted_time();
+        vdi->vpuinfo[inst_info.inst_idx].status = 1;
+        memset(vdi->vpuinfo[inst_info.inst_idx].url,0,256);
+        buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_info.inst_idx]);
+        int str_len = strlen(json);
+        if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
+            VLOG(ERR, "[VDI] fail to write vpuinfo.\n");
+        }
+        fflush(vdi->vpuinfo_fd);
+    }
     return 0;
 }
 
@@ -971,6 +1108,29 @@ int bm_vdi_close_instance(uint32_t core_idx, uint32_t inst_idx)
 
     vdi->pvip->vpu_instance_num = inst_info.inst_open_count;
 
+    if (vdi->vpuinfo_fd  !=  NULL) {
+        int json_len = 512;
+        char json[512] = {0};
+        int writelen = 0;
+        memset(&vdi->vpuinfo[inst_info.inst_idx], 0, sizeof(vpu_inst_info_t));
+        vdi->vpuinfo[inst_info.inst_idx].core_idx = inst_info.core_idx;
+        vdi->vpuinfo[inst_info.inst_idx].inst_idx = inst_info.inst_idx;
+        vdi->vpuinfo[inst_info.inst_idx].width    = 0;
+        vdi->vpuinfo[inst_info.inst_idx].height   = 0;;
+        vdi->vpuinfo[inst_info.inst_idx].fps      = 0;
+        vdi->vpuinfo[inst_info.inst_idx].inframenums = 0;
+        vdi->vpuinfo[inst_info.inst_idx].outframenums = 0;
+        vdi->vpuinfo[inst_info.inst_idx].time = get_formatted_time();
+        vdi->vpuinfo[inst_info.inst_idx].status = 0;
+        memset(vdi->vpuinfo[inst_info.inst_idx].url,0,256);
+        buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_info.inst_idx]);
+        int str_len = strlen(json);
+        if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
+            VLOG(ERR, "[VDI] fail to write vpuinfo.\n");
+        }
+        fflush(vdi->vpuinfo_fd);
+    }
+
     return 0;
 }
 
@@ -992,16 +1152,141 @@ int bm_vdi_get_instance_num(uint32_t core_idx)
     return vdi->pvip->vpu_instance_num;
 }
 
+int bm_vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx) {
+    bm_vdi_info_t *vdi;
+    vpudrv_inst_info_t inst_info = {0};
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#else
+    int chip_core_idx = core_idx;
+#endif
+    int ret;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vdi->vpuinfo_fd  !=  NULL) {
+        int json_len = 512;
+        char json[512] = {0};
+        int writelen = 0;
+        vdi->vpuinfo[inst_idx].inframenums++;
+        vdi->vpuinfo[inst_idx].status = 1;
+
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
+        vdi->vpuinfo[inst_idx].time = get_formatted_time();
+        buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
+        int str_len = strlen(json);
+        if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
+            VLOG(ERR, "[VDI] fail to write vpuinfo.\n");
+        }
+        fflush(vdi->vpuinfo_fd);
+    }
+
+    return 0;
+}
+
+int bm_vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx) {
+    bm_vdi_info_t *vdi;
+    vpudrv_inst_info_t inst_info = {0};
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#else
+    int chip_core_idx = core_idx;
+#endif
+    int ret;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vdi->vpuinfo_fd != NULL) {
+        int json_len = 512;
+        char json[512] = {0};
+        int writelen = 0;
+        vdi->vpuinfo[inst_idx].outframenums++;
+        vdi->vpuinfo[inst_idx].status = 1;
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
+        vdi->vpuinfo[inst_idx].time = get_formatted_time();
+        buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
+        int str_len = strlen(json);
+        if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
+            VLOG(ERR, "[VDI] fail to write vpuinfo.\n");
+        }
+        fflush(vdi->vpuinfo_fd);
+    }
+
+    return 0;
+}
+
+int bm_vdi_vpuinfo_get_failed(uint32_t core_idx, uint32_t inst_idx) {
+    bm_vdi_info_t *vdi;
+    vpudrv_inst_info_t inst_info = {0};
+#if defined(BM_PCIE_MODE)
+    int chip_core_idx = core_idx%MAX_NUM_VPU_CORE_CHIP;
+#else
+    int chip_core_idx = core_idx;
+#endif
+    int ret;
+
+    vdi = bm_vdi_check_info_ptr(core_idx);
+    if (vdi == NULL || vdi->vpu_fd < 0) {
+        VLOG(ERR, "bm_vdi_check_info_ptr failed. Please call bm_vdi_init first.\n");
+        return -1;
+    }
+
+    if (vdi->vpuinfo_fd != NULL) {
+        int json_len = 512;
+        char json[512] = {0};
+        int writelen = 0;
+        vdi->vpuinfo[inst_idx].outframefailnums++;
+        vdi->vpuinfo[inst_idx].time = get_formatted_time();
+        vdi->vpuinfo[inst_idx].status = 1;
+        buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
+        int str_len = strlen(json);
+        if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
+            VLOG(ERR, "[VDI] fail to write vpuinfo.\n");
+        }
+        fflush(vdi->vpuinfo_fd);
+    }
+
+    return 0;
+}
+
 static inline int bm_vdi_lock_internal(uint32_t core_idx, int no, int us_delay)
 {
+    int new_value;
+    int mutex_val = 0;
+    int last_mutex_val = 0;
+    int lock_timeout = 60*1000; //1000ms
+
 #if defined(BM_PCIE_MODE)
     int enc_core_idx = core_idx/MAX_NUM_VPU_CORE_CHIP;
 #else
     int enc_core_idx = 0;
 #endif
     bm_vdi_info_t* vdi = p_vdi_info[enc_core_idx];
-    struct timespec ts = {0, us_delay*1000};
-    int new_value;
+    struct timespec ts = {0, ((us_delay > 40)?us_delay:40)*1000};
+    struct timespec start, current, sleep_time;
+
 
     if (vdi == NULL) {
         VLOG(ERR, "vdi is NULL. lock %d is invalid.\n", no);
@@ -1013,12 +1298,34 @@ static inline int bm_vdi_lock_internal(uint32_t core_idx, int no, int us_delay)
     }
 
     new_value = vdi->pid;
-    while (__sync_val_compare_and_swap(vdi->mutex[no], 0, new_value) != 0) {
+    if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+        VLOG(ERR, "clock_gettime failed.");
+        return 0;
+    }
+    while (TRUE) {
+        mutex_val = __sync_val_compare_and_swap(vdi->mutex[no], 0, new_value);
+        if (mutex_val == 0) {
+            break;
+        }
+        if (last_mutex_val != mutex_val) {
+            if (clock_gettime(CLOCK_MONOTONIC, &start) == -1) {
+                VLOG(ERR, "clock_gettime failed.");
+                return 0;
+            }
+            last_mutex_val = mutex_val;
+        }
+        if (clock_gettime(CLOCK_MONOTONIC, &current) == -1) {
+            VLOG(ERR, "clock_gettime failed.");
+            return 0;
+        }
+        if (((current.tv_sec - start.tv_sec) * 1000 + (current.tv_nsec - start.tv_nsec) / 1000 / 1000) > lock_timeout) {
+            mutex_val = __sync_val_compare_and_swap(vdi->mutex[no], mutex_val, new_value);
+            break;
+        }
         nanosleep(&ts, NULL);
         if(ts.tv_nsec > 40*1000)
             ts.tv_nsec = ts.tv_nsec/1.1;
     }
-
     return 0;
 }
 static int bm_vdi_unlock_internal(uint32_t core_idx, int no)
@@ -1467,10 +1774,10 @@ int bm_vdi_wait_interrupt(uint32_t core_idx, int timeout)
     if (ret < 0) {
 #if defined(BM_PCIE_MODE)
         int soc_idx = core_idx/MAX_NUM_VPU_CORE_CHIP;
-        VLOG(ERR, "[VDI] fail to wait for interrupt at SoC %d, core %d with ioctl() "
+        VLOG(WARN, "[VDI] fail to wait for interrupt at SoC %d, core %d with ioctl() "
              "request. [error=%s]\n", soc_idx, chip_core_idx, strerror(errno));
 #else
-        VLOG(ERR, "[VDI] fail to wait for interrupt at core %d with ioctl() "
+        VLOG(WARN, "[VDI] fail to wait for interrupt at core %d with ioctl() "
              "request. [error=%s]\n", chip_core_idx, strerror(errno));
 #endif
         return -1;

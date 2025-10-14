@@ -4,6 +4,7 @@
 #include "stdio.h"
 #include "bmlib_runtime.h"
 #include "bmcv_api_ext.h"
+// #include "bmcv_internal.h"
 
 #if defined (__cplusplus)
 extern "C" {
@@ -125,39 +126,7 @@ typedef enum {
 
 typedef data_type_t bm_data_type_t;
 
-typedef struct
-{
-        unsigned short  manti : 10;
-        unsigned short  exp : 5;
-        unsigned short  sign : 1;
-} fp16;
-
-typedef struct
-{
-        unsigned int manti : 23;
-        unsigned int exp : 8;
-        unsigned int sign : 1;
-} fp32;
-
-union fp16_data
-{
-        unsigned short idata;
-        fp16 ndata;
-};
-
-union fp32_data
-{
-        unsigned int idata;
-        int idataSign;
-        float fdata;
-        fp32 ndata;
-};
-
 int dtype_size(data_type_t data_type);
-
-float fp16tofp32(fp16 h);
-
-fp16 fp32tofp16 (float A, int round_method);
 
 int array_cmp_(float *p_exp, float *p_got, int len, const char *info_label, float delta);
 int array_cmp_fix8b_(

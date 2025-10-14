@@ -1,7 +1,6 @@
 bmcv_image_copy_to
 ==================
 
-
 The interface copies an image to the corresponding memory area of the target image.
 
 
@@ -15,11 +14,10 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_copy_to(
-                bm_handle_t handle,
-                bmcv_copy_to_atrr_t copy_to_attr,
-                bm_image            input,
-                bm_image            output
-        );
+                    bm_handle_t handle,
+                    bmcv_copy_to_atrr_t copy_to_attr,
+                    bm_image input,
+                    bm_image output);
 
 
 **Parameter Description:**
@@ -61,7 +59,6 @@ This interface supports BM1684/BM1684X.
             unsigned char padding_b;
             int if_padding;
         } bmcv_copy_to_atrr_t;
-
 
 * padding_b represents the value filled in the b channel of the extra image when the input image is smaller than the output image.
 
@@ -166,58 +163,73 @@ The color formats supported for input and output are:
 
     .. code-block:: c
 
+        #include <assert.h>
+        #include <stdint.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include "bmcv_api_ext.h"
 
-        int channel   = 3;
-        int in_w      = 400;
-        int in_h      = 400;
-        int out_w     = 800;
-        int out_h     = 800;
-        int    dev_id = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src_ptr(
-                new unsigned char[channel * in_w * in_h],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * out_w * out_h],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src_data = src_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * in_w * in_h; i++) {
-            src_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 4, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bmcv_copy_to_atrr_t copy_to_attr;
-        copy_to_attr.start_x   = 0;
-        copy_to_attr.start_y   = 0;
-        copy_to_attr.padding_r = 0;
-        copy_to_attr.padding_g = 0;
-        copy_to_attr.padding_b = 0;
-        bm_image input, output;
-        bm_image_create(handle,
-                in_h,
-                in_w,
-                FORMAT_RGB_PLANAR,
-                DATA_TYPE_EXT_1N_BYTE,
-                &input);
-        bm_image_alloc_dev_mem(input);
-        bm_image_copy_host_to_device(input, (void **)&src_data);
-        bm_image_create(handle,
-                out_h,
-                out_w,
-                FORMAT_RGB_PLANAR,
-                DATA_TYPE_EXT_1N_BYTE,
-                &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_copy_to(handle, copy_to_attr, input, output)) {
-            std::cout << "bmcv_copy_to error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 4, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 3;
+            int in_w = 400;
+            int in_h = 400;
+            int out_w = 800;
+            int out_h = 800;
+            int dev_id = 0;
+            int image_n = 1;
+            bm_handle_t handle;
+            bmcv_copy_to_atrr_t copy_to_attr;
+            bm_image input, output;
+            float* src_data = (float *)malloc(image_n * channel * in_w * in_h * sizeof(float));
+            float* res_data = (float *)malloc(image_n * channel * out_w * out_h * sizeof(float));
+            const char* src_name = "path/to/src";
+            const char* dst_name = "path/to/dst";
+
+            bm_dev_request(&handle, dev_id);
+            readBin(src_name, (unsigned char*)src_data, channel * in_w * in_h);
+
+            copy_to_attr.start_x = 200;
+            copy_to_attr.start_y = 200;
+            copy_to_attr.padding_r = 0;
+            copy_to_attr.padding_g = 0;
+            copy_to_attr.padding_b = 0;
+            copy_to_attr.if_padding = 1;
+
+            bm_image_create(handle, in_h, in_w, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_FLOAT32, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_copy_host_to_device(input, (void **)&src_data);
+            bm_image_create(handle, out_h, out_w, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_FLOAT32, &output);
+            bm_image_alloc_dev_mem(output);
+            bmcv_image_copy_to(handle, copy_to_attr, input, output);
+            bm_image_copy_device_to_host(output, (void **)&res_data);
+            writeBin(dst_name, (unsigned char*)res_data, channel * out_w * out_h);
+
             bm_image_destroy(input);
             bm_image_destroy(output);
+            free(src_data);
+            free(res_data);
             bm_dev_free(handle);
-
-            exit(-1);
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle)

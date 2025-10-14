@@ -14,6 +14,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64)
 CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
 CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
 CROSS_CC_PREFIX =
 else
@@ -34,9 +36,9 @@ AR  = $(CROSS_CC_PREFIX)ar
 
 INCLUDES = -I./inc -I$(INSTALL_DIR)/include
 DEFINES += -D$(chip_type)
-CFLAGS  += -fPIC -Wno-deprecated-declarations -Wall -Wl,--fatal-warning $(INCLUDES) $(DEFINES) 
+CFLAGS  += -fPIC -Wno-deprecated-declarations -Wall -Wl,--fatal-warning $(INCLUDES) $(DEFINES)
 LDFLAGS += -L. -L$(INSTALL_DIR)/lib
-LIBS = -lm -lrt -lbmion -lpthread 
+LIBS = -lm -lrt -lbmion -lpthread
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -ggdb
@@ -52,11 +54,15 @@ LDFLAGS += -Wl,-melf64ltsmip
 endif
 
 ifeq ($(PRODUCTFORM), pcie_sw64)
-CFLAGS += --machine=sw6b
+CFLAGS += --machine=sw6b --sysroot=$(CMAKE_SYSROOT)
 LDFLAGS +=
 endif
 
 ifeq ($(PRODUCTFORM), pcie_loongarch64)
+LDFLAGS += -Wl,-melf64loongarch
+endif
+
+ifeq ($(PRODUCTFORM), pcie_loongarch64_anolis)
 LDFLAGS += -Wl,-melf64loongarch
 endif
 

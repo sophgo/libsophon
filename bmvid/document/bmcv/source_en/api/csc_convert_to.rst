@@ -1,22 +1,23 @@
 bmcv_image_csc_convert_to
 =========================
 
-  The API can combine  crop, color-space-convert, resize, padding, convert_to, and any number of functions for multiple images.
+The API can combine  crop, color-space-convert, resize, padding, convert_to, and any number of functions for multiple images.
 
     .. code-block:: c
 
         bm_status_t bmcv_image_csc_convert_to(
-            bm_handle_t           handle,
-            int                   in_img_num,
-            bm_image*             input,
-            bm_image*             output,
-            int*                  crop_num_vec = NULL,
-            bmcv_rect_t*          crop_rect = NULL,
-            bmcv_padding_atrr_t*  padding_attr = NULL,
-            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
-            csc_type_t            csc_type = CSC_MAX_ENUM,
-            csc_matrix_t*         matrix = NULL,
-            bmcv_convert_to_attr* convert_to_attr);
+                    bm_handle_t handle,
+                    int in_img_num,
+                    bm_image* input,
+                    bm_image* output,
+                    int* crop_num_vec = NULL,
+                    bmcv_rect_t* crop_rect = NULL,
+                    bmcv_padding_atrr_t* padding_attr = NULL,
+                    bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
+                    csc_type_t csc_type = CSC_MAX_ENUM,
+                    csc_matrix_t* matrix = NULL,
+                    bmcv_convert_to_attr* convert_to_attr);
+
 
 **Processor model support**
 
@@ -376,6 +377,3 @@ of which:
                 avframe->linesize[4] * avframe->h / 2);
 
         bm_image_attach(*compressed_image, src_plane_device);
-
-
-
