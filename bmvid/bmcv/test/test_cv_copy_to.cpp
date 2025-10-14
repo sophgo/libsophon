@@ -131,9 +131,8 @@ template <typename T>
 static bool res_ref_comp(T *res_1n_planner, T *ref_1n_planner, int size) {
     for (int idx = 0; idx < size; idx++) {
         if (res_1n_planner[idx] != ref_1n_planner[idx]) {
-            std::cout << "[COMP ERROR]: idx: " << idx
-                      << " res: " << (int)res_1n_planner[idx]
-                      << " ref: " << (int)ref_1n_planner[idx] << std::endl;
+            printf("[COMP ERROR]: idx: %d, res %d, ref %d\n",
+                idx, (int)res_1n_planner[idx], (int)ref_1n_planner[idx]);
             return false;
         }
     }
@@ -161,12 +160,8 @@ static bool res_ref_comp(T * res_1n_planner,
                     int idx = n_idx * n_len + c_idx * c_len +
                               (h_idx + start_y) * h_len + w_idx + start_x;
                     if (res_1n_planner[idx] != ref_1n_planner[idx]) {
-                        std::cout << "[COMP ERROR]: idx: " << idx
-                                  << " res: " << (int)res_1n_planner[idx]
-                                  << " ref: " << (int)ref_1n_planner[idx]
-                                  << " n_idx: " << n_idx << " c_idx: " << c_idx
-                                  << " h_idx: " << h_idx << " w_idx: " << w_idx
-                                  << std::endl;
+                        printf("[COMP ERROR]: idx %d: res: %d, ref: %d, n_idx: %d, c_idx: %d, h_idx: %d, w_idx: %d\n",
+                               idx, (int)res_1n_planner[idx], (int)ref_1n_planner[idx], n_idx, c_idx, h_idx, w_idx);
                         return false;
                     }
                 }
@@ -290,11 +285,11 @@ static int copy_to_test_rand(bm_handle_t handle,
     gettimeofday_(&t1);
     ret = bmcv_image_copy_to(handle, copy_to_attr, input, output);
     gettimeofday_(&t2);
-    std::cout << "copy to using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+    printf("copy to using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
 
     if (BM_SUCCESS != ret) {
-        std::cout << "bmcv_copy_to error !!!" << std::endl;
+        printf("bmcv_copy_to error !!!\n");
         bm_image_destroy(input);
         bm_image_destroy(output);
         exit(-1);
@@ -335,7 +330,7 @@ static int copy_to_test_rand(bm_handle_t handle,
                                      out_w,
                                      start_x,
                                      start_y)) {
-            std::cout << "copy_to test error!!!" << std::endl;
+            printf("copy_to test error!!!\n");
             bm_image_destroy(input);
             bm_image_destroy(output);
             exit(-1);
@@ -344,7 +339,7 @@ static int copy_to_test_rand(bm_handle_t handle,
         if (false == res_ref_comp<T>(res_ptr.get(),
                                      ref_ptr.get(),
                                      image_n * channel * out_h * out_w)) {
-            std::cout << "copy_to test error!!!" << std::endl;
+            printf("copy_to test error!!!\n");
             bm_image_destroy(input);
             bm_image_destroy(output);
             exit(-1);
@@ -352,7 +347,7 @@ static int copy_to_test_rand(bm_handle_t handle,
     }
     bm_image_destroy(input);
     bm_image_destroy(output);
-    std::cout << "copy_to test compare passed" << std::endl;
+    printf("copy_to test compare passed\n");
     return 0;
 }
 
@@ -364,14 +359,11 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
     copy_to_thread_arg_t *copy_to_thread_arg = (copy_to_thread_arg_t *)arg;
     int                   test_loop_times    = copy_to_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld ----------\n", pthread_self());
     #else
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << GetCurrentThreadId() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld ----------\n", GetCurrentThreadId());
     #endif
-    std::cout << "[TEST COPY_TO] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST COPY_TO] test starts... LOOP times will be %d\n", test_loop_times);
     int         dev_id = 0;
     bm_handle_t handle;
     unsigned int chipid = BM1684X;
@@ -385,11 +377,10 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
     if (BM_SUCCESS != ret)
         printf("bm_get_chipid failed. ret = %d\n", ret);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST COPY_TO] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST COPY_TO] LOOP %d ------\n", loop_idx);
         unsigned int seed = (unsigned)time(NULL);
         // seed = 1571392508;
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         srand(seed);
         int in_w    = 400;
         int in_h    = 400;
@@ -397,11 +388,8 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
         int out_h   = 800;
         int start_x = 200;
         int start_y = 200;
-        std::cout << "---------COPY_TO CLASSICAL SIZE TEST----------"
-                  << std::endl;
-        std::cout << "[COPY_TO TEST] fp32 bgr packed: "
-                    "1n_fp32->1n_fp32 starts"
-                    << std::endl;
+        printf("---------COPY_TO CLASSICAL SIZE TEST----------\n");
+        printf("[COPY_TO TEST] fp32 bgr packed: 1n_fp32->1n_fp32 starts\n");
         copy_to_test_rand<float>(handle,
                                 FORMAT_BGR_PACKED,
                                 DATA_TYPE_EXT_FLOAT32,
@@ -411,9 +399,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] fp32 bgr planner: "
-                    "1n_fp32->1n_fp32 starts"
-                    << std::endl;
+        printf("[COPY_TO TEST] fp32 bgr planner: 1n_fp32->1n_fp32 starts\n");
         copy_to_test_rand<float>(handle,
                                 FORMAT_BGR_PLANAR,
                                 DATA_TYPE_EXT_FLOAT32,
@@ -423,9 +409,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] int8 bgr packed: "
-                    "1n_int8->1n_int8 starts"
-                    << std::endl;
+        printf("[COPY_TO TEST] int8 bgr packed: 1n_int8->1n_int8 starts\n");
         copy_to_test_rand<int8_t>(handle,
                                 FORMAT_BGR_PACKED,
                                 DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -435,9 +419,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] int8 bgr planner: "
-                    "1n_int8->1n_int8 starts"
-                    << std::endl;
+        printf("[COPY_TO TEST] int8 bgr planner: 1n_int8->1n_int8 starts\n");
         copy_to_test_rand<int8_t>(handle,
                                 FORMAT_BGR_PLANAR,
                                 DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -448,9 +430,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 start_x,
                                 start_y);
         if(chipid == 0x1684){
-            std::cout << "[COPY_TO TEST] int8 bgr planner: "
-                        "4n_int8->4n_int8 starts"
-                        << std::endl;
+            printf("[COPY_TO TEST] int8 bgr planner: 4n_int8->4n_int8 starts\n");
             copy_to_test_rand<uint8_t>(handle,
                                         FORMAT_BGR_PLANAR,
                                         DATA_TYPE_EXT_4N_BYTE,
@@ -461,9 +441,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         start_x,
                                         start_y);
         }
-        std::cout << "[COPY_TO TEST] uint8 bgr packed: "
-                    "1n_uint8->1n_uint8 starts"
-                << std::endl;
+        printf("[COPY_TO TEST] uint8 bgr packed: 1n_uint8->1n_uint8 starts\n");
         copy_to_test_rand<uint8_t>(handle,
                                 FORMAT_BGR_PACKED,
                                 DATA_TYPE_EXT_1N_BYTE,
@@ -473,9 +451,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] uint8 bgr planner: "
-                    "1n_uint8->1n_uint8 starts"
-                << std::endl;
+        printf("[COPY_TO TEST] uint8 bgr planner: 1n_uint8->1n_uint8 starts\n");
         copy_to_test_rand<uint8_t>(handle,
                                 FORMAT_BGR_PLANAR,
                                 DATA_TYPE_EXT_1N_BYTE,
@@ -485,9 +461,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] int8 gray planner: "
-                    "1n_int8->1n_int8 starts"
-                << std::endl;
+        printf("[COPY_TO TEST] int8 gray planner: 1n_int8->1n_int8 starts\n");
         copy_to_test_rand<int8_t>(handle,
                                 FORMAT_GRAY,
                                 DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -497,9 +471,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "[COPY_TO TEST] uint8 gray planner: "
-                    "1n_uint8->1n_uint8 starts"
-                << std::endl;
+        printf("[COPY_TO TEST] uint8 gray planner: 1n_uint8->1n_uint8 starts\n");
         copy_to_test_rand<uint8_t>(handle,
                                 FORMAT_GRAY,
                                 DATA_TYPE_EXT_1N_BYTE,
@@ -509,19 +481,15 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                 out_w,
                                 start_x,
                                 start_y);
-        std::cout << "----------COPY_TO CORNER TEST---------" << std::endl;
+        printf("----------COPY_TO CORNER TEST---------\n");
         int loop_num = 2;
         for (int loop_idx = 0; loop_idx < loop_num; loop_idx++) {
             for (int rand_mode = 0; rand_mode < MAX_RAND_MODE; rand_mode++) {
                 gen_test_size(
                     in_w, in_h, out_w, out_h, start_x, start_y, rand_mode);
-                std::cout << "rand mode : " << rand_mode << " ,in_w: " << in_w
-                          << " ,in_h: " << in_h << " ,out_w: " << out_w
-                          << ", out_h: " << out_h << ", start_x: " << start_x
-                          << ", start_y: " << start_y << std::endl;
-                std::cout << "[COPY_TO TEST] fp32 bgr packed: "
-                            "1n_fp32->1n_fp32 starts"
-                        << std::endl;
+                printf("rand_mode:%d, in_w %d, in_h %d, out_w %d, out_h %d, start_x %d, start_y %d\n",
+                        rand_mode, in_w, in_h, out_w, out_h, start_x, start_y);
+                printf("[COPY_TO TEST] fp32 bgr packed: 1n_fp32->1n_fp32 starts\n");
                 copy_to_test_rand<float>(handle,
                                         FORMAT_BGR_PACKED,
                                         DATA_TYPE_EXT_FLOAT32,
@@ -531,9 +499,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] fp32 bgr planner: "
-                            "1n_fp32->1n_fp32 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] fp32 bgr planner: 1n_fp32->1n_fp32 starts\n");
                 copy_to_test_rand<float>(handle,
                                         FORMAT_BGR_PLANAR,
                                         DATA_TYPE_EXT_FLOAT32,
@@ -543,9 +509,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] int8 bgr packed: "
-                            "1n_int8->1n_int8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] int8 bgr packed: 1n_int8->1n_int8 starts\n");
                 copy_to_test_rand<int8_t>(handle,
                                         FORMAT_BGR_PACKED,
                                         DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -555,9 +519,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] int8 bgr planner: "
-                            "1n_int8->1n_int8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] int8 bgr planner: 1n_int8->1n_int8 starts\n");
                 copy_to_test_rand<int8_t>(handle,
                                         FORMAT_BGR_PLANAR,
                                         DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -568,9 +530,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         start_x,
                                         start_y);
             if(chipid == 0x1684){
-                std::cout << "[COPY_TO TEST] uint8 bgr planner: "
-                            "4n_uint8->4n_uint8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] uint8 bgr planner: 4n_uint8->4n_uint8 starts\n");
                 copy_to_test_rand<uint8_t>(handle,
                                             FORMAT_BGR_PLANAR,
                                             DATA_TYPE_EXT_4N_BYTE,
@@ -581,9 +541,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                             start_x,
                                             start_y);
             }
-                std::cout << "[COPY_TO TEST] uint8 bgr packed: "
-                            "1n_uint8->1n_uint8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] uint8 bgr packed: 1n_uint8->1n_uint8 starts\n");
                 copy_to_test_rand<uint8_t>(handle,
                                         FORMAT_BGR_PACKED,
                                         DATA_TYPE_EXT_1N_BYTE,
@@ -593,9 +551,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] uint8 bgr planner: "
-                            "1n_uint8->1n_uint8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] uint8 bgr planner: 1n_uint8->1n_uint8 starts\n");
                 copy_to_test_rand<uint8_t>(handle,
                                         FORMAT_BGR_PLANAR,
                                         DATA_TYPE_EXT_1N_BYTE,
@@ -605,9 +561,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] uint8 gray planner: "
-                            "1n_uint8->1n_uint8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] uint8 gray planner: 1n_uint8->1n_uint8 starts\n");
                 copy_to_test_rand<uint8_t>(handle,
                                         FORMAT_GRAY,
                                         DATA_TYPE_EXT_1N_BYTE,
@@ -617,9 +571,7 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         out_w,
                                         start_x,
                                         start_y);
-                std::cout << "[COPY_TO TEST] int8 gray planner: "
-                            "1n_int8->1n_int8 starts"
-                        << std::endl;
+                printf("[COPY_TO TEST] int8 gray planner: 1n_int8->1n_int8 starts\n");
                 copy_to_test_rand<int8_t>(handle,
                                         FORMAT_GRAY,
                                         DATA_TYPE_EXT_1N_BYTE_SIGNED,
@@ -631,10 +583,10 @@ DWORD WINAPI test_copy_to_thread(LPVOID arg) {
                                         start_y);
             }
         }
-        std::cout << "----------COPY_TO TEST OVER---------" << std::endl;
+        printf("----------COPY_TO TEST OVER---------\n");
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST COPY_TO] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST COPY_TO] ALL TEST PASSED!\n");
     return NULL;
 }
 
@@ -651,17 +603,15 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_copy_to loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_copy_to loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST COPY_TO] loop times should be 1~1500" << std::endl;
+        printf("[TEST COPY_TO] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST COPY_TO] thread nums should be 1~4 " << std::endl;
+        printf("[TEST COPY_TO] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -688,7 +638,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] copy_to_thread_arg;
     #else
@@ -740,7 +690,7 @@ int main(int argc, char **argv) {
     }
     for (int i = 0; i < test_threads_num; i++)
         CloseHandle(hThreadArray[i]);
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] copy_to_thread_arg;
     #endif
     return 0;

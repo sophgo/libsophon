@@ -3,6 +3,7 @@ bmcv_image_jpeg_dec
 
 该接口可以实现对多张图片的 JPEG 解码过程。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -13,12 +14,11 @@ bmcv_image_jpeg_dec
     .. code-block:: c
 
         bm_status_t bmcv_image_jpeg_dec(
-                bm_handle_t handle,
-                void *      p_jpeg_data[],
-                size_t *    in_size,
-                int         image_num,
-                bm_image *  dst
-        );
+                    bm_handle_t handle,
+                    void* p_jpeg_data[],
+                    size_t* in_size,
+                    int image_num,
+                    bm_image* dst);
 
 
 **输入参数说明：**
@@ -56,12 +56,11 @@ bmcv_image_jpeg_dec
 +------------+------------------+
 
 
-
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **注意事项：**
@@ -99,35 +98,73 @@ bmcv_image_jpeg_dec
 | 1   | DATA_TYPE_EXT_1N_BYTE          |
 +-----+--------------------------------+
 
-**示例代码**
 
+**示例代码**
 
     .. code-block:: c
 
-        size_t size = 0;
-        // read input from picture
-        FILE *fp = fopen(filename, "rb+");
-        assert(fp != NULL);
-        fseek(fp, 0, SEEK_END);
-        *size = ftell(fp);
-        u8* jpeg_data = (u8*)malloc(*size);
-        fseek(fp, 0, SEEK_SET);
-        fread(jpeg_data, *size, 1, fp);
-        fclose(fp);
+        #include <stdio.h>
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <memory.h>
+        #include "bmcv_api_ext.h"
+        #include <assert.h>
+        #include <math.h>
 
-        // create bm_image used to save output
-        bm_image dst;
-        memset((char*)&dst, 0, sizeof(bm_image));
-        // if you not create dst bm_image it will create automatically inside.
-        // you can also create dst bm_image here, like this:
-        // bm_image_create(handle, IMAGE_H, IMAGE_W, FORMAT_YUV420P,
-        //         DATA_TYPE_EXT_1N_BYTE, &dst);
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-        // decode input
-        int ret = bmcv_image_jpeg_dec(handle, (void**)&jpeg_data, &size, 1, &dst);
-        free(jpeg_data);
-        bm_image_destory(dst);
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_src);
+        }
 
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_dst);
+        }
 
+        int main()
+        {
+            int format = FORMAT_YUV420P;
+            int image_h = 1080;
+            int image_w = 1920;
+            bm_image src;
+            bm_image dst;
+            bm_handle_t handle;
+            size_t byte_size = image_w * image_h * 3 / 2;
+            unsigned char* input_data = (unsigned char*)malloc(byte_size);
+            unsigned char* output_data = (unsigned char*)malloc(byte_size);
+            unsigned char* in_ptr[3] = {input_data, input_data + image_h * image_w, input_data + 2 * image_h * image_w};
+            unsigned char* out_ptr[3] = {output_data, output_data + image_h * image_w, output_data + 2 * image_h * image_w};
+            void* jpeg_data[4] = {NULL, NULL, NULL, NULL};
+            const char *dst_name = "path/to/dst";
+            const char *src_name = "path/to/src";
+
+            readBin(src_name, input_data, byte_size);
+            bm_dev_request(&handle, 0);
+            bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &src, NULL);
+            bm_image_alloc_dev_mem(src, BMCV_HEAP1_ID);
+            bm_image_create(handle, image_h, image_w, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &dst, NULL);
+            bm_image_alloc_dev_mem(dst, BMCV_HEAP1_ID);
+            bm_image_copy_host_to_device(src, (void**)in_ptr);
+            bmcv_image_jpeg_enc(handle, 1, &src, jpeg_data, &byte_size, 95);
+            bmcv_image_jpeg_dec(handle, (void**)jpeg_data, &byte_size, 1, &dst);
+            bm_image_copy_device_to_host(dst, (void**)out_ptr);
+            writeBin(dst_name, output_data, byte_size);
+
+            bm_image_destroy(src);
+            bm_image_destroy(dst);
+            free(input_data);
+            free(output_data);
+            bm_dev_free(handle);
+            return 0;
+        }

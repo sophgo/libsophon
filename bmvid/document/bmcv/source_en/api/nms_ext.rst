@@ -13,18 +13,20 @@ This interface supports BM1684/BM1684X.
 
     .. code-block:: c
 
-        bm_status_t bmcv_nms_ext(bm_handle_t     handle,
-                         bm_device_mem_t input_proposal_addr,
-                         int             proposal_size,
-                         float           nms_threshold,
-                         bm_device_mem_t output_proposal_addr,
-                         int             topk,
-                         float           score_threshold,
-                         int             nms_alg,
-                         float           sigma,
-                         int             weighting_method,
-                         float *         densities,
-                         float           eta)
+        bm_status_t bmcv_nms_ext(
+                    bm_handle_t handle,
+                    bm_device_mem_t input_proposal_addr,
+                    int proposal_size,
+                    float nms_threshold,
+                    bm_device_mem_t output_proposal_addr,
+                    int topk,
+                    float score_threshold,
+                    int nms_alg,
+                    float sigma,
+                    int weighting_method,
+                    float* densities,
+                    float eta);
+
 
 **Parameter Description:**
 
@@ -103,14 +105,15 @@ In the above two expressions, :math:`\mathcal{M}` represents the object frame wi
 
   Input parameter. SSD-NMS coefficient, used to adjust iou threshold.
 
+
 **Return value:**
 
 * BM_SUCCESS: success
 
 * Other: failed
 
-**Code example:**
 
+**Code example:**
 
     .. code-block:: c
 
@@ -128,116 +131,42 @@ In the above two expressions, :math:`\mathcal{M}` represents the object frame wi
         #include "bmcv_api.h"
         #include "bmcv_internal.h"
         #include "bmcv_common_bm1684.h"
+        #include "bmcv_api_ext.h"
 
-        #define MAX_PROPOSAL_NUM (65535)
-        typedef float bm_nms_data_type_t;
+        int main()
+        {
+            float nms_threshold = 0.22;
+            float nms_score_threshold = 0.22;
+            float sigma = 0.4;
+            int proposal_size = 500;
+            int weighting_method = GAUSSIAN_WEIGHTING;
+            int nms_type = SOFT_NMS; // ADAPTIVE NMS / HARD NMS / SOFT NMS
+            face_rect_t* proposal_rand = (face_rect_t*)malloc(MAX_PROPOSAL_NUM * sizeof(face_rect_t));
+            nms_proposal_t* output_proposal = (nms_proposal_t*)malloc(1 * sizeof(nms_proposal_t));
+            float* densities = (float*)malloc(proposal_size * sizeof(float));
+            float eta = ((float)(rand() % 10)) / 10;
+            bm_handle_t handle;
 
-        typedef struct {
-            float x1;
-            float y1;
-            float x2;
-            float y2;
-            float score;
-        } face_rect_t;
-
-        typedef struct nms_proposal {
-            int          size;
-            face_rect_t  face_rect[MAX_PROPOSAL_NUM];
-            int          capacity;
-            face_rect_t *begin;
-            face_rect_t *end;
-        } nms_proposal_t;
-
-        typedef enum {
-            LINEAR_WEIGHTING = 0,
-            GAUSSIAN_WEIGHTING,
-            MAX_WEIGHTING_TYPE
-        } weighting_method_e;
-
-        template <typename data_type>
-        static bool generate_random_buf(std::vector<data_type> &random_buffer,
-                                        int                     random_min,
-                                        int                     random_max,
-                                        int                     scale) {
-            for (int i = 0; i < scale; i++) {
-                data_type data_val = (data_type)(
-                    random_min + (((float)((random_max - random_min) * i)) / scale));
-                random_buffer.push_back(data_val);
-            }
-            std::random_shuffle(random_buffer.begin(), random_buffer.end());
-
-            return false;
-        }
-
-         int main(int argc, char *argv[]) {
-             unsigned int seed1 = 100;
-            bm_nms_data_type_t  nms_threshold = 0.22;
-            bm_nms_data_type_t  nms_score_threshold = 0.22;
-            bm_nms_data_type_t  sigma               = 0.4;
-            int  proposal_size       = 500;
-            int  rand_loop_num       = 10;
-            int  weighting_method    = GAUSSIAN_WEIGHTING;
-            std::function<float(float, float)> weighting_func;
-            int  nms_type = SOFT_NMS;  // ADAPTIVE NMS / HARD NMS / SOFT NMS
-            const int soft_nms_total_types = MAX_NMS_TYPE - HARD_NMS - 1;
-
-            for (int rand_loop_idx = 0;rand_loop_idx < (rand_loop_num * soft_nms_total_types);rand_loop_idx++) {
-                for (int rand_mode = 0; rand_mode < MAX_RAND_MODE; rand_mode++) {
-                    std::shared_ptr<Blob<face_rect_t>> proposal_rand =
-                        std::make_shared<Blob<face_rect_t>>(MAX_PROPOSAL_NUM);
-                    std::shared_ptr<nms_proposal_t> output_proposal =
-                        std::make_shared<nms_proposal_t>();
-
-                    std::vector<face_rect_t>        proposals_ref;
-                    std::vector<face_rect_t>        nms_proposal;
-                    std::vector<bm_nms_data_type_t> score_random_buf;
-                    std::vector<bm_nms_data_type_t> density_vec;
-                    std::shared_ptr<Blob<float>>    densities =
-                        std::make_shared<Blob<float>>(proposal_size);
-                    generate_random_buf<bm_nms_data_type_t>(
-                        score_random_buf, 0, 1, 10000);
-                    face_rect_t *proposal_rand_ptr = proposal_rand.get()->data;
-                    float eta = ((float)(rand() % 10)) / 10;
-                    for (int32_t i = 0; i < proposal_size; i++) {
-                        proposal_rand_ptr[i].x1 =
-                            ((bm_nms_data_type_t)(rand() % 100)) / 10;
-                        proposal_rand_ptr[i].x2 = proposal_rand_ptr[i].x1
-                            + ((bm_nms_data_type_t)(rand() % 100)) / 10;
-                        proposal_rand_ptr[i].y1 =
-                            ((bm_nms_data_type_t)(rand() % 100)) / 10;
-                        proposal_rand_ptr[i].y2 = proposal_rand_ptr[i].y1
-                            + ((bm_nms_data_type_t)(rand() % 100)) / 10;
-                        proposal_rand_ptr[i].score = score_random_buf[i];
-                        proposals_ref.push_back(proposal_rand_ptr[i]);
-                        densities.get()->data[i] = ((float)(rand() % 100)) / 100;
-                    }
-                    assert(proposal_size <= MAX_PROPOSAL_NUM);
-                    if (weighting_method == LINEAR_WEIGHTING) {
-                        weighting_func = linear_weighting;
-                    } else if (weighting_method == GAUSSIAN_WEIGHTING) {
-                        weighting_func = gaussian_weighting;
-                    } else {
-                        std::cout << "weighting_method error: " << weighting_method
-                                    << std::endl;
-                    }
-                    bmcv_nms_ext(handle,
-                                    bm_mem_from_system(proposal_rand.get()->data),
-                                    proposal_size,
-                                    nms_threshold,
-                                    bm_mem_from_system(output_proposal.get()),
-                                    1,
-                                    nms_score_threshold,
-                                    nms_type,
-                                    sigma,
-                                    weighting_method,
-                                    densities.get()->data,
-                                    eta);
-                }
+            bm_dev_request(&handle, 0);
+            for (int32_t i = 0; i < proposal_size; i++) {
+                proposal_rand[i].x1 = ((float)(rand() % 100)) / 10;
+                proposal_rand[i].x2 = proposal_rand[i].x1 + ((float)(rand() % 100)) / 10;
+                proposal_rand[i].y1 = ((float)(rand() % 100)) / 10;
+                proposal_rand[i].y2 = proposal_rand[i].y1  + ((float)(rand() % 100)) / 10;
+                proposal_rand[i].score = ((float)(rand() % 100)) / 10;
+                densities[i] = (float)rand() / (float)RAND_MAX;
             }
 
+            bmcv_nms_ext(handle, bm_mem_from_system(proposal_rand), proposal_size, nms_threshold,
+                        bm_mem_from_system(output_proposal), 1, nms_score_threshold,
+                        nms_type, sigma, weighting_method, densities, eta);
+
+            free(proposal_rand);
+            free(output_proposal);
+            free(densities);
+            bm_dev_free(handle);
             return 0;
-         }
-
+        }
 
 
 **Note:**

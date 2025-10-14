@@ -13,17 +13,17 @@ This interface supports BM1684/BM1684X.
 
     .. code-block:: c
 
-        bm_status_t bmcv_sort(bm_handle_t     handle,
-                              bm_device_mem_t src_index_addr,
-                              bm_device_mem_t src_data_addr,
-                              int             data_cnt,
-                              bm_device_mem_t dst_index_addr,
-                              bm_device_mem_t dst_data_addr,
-                              int             sort_cnt,
-                              int             order,
-                              bool            index_enable,
-                              bool            auto_index);
-
+        bm_status_t bmcv_sort(
+                    bm_handle_t handle,
+                    bm_device_mem_t src_index_addr,
+                    bm_device_mem_t src_data_addr,
+                    int data_cnt,
+                    bm_device_mem_t dst_index_addr,
+                    bm_device_mem_t dst_data_addr,
+                    int sort_cnt,
+                    int order,
+                    bool index_enable,
+                    bool auto_index);
 
 
 **Input parameter description:**
@@ -69,7 +69,6 @@ This interface supports BM1684/BM1684X.
   Input parameter. Whether to enable the automatic generation of index function. The premise of using this function is index_enable parameter is true. If the parameter is also true, it means counting from 0 according to the storage order of the input data as index and src_index_addr is invalid, and the index corresponding to the ordered data in the output result is stored in dst_index_addr.
 
 
-
 **Return value description:**
 
 * BM_SUCCESS: success
@@ -88,29 +87,32 @@ This interface supports BM1684/BM1684X.
 
 **Sample code**
 
-
     .. code-block:: c
 
-         int data_cnt = 100;
-         int sort_cnt = 50;
-         float src_data_p[100];
-         int src_index_p[100];
-         float dst_data_p[50];
-         int dst_index_p[50];
-         for (int i = 0; i < 100; i++) {
-             src_data_p[i] = rand() % 1000;
-             src_index_p[i] = 100 - i;
-         }
-         int order = 0;
-         bmcv_sort(handle,
-                   bm_mem_from_system(src_index_p),
-                   bm_mem_from_system(src_data_p),
-                   data_cnt,
-                   bm_mem_from_system(dst_index_p),
-                   bm_mem_from_system(dst_data_p),
-                   sort_cnt,
-                   order,
-                   true,
-                   false);
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <stdio.h>
+        #include "bmcv_api_ext.h"
 
+        int main()
+        {
+            int data_cnt = 100;
+            int sort_cnt = 50;
+            float src_data_p[100];
+            int src_index_p[100];
+            float dst_data_p[50];
+            int dst_index_p[50];
+            int order = 0;
+            bm_handle_t handle;
 
+            bm_dev_request(&handle, 0);
+            for (int i = 0; i < 100; i++) {
+                src_data_p[i] = rand() % 1000;
+                src_index_p[i] = 100 - i;
+            }
+            bmcv_sort(handle, bm_mem_from_system(src_index_p), bm_mem_from_system(src_data_p), data_cnt,
+                    bm_mem_from_system(dst_index_p), bm_mem_from_system(dst_data_p), sort_cnt, order,
+                    true, false);
+            bm_dev_free(handle);
+            return 0;
+        }

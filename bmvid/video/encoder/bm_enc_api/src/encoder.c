@@ -54,6 +54,12 @@ typedef struct _BmVpuEncWriteContext {
 #define BM_VPU_ENC_GET_BS_VA(BMVPUENC, BITSTREAM_PHYS_ADDR) \
     (((BMVPUENC)->bs_virt_addr) + ((bmvpu_phys_addr_t)(BITSTREAM_PHYS_ADDR) - (bmvpu_phys_addr_t)((BMVPUENC)->bs_phys_addr)))
 
+int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
+                                    BmVpuFramebuffer *framebuffers,
+                                    uint32_t num_framebuffers);
+
+
+int bmvpu_enc_get_initial_info(BmVpuEncoder *encoder, BmVpuEncInitialInfo *info);
 
 /* For BM1684 */
 #define MAX_NUM_VPU_CORE_CHIP     5
@@ -81,7 +87,7 @@ static __thread sigset_t newmask[128];
 
 #define TRY_OPEN_SEM_TIMEOUT 20
 
-void get_lock_timeout(int sec,int soc_idx)
+void bmvpu_enc_get_lock_timeout(int sec,int soc_idx)
 {
     char flock_name[255];
 #ifdef __linux__
@@ -106,7 +112,7 @@ void get_lock_timeout(int sec,int soc_idx)
     WaitForSingleObject(s_vid_enc_open_flock_fd[soc_idx], INFINITE);
 #endif
 }
-void unlock_flock(int soc_idx)
+void bmvpu_enc_unlock_flock(int soc_idx)
 {
 #ifdef __linux__
     if(s_vid_enc_open_flock_fd[soc_idx] == -1) {
@@ -178,8 +184,9 @@ static int bmvpu_enc_alloc_proc(void *enc_ctx,
     int ret = 0;
 
     if (video_enc_ctx->buffer_alloc_func) {
-        ret = video_enc_ctx->buffer_alloc_func(video_enc_ctx->buffer_context
-                                            , vpu_core_idx, buf, size);
+        if (video_enc_ctx->buffer_alloc_func(video_enc_ctx->buffer_context, vpu_core_idx, buf, size) == NULL) {
+            ret = -1;
+        }
     } else {
         ret = bmvpu_enc_dma_buffer_allocate(vpu_core_idx, buf, size);
     }
@@ -194,8 +201,9 @@ static int bmvpu_enc_free_proc(void *enc_ctx,
     int ret = 0;
 
     if (video_enc_ctx->buffer_free_func) {
-        ret = video_enc_ctx->buffer_free_func(video_enc_ctx->buffer_context
-                                            , vpu_core_idx, buf);
+        if (video_enc_ctx->buffer_free_func(video_enc_ctx->buffer_context, vpu_core_idx, buf) == NULL) {
+            ret = -1;
+        }
     } else {
         ret = bmvpu_enc_dma_buffer_deallocate(vpu_core_idx, buf);
     }
@@ -298,7 +306,7 @@ int bmvpu_enc_load(int soc_idx)
 
     /* Enter critical region */
 
-   get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
+   bmvpu_enc_get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
 
 
     BM_VPU_LOG("VPU at device [%d] init", soc_idx);
@@ -310,7 +318,7 @@ int bmvpu_enc_load(int soc_idx)
     {
         BM_VPU_ERROR("loading VPU failed");
         ret = BM_VPU_ENC_RETURN_CODE_ERROR;
-        unlock_flock(soc_idx);
+        bmvpu_enc_unlock_flock(soc_idx);
         goto cleanup;
     }
 
@@ -321,6 +329,7 @@ int bmvpu_enc_load(int soc_idx)
 
 cleanup:
     /* Leave critical region */
+    bmvpu_enc_unlock_flock(soc_idx);
 
     return ret;
 }
@@ -331,7 +340,7 @@ int bmvpu_enc_unload(int soc_idx)
 
     /* Enter critical region */
 
-    get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
+    bmvpu_enc_get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
 
     BM_VPU_LOG("VPU at device [%d] deinit", soc_idx);
 
@@ -340,7 +349,7 @@ int bmvpu_enc_unload(int soc_idx)
 
     /* Leave critical region */
 //    atomic_flag_clear(&bmve_atomic_lock);
-    unlock_flock(soc_idx);
+    bmvpu_enc_unlock_flock(soc_idx);
 
     return ret;
 }
@@ -583,7 +592,6 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
 
     if((encoder == NULL) || (open_params == NULL) || (bs_dmabuffer == NULL)){
         BM_VPU_ERROR("bmvpu_enc_open params err: encoder(0X%x), open_params(0X%x), bs_dmabuffer(0X%x)", encoder, open_params, bs_dmabuffer);
-        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
     }
 
@@ -591,7 +599,6 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
         || (!open_params->buffer_alloc_func && open_params->buffer_free_func)) {
         BM_VPU_ERROR("bmvpu_enc_open params err: alloc_func(0X%x), free_func(0X%x)"
                     , open_params->buffer_alloc_func, open_params->buffer_free_func);
-        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
     }
 
@@ -599,7 +606,6 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
     int size = bs_dmabuffer->size;
     if (size < VPU_ENC_BITSTREAM_BUFFER_SIZE) {
         BM_VPU_ERROR("Get bs_dmabuffer buffer size failed: size=%d",size);
-        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
 
@@ -613,7 +619,6 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
     ret = bmvpu_enc_check_open_params(open_params);
     if (ret != BM_VPU_ENC_RETURN_CODE_OK)
     {
-        unlock_flock(soc_idx);
         return ret;
     }
 
@@ -622,7 +627,6 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
     if ((*encoder) == NULL)
     {
         BM_VPU_ERROR("allocating memory for encoder object failed");
-        unlock_flock(soc_idx);
         return BM_VPU_ENC_RETURN_CODE_ERROR;
     }
 
@@ -631,6 +635,7 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
 
     (*encoder)->first_frame = TRUE;
 
+    bmvpu_enc_get_lock_timeout(TRY_OPEN_SEM_TIMEOUT,soc_idx);
     /* Map the bitstream buffer. This mapping will persist until the encoder is closed. */
 #ifndef BM_PCIE_MODE
     ret = bmvpu_dma_buffer_map(bmvpu_enc_get_core_idx(soc_idx), bs_dmabuffer, BM_VPU_MAPPING_FLAG_READ|BM_VPU_MAPPING_FLAG_WRITE);
@@ -844,14 +849,14 @@ int bmvpu_enc_open_internal(BmVpuEncoder **encoder,
         (*encoder)->timeout_count = VPU_MAX_TIMEOUT_COUNTS;
 
 finish:
-    unlock_flock(soc_idx);
+    bmvpu_enc_unlock_flock(soc_idx);
     if (ret == BM_VPU_ENC_RETURN_CODE_OK)
         BM_VPU_DEBUG("successfully opened encoder");
 
     return ret;
 
 cleanup:
-    unlock_flock(soc_idx);
+    bmvpu_enc_unlock_flock(soc_idx);
 #ifndef BM_PCIE_MODE
     bmvpu_dma_buffer_unmap((*encoder)->core_idx, bs_dmabuffer);
 #endif
@@ -1194,18 +1199,26 @@ int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
         goto cleanup;
     }
 
-    BM_VPU_LOG("mv:        pa = 0x%lx, size = %d \n",
-               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_mv),
-               mv_size);
-    BM_VPU_LOG("fbc_y_tbl: pa = 0x%lx, size = %d",
-               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_y_tbl),
-               fbc_y_tbl_size);
-    BM_VPU_LOG("fbc_c_tbl: pa = 0x%lx, size = %d",
-               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_c_tbl),
-               fbc_c_tbl_size);
-    BM_VPU_LOG("sub_sam:   pa = 0x%lx, size = %d",
-               bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_sub_sam),
-               sub_sam_size);
+    if (encoder->buffer_mv != NULL) {
+        BM_VPU_LOG("mv:        pa = 0x%lx, size = %d \n",
+                bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_mv),
+                mv_size);
+    }
+    if (encoder->buffer_fbc_y_tbl != NULL) {
+        BM_VPU_LOG("fbc_y_tbl: pa = 0x%lx, size = %d",
+                bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_y_tbl),
+                fbc_y_tbl_size);
+    }
+    if (encoder->buffer_fbc_c_tbl != NULL) {
+        BM_VPU_LOG("fbc_c_tbl: pa = 0x%lx, size = %d",
+                bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_fbc_c_tbl),
+                fbc_c_tbl_size);
+    }
+    if (encoder->buffer_sub_sam != NULL) {
+        BM_VPU_LOG("sub_sam:   pa = 0x%lx, size = %d",
+                bmvpu_enc_dma_buffer_get_physical_address(encoder->buffer_sub_sam),
+                sub_sam_size);
+    }
 
     encoder->buffer_mv        = (BmVpuEncDMABuffer*)dmabuffer_mv;
     encoder->buffer_fbc_y_tbl = (BmVpuEncDMABuffer*)dmabuffer_fbc_y_tbl;
@@ -1359,6 +1372,13 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     VpuEncParam enc_param;
     VpuFrameBuffer src_fb;
     bmvpu_phys_addr_t pa;
+    bmvpu_phys_addr_t pa_y;
+    bmvpu_phys_addr_t pa_u;
+    bmvpu_phys_addr_t pa_v;
+    size_t y_len = 0;
+    size_t u_len = 0;
+    size_t v_len = 0;
+
     BOOL timeout;
     BOOL add_header;
     size_t encoded_data_size;
@@ -1392,6 +1412,9 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     memset(&enc_param, 0, sizeof(enc_param));
 
     enc_param.skipPicture = encoding_params->skip_frame;
+
+    enc_param.forcePicTypeEnable = encoding_params->forcePicTypeEnable;
+    enc_param.forcePicType = encoding_params->forcePicType;
 
     enc_param.picStreamBufferAddr = bmvpu_enc_dma_buffer_get_physical_address(encoder->bs_dmabuffer);
     enc_param.picStreamBufferSize = bmvpu_enc_dma_buffer_get_size(encoder->bs_dmabuffer);
@@ -1449,21 +1472,37 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
 
         /* Get the physical address for the raw_frame that shall be encoded
          * and the virtual pointer to the output buffer */
-        pa = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer);
+        if (framebuffer->dma_buffer != NULL) {
+            pa = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer);
 
-        BM_VPU_LOG("source framebuffer: myIndex: 0x%x, Y stride: %u,  CbCr stride: %u, pa: 0x%lx",
-                   framebuffer->myIndex, framebuffer->y_stride, framebuffer->cbcr_stride, pa);
+            src_fb.bufY  = (bmvpu_phys_addr_t)(pa + framebuffer-> y_offset);
+            src_fb.bufCb = (bmvpu_phys_addr_t)(pa + framebuffer->cb_offset);
+            src_fb.bufCr = (bmvpu_phys_addr_t)(pa + framebuffer->cr_offset);
+
+            src_fb.size = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer);
+        } else {
+            pa_y = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer_y);
+            pa_u = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer_u);
+            pa_v = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer_v);
+
+            src_fb.bufY  = (bmvpu_phys_addr_t)pa_y;
+            src_fb.bufCb = (bmvpu_phys_addr_t)pa_u;
+            src_fb.bufCr = (bmvpu_phys_addr_t)pa_v;
+
+            y_len = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer_y);
+            u_len = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer_u);
+            v_len = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer_v);
+            src_fb.size = y_len + u_len + v_len;
+        }
+        BM_VPU_LOG("source framebuffer: myIndex: 0x%x, Y stride: %u,  CbCr stride: %u, pa_y: 0x%lx, pa_u: 0x%lx, pa_v: 0x%lx",
+                   framebuffer->myIndex, framebuffer->y_stride, framebuffer->cbcr_stride, pa_y, pa_u, pa_v);
 
         src_fb.myIndex = framebuffer->myIndex;
         src_fb.stride = framebuffer->y_stride;
         src_fb.width  = framebuffer->width;
         src_fb.height = framebuffer->height;
 
-        src_fb.bufY  = (bmvpu_phys_addr_t)(pa + framebuffer-> y_offset);
-        src_fb.bufCb = (bmvpu_phys_addr_t)(pa + framebuffer->cb_offset);
-        src_fb.bufCr = (bmvpu_phys_addr_t)(pa + framebuffer->cr_offset);
 
-        src_fb.size = bmvpu_enc_dma_buffer_get_size(framebuffer->dma_buffer);
 
         enc_param.srcEndFlag = 0;
     }

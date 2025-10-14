@@ -1,5 +1,5 @@
 bmcv_image_bayer2rgb
-==================
+======================
 
 Converts bayerBG8 or bayerRG8 format images to RGB Plannar format.
 
@@ -11,14 +11,13 @@ This interface only supports BM1684X.
 
 **Interface form:**
 
-
     .. code-block:: c
 
-         bm_status_t bmcv_image_bayer2rgb(
-                 bm_handle_t handle,
-                 unsigned char* convd_kernel,
-                 bm_image input
-                 bm_image output);
+        bm_status_t bmcv_image_bayer2rgb(
+                    bm_handle_t handle,
+                    unsigned char* convd_kernel,
+                    bm_image input
+                    bm_image output);
 
 
 **Parameter Description:**
@@ -91,6 +90,11 @@ The interface currently supports the following data_type:
 
     .. code-block:: c
 
+        #include "bmcv_api_ext.h"
+        #include "stdio.h"
+        #include "stdlib.h"
+        #include "string.h"
+        #include <assert.h>
 
         #define KERNEL_SIZE 3 * 3 * 3 * 4 * 64
         #define CONVD_MATRIX 12 * 9
@@ -119,37 +123,76 @@ The interface currently supports the following data_type:
                                                               0, 0, 0, 0, 0, 4, 0, 0, 0, //Gg1
                                                               0, 0, 0, 0, 0, 0, 0, 4, 0, //Gg2
                                                               0, 1, 0, 1, 0, 1, 0, 1, 0};//Gb
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        unsigned char* input = (unsigned char*)malloc(width * height);
-        unsigned char* output = (unsigned char*)malloc(width * height * 3);
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
 
-        bm_image input_img;
-        bm_image output_img;
-        bm_image_create(handle, height, width, FORMAT_BAYER_RG8, DATA_TYPE_EXT_1N_BYTE, &input_img);
-        //bm_image_create(handle, height, width, FORMAT_BAYER, DATA_TYPE_EXT_1N_BYTE, &input_img); //bayerBG8
-        bm_image_create(handle, height, width, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output_img);
-        bm_image_alloc_dev_mem(input_img, BMCV_HEAP_ANY);
-        bm_image_alloc_dev_mem(output_img, BMCV_HEAP_ANY);
+        static void readBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
-        unsigned char kernel_data[KERNEL_SIZE];
-        memset(kernel_data, 0, KERNEL_SIZE);
-        // constructing convd_kernel_data
-        for (int i = 0;i < 12;i++) {
-            for (int j = 0;j < 9;j++) {
-                kernel_data[i * 9 * 64 + 64 * j] = convd_kernel_rg8[i * 9 + j];
-                //kernel_data[i * 9 * 64 + 64 * j] = convd_kernel_bg8[i * 9 + j];
-            }
+            fclose(fp_src);
         }
 
-        bm_image_copy_host_to_device(input_img, (void **)input);
-        bmcv_image_bayer2rgb(handle, kernel_data, input_img, output_img);
-        bm_image_copy_device_to_host(output_img, (void **)(&output));
-        bm_image_destroy(input_img);
-        bm_image_destroy(output_img);
-        free(input);
-        free(output);
-        bm_dev_free(handle);
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            unsigned char* input = (unsigned char*)malloc(width * height);
+            unsigned char* output_tpu = (unsigned char*)malloc(width * height * 3);
+            unsigned char kernel_data[KERNEL_SIZE] = {0};
+            bm_handle_t handle;
+            bm_image input_img;
+            bm_image output_img;
+            const char *src_name = "path/to/src";
+            const char *dst_name = "path/to/dst";
+            int src_type = 0;
+            unsigned char* out_ptr[3] = {output_tpu, output_tpu + height * width, output_tpu + 2 * height * width};
+
+            bm_dev_request(&handle, dev_id);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &input_img, NULL);
+            bm_image_create(handle, height, width, FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output_img, NULL);
+            bm_image_alloc_dev_mem(input_img, BMCV_HEAP_ANY);
+            bm_image_alloc_dev_mem(output_img, BMCV_HEAP_ANY);
+
+
+            for (int i = 0;i < height;i++) {
+                for (int j = 0;j < width;j++) {
+                    input[i * width + j] = rand() % 255;
+                }
+            }
+
+            for (int i = 0;i < 12;i++) {
+                for (int j = 0;j < 9;j++) {
+                    if (src_type == 0) {
+                        kernel_data[i * 9 * 64 + 64 * j] = convd_kernel_bg8[i * 9 + j];
+                    } else {
+                        kernel_data[i * 9 * 64 + 64 * j] = convd_kernel_rg8[i * 9 + j];
+                    }
+                }
+            }
+
+            readBin(src_name, input, height * width);
+            bm_image_copy_host_to_device(input_img, (void**)&input);
+            bmcv_image_bayer2rgb(handle, kernel_data, input_img, output_img);
+            bm_image_copy_device_to_host(output_img, (void **)out_ptr);
+            writeBin(dst_name, output_tpu, width * height * 3);
+
+            bm_image_destroy(input_img);
+            bm_image_destroy(output_img);
+            free(input);
+            free(output_tpu);
+            bm_dev_free(handle);
+            return 0;
+        }

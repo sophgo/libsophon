@@ -539,6 +539,8 @@ function build_vpp_lib()
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=sunwayLinux
     elif [ ${PRODUCTFORM} = "pcie_loongarch64" ]; then
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=loongLinux
+    elif [ ${PRODUCTFORM} = "pcie_loongarch64_anolis" ]; then
+        make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=loongLinuxAnolis
     elif [ ${PRODUCTFORM} = "pcie_arm64" ]; then
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=arm64Linux
     elif [ ${PRODUCTFORM} = "pcie_riscv64" ]; then

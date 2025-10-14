@@ -115,6 +115,7 @@ set(SRCS
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/windows/vdi_osal.c
     ${PROJECT_ROOT}/video/provider/cnm/decoder/vdi/mm.c
     ${PROJECT_ROOT}/video/decoder/bm_dec_api/src/bm_video_interface.c
+    ${PROJECT_ROOT}/video/decoder/bm_dec_api/src/log.c
 )
 
 add_library(libbmvideo SHARED ${SRCS})

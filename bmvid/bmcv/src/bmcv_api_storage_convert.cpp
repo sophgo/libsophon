@@ -7,6 +7,7 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
 #include "bmcv_common_bm1684.h"
+#include "bm1684/bmcv_1684_vpp_internal.h"
 #include "bm1684x/bmcv_1684x_vpp_ext.h"
 
 #define IS_CS_YUV(a) (a == FORMAT_NV12 || a == FORMAT_NV21 || a == FORMAT_NV16 \
@@ -146,7 +147,7 @@ static bm_status_t bmcv_convert_check(
       case FORMAT_BGRP_SEPARATE:
         break;
       default:
-        bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support input image format, %s: %s: %d\n",
+        bmlib_log("BMCV", BMLIB_LOG_ERROR, "Not support output image format, %s: %s: %d\n",
           filename(__FILE__), __func__, __LINE__);
         return BM_ERR_DATA;
     }
@@ -292,6 +293,87 @@ bm_status_t yuv_to_gray(bm_handle_t handle, bm_image input, bm_image output){
     return ret;
 }
 
+static int bm_image_private_copy(bm_image_private *out, bm_image_private *in){
+    for (int i = 0; i < in->plane_num; i++) {
+        out->data[i] = in->data[i];
+        out->memory_layout[i] = in->memory_layout[i];
+    }
+    out->attached = in->attached;
+    out->data_owned = in->data_owned;
+    out->default_stride = in->default_stride;
+    out->internal_alloc_plane = in->internal_alloc_plane;
+    out->owned_mem = in->owned_mem;
+    return 0;
+};
+
+bm_status_t bmcv_image_storage_convert_oddout(
+    bm_handle_t      handle,
+    int              image_num,
+    bm_image*        input,
+    bm_image*        output,
+    csc_type_t       csc_type) {
+
+    bm_status_t ret = BM_SUCCESS;
+    short input_num = IS_4N(input[0].data_type) ? 1 : image_num;
+    short output_num = IS_4N(output[0].data_type) ? 1 : image_num;
+    short width_inter = ALIGN(output[0].width, 2), height_inter = output[0].height;
+    std::vector<bm_image> input_inter(input_num);
+    std::vector<bm_image> output_inter(output_num);
+
+    if (output[0].image_format == FORMAT_NV12 || output[0].image_format == FORMAT_NV21)
+        height_inter = ALIGN(output[0].height, 2);
+    for (short i = 0; i < input_num; i++) {
+        ret = bm_image_create(handle, height_inter, width_inter,
+            input[0].image_format, input[0].data_type, input_inter.data() + i);
+        if (ret != BM_SUCCESS) {printf("idx%d create inbmimg fail\n", i); goto fail;}
+
+        ret = bm_image_alloc_dev_mem(input_inter[i], BMCV_HEAP_ANY);
+        if (ret != BM_SUCCESS) {printf("idx%d alloc inbmimg fail\n", i); goto fail;}
+
+        bm_image align_img = input_inter[i];
+        align_img.width = input[i].width;
+        align_img.height = input[i].height;
+        ret = bmcv_width_align(handle, input[i], align_img);
+        if (ret != BM_SUCCESS) {printf("idx%d align inbmimg fail\n", i); goto fail;}
+    }
+
+    for (short i = 0; i < output_num; i++) {
+        ret = bm_image_create(output[0].image_private->handle, height_inter, width_inter,
+            output[0].image_format, output[0].data_type, output_inter.data() + i);
+        if (ret != BM_SUCCESS) {printf("idx%d create outbmimg fail\n", i); goto fail;}
+
+        ret = bm_image_alloc_dev_mem(output_inter[i], BMCV_HEAP_ANY);
+        if (ret != BM_SUCCESS) {printf("idx%d alloc outbmimg fail\n", i); goto fail;}
+    }
+
+    ret = bmcv_image_storage_convert_with_csctype(handle, image_num,
+        input_inter.data(), output_inter.data(), csc_type);
+    if (ret != BM_SUCCESS) {printf("convert bmimg fail\n"); goto fail;}
+
+    for (short i = 0; i < input_num; i++)
+        bm_image_destroy(input_inter[i]);
+
+    for (short i = 0; i < output_num; i++) {
+        if (output[i].image_private->attached && !output[i].image_private->data_owned) {
+            output_inter[i].width = output[i].width;
+            output_inter[i].height = output[i].height;
+            ret = bmcv_width_align(handle, output_inter[i], output[i]);
+            if (ret != BM_SUCCESS) {printf("idx%d align outbmimg fail\n", i); goto fail;}
+        } else {
+            bm_image_detach(output[i]);
+            bm_image_private_copy(output[i].image_private, output_inter[i].image_private);
+            delete output_inter[i].image_private;
+        }
+    }
+    return ret;
+fail:
+    for (short i = 0; i < input_num; i++)
+        bm_image_destroy(input_inter[i]);
+    for (short i = 0; i < output_num; i++)
+        bm_image_destroy(output_inter[i]);
+    return ret;
+}
+
 bm_status_t bmcv_image_storage_convert_(
     bm_handle_t      handle,
     int              image_num,
@@ -308,6 +390,30 @@ bm_status_t bmcv_image_storage_convert_(
 
     int input_num = IS_4N(input_[0].data_type) ? 1 : image_num;
     int output_num = IS_4N(output_[0].data_type) ? 1 : image_num;
+
+    switch (output_[0].image_format)
+    {
+    case FORMAT_NV12:
+    case FORMAT_NV21:
+        if (output_[0].height % 2 != 0) {
+            ret = bmcv_image_storage_convert_oddout(handle, image_num,
+                input_, output_, csc_type);
+            if (ret != BM_SUCCESS) printf("odd height convert fail\n");
+            return ret;
+        }
+        /* fall through */
+    case FORMAT_NV16:
+    case FORMAT_NV61:
+        if (output_[0].width % 2 != 0) {
+            ret = bmcv_image_storage_convert_oddout(handle, image_num,
+                input_, output_, csc_type);
+            if (ret != BM_SUCCESS) printf("odd width convert fail\n");
+            return ret;
+        }
+        break;
+    default:
+        break;
+    }
 
 #ifndef USING_CMODEL
     bool try_use_vpp = true;
@@ -395,10 +501,10 @@ bm_status_t bmcv_image_storage_convert_(
                 }
                 continue;
             }
-            if (bmcv_image_vpp_csc_matrix_convert(handle, 1,
-                                                  input_[i], output_ + i,
-                                                  csc_type, nullptr,
-                                                  BMCV_INTER_LINEAR, &rect) != BM_SUCCESS) {
+            if (bm1684_vpp_csc_matrix_convert(handle, 1,
+                                            input_[i], output_ + i,
+                                            csc_type, nullptr,
+                                            BMCV_INTER_LINEAR, &rect, BMLIB_LOG_INFO) != BM_SUCCESS) {
                 bmlib_log("BMCV", BMLIB_LOG_INFO, "can't use vpp,  go through tpu path\n");
                 success = false;
                 break;

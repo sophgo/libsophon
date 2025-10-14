@@ -66,7 +66,7 @@ static int bmcv_transpose_tpu_old(int channel,
         return -1;
     }
     gettimeofday_(&t2);
-    cout << "excution time is : " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("excution time is : %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     bm_dev_free(handle);
     return 0;

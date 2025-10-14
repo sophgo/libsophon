@@ -80,7 +80,7 @@ static int absdiff_tpu(
     gettimeofday_(&t1);
     bmcv_image_absdiff(handle, input1_img, input2_img, output_img);
     gettimeofday_(&t2);
-    cout << "Absdiff TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("Absdiff TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     unsigned char* out_ptr[3] = {output, output + height * width, output + 2 * height * width};
     bm_image_copy_device_to_host(output_img, (void **)out_ptr);
@@ -130,7 +130,7 @@ static vector<int> get_image_size(int format, int width, int height) {
             size.push_back(width * height);
             break;
         default:
-            cout << "format error" << endl;
+            printf("format error\n");
     }
     return size;
 }
@@ -172,7 +172,7 @@ static int cmpv2(unsigned char* got, unsigned char* exp ,int width, int height, 
     unsigned char* md5_tpuOut = new unsigned char[16];
     md5_get(got, (sizeof(unsigned char) * channel * height * width), md5_tpuOut);
     if(0 != strcmp((unsignedCharToHex(md5_tpuOut).c_str()), (const char*)exp)){
-        cout << "cmp error!" << endl;
+        printf("cmp error!\n");
         delete [] md5_tpuOut;
         return -1;
     }
@@ -189,9 +189,8 @@ static int test_absdiff_random(
 
     unsigned int seed = tp.tv_nsec;
     srand(seed);
-    cout << "seed = " << seed << endl;
-    cout << "format: " << format << endl;
-    cout << "width: " << width << "  height: " << height << endl;
+    printf("seed = %d\n", seed);
+    printf("format: %d, widht %d, height %d\n", format, width, height);
     unsigned char* input1_data = new unsigned char [width * height * 3];
     unsigned char* input2_data = new unsigned char [width * height * 3];
     unsigned char* output_tpu = new unsigned char [width * height * 3];
@@ -222,10 +221,10 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_absdiff_random(height, width, format);
         if (ret) {
-            cout << "test absdiff failed" << endl;
+            printf("test absdiff failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with OpenCV successfully!" << endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     return 0;
 }

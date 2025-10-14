@@ -30,11 +30,10 @@ This interface only supports BM1684.
         } bmcv_morph_shape_t;
 
         bm_device_mem_t bmcv_get_structuring_element(
-                bm_handle_t handle,
-                bmcv_morph_shape_t shape,
-                int kw,
-                int kh
-                );
+                        bm_handle_t handle,
+                        bmcv_morph_shape_t shape,
+                        int kw,
+                        int kh);
 
 **Parameter Description:**
 
@@ -77,22 +76,20 @@ Currently supporting dilation and erosion. Users can also implment the following
     .. code-block:: c
 
         bm_status_t bmcv_image_erode(
-                bm_handle_t handle,
-                bm_image src,
-                bm_image dst,
-                int kw,
-                int kh,
-                bm_device_mem_t kmem
-                );
+                    bm_handle_t handle,
+                    bm_image src,
+                    bm_image dst,
+                    int kw,
+                    int kh,
+                    bm_device_mem_t kmem);
 
         bm_status_t bmcv_image_dilate(
-                bm_handle_t handle,
-                bm_image src,
-                bm_image dst,
-                int kw,
-                int kh,
-                bm_device_mem_t kmem
-                );
+                    bm_handle_t handle,
+                    bm_image src,
+                    bm_image dst,
+                    int kw,
+                    int kh,
+                    bm_device_mem_t kmem);
 
 
 **Parameter Description:**
@@ -160,55 +157,68 @@ The following data are currently supported_type:
 
     .. code-block:: c
 
+        #include <iostream>
+        #include <thread>
+        #include <mutex>
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include <assert.h>
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int kw        = 3;
-        int kh        = 3;
-        int dev_id    = 0;
-        bmcv_morph_shape_t shape = BM_MORPH_RECT;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        bm_device_mem_t kmem = bmcv_get_structuring_element(
-                handle,
-                shape,
-                kw,
-                kh);
-        std::shared_ptr<unsigned char> data_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        for (int i = 0; i < channel * width * height; i++) {
-            data_ptr.get()[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bm_image src, dst;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &src);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &dst);
-        bm_image_alloc_dev_mem(src);
-        bm_image_alloc_dev_mem(dst);
-        bm_image_copy_host_to_device(src, (void **)&(data_ptr.get()));
-        if (BM_SUCCESS != bmcv_image_erode(handle, src, dst, kw, kh, kmem)) {
-            std::cout << "bmcv erode error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int kw = 3;
+            int kh = 3;
+            int dev_id = 0;
+            bmcv_morph_shape_t shape = BM_MORPH_RECT;
+            bm_handle_t handle;
+            bm_image src, dst;
+            bm_dev_request(&handle, dev_id);
+            bm_device_mem_t kmem = bmcv_get_structuring_element(handle, shape, kw, kh);
+            unsigned char* data_ptr = new unsigned char[channel * width * height];
+            const char* src_name = "path/to/src";
+            const char* dst_name = "path/to/dst";
+
+            readBin(src_name, data_ptr, channel * width * height);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &dst);
+            bm_image_alloc_dev_mem(src);
+            bm_image_alloc_dev_mem(dst);
+            bm_image_copy_host_to_device(src, (void**)&data_ptr);
+            bmcv_image_erode(handle, src, dst, kw, kh, kmem);
+            bm_image_copy_device_to_host(dst, (void**)&data_ptr);
+            writeBin(dst_name, data_ptr,  channel * width * height);
+
             bm_image_destroy(src);
             bm_image_destroy(dst);
             bm_free_device(handle, kmem);
             bm_dev_free(handle);
-            return;
+            free(data_ptr);
+            return 0;
         }
-        bm_image_copy_device_to_host(dst, (void **)&(data_ptr.get()));
-        bm_image_destroy(src);
-        bm_image_destroy(dst);
-        bm_free_device(handle, kmem);
-        bm_dev_free(handle);
-

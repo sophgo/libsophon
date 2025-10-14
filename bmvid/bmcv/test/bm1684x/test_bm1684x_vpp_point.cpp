@@ -11,8 +11,8 @@
 #include <sys/time.h>
 #endif
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
+extern void bm_write_bin(bm_image dst, const char *output_name);
 extern void format_to_str(bm_image_format_ext format, char* res);
 
 int main(int argc, char **argv) {
@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
 
   bm_image_create(handle, src_h, src_w, src_fmt, DATA_TYPE_EXT_1N_BYTE, &src);
   bm_image_alloc_dev_mem(src, 1);
-  bm1684x_vpp_read_bin(src,src_name);
+  bm_read_bin(src,src_name);
 
   for(i = 0;i < loop_time; i++){
 
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
   fps = 1000000 *2 / time_avg;
   pixel_per_sec = length * length * fps / 1024 /1024;
 
-  bm1684x_vpp_write_bin(src, dst_name);
+  bm_write_bin(src, dst_name);
   bm_image_destroy(src);
 
   bm_dev_free(handle);

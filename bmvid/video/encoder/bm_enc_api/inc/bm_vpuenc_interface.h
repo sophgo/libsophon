@@ -182,6 +182,14 @@ typedef struct {
     int           enable_cache;
 } BmVpuEncDMABuffer;
 
+
+typedef struct {
+    BmVpuEncDMABuffer dmabuffers_y;
+    BmVpuEncDMABuffer dmabuffers_u;
+    BmVpuEncDMABuffer dmabuffers_v;
+}BmEncDmaBufferYUV;
+
+
 /**
  * Upload data from HOST to a VPU core.
  * For now, only support PCIE mode.
@@ -350,8 +358,11 @@ typedef enum
 typedef struct
 {
     /* DMA buffer which contains the pixels. */
-    BmVpuEncDMABuffer *dma_buffer;
+    BmVpuEncDMABuffer *dma_buffer;    // YUV allocates a whole block of physical addresses
 
+    BmVpuEncDMABuffer *dma_buffer_y;  // when dma_buffer is empty, dma_buffer_y/dma_buffer_u/dma_buffer_v will be used.
+    BmVpuEncDMABuffer *dma_buffer_u;  // nv12: set uv dma_buffer
+    BmVpuEncDMABuffer *dma_buffer_v;  // nv12: ignore.
     /* Make sure each framebuffer has an ID that is different
      * to the IDs of each other */
     int          myIndex;
@@ -832,6 +843,12 @@ typedef struct
      * 0 disables skipped frame generation. Default value is 0. */
     int skip_frame;
 
+    /* A flag to use a force picture type */
+    int       forcePicTypeEnable;
+    /* A force picture type (I, P, B, IDR, CRA).
+     * It is valid when forcePicTypeEnable is 1. */
+    int       forcePicType;
+
     /* Functions for acquiring and finishing output buffers. See the
      * typedef documentations above for details about how these
      * functions should behave, and the bmvpu_enc_encode()
@@ -944,6 +961,11 @@ DECL_EXPORT void bmvpu_enc_set_default_open_params(BmVpuEncOpenParams *open_para
  * Fill fields of the BmVpuFramebuffer structure, based on data from "fb_info".
  * The specified DMA buffer and context pointer are also set.
  */
+DECL_EXPORT int bmvpu_fill_framebuffer_params_yuv(BmVpuFramebuffer *framebuffer,
+                                   BmVpuFbInfo *fb_info,
+                                   BmEncDmaBufferYUV *fb_dma_buffer,
+                                   int fb_id, void* context);
+
 DECL_EXPORT int bmvpu_fill_framebuffer_params(BmVpuFramebuffer *framebuffer,
                                    BmVpuFbInfo *fb_info,
                                    BmVpuEncDMABuffer *fb_dma_buffer,

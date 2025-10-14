@@ -114,6 +114,47 @@ typedef struct vpu_buffer_t {
     int           enable_cache;
 } vpu_buffer_t;
 
+typedef struct vpu_dec_start_buffer_t {
+    unsigned int core_idx;
+    unsigned int write_W5_BS_RD_PTR;
+    unsigned int write_W5_BS_WR_PTR;
+    unsigned int write_W5_BS_OPTION;
+    unsigned int write_W5_USE_SEC_AXI;
+    unsigned int write_W5_CMD_DEC_USER_MASK;
+    unsigned int write_W5_CMD_DEC_TEMPORAL_ID_PLUS1;
+    unsigned int write_W5_CMD_SEQ_CHANGE_ENABLE_FLAG;
+    unsigned int write_W5_CMD_DEC_FORCE_FB_LATENCY_PLUS1;
+    unsigned int write_W5_COMMAND_OPTION;
+} vpu_dec_start_buffer_t;
+
+typedef struct vpu_dec_getresult_buffer_t {
+    unsigned int core_idx;
+    unsigned int read_W5_RET_QUEUE_STATUS;
+    unsigned int read_W5_RET_DEC_DECODING_SUCCESS;
+    unsigned int read_W5_RET_DEC_ERR_INFO;
+    unsigned int read_W5_RET_DEC_WARN_INFO;
+    unsigned int read_W5_RET_DEC_USERDATA_IDC;
+    unsigned int read_W5_RET_DEC_PIC_TYPE;
+    unsigned int read_W5_RET_DEC_DISPLAY_INDEX;
+    unsigned int read_W5_RET_DEC_DECODED_INDEX;
+    unsigned int read_W5_RET_DEC_PIC_POC;
+    unsigned int read_W5_RET_DEC_SUB_LAYER_INFO;
+    unsigned int read_W5_RET_DEC_NOTIFICATION;
+    unsigned int read_W5_RET_DEC_PIC_SIZE;
+    unsigned int read_W5_RET_DEC_REALLOC_INDEX;
+    unsigned int read_W5_RET_DEC_ERR_CTB_NUM;
+    unsigned int read_W5_RET_DEC_AU_START_POS;
+    unsigned int read_W5_RET_DEC_AU_END_POS;
+    unsigned int read_W5_RET_DEC_RECOVERY_POINT;
+    unsigned int read_W5_RET_DEC_HOST_CMD_TICK;
+    unsigned int read_W5_RET_DEC_SEEK_START_TICK;
+    unsigned int read_W5_RET_DEC_SEEK_END_TICK;
+    unsigned int read_W5_RET_DEC_PARSING_START_TICK;
+    unsigned int read_W5_RET_DEC_PARSING_END_TICK;
+    unsigned int read_W5_RET_DEC_DECODING_START_TICK;
+    unsigned int read_W5_RET_DEC_DECODING_ENC_TICK;
+} vpu_dec_getresult_buffer_t;
+
 #ifndef ENDIANMODE
 #define ENDIANMODE
 typedef enum {
@@ -234,6 +275,9 @@ extern "C" {
 
     void vdi_write_register(u64 core_idx, u64 addr, unsigned int data);
     unsigned int vdi_read_register(u64 core_idx, u64 addr);
+    void vdi_dec_start_register(u64 core_idx, vpu_dec_start_buffer_t *buf);
+    unsigned int vdi_dec_getresult_register(u64 core_idx, vpu_dec_getresult_buffer_t *buf);
+
     void vdi_fio_write_register(u64 core_idx, u64 addr, unsigned int data);
     unsigned int vdi_fio_read_register(u64 core_idx, u64 addr);
     DECL_EXPORT int vdi_clear_memory(u64 core_idx, u64 addr, int len, int endian);
@@ -255,6 +299,11 @@ extern "C" {
     void vdi_log(u64 core_idx, int cmd, int step);
     int vdi_open_instance(u64 core_idx, u64 inst_idx);
     int vdi_close_instance(u64 core_idx, u64 inst_idx);
+    int vdi_vpuinfo_set_status(uint32_t core_idx, uint32_t inst_idx, int status);
+    int vdi_vpuinfo_set_seqinfo(uint32_t core_idx, uint32_t inst_idx, int width, int height, int fps);
+    int vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx);
+    int vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx);
+    int vdi_vpuinfo_get_failed(uint32_t core_idx, uint32_t inst_idx);
     int vdi_set_bit_firmware_to_pm(u64 core_idx, const unsigned short *code);
     void vdi_delay_ms(unsigned int delay_ms);
     int vdi_get_system_endian(u64 core_idx);

@@ -10,9 +10,7 @@
 #ifdef __linux__
 #include <sys/ioctl.h>
 #endif
-#ifdef __riscv
 #include <cstdlib>
-#endif
 
 float bm1684x_csc_matrix[12][12] = {
   /*YUV2RGB 601 NOT FULL RANGE    3   YCbCr2RGB_BT601*/
@@ -126,12 +124,13 @@ static bm_status_t simple_check_bm1684x_input_param(
   }
   if((frame_number > VPP1684X_MAX_CROP_NUM) || (frame_number <= 0))
   {
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input num should less than 512");
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input_num[%d] should less than 512", frame_number);
     return BM_ERR_PARAM;
   }
 
   return BM_SUCCESS;;
 }
+
 static int is_csc_yuv_or_rgb(bm_image_format_ext format)
 {
   int ret = COLOR_SPACE_YUV;
@@ -199,14 +198,16 @@ static bm_status_t check_bm1684x_bm_image_param(
        !bm_image_is_attached(output[frame_idx]))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create bm_image ,frame [%d] input or output not attache mem check_bm_image_param: %d\n",
+        "not correctly create bm_image, \
+        frame[%d] input or output not attache mem check_bm_image_param: %d\n",
         frame_idx, __LINE__);
       return BM_ERR_DATA;
     }
     if(input[frame_idx].data_type != DATA_TYPE_EXT_1N_BYTE)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp input only support DATA_TYPE_EXT_1N_BYTE,frame [%d], check_bm_image_param: %d\n",
+        "vpp input only support DATA_TYPE_EXT_1N_BYTE, \
+        frame[%d], datatype[%d], check_bm_image_param: %d\n",
         frame_idx, __LINE__);
       return BM_ERR_DATA;
     }
@@ -218,7 +219,7 @@ static bm_status_t check_bm1684x_bm_image_param(
         (output[frame_idx].data_type != DATA_TYPE_EXT_BF16))
      {
        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-         "vpp[%d] output data type %d not support check_bm_image_param: %d\n",
+         "vpp[%d] output data_type[%d] not support check_bm_image_param: %d\n",
          frame_idx ,output[frame_idx].data_type, __LINE__);
        return BM_ERR_DATA;
      }
@@ -227,7 +228,8 @@ static bm_status_t check_bm1684x_bm_image_param(
        (bm_image_get_stride(output[frame_idx], stride) != BM_SUCCESS))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create input bm_image , frame [%d],input or output get stride err check_bm_image_param: %d\n",
+        "not correctly create input bm_image, \
+        frame[%d], input or output get stride err check_bm_image_param: %d\n",
         frame_idx, __LINE__);
       return BM_ERR_DATA;
     }
@@ -236,8 +238,8 @@ static bm_status_t check_bm1684x_bm_image_param(
     if(plane_num == 0 || bm_image_get_device_mem(input[frame_idx], device_mem) != BM_SUCCESS)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create input[%d] bm_image, get plane num or device mem err check_bm_image_param: %d\n",
-        frame_idx, __LINE__);
+        "not correctly create input[%d] bm_image, get plane[%d] or device mem err check_bm_image_param: %d\n",
+        plane_num, frame_idx, __LINE__);
       return BM_ERR_DATA;
     }
 #ifndef USING_CMODEL
@@ -249,8 +251,8 @@ static bm_status_t check_bm1684x_bm_image_param(
       if((device_addr > 0x4ffffffff) || (device_addr < 0x100000000))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "input[%d] device memory should between 0x100000000 and 0x4ffffffff  check_bm_image_param: %d\n",
-          frame_idx, __LINE__);
+          "input[%d] device memory[0x%lx] should between 0x100000000 and 0x4ffffffff check_bm_image_param: %d\n",
+          frame_idx, device_addr, __LINE__);
         return BM_ERR_DATA;
       }
     }
@@ -259,8 +261,8 @@ static bm_status_t check_bm1684x_bm_image_param(
     if(plane_num == 0 || bm_image_get_device_mem(output[frame_idx], device_mem) != BM_SUCCESS)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "not correctly create output[%d] bm_image, get plane num or device mem err check_bm_image_param: %d\n",
-        frame_idx, __LINE__);
+        "not correctly create output[%d] bm_image, get plane[%d] or device mem err check_bm_image_param: %d\n",
+        frame_idx, plane_num, __LINE__);
       return BM_ERR_DATA;
     }
 #ifndef USING_CMODEL
@@ -269,8 +271,8 @@ static bm_status_t check_bm1684x_bm_image_param(
       if((device_addr > 0x4ffffffff) || (device_addr < 0x100000000))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "output[%d] device memory should between 0x100000000 and 0x4ffffffff  check_bm_image_param: %d\n",
-          frame_idx, __LINE__);
+          "output[%d] device memory[%lx] should between 0x100000000 and 0x4ffffffff check_bm_image_param: %d\n",
+          frame_idx, device_addr, __LINE__);
         return BM_ERR_DATA;
       }
     }
@@ -295,13 +297,14 @@ static bm_status_t check_bm1684x_vpp_csctype(
     input_color_space = is_csc_yuv_or_rgb(input[idx].image_format);
     output_color_space = is_csc_yuv_or_rgb(output[idx].image_format);
 
-    if((is_csc_yuv_or_rgb(input[0].image_format) != is_csc_yuv_or_rgb(input[idx].image_format)) ||
-      (is_csc_yuv_or_rgb(output[0].image_format) != is_csc_yuv_or_rgb(output[idx].image_format)))
+    if((is_csc_yuv_or_rgb(input[0].image_format) != input_color_space) ||
+      (is_csc_yuv_or_rgb(output[0].image_format) != output_color_space))
     {
       ret = BM_ERR_DATA;
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
         "vpp Input and output color space changes will cause hardware hang,"
-        " check_vpp_csctype: %d\n", __LINE__);
+        "in[0].fmt(%d), in[%d].fmt(%d), out[0].fmt(%d), out[%d].fmt(%d), check_vpp_csctype: %d\n",
+        input[0].image_format, input[idx].image_format, output[0].image_format, output[idx].image_format, __LINE__);
       break;
     }
 
@@ -496,8 +499,8 @@ static bm_status_t check_bm1684x_vpp_image_param(
       if((padding_attr[frame_idx].if_memset != 0) && (padding_attr[frame_idx].if_memset != 1))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "frame [%d], padding_attr if_memset wrong  check_vpp_image_param: %d\n",
-          frame_idx, __LINE__);
+          "frame [%d], padding_attr if_memset[%d] wrong  check_vpp_image_param: %d\n",
+          frame_idx, padding_attr[frame_idx].if_memset, __LINE__);
         return BM_ERR_PARAM;
       }
       if(padding_attr[frame_idx].if_memset == 1)
@@ -507,8 +510,9 @@ static bm_status_t check_bm1684x_vpp_image_param(
             (output[frame_idx].height- padding_attr[frame_idx].dst_crop_h - padding_attr[frame_idx].dst_crop_sty > 255) )
         {
             bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-              "frame [%d], padding_attr  x,y,w,h may be > 255  check_vpp_image_param: %d\n",
-              frame_idx, __LINE__);
+              "frame [%d], out w[%d],h[%d], padding_attr x[%d],y[%d],w[%d],h[%d] out of range check_vpp_image_param: %d\n",
+              frame_idx, output[frame_idx].width, output[frame_idx].height, padding_attr[frame_idx].dst_crop_stx,
+              padding_attr[frame_idx].dst_crop_sty, padding_attr[frame_idx].dst_crop_w, padding_attr[frame_idx].dst_crop_h, __LINE__);
             return BM_ERR_PARAM;
         }
         dst_crop_rect.start_x = 0;
@@ -541,11 +545,8 @@ static bm_status_t check_bm1684x_vpp_image_param(
        (dst_crop_rect.crop_h < VPP1684X_MIN_H) )
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,\
-        "vpp frame_idx %d, width or height abnormal,"
-        "input[frame_idx].width %d,input[frame_idx].height %d,"
-        "src_crop_rect[frame_idx].crop_w %d,src_crop_rect[frame_idx].crop_h %d,"
-        "output[frame_idx].width %d, output[frame_idx].height %d,"
-        "dst_crop_rect[frame_idx].crop_w %d, dst_crop_rect[frame_idx].crop_h %d,"
+        "vpp frame_idx %d, width or height abnormal\n"
+        "in w[%d] h[%d], crop w[%d] h[%d], out w[%d] h[%d], dst_rect w[%d] h[%d]\n"
         "check_vpp_image_param: %d\n",\
         frame_idx,input[frame_idx].width,input[frame_idx].height,src_crop_rect.crop_w,
         src_crop_rect.crop_h, output[frame_idx].width, output[frame_idx].height,
@@ -564,10 +565,9 @@ static bm_status_t check_bm1684x_vpp_image_param(
     )
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "frame [%d], input or output crop is out of range: src_crop_rect=(start_x: %d, "
-        "start_y: %d, crop_w: %d, crop_h: %d), input=(width: %d, height: %d), "
-        "dst_crop_rect=(start_x: %d, start_y: %d, crop_w: %d, crop_h: %d), "
-        "output=(width: %d, height: %d) check_vpp_image_param: %d\n",
+        "frame [%d], input or output crop is out of range\n"
+        "crop x[%d] y[%d] w[%d] h[%d], in w[%d] h[%d], dst rect x[%d] y[%d] w[%d] h[%d], out w[%d] h[%d]\n"
+        "check_vpp_image_param: %d\n",
         frame_idx, src_crop_rect.start_x, src_crop_rect.start_y, src_crop_rect.crop_w,
         src_crop_rect.crop_h, input[frame_idx].width, input[frame_idx].height,
         dst_crop_rect.start_x, dst_crop_rect.start_y, dst_crop_rect.crop_w,
@@ -597,7 +597,9 @@ static bm_status_t check_bm1684x_vpp_image_param(
          (output[0].data_type != DATA_TYPE_EXT_1N_BYTE))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "vpp draw rectangle param wrong: st_x=%d, st_y=%d, rect_width=%d, rect_height=%d, input_width=%d, input_height=%d, output_data_type=%d. check_vpp_image_param: %d\n",
+          "vpp draw rectangle param wrong\n"
+          "rect x[%d] y[%d] w[%d] h[%d], in w[%d] h[%d], out data_type[%d]\n"
+          "check_vpp_image_param: %d\n",
           border_param[0].st_x, border_param[0].st_y,
           border_param[0].width, border_param[0].height,
           input[0].width, input[0].height,
@@ -629,7 +631,7 @@ static bm_status_t check_bm1684x_vpp_param(
   if((input == NULL) || (output == NULL))
   {
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-      "input or output is nullptr , check_vpp_param: %d\n", __LINE__);
+      "input or output is nullptr, check_vpp_param: %d\n", __LINE__);
     return BM_ERR_DATA;
   }
 
@@ -667,7 +669,7 @@ static bm_status_t check_bm1684x_vpp_param(
 
 static bm_status_t check_bm1684x_vpp_continuity(
   int                     frame_number,
-  bm_image*               input_or_output)
+  bm_image *           input_or_output)
 {
   for (int i = 0; i < frame_number; i++)
   {
@@ -679,12 +681,13 @@ static bm_status_t check_bm1684x_vpp_continuity(
     if(input_or_output[i].image_private== NULL)
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "bm_image image_private cannot be empty, check_vpp_continuity: %d\n", __LINE__);
+        "bm_image[%d] image_private cannot be empty, check_vpp_continuity: %d\n", i, __LINE__);
       return BM_ERR_DATA;
     }
   }
   return BM_SUCCESS;
 }
+
 static bm_status_t bm1684x_check_vpp_internal_param(
   int                     frame_number,
   bm1684x_vpp_mat         *vpp_input,
@@ -701,16 +704,16 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        (vpp_param[idx].post_padding_param.post_padding_enable == 1))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp postpadding left right top bottom all is 0 , check_vpp_internal_param: %d\n", __LINE__);
+        "vpp postpadding left right top bottom all is 0, check_vpp_internal_param: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
-    if(((vpp_input[idx].cropW+ vpp_param[idx].padding_param.left + vpp_param[idx].padding_param.right) > VPP1684X_MAX_W) ||
-       ((vpp_input[idx].cropH+ vpp_param[idx].padding_param.top+ vpp_param[idx].padding_param.bottom) > VPP1684X_MAX_W) ||
+    if(((vpp_input[idx].cropW + vpp_param[idx].padding_param.left + vpp_param[idx].padding_param.right) > VPP1684X_MAX_W) ||
+       ((vpp_input[idx].cropH + vpp_param[idx].padding_param.top + vpp_param[idx].padding_param.bottom) > VPP1684X_MAX_W) ||
        ((vpp_output[idx].cropW - vpp_param[idx].post_padding_param.left - vpp_param[idx].post_padding_param.right) <= 0) ||
        ((vpp_output[idx].cropH - vpp_param[idx].post_padding_param.top - vpp_param[idx].post_padding_param.bottom) <= 0))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp after padding > 8192, or after postpadding < 0 , check_vpp_internal_param: %d\n", __LINE__);
+        "vpp after padding > 8192, or after postpadding < 0, check_vpp_internal_param: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
     scl_x = (float)(vpp_input[idx].cropW+ vpp_param[idx].padding_param.left + vpp_param[idx].padding_param.right) / (float)(vpp_output[idx].cropW - vpp_param[idx].post_padding_param.left - vpp_param[idx].post_padding_param.right);
@@ -721,7 +724,7 @@ static bm_status_t bm1684x_check_vpp_internal_param(
         (scl_y > ((float)VPP1684X_MAX_SCALE_RATIO)))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp not support: scaling ratio greater than 128,pay attention to postpadding, check_vpp_internal_param: %d\n", __LINE__);
+        "vpp not support: scaling ratio greater than 128, pay attention to postpadding, check_vpp_internal_param: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
 
@@ -748,7 +751,9 @@ static bm_status_t bm1684x_check_vpp_internal_param(
          (vpp_output[idx].wdma_form != DATA_TYPE_1N_BYTE))
       {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "vpp border_param wrong, check_vpp_internal_param: %d\n", __LINE__);
+          "vpp border_param wrong, idx[%d] in crop[%d %d], border rect[%d %d] thick[%d], check_vpp_internal_param: %d\n",
+          idx, vpp_input[idx].cropW, vpp_input[idx].cropH, vpp_param[idx].border_param.st_x,
+          vpp_param[idx].border_param.st_y, vpp_param[idx].border_param.thickness, __LINE__);
         return BM_ERR_PARAM;
       }
     }
@@ -769,7 +774,9 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        (vpp_input[idx].cropH % 4 != 0) || (vpp_input[idx].axisX % 32 != 0) || (vpp_input[idx].axisY % 2 != 0)))
     {
         bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-          "vpp When compressing the format, cropw requires 16 alignment, croph requires 4 alignment, and start_x requires 32 alignment.start_y requires 2 alignment, check_vpp_internal_param: %d\n", __LINE__);
+          "vpp When compressing the format, idx[%d], cropw[%d] requires 16 alignment, croph[%d] requires 4 alignment,\
+          and start_x[%d] requires 32 alignment.start_y[%d] requires 2 alignment, check_vpp_internal_param: %d\n",
+          idx, vpp_input[idx].cropW, vpp_input[idx].cropH, vpp_input[idx].axisX, vpp_input[idx].axisY, __LINE__);
         return BM_ERR_PARAM;
     }
 
@@ -779,7 +786,8 @@ static bm_status_t bm1684x_check_vpp_internal_param(
        ((vpp_output[idx].format != OUT_RGBP) && (vpp_output[idx].format != OUT_YUV444P) && (vpp_output[idx].format != OUT_YUV400P)))
     {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
-        "vpp fp32,bf16,fp16 only supprot yuv444p, yonly and rgbp, check_vpp_internal_param: %d\n", __LINE__);
+        "vpp fp32,bf16,fp16 only support yuv444p, yonly and rgbp,\
+        out datatype[%d] fmt[%d], check_vpp_internal_param: %d\n", vpp_output[idx].wdma_form, vpp_output[idx].format, __LINE__);
       return BM_ERR_DATA;
     }
   }
@@ -1017,7 +1025,7 @@ static bm_status_t input_format_match(bm_image *input,uint8* input_format)
       break;
     default:
       ret = BM_ERR_DATA;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input format not support : %d\n", __LINE__);
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "input format[%d] not support : %d\n", input->image_format, __LINE__);
       break;
 }
 
@@ -1068,7 +1076,7 @@ static bm_status_t output_format_match(bm_image *output,uint8* output_format)
        break;
     default:
       ret = BM_ERR_DATA;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format not support : %d\n", __LINE__);
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format[%d] not support : %d\n", output->image_format, __LINE__);
       break;
   }
 
@@ -1105,7 +1113,7 @@ static bm_status_t default_csc_type(bm1684x_vpp_mat *input, bm1684x_vpp_mat *out
     break;
   default:
     ret = BM_ERR_DATA;
-    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp input format not support : %d\n", __LINE__);
+    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp input format[%d] not support : %d\n", input->format, __LINE__);
     break;
 }
 
@@ -1136,7 +1144,7 @@ static bm_status_t default_csc_type(bm1684x_vpp_mat *input, bm1684x_vpp_mat *out
 
     default:
       ret = BM_ERR_DATA;
-      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format not support : %d\n", __LINE__);
+      bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp output format[%d] not support : %d\n", output->format, __LINE__);
       break;
   }
 
@@ -1468,9 +1476,10 @@ static bm_status_t bm1684x_vpp_misc(
   csc_type_1684x_t    csc_mode = YCbCr2RGB_BT601;
   u32 src_width, src_height, height;
   u64 map_conv_off_base_y = 0, map_conv_off_base_c = 0, map_comp_base_y = 0, map_comp_base_c = 0;
+  std::vector<descriptor> vpp_des(frame_number);
 
   batch.num = frame_number;
-  batch.cmd = new descriptor [batch.num * (sizeof(descriptor))];
+  batch.cmd = vpp_des.data();
   if (batch.cmd == NULL) {
     ret = BM_ERR_NOMEM;
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp malloc failed vpp_misc: %d\n", __LINE__);
@@ -1480,7 +1489,7 @@ static bm_status_t bm1684x_vpp_misc(
   memset(batch.cmd,0,(batch.num * (sizeof(descriptor))));
   for (idx = 0; idx < batch.num; idx++) {
 
-    default_csc_type(vpp_input,vpp_output,&csc_mode);
+    default_csc_type(&vpp_input[idx],&vpp_output[idx],&csc_mode);
 
     pdes = (batch.cmd + idx);
     if (idx == (batch.num - 1)) {
@@ -1582,7 +1591,7 @@ static bm_status_t bm1684x_vpp_misc(
     pdes->dst_stride_ch2.dst_stride_ch2 = vpp_output[idx].stride_ch2;
     pdes->dst_stride_ch3.dst_stride_ch3 = vpp_output[idx].stride_ch3;
 
-    if(vpp_param->csc_mode == USER_DEFINED_MATRIX)
+    if(vpp_param[idx].csc_mode == USER_DEFINED_MATRIX)
     {
       pdes->csc_coe00 = vpp_param[idx].csc_matrix.csc_coe00;
       pdes->csc_coe01 = vpp_param[idx].csc_matrix.csc_coe01;
@@ -1598,8 +1607,8 @@ static bm_status_t bm1684x_vpp_misc(
       pdes->csc_add2  = vpp_param[idx].csc_matrix.csc_add2;
     }else
     {
-      if(vpp_param->csc_mode != CSC_MAX)
-        csc_mode = vpp_param->csc_mode;
+      if(vpp_param[idx].csc_mode != CSC_MAX)
+        csc_mode = vpp_param[idx].csc_mode;
 
       pdes->csc_coe00 = bm1684x_csc_matrix[csc_mode][0];
       pdes->csc_coe01 = bm1684x_csc_matrix[csc_mode][1];
@@ -1710,7 +1719,6 @@ static bm_status_t bm1684x_vpp_misc(
     ret = bm_get_handle_fd(handle, VPP_FD, &vpp_dev_fd);
     if ((ret != 0 ) || (vpp_dev_fd < 0)){
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "invalid vpp fd vpp_misc: %d\n", __LINE__);
-      delete[] batch.cmd;
       return ret;
     }
 
@@ -1747,7 +1755,6 @@ static bm_status_t bm1684x_vpp_misc(
 
 #endif
 
-  delete[] batch.cmd;
   return ret;
 }
 
@@ -1771,13 +1778,13 @@ static bm_status_t bm1684x_vpp_asic_and_cmodel(
 
   bmcv_rect_t  src_crop_rect, dst_crop_rect;
   post_padding_t  post_padding_param;
+  std::vector<bm1684x_vpp_mat> vpp_input(frame_number);
+  std::vector<bm1684x_vpp_mat> vpp_output(frame_number);
+  std::vector<bm1684x_vpp_param> vpp_param(frame_number);
 
-  bm1684x_vpp_mat*   vpp_input  = new bm1684x_vpp_mat [frame_number];
-  bm1684x_vpp_mat*   vpp_output = new bm1684x_vpp_mat [frame_number];
-  bm1684x_vpp_param* vpp_param  = new bm1684x_vpp_param [frame_number];
-  memset(vpp_input, 0, sizeof(bm1684x_vpp_mat) * frame_number);
-  memset(vpp_output, 0, sizeof(bm1684x_vpp_mat) * frame_number);
-  memset(vpp_param, 0, sizeof(bm1684x_vpp_param) * frame_number);
+  memset(vpp_input.data(), 0, sizeof(bm1684x_vpp_mat) * frame_number);
+  memset(vpp_output.data(), 0, sizeof(bm1684x_vpp_mat) * frame_number);
+  memset(vpp_param.data(), 0, sizeof(bm1684x_vpp_param) * frame_number);
 
   for(i = 0; i< frame_number; i++)
   {
@@ -1832,16 +1839,14 @@ static bm_status_t bm1684x_vpp_asic_and_cmodel(
     ret = bm_image_to_1684x_vpp_output_mat(handle, &output[i], &vpp_output[i], &dst_crop_rect);
     ret = bm1684x_vpp_param_config(algorithm, matrix, csc_type, &post_padding_param, &vpp_param[i]);
   }
-  ret = bm1684x_vpp_border_font_config(frame_number, border_param, font_param, vpp_param, convert_to_attr);
 
-  if(BM_SUCCESS == bm1684x_check_vpp_internal_param(frame_number, vpp_input, vpp_output, vpp_param))
+  ret = bm1684x_vpp_border_font_config(frame_number, border_param, font_param, vpp_param.data(), convert_to_attr);
+
+  if(BM_SUCCESS == bm1684x_check_vpp_internal_param(frame_number, vpp_input.data(), vpp_output.data(), vpp_param.data()))
   {
-    ret = bm1684x_vpp_misc(handle, frame_number, vpp_input, vpp_output, vpp_param, cmodel_flag);
+    ret = bm1684x_vpp_misc(handle, frame_number, vpp_input.data(), vpp_output.data(), vpp_param.data(), cmodel_flag);
   }
 
-  delete [] vpp_param;
-  delete [] vpp_output;
-  delete [] vpp_input;
   return ret;
 
 }
@@ -1896,7 +1901,8 @@ static bm_status_t bm1684x_vpp_multi_parameter_processing(
 }
 
 
-static bm_status_t check_bm1684x_convert_to_param(bm_image* input,
+static bm_status_t check_bm1684x_convert_to_param(
+                                          bm_image* input,
                                           bm_image* output,
                                           int input_num){
   for(int i=0; i<input_num; i++){
@@ -1945,7 +1951,7 @@ bm_status_t bm1684x_vpp_convert_to(
     return ret;
   }
 
-  bmcv_convert_to_attr *convert_to_attr_inner = new bmcv_convert_to_attr [input_num];
+  std::vector<bmcv_convert_to_attr> convert_to_attr_inner(input_num);
 
   if(input->image_format == FORMAT_BGR_PLANAR){
     float exc = convert_to_attr.alpha_0;
@@ -1962,9 +1968,8 @@ bm_status_t bm1684x_vpp_convert_to(
   }
 
   ret = bm1684x_vpp_multi_parameter_processing(
-    handle, input_num, input, output, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, convert_to_attr_inner,NULL, NULL);
+    handle, input_num, input, output, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, convert_to_attr_inner.data(), NULL, NULL);
 
-  delete [] convert_to_attr_inner;
   return ret;
 
 }
@@ -2012,9 +2017,8 @@ static bm_status_t bm1684x_vpp_multi_input_multi_output(
       }
     }
   }
-
   ret = bm1684x_vpp_multi_parameter_processing(
-    handle, frame_number, input, output, crop_rect, padding_attr, algorithm, csc_type, matrix,NULL,NULL,NULL);
+    handle, frame_number, input, output, crop_rect, padding_attr, algorithm, csc_type, matrix, NULL, NULL, NULL);
 
   return ret;
 
@@ -2033,6 +2037,7 @@ static bm_status_t bm1684x_vpp_single_input_multi_output(
 {
   int i;
   bm_status_t ret = BM_SUCCESS;
+  std::vector<bm_image> input_inner(frame_number);
 
   ret = check_bm1684x_vpp_continuity(frame_number, output);
   if(ret != BM_SUCCESS)
@@ -2040,18 +2045,14 @@ static bm_status_t bm1684x_vpp_single_input_multi_output(
     return ret;
   }
 
-
-  bm_image *input_inner = new bm_image [frame_number];
-
   for(i = 0; i< frame_number; i++)
   {
     input_inner[i] = input;
   }
 
   ret = bm1684x_vpp_multi_input_multi_output(
-    handle, frame_number, input_inner, output, crop_rect, padding_attr, algorithm, csc_type, matrix);
+    handle, frame_number, input_inner.data(), output, crop_rect, padding_attr, algorithm, csc_type, matrix);
 
-  delete [] input_inner;
   return ret;
 }
 
@@ -2068,13 +2069,13 @@ static bm_status_t bm1684x_vpp_multi_input_single_output(
 {
   int i;
   bm_status_t ret = BM_SUCCESS;
+  std::vector<bm_image> output_inner(frame_number);
+
   ret = check_bm1684x_vpp_continuity( frame_number, input);
   if(ret != BM_SUCCESS)
   {
     return ret;
   }
-
-  bm_image *output_inner = new bm_image [frame_number];
 
   for(i = 0; i< frame_number; i++)
   {
@@ -2082,9 +2083,7 @@ static bm_status_t bm1684x_vpp_multi_input_single_output(
   }
 
   ret = bm1684x_vpp_multi_input_multi_output(
-    handle, frame_number, input, output_inner, crop_rect, padding_attr, algorithm, csc_type, matrix);
-
-  delete [] output_inner;
+    handle, frame_number, input, output_inner.data(), crop_rect, padding_attr, algorithm, csc_type, matrix);
 
   return ret;
 }
@@ -2241,7 +2240,6 @@ bm_status_t bm1684x_vpp_basic(
   csc_matrix_t*           matrix) {
 
   int out_img_num = 0, i = 0, j = 0;
-  bm_image *input_inner;
   int out_idx = 0;
   bm_status_t ret = BM_SUCCESS;
 
@@ -2251,11 +2249,27 @@ bm_status_t bm1684x_vpp_basic(
     return ret;
   }
 
+  if (crop_rect == NULL) {
+      out_img_num = in_img_num;
+  } else if (crop_num_vec != NULL) {
+      for (i = 0; i < in_img_num; i++) {
+          out_img_num += crop_num_vec[i];
+      }
+  } else {
+      bmlib_log(
+          BMCV_LOG_TAG, BMLIB_LOG_ERROR, "crop_num_vec should not be NULL err vpp_basic: %d\n",
+          __LINE__);
+      return BM_ERR_PARAM;
+  }
+
+  std::vector<bm_image> input_inner(out_img_num);
+
   int compressed_flag = 0;
   bm_image input_temp;
   ret = bm1684x_vpp_compressed2yuv(handle, in_img_num, input, &input_temp, matrix, algorithm, crop_rect, &compressed_flag);
-  if(ret != BM_SUCCESS)
+  if(ret != BM_SUCCESS) {
     goto failed;
+  }
 
   if (crop_rect == NULL) {
     if (crop_num_vec != NULL) {
@@ -2263,21 +2277,16 @@ bm_status_t bm1684x_vpp_basic(
         "crop_num_vec should be NULL err vpp_basic: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
-
-    out_img_num = in_img_num;
-    input_inner = input;
-
+    for(i = 0; i < out_img_num; i++)
+    {
+      input_inner[i] = input[i];
+    }
   } else {
     if (crop_num_vec == NULL) {
       bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
         "crop_num_vec should not be NULL err vpp_basic: %d\n", __LINE__);
       return BM_ERR_PARAM;
     }
-
-    for (i = 0; i < in_img_num; i++) {
-      out_img_num += crop_num_vec[i];
-    }
-    input_inner = new bm_image [out_img_num];
 
     for (i = 0; i < in_img_num; i++) {
       for (j = 0; j < crop_num_vec[i]; j++) {
@@ -2299,12 +2308,8 @@ bm_status_t bm1684x_vpp_basic(
   }
 
   ret = bm1684x_vpp_multi_input_multi_output(
-    handle, out_img_num, input_inner, output, crop_rect, padding_attr, algorithm, csc_type, matrix);
+    handle, out_img_num, input_inner.data(), output, crop_rect, padding_attr, algorithm, csc_type, matrix);
 
-  if (crop_rect != NULL)
-  {
-    delete [] input_inner;
-  }
 failed:
   if(1 == compressed_flag)
   {
@@ -2327,6 +2332,7 @@ bm_status_t bm1684x_vpp_stitch(
 
   int i;
   bm_status_t ret = BM_SUCCESS;
+  std:: vector<bmcv_padding_atrr_t> padding_attr(input_num);
 
   ret = simple_check_bm1684x_input_param(handle, input, input_num);
   if(ret != BM_SUCCESS)
@@ -2339,11 +2345,7 @@ bm_status_t bm1684x_vpp_stitch(
     return BM_ERR_PARAM;
   }
 
-
-
-  bmcv_padding_atrr_t *padding_attr = new bmcv_padding_atrr_t [input_num];
-
-  memset( padding_attr, 0, input_num *sizeof(bmcv_padding_atrr_t));
+  memset(padding_attr.data(), 0, input_num *sizeof(bmcv_padding_atrr_t));
   for(i = 0; i < input_num; i++)
   {
     padding_attr[i].dst_crop_stx = dst_crop_rect[i].start_x;
@@ -2352,9 +2354,8 @@ bm_status_t bm1684x_vpp_stitch(
     padding_attr[i].dst_crop_h   = dst_crop_rect[i].crop_h;
   }
   ret = bm1684x_vpp_multi_input_single_output(
-    handle, input_num, input, output, src_crop_rect, padding_attr, algorithm, CSC_MAX_ENUM, NULL);
+    handle, input_num, input, output, src_crop_rect, padding_attr.data(), algorithm, CSC_MAX_ENUM, NULL);
 
-  delete [] padding_attr;
   return ret;
 }
 
@@ -2371,11 +2372,16 @@ bm_status_t bm1684x_vpp_draw_rectangle(
 {
   int i = 0;
   bm_status_t ret = BM_SUCCESS;
-  int draw_num = 0;
-  /*check border param*/
+  ret = simple_check_bm1684x_input_param(handle, &image, rect_num);
+  if(ret != BM_SUCCESS)
+    return ret;
 
+  std::vector<border_t> border_param(rect_num);
+  std::vector<bm_image> border_image(rect_num);
+
+  int draw_num = 0;
   draw_num = (rect_num + 31) >> 5;
-  border_t* border_param = new border_t [rect_num];
+
   for(i = 0; i < rect_num; i++)
   {
     border_param[i].rect_border_enable = 1;
@@ -2389,8 +2395,6 @@ bm_status_t bm1684x_vpp_draw_rectangle(
     border_param[i].thickness = line_width;
   }
 
-  bm_image *border_image = new bm_image [rect_num];
-
   for(i = 0; i< rect_num; i++)
   {
     border_image[i] = image;
@@ -2402,11 +2406,9 @@ bm_status_t bm1684x_vpp_draw_rectangle(
       draw_num_current = rect_num - 32 * i;
     }
     ret = bm1684x_vpp_multi_parameter_processing(
-      handle, draw_num_current, border_image + 32 * i, border_image + 32 * i, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param + 32 * i,NULL);
+      handle, draw_num_current, border_image.data() + 32 * i, border_image.data() + 32 * i, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param.data() + 32 * i,NULL);
   }
 
-  delete [] border_image;
-  delete [] border_param;
   return ret;
 }
 
@@ -2464,9 +2466,9 @@ bm_status_t bm1684x_vpp_resize(
     output_num += resize_attr[input_idx].roi_num;
   }
 
-  bm_image* input_inner = new bm_image [output_num];
-  bmcv_rect_t* src_crop_rect = new bmcv_rect_t[output_num];
-  bmcv_padding_atrr_t* padding_attr = new bmcv_padding_atrr_t[output_num];
+  std::vector<bm_image> input_inner(output_num);
+  std::vector<bmcv_rect_t> src_crop_rect(output_num);
+  std::vector<bmcv_padding_atrr_t> padding_attr(output_num);
 
   for (input_idx = 0; input_idx < input_num; input_idx++) {
     for (i = 0; i < resize_attr[input_idx].roi_num; i++) {
@@ -2524,11 +2526,8 @@ bm_status_t bm1684x_vpp_resize(
   }
 
   ret = bm1684x_vpp_multi_input_multi_output(
-    handle, output_num, input_inner, output, src_crop_rect, padding_attr, (bmcv_resize_algorithm)resize_attr[0].interpolation, CSC_MAX_ENUM, NULL);
+    handle, output_num, input_inner.data(), output, src_crop_rect.data(), padding_attr.data(), (bmcv_resize_algorithm)resize_attr[0].interpolation, CSC_MAX_ENUM, NULL);
 
-  delete [] padding_attr;
-  delete [] src_crop_rect;
-  delete [] input_inner;
   return ret;
 }
 
@@ -2599,8 +2598,8 @@ bm_status_t bm1684x_vpp_put_text(
 {
   int i = 0;
   bm_status_t ret = BM_SUCCESS;
+  std::vector<font_t> font_param(font_num);
 
-  font_t* font_param = new font_t [font_num];
   for(i = 0; i < font_num; i++)
   {
     font_param[i].font_enable = 1;
@@ -2618,7 +2617,7 @@ bm_status_t bm1684x_vpp_put_text(
       "rects out of range, idx = %d, stx = %d, sty = %d, crop_w = %d, crop_h = %d, vpp_put_text: %d\n", i, font_rects[i].start_x, font_rects[i].start_y, \
             font_rects[i].crop_w, font_rects[i].crop_h, __LINE__);
       ret = BM_ERR_PARAM;
-      goto fail;
+      return ret;
     }
 #ifdef USING_CMODEL
     ret= bm_mem_mmap_device_mem(handle, font_mem, &font_param[i].font_addr);
@@ -2632,9 +2631,8 @@ bm_status_t bm1684x_vpp_put_text(
   }
 
   ret = bm1684x_vpp_multi_parameter_processing(
-    handle, font_num, image, image, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, NULL, font_param);
-fail:
-  delete [] font_param;
+    handle, font_num, image, image, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, NULL, font_param.data());
+
   return ret;
 }
 
@@ -2662,7 +2660,7 @@ DECL_EXPORT bm_status_t bm1684x_vpp_copy_to(
   return ret;
 }
 
-void bm1684x_vpp_write_bin(bm_image dst, const char *output_name)
+void bm_write_bin(bm_image dst, const char *output_name)
 {
   int image_byte_size[4] = {0};
   bm_image_get_byte_size(dst, image_byte_size);
@@ -2693,7 +2691,7 @@ void bm1684x_vpp_write_bin(bm_image dst, const char *output_name)
   return;
 }
 
-void bm1684x_vpp_read_bin(bm_image src, const char *input_name)
+void bm_read_bin(bm_image src, const char *input_name)
 {
   int image_byte_size[4] = {0};
   bm_image_get_byte_size(src, image_byte_size);
@@ -2774,11 +2772,16 @@ bm_status_t bm1684x_vpp_point(
     unsigned char g,
     unsigned char b){
   bm_status_t ret = BM_SUCCESS;
-  bm_image *input = new bm_image [point_num];
-  bm_image *output = new bm_image [point_num];
-  bmcv_rect_t *input_crop_rect = new bmcv_rect_t [point_num];
-  border_t *border_param = new border_t [point_num];
-  bmcv_padding_atrr_t *padding_attr = new bmcv_padding_atrr_t [point_num];
+
+  ret = simple_check_bm1684x_input_param(handle, &image, point_num);
+  if(ret != BM_SUCCESS)
+    return ret;
+  std::vector<bm_image> input(point_num);
+  std::vector<bm_image> output(point_num);
+  std::vector<bmcv_rect_t> input_crop_rect(point_num);
+  std::vector<border_t> border_param(point_num);
+  std::vector<bmcv_padding_atrr_t> padding_attr(point_num);
+
   for(int i = 0; i < point_num; i++){
     input[i] = image;
     output[i] = image;
@@ -2802,12 +2805,7 @@ bm_status_t bm1684x_vpp_point(
     padding_attr[i].if_memset = 0;
   }
   ret = bm1684x_vpp_multi_parameter_processing(
-     handle, point_num, input, output, input_crop_rect, padding_attr, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param, NULL);
-  delete [] input;
-  delete [] output;
-  delete [] input_crop_rect;
-  delete [] padding_attr;
-  delete [] border_param;
+     handle, point_num, input.data(), output.data(), input_crop_rect.data(), padding_attr.data(), BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param.data(), NULL);
   return ret;
 }
 
@@ -2823,13 +2821,15 @@ bm_status_t bm1684x_vpp_fill_rectangle(
   unsigned char        b)
 {
   bm_status_t ret = BM_SUCCESS;
+
   bm_handle_check_2(handle, *input, *output);
   ret = simple_check_bm1684x_input_param(handle, input, input_num);
   if(ret != BM_SUCCESS)
     return ret;
-  bm_image *output_inner = new bm_image [input_num];
-  bmcv_padding_atrr_t *padding_attr = new bmcv_padding_atrr_t [input_num];
-  bmcv_convert_to_attr *convert_to_attr = new bmcv_convert_to_attr [input_num];
+  std::vector<bm_image> output_inner(input_num);
+  std::vector<bmcv_padding_atrr_t> padding_attr(input_num);
+  std::vector<bmcv_convert_to_attr> convert_to_attr(input_num);
+
   for(int i=0;i<input_num;i++){
     output_inner[i]=output[0];
     padding_attr[i].dst_crop_w = input_crop_rect[i].crop_w;
@@ -2850,12 +2850,10 @@ bm_status_t bm1684x_vpp_fill_rectangle(
     convert_to_attr[i].alpha_2 = 0;
     convert_to_attr[i].beta_0 = (float)r;
     convert_to_attr[i].beta_1 = (float)g;
-    convert_to_attr[i].beta_2 = (float)b;}
+    convert_to_attr[i].beta_2 = (float)b;
+    }
   ret = bm1684x_vpp_multi_parameter_processing(
-     handle, input_num, input, output_inner, NULL, padding_attr, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, convert_to_attr, NULL, NULL);
-  delete [] padding_attr;
-  delete [] convert_to_attr;
-  delete [] output_inner;
+     handle, input_num, input, output_inner.data(), NULL, padding_attr.data(), BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, convert_to_attr.data(), NULL, NULL);
   return ret;
 }
 
@@ -2890,8 +2888,14 @@ bm_status_t bm1684x_vpp_cmodel_border(
   unsigned char           b)
 {
   bm_status_t ret = BM_SUCCESS;
+  ret = simple_check_bm1684x_input_param(handle, input, rect_num);
+  if(ret != BM_SUCCESS)
+    return ret;
+
+  std::vector<border_t> border_param(rect_num);
+
   bm_handle_check_2(handle, *input, *output);
-  border_t* border_param = new border_t [rect_num];
+
   for(int i = 0; i < rect_num; i++){
     border_param[i].rect_border_enable = 1;
     border_param[i].st_x = rect[i].start_x;
@@ -2908,8 +2912,8 @@ bm_status_t bm1684x_vpp_cmodel_border(
     border_param[i].thickness = line_width;
   }
   ret = bm1684x_vpp_asic_and_cmodel(
-    handle, rect_num, input, output, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param, NULL, USE_CMODEL);
-  delete [] border_param;
+    handle, rect_num, input, output, NULL, NULL, BMCV_INTER_LINEAR, CSC_MAX_ENUM, NULL, NULL, border_param.data(), NULL, USE_CMODEL);
+
   return ret;
 }
 
@@ -2918,14 +2922,15 @@ bm_status_t bm1684x_vpp_mosaic_special(bm_handle_t          handle,
                                       bm_image              image,
                                       bmcv_rect_t *         mosaic_rect){
   bm_status_t ret = BM_SUCCESS;
-  bm_image * input = new bm_image [mosaic_num];
-  bm_image * output = new bm_image [mosaic_num];
-  bm_image * masaic_pad = new bm_image [mosaic_num];
-  bm_image * masaic_narrow = new bm_image [mosaic_num];
-  bmcv_padding_atrr_t * padding_pad = new bmcv_padding_atrr_t [mosaic_num];
-  bmcv_padding_atrr_t * padding_enlarge = new bmcv_padding_atrr_t [mosaic_num];
-  bmcv_rect_t * crop_pad = new bmcv_rect_t [mosaic_num];
-  bmcv_rect_t * crop_enlarge = new bmcv_rect_t [mosaic_num];
+  std::vector<bm_image> input(mosaic_num);
+  std::vector<bm_image> output(mosaic_num);
+  std::vector<bm_image> masaic_pad(mosaic_num);
+  std::vector<bm_image> masaic_narrow(mosaic_num);
+  std::vector<bmcv_padding_atrr_t> padding_pad(mosaic_num);
+  std::vector<bmcv_padding_atrr_t> padding_enlarge(mosaic_num);
+  std::vector<bmcv_rect_t> crop_pad(mosaic_num);
+  std::vector<bmcv_rect_t> crop_enlarge(mosaic_num);
+
   for(int i=0; i<mosaic_num; i++){
     input[i] = image;
     crop_pad[i].start_x = mosaic_rect[i].start_x;
@@ -2950,8 +2955,8 @@ bm_status_t bm1684x_vpp_mosaic_special(bm_handle_t          handle,
       goto fail2;
     }
   }
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, input, masaic_pad, crop_pad,
-                                                padding_pad, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, input.data(), masaic_pad.data(), crop_pad.data(),
+                                                padding_pad.data(), BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
   if(ret != BM_SUCCESS)
     goto fail2;
   for(int i=0; i<mosaic_num; i++){
@@ -2975,16 +2980,16 @@ bm_status_t bm1684x_vpp_mosaic_special(bm_handle_t          handle,
     crop_enlarge[i].crop_w = crop_pad[i].crop_w;
     crop_enlarge[i].crop_h = crop_pad[i].crop_h;
   }
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_pad, masaic_narrow, NULL,
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_pad.data(), masaic_narrow.data(), NULL,
                                                      NULL, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
   if(ret != BM_SUCCESS)
     goto fail1;
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_narrow, masaic_pad, NULL,
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_narrow.data(), masaic_pad.data(), NULL,
                                                     NULL, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
   if(ret != BM_SUCCESS)
     goto fail1;
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_pad, output, crop_enlarge,
-                                                    padding_enlarge, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_pad.data(), output.data(), crop_enlarge.data(),
+                                                    padding_enlarge.data(), BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
 fail1:
   for(int i=0; i<mosaic_num; i++){
     bm_image_destroy(masaic_narrow[i]);
@@ -2993,14 +2998,7 @@ fail2:
   for(int i=0; i<mosaic_num; i++){
     bm_image_destroy(masaic_pad[i]);
   }
-  delete [] masaic_narrow;
-  delete [] masaic_pad;
-  delete [] padding_pad;
-  delete [] padding_enlarge;
-  delete [] crop_pad;
-  delete [] crop_enlarge;
-  delete [] input;
-  delete [] output;
+
   return ret;
 }
 
@@ -3009,10 +3007,11 @@ bm_status_t bm1684x_vpp_mosaic_normal(bm_handle_t           handle,
                                       bm_image              input,
                                       bmcv_rect_t *         mosaic_rect){
   bm_status_t ret = BM_SUCCESS;
-  bm_image * image = new bm_image [mosaic_num];
-  bm_image * masaic_narrow = new bm_image [mosaic_num];
-  bmcv_rect_t * crop_narrow = new bmcv_rect_t [mosaic_num];
-  bmcv_padding_atrr_t * padding_enlarge = new bmcv_padding_atrr_t [mosaic_num];
+  std::vector<bm_image> image(mosaic_num);
+  std::vector<bm_image> masaic_narrow(mosaic_num);
+  std::vector<bmcv_rect_t> crop_narrow(mosaic_num);
+  std::vector<bmcv_padding_atrr_t> padding_enlarge(mosaic_num);
+
   for(int i=0; i<mosaic_num; i++){
     image[i] = input;
     crop_narrow[i].start_x = mosaic_rect[i].start_x;
@@ -3032,17 +3031,14 @@ bm_status_t bm1684x_vpp_mosaic_normal(bm_handle_t           handle,
       goto fail;
     }
   }
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, image, masaic_narrow, crop_narrow, NULL, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, image.data(), masaic_narrow.data(), crop_narrow.data(), NULL, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
   if(ret != BM_SUCCESS)
     goto fail;
-  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_narrow, image, NULL, padding_enlarge, BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
+  ret = bm1684x_vpp_multi_parameter_processing(handle, mosaic_num, masaic_narrow.data(), image.data(), NULL, padding_enlarge.data(), BMCV_INTER_NEAREST, CSC_MAX_ENUM, NULL, NULL, NULL, NULL);
 fail:
   for(int i=0; i<mosaic_num; i++)
     bm_image_destroy(masaic_narrow[i]);
-  delete [] image;
-  delete [] masaic_narrow;
-  delete [] crop_narrow;
-  delete [] padding_enlarge;
+
   return ret;
 }
 
@@ -3051,9 +3047,13 @@ bm_status_t bm1684x_vpp_mosaic(bm_handle_t          handle,
                               bm_image              image,
                               bmcv_rect_t *         mosaic_rect){
   bm_status_t ret = BM_SUCCESS;
+  ret = simple_check_bm1684x_input_param(handle, &image, mosaic_num);
+  if(ret != BM_SUCCESS)
+    return ret;
   int normal_num = 0, special_num = 0;
-  bmcv_rect_t * normal_masaic = new bmcv_rect_t [mosaic_num];
-  bmcv_rect_t * special_masaic = new bmcv_rect_t [mosaic_num];
+  std::vector<bmcv_rect_t> normal_masaic(mosaic_num);
+  std::vector<bmcv_rect_t> special_masaic(mosaic_num);
+
   for(int i=0; i<mosaic_num; i++){
     if(mosaic_rect[i].crop_w < 64 || mosaic_rect[i].crop_h < 64){
         special_masaic[special_num] = mosaic_rect[i];
@@ -3065,13 +3065,11 @@ bm_status_t bm1684x_vpp_mosaic(bm_handle_t          handle,
     }
   }
   if(special_num > 0){
-    ret = bm1684x_vpp_mosaic_special(handle, special_num, image, special_masaic);
+    ret = bm1684x_vpp_mosaic_special(handle, special_num, image, special_masaic.data());
   }
   if(normal_num > 0){
-    ret = bm1684x_vpp_mosaic_normal(handle, normal_num, image, normal_masaic);
+    ret = bm1684x_vpp_mosaic_normal(handle, normal_num, image, normal_masaic.data());
   }
-  delete [] normal_masaic;
-  delete [] special_masaic;
   return ret;
 }
 
@@ -3089,8 +3087,6 @@ bm_status_t bm1684x_vpp_basic_v2(
   bmcv_convert_to_attr*   convert_to_attr_){
 
   int out_crop_num = 0, i = 0, j = 0;
-  bm_image *input_inner, *output_inner;
-  bmcv_convert_to_attr *convert_to_attr;
   int out_idx = 0;
   bm_status_t ret = BM_SUCCESS;
 
@@ -3129,7 +3125,10 @@ bm_status_t bm1684x_vpp_basic_v2(
       out_crop_num += crop_num_vec[i];
     }
   }
-
+  std::vector<bm_image> input_inner(out_crop_num);
+  std::vector<bm_image> output_inner(out_crop_num);
+  std::vector<bmcv_convert_to_attr> convert_to_inner(out_crop_num);
+  bmcv_convert_to_attr *convert_to_attr = NULL;
   bmcv_convert_to_attr black_attr;
 
   if(NULL != padding_attr) {
@@ -3157,9 +3156,6 @@ bm_status_t bm1684x_vpp_basic_v2(
   }
 
   if (crop_rect != NULL) {
-    input_inner = new bm_image [out_crop_num];
-    output_inner = new bm_image [out_crop_num];
-
     for (i = 0; i < img_num; i++) {
       for (j = 0; j < crop_num_vec[i]; j++) {
           input_inner[out_idx + j]= input[i];
@@ -3168,23 +3164,22 @@ bm_status_t bm1684x_vpp_basic_v2(
       out_idx += crop_num_vec[i];
     }
   } else {
-    input_inner = input;
-    output_inner = output;
+    for (i = 0; i < out_crop_num; i++) {
+      input_inner[i] = input[i];
+      output_inner[i] = output[i];
+    }
   }
 
-  convert_to_attr = new bmcv_convert_to_attr [out_crop_num];
-  for(int i=0; i<out_crop_num; i++)
+  if(NULL != convert_to_attr_)
+  {
+    convert_to_attr = convert_to_inner.data();
+    for(int i=0; i<out_crop_num; i++)
     convert_to_attr[i] = convert_to_attr_[0];
+  }
 
   ret = bm1684x_vpp_multi_parameter_processing(
-    handle, out_crop_num, input_inner, output_inner, crop_rect, padding_attr, algorithm, csc_type, matrix, convert_to_attr, NULL, NULL);
+    handle, out_crop_num, input_inner.data(), output_inner.data(), crop_rect, padding_attr, algorithm, csc_type, matrix, convert_to_attr, NULL, NULL);
 
-  if (crop_rect != NULL)
-  {
-    delete [] input_inner;
-    delete [] output_inner;
-  }
-  delete [] convert_to_attr;
   return ret;
 }
 

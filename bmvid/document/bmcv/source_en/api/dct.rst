@@ -3,15 +3,17 @@ bmcv_image_dct
 
 DCT transformation of the image.
 
-The format of the interface is as follows:
+
+**Interface Form**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_dct(
-                bm_handle_t handle,
-                bm_image input,
-                bm_image output,
-                bool is_inversed);
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output,
+                    bool is_inversed);
+
 
 **Processor model support**
 
@@ -63,6 +65,7 @@ The interface form of calculation coefficient is as follows:
                 bm_device_mem_t wcoeff_output,
                 bool is_inversed);
 
+
 **Description of input parameters:**
 
 * bm_handle_t handle
@@ -89,6 +92,7 @@ The interface form of calculation coefficient is as follows:
 
   Input parameter. Whether it is inverse transformation.
 
+
 **Return value description:**
 
 * BM_SUCCESS: success
@@ -106,6 +110,7 @@ After obtaining the coefficient, transfer it to the following interfaces to star
                 bm_device_mem_t hcoeff,
                 bm_device_mem_t wcoeff,
                 bm_image output);
+
 
 **Description of input parameters:**
 
@@ -128,6 +133,7 @@ After obtaining the coefficient, transfer it to the following interfaces to star
 * bm_image output
 
   Output bm_image. The creation of bm_image requires an external call to bmcv_image_create. Image memory can use bm_image_alloc_dev_mem to create new memory, or use bmcv_image_attach to attach existing memory. If users do not actively allocate, it will be allocated automatically within the API.
+
 
 **Return value description:**
 
@@ -161,54 +167,81 @@ The interface currently supports the following data_type:
 
 2. The data_type of input and output must be the same.
 
-**Sample code**
 
+**Sample code**
 
     .. code-block:: c
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<float> src_ptr(
-                new float[channel * width * height],
-                std::default_delete<float[]>());
-        std::shared_ptr<float> res_ptr(
-                new float[channel * width * height],
-                std::default_delete<float[]>());
-        float * src_data = src_ptr.get();
-        float * res_data = res_ptr.get();
-        for (int i = 0; i < channel * width * height; i++) {
-            src_data[i] = rand() % 255;
-        }
-        bm_image bm_input, bm_output;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_FLOAT32,
-                        &bm_input);
-        bm_image_alloc_dev_mem(bm_input);
-        bm_image_copy_host_to_device(bm_input, (void **)&src_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_FLOAT32,
-                        &bm_output);
-        bm_image_alloc_dev_mem(bm_output);
-        bm_device_mem_t hcoeff_mem;
-        bm_device_mem_t wcoeff_mem;
-        bm_malloc_device_byte(handle, &hcoeff_mem, height*height*sizeof(float));
-        bm_malloc_device_byte(handle, &wcoeff_mem, width*width*sizeof(float));
-        bmcv_dct_coeff(handle, bm_input.height, bm_input.width, hcoeff_mem, wcoeff_mem, is_inversed);
-        bmcv_image_dct_with_coeff(handle, bm_input, hcoeff_mem, wcoeff_mem, bm_output);
-        bm_image_copy_device_to_host(bm_output, (void **)&res_data);
-        bm_image_destroy(bm_input);
-        bm_image_destroy(bm_output);
-        bm_free_device(handle, hcoeff_mem);
-        bm_free_device(handle, wcoeff_mem);
-        bm_dev_free(handle);
+        #include <iostream>
+        #include <fstream>
+        #include <assert.h>
+        #include <memory>
+        #include <string>
+        #include <numeric>
+        #include <vector>
+        #include <cmath>
+        #include <cassert>
+        #include <algorithm>
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
 
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 4, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 4, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bm_handle_t handle;
+            bm_image bm_input, bm_output;
+            float * src_data = new float[channel * width * height];
+            float * res_data = new float[channel * width * height];
+            bm_device_mem_t hcoeff_mem;
+            bm_device_mem_t wcoeff_mem;
+            bool is_inversed = true;
+            const char *input_path = "path/to/input";
+            const char *output_path = "path/to/output";
+
+            bm_dev_request(&handle, dev_id);
+            readBin(input_path, (unsigned char*)src_data, channel * width * height);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_FLOAT32, &bm_input);
+            bm_image_alloc_dev_mem(bm_input);
+            bm_image_copy_host_to_device(bm_input, (void **)&src_data);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_FLOAT32, &bm_output);
+            bm_image_alloc_dev_mem(bm_output);
+            bm_malloc_device_byte(handle, &hcoeff_mem, height * height * sizeof(float));
+            bm_malloc_device_byte(handle, &wcoeff_mem, width * width * sizeof(float));
+            bmcv_dct_coeff(handle, bm_input.height, bm_input.width, hcoeff_mem, wcoeff_mem, is_inversed);
+            bmcv_image_dct_with_coeff(handle, bm_input, hcoeff_mem, wcoeff_mem, bm_output);
+            bm_image_copy_device_to_host(bm_output, (void **)&res_data);
+            writeBin(output_path, (unsigned char*)res_data, channel * width * height);
+
+            bm_image_destroy(bm_input);
+            bm_image_destroy(bm_output);
+            bm_free_device(handle, hcoeff_mem);
+            bm_free_device(handle, wcoeff_mem);
+            delete[] src_data;
+            delete[] res_data;
+            bm_dev_free(handle);
+            return 0;
+        }

@@ -382,10 +382,8 @@ static int bmcv_resize_cmp(T1 *p_exp,
                             //        n_idx,
                             //        (int)got,
                             //        (int)exp);
-                            std::cout << "h: " << y << " w: " << x
-                                      << " c: " << c_idx << " n: " << n_idx
-                                      << " got: " << (int)got
-                                      << " exp: " << (int)exp << std::endl;
+                            printf("h: %d, w: %d, c: %d, n: %d, got: %d, exp: %d\n",
+                                   y, x, c_idx, n_idx, (int)got, (int)exp);
 
                             return -1;
                         }
@@ -406,10 +404,8 @@ int vpp_resize_cmp(
                 for (int i = 0; i < w; i++) {
                     int len = idx * c * w * h + k * w * h + w * j + i;
                     if (fabs(got[len] - exp[len]) > percision) {
-                        cout << "cmp error, got: " << (u8)got[len]
-                             << " exp: " << (u8)exp[len] << " ,n: " << idx
-                             << " ,c: " << k << " ,w: " << i << " ,h: " << j
-                             << endl;
+                        printf("cmp error, got: %d, exp: %d, n: %d, c: %d, w: %d, h: %d\n",
+                              (u8)got[len], (u8)exp[len], idx, k, i, j);
                         return -1;
                     }
                 }
@@ -824,8 +820,7 @@ static int resize_test_rand(bm_handle_t handle,
     }
 
     if (ret < 0) {
-        // printf("[ERROR] COMPARE FAILED !\r\n");
-        cout << "[ERROR] COMPARE FAILED !\r\n" << endl;
+        printf("[ERROR] COMPARE FAILED !\r\n");
         delete[] img_data;
         delete[] res_data;
         delete[] ref_data;
@@ -840,8 +835,7 @@ static int resize_test_rand(bm_handle_t handle,
         bm_dev_free(handle);
         exit(-1);
     } else {
-        // printf("COMPARE PASSED\r\n");
-        cout << "COMPARE PASSED!\r\n" << endl;
+        printf("COMPARE PASSED\r\n");
     }
     if (TPU_RESIZE != if_vpp) {
         test_img_width  = tmp_test_img_width;
@@ -935,7 +929,7 @@ int gen_test_size(int *image_w,
             break;
         }
         default: {
-            cout << "gen mode error" << endl;
+            printf("gen mode error\n");
             exit(-1);
         }
     }
@@ -951,14 +945,12 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
     resize_thread_arg_t *resize_thread_arg = (resize_thread_arg_t *)arg;
     int                  test_loop_times   = resize_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST RESIZE] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST RESIZE] test starts... LOOP times will be %d\n", test_loop_times);
     bm_handle_t handle;
     bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
     if (dev_ret != BM_SUCCESS) {
@@ -966,11 +958,10 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
         exit(-1);
     }
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST RESIZE] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST RESIZE] LOOP %d------\n", loop_idx);
         unsigned int seed = (unsigned)time(NULL);
         // seed              = 1569487766;
-        cout << "seed: " << seed << endl;
+        printf("seed: %d\n", seed);
         srand(seed);
         int image_num       = 4;
         int image_channel   = 3;
@@ -980,8 +971,8 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
         int crop_h          = constant_crop_h;
         int resize_w        = constant_resize_w;
         int resize_h        = constant_resize_h;
-        cout << "---------RESIZE CLASSICAL SIZE TEST----------" << endl;
-        cout << "[RESIZE TEST] single roi: 1n_int8->1n_int8 starts" << endl;
+        printf("---------RESIZE CLASSICAL SIZE TEST----------\n");
+        printf("[RESIZE TEST] single roi: 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -994,7 +985,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            resize_h,
                                            image_num,
                                            image_channel);
-        cout << "[RESIZE TEST] single roi: 1n_fp32->1n_fp32 starts" << endl;
+        printf("[RESIZE TEST] single roi: 1n_fp32->1n_fp32 starts\n");
         resize_test_rand<float, float>(handle,
                                        DATA_TYPE_EXT_FLOAT32,
                                        DATA_TYPE_EXT_FLOAT32,
@@ -1007,7 +998,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                        resize_h,
                                        image_num,
                                        image_channel);
-        cout << "[RESIZE TEST] single roi: 4n_int8->4n_int8 starts" << endl;
+        printf( "[RESIZE TEST] single roi: 4n_int8->4n_int8 starts\n");
         resize_test_rand<float, float>(handle,
                                        DATA_TYPE_EXT_4N_BYTE,
                                        DATA_TYPE_EXT_4N_BYTE,
@@ -1020,7 +1011,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                        resize_h,
                                        image_num,
                                        image_channel);
-        cout << "[RESIZE TEST] single roi: 4n_int8->1n_int8 starts" << endl;
+        printf("[RESIZE TEST] single roi: 4n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_4N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1033,7 +1024,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            image_num,
                                            image_channel,
                                            1);
-        cout << "[RESIZE TEST] multi roi: 4n_int8->1n_int8 starts" << endl;
+        printf("[RESIZE TEST] multi roi: 4n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_4N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1047,7 +1038,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            image_channel,
                                            1,
                                            1);
-        cout << "[RESIZE TEST] multi roi: 1n_int8->1n_int8 starts" << endl;
+        printf("[RESIZE TEST] multi roi: 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1062,7 +1053,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            image_channel,
                                            0,
                                            1);
-        cout << "[RESIZE TEST] multi roi: 1n_fp32->1n_fp32 starts" << endl;
+        printf("[RESIZE TEST] multi roi: 1n_fp32->1n_fp32 starts\n");
         resize_test_rand<float, float>(handle,
                                        DATA_TYPE_EXT_FLOAT32,
                                        DATA_TYPE_EXT_FLOAT32,
@@ -1077,9 +1068,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                        image_channel,
                                        0,
                                        1);
-        cout
-            << "[RESIZE TEST] multi roi(image 1, c 3): 1n_int8->1n_int8 starts "
-            << endl;
+        printf("[RESIZE TEST] multi roi(image 1, c 3): 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1093,9 +1082,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            image_channel,
                                            0,
                                            1);
-        cout
-            << "[RESIZE TEST] multi roi(image 1, c 1): 1n_int8->1n_int8 starts "
-            << endl;
+        printf("[RESIZE TEST] multi roi(image 1, c 1): 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1109,9 +1096,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            1,
                                            0,
                                            1);
-        cout
-            << "[RESIZE TEST] multi roi(image 1, c 3): 1n_fp32->1n_fp32 starts "
-            << endl;
+        printf("[RESIZE TEST] multi roi(image 1, c 3): 1n_fp32->1n_fp32 starts\n");
         resize_test_rand<float, float>(handle,
                                        DATA_TYPE_EXT_FLOAT32,
                                        DATA_TYPE_EXT_FLOAT32,
@@ -1127,7 +1112,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                        0,
                                        1);
 #ifndef USING_CMODEL
-        cout << "[RESIZE TEST] vpp crop one: 1n_int8->1n_int8 starts" << endl;
+        printf("[RESIZE TEST] vpp crop one: 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1143,7 +1128,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            0,
                                            1,
                                            VPP_CROP_ONE);
-        cout << "[RESIZE TEST] vpp crop mul: 1n_int8->1n_int8 starts" << endl;
+        printf("[RESIZE TEST] vpp crop mul: 1n_int8->1n_int8 starts\n");
         resize_test_rand<uint8_t, uint8_t>(handle,
                                            DATA_TYPE_EXT_1N_BYTE,
                                            DATA_TYPE_EXT_1N_BYTE,
@@ -1160,7 +1145,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                            0,
                                            VPP_CROP_MUL);
 #endif
-        cout << "----------RESIZE CORNER TEST---------" << endl;
+        printf("----------RESIZE CORNER TEST---------\n");
         if(is_random){
             int loop_num = 2;
             for (int loop_idx = 0; loop_idx < loop_num; loop_idx++) {
@@ -1183,15 +1168,10 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                     // image_num = 4;
                     // image_channel = 3;
 
-                    cout << "rand mode : " << rand_mode
-                        << " ,img_w: " << test_img_width
-                        << " ,img_h: " << test_img_height << " ,crop_w: " << crop_w
-                        << ", crop_h: " << crop_h << ", resize_w: " << resize_w
-                        << ", resize_h: " << resize_h << ", image_n: " << image_num
-                        << ", image_c: " << image_channel << endl;
+                    printf("rand_mode: %d, img_w: %d, img_h: %d, crop_h: %d, crop_w: %d, resize_w: %d, resize_h: %d, img_n: %d, img_c: %d\n",
+                            rand_mode, test_img_width, test_img_height, crop_h, crop_w, resize_w, resize_h, image_num, image_channel);
 
-                    cout << "[RESIZE TEST] single roi: 1n_int8->1n_int8 starts"
-                        << endl;
+                    printf("[RESIZE TEST] single roi: 1n_int8->1n_int8 starts\n");
                     resize_test_rand<uint8_t, uint8_t>(handle,
                                                     DATA_TYPE_EXT_1N_BYTE,
                                                     DATA_TYPE_EXT_1N_BYTE,
@@ -1203,8 +1183,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                     resize_h,
                                                     image_num,
                                                     image_channel);
-                    cout << "[RESIZE TEST] single roi: 1n_fp32->1n_fp32 starts"
-                        << endl;
+                    printf("[RESIZE TEST] single roi: 1n_fp32->1n_fp32 starts\n");
                     resize_test_rand<float, float>(handle,
                                                 DATA_TYPE_EXT_FLOAT32,
                                                 DATA_TYPE_EXT_FLOAT32,
@@ -1216,8 +1195,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                 resize_h,
                                                 image_num,
                                                 image_channel);
-                    cout << "[RESIZE TEST] single roi: 4n_int8->4n_int8 starts"
-                        << endl;
+                    printf("[RESIZE TEST] single roi: 4n_int8->4n_int8 starts\n");
                     resize_test_rand<float, float>(handle,
                                                 DATA_TYPE_EXT_4N_BYTE,
                                                 DATA_TYPE_EXT_4N_BYTE,
@@ -1229,8 +1207,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                 resize_h,
                                                 4,
                                                 image_channel);
-                    cout << "[RESIZE TEST] single roi: 4n_int8->1n_int8 starts"
-                        << endl;
+                    printf("[RESIZE TEST] single roi: 4n_int8->1n_int8 starts\n");
                     resize_test_rand<uint8_t, uint8_t>(handle,
                                                     DATA_TYPE_EXT_4N_BYTE,
                                                     DATA_TYPE_EXT_1N_BYTE,
@@ -1244,8 +1221,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                     4,
                                                     image_channel,
                                                     1);
-                    cout << "[RESIZE TEST] multi roi: 4n_int8->1n_int8 starts"
-                        << endl;
+                    printf("[RESIZE TEST] multi roi: 4n_int8->1n_int8 starts\n");
                     resize_test_rand<uint8_t, uint8_t>(handle,
                                                     DATA_TYPE_EXT_4N_BYTE,
                                                     DATA_TYPE_EXT_1N_BYTE,
@@ -1260,8 +1236,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                     image_channel,
                                                     1,
                                                     1);
-                    cout << "[RESIZE TEST] multi roi: 1n_int8->1n_int8 starts"
-                        << endl;
+                    printf("[RESIZE TEST] multi roi: 1n_int8->1n_int8 starts\n");
                     resize_test_rand<uint8_t, uint8_t>(handle,
                                                     DATA_TYPE_EXT_1N_BYTE,
                                                     DATA_TYPE_EXT_1N_BYTE,
@@ -1276,8 +1251,7 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                                                     image_channel,
                                                     0,
                                                     1);
-                    cout << "[RESIZE TEST] multi roi: 1n_fp32->1n_fp32 starts"
-                        << endl;
+                    printf("[RESIZE TEST] multi roi: 1n_fp32->1n_fp32 starts\n");
                     resize_test_rand<float, float>(handle,
                                                 DATA_TYPE_EXT_FLOAT32,
                                                 DATA_TYPE_EXT_FLOAT32,
@@ -1295,10 +1269,10 @@ DWORD WINAPI test_resize_thread(LPVOID arg) {
                 }
             }
         }
-        cout << "----------RESIZE TEST OVER---------" << endl;
+        printf("----------RESIZE TEST OVER---------\n");
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST RESIZE] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST RESIZE] ALL TEST PASSED!------\n");
     return NULL;
 }
 
@@ -1306,9 +1280,8 @@ int main(int argc, char **argv) {
     int test_loop_times  = 1;
     int test_threads_num = 1;
     if(argc > 11)
-        std::cout << "command input error, please follow this\n"
-                    "order:test_resize loop_num multi_thread_num in_w in_h crop_w crop_h out_w out_h is_random devid\n"
-                << std::endl;
+        printf("command input error, please follow this\n"
+               "order:test_resize loop_num multi_thread_num in_w in_h crop_w crop_h out_w out_h is_random devid\n");
     if(argc > 10)
         dev_id = atoi(argv[10]);
     if(argc > 9)
@@ -1326,16 +1299,16 @@ int main(int argc, char **argv) {
     if(argc > 1)
         test_loop_times  = atoi(argv[1]);
 
-    printf("input parameter:\nloop_num(%d) multi_thread_num(%d) in_w(%d) in_h(%d) crop_w(%d) crop_h(%d) out_w(%d) out_h(%d) is_random(%d) devid(%d)\n\n", 
+    printf("input parameter:\nloop_num(%d) multi_thread_num(%d) in_w(%d) in_h(%d) crop_w(%d) crop_h(%d) out_w(%d) out_h(%d) is_random(%d) devid(%d)\n\n",
                 test_loop_times, test_threads_num, constant_test_img_width, constant_test_img_height, constant_crop_w, constant_crop_h, constant_resize_w,
                 constant_resize_h, is_random, dev_id);
 
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST RESIZE] loop times should be 1~1500" << std::endl;
+        printf("[TEST RESIZE] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST RESIZE] thread nums should be 1~4 " << std::endl;
+        printf("[TEST RESIZE] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -1362,7 +1335,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] resize_thread_arg;
     #else

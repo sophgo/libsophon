@@ -3,6 +3,7 @@ bmcv_image_laplacian
 
 梯度计算laplacian算子。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -12,11 +13,11 @@ bmcv_image_laplacian
 
     .. code-block:: c
 
-        bm_status_t  bmcv_image_laplacian(
-            bm_handle_t handle,
-            bm_image input,
-            bm_image output,
-            unsigned int ksize);
+        bm_status_t bmcv_image_laplacian(
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output,
+                    unsigned int ksize);
 
 
 **参数说明：**
@@ -38,13 +39,11 @@ bmcv_image_laplacian
   Laplacian核的大小，必须是1或3。
 
 
-
-
 **返回值说明：**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **格式支持：**
@@ -80,61 +79,64 @@ bmcv_image_laplacian
 
     .. code-block:: c
 
-        int loop =1;
-        int ih = 1080;
-        int iw = 1920;
-        unsigned int ksize = 3;
-        bm_image_format_ext fmt = FORMAT_GRAY;
+        #include "bmcv_api_ext.h"
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <math.h>
+        #include <string.h>
 
-        fmt = argc > 1 ? (bm_image_format_ext)atoi(argv[1]) : fmt;
-        ih = argc > 2 ? atoi(argv[2]) : ih;
-        iw = argc > 3 ? atoi(argv[3]) : iw;
-        loop = argc > 4 ? atoi(argv[4]) : loop;
-        ksize = argc >5 ? atoi(argv[5]) : ksize;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-        bm_status_t ret = BM_SUCCESS;
-        bm_handle_t handle;
-        ret = bm_dev_request(&handle, 0);
-        if (ret != BM_SUCCESS)
-            throw("bm_dev_request failed");
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
-        bm_image_data_format_ext data_type = DATA_TYPE_EXT_1N_BYTE;
-        bm_image input;
-        bm_image output;
-
-        bm_image_create(handle, ih, iw, fmt, data_type, &input);
-        bm_image_alloc_dev_mem(input);
-
-        bm_image_create(handle,ih, iw, fmt, data_type, &output);
-        bm_image_alloc_dev_mem(output);
-
-        std::shared_ptr<unsigned char*> ch0_ptr = std::make_shared<unsigned char*>(new unsigned char[ih * iw]);
-        std::shared_ptr<unsigned char*> tpu_res_ptr = std::make_shared<unsigned char *>(new unsigned char[ih * iw]);
-        std::shared_ptr<unsigned char*> cpu_res_ptr = std::make_shared<unsigned char *>(new unsigned char[ih*iw]);
-
-        for (int i = 0; i < loop; i++) {
-            for (int j = 0; j < ih * iw; j++) {
-                (*ch0_ptr.get())[j] = j % 256;
-            }
-
-            unsigned char *host_ptr[] = {*ch0_ptr.get()};
-            bm_image_copy_host_to_device(input, (void **)host_ptr);
-
-            ret = bmcv_image_laplacian(handle, input, output, ksize);
-            if (ret) {
-                cout << "test laplacian failed" << endl;
-                bm_image_destroy(input);
-                bm_image_destroy(output);
-                bm_dev_free(handle);
-                return ret;
-            } else {
-                host_ptr[0] = *tpu_res_ptr.get();
-                bm_image_copy_device_to_host(output, (void **)host_ptr);
-            }
+            fclose(fp_src);
         }
 
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_dst);
+        }
 
+        int main()
+        {
+            int height = 1080;
+            int width = 1920;
+            unsigned int ksize = 3;
+            bm_image_format_ext fmt = FORMAT_GRAY;
+            bm_handle_t handle;
+            bm_image_data_format_ext data_type = DATA_TYPE_EXT_1N_BYTE;
+            bm_image input;
+            bm_image output;
+            unsigned char* input_data = (unsigned char*)malloc(width * height * sizeof(unsigned char));
+            unsigned char* tpu_out = (unsigned char*)malloc(width * height * sizeof(unsigned char));
+            const char* src_name = "path/to/src";
+            const char* dst_name = "path/to/dst";
+
+            bm_dev_request(&handle, 0);
+            bm_image_create(handle, height, width, fmt, data_type, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_create(handle, height, width, fmt, data_type, &output);
+            bm_image_alloc_dev_mem(output);
+
+            readBin(src_name, input_data, width * height);
+            bm_image_copy_host_to_device(input, (void**)&input_data);
+            bmcv_image_laplacian(handle, input, output, ksize);
+            bm_image_copy_device_to_host(output, (void **)&tpu_out);
+            writeBin(dst_name, tpu_out, width * height);
+
+            bm_image_destroy(input);
+            bm_image_destroy(output);
+            bm_dev_free(handle);
+            free(input_data);
+            free(tpu_out);
+            return 0;
+        }

@@ -178,11 +178,11 @@ static int test_base64_enc(int len, int dst_len, char *src, char *dst) {
     gettimeofday_(&t1);
     bmcv_base64_enc(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
     gettimeofday_(&t2);
-    cout << "bmcv excution time is: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec)<< "us" << endl;
+    printf("bmcv excution time is: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     gettimeofday_(&t1);
     base64_encode(dst_soft, src, len, (char*)base64std);
     gettimeofday_(&t2);
-    cout << "soft excution time is: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("soft excution time is: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     //tt0 = (double)cv::getTickCount();
     //bmcv_base64_enc(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
     //tt1 = (double)cv::getTickCount() - tt0;
@@ -217,11 +217,11 @@ static int test_base64_dec(int len, int dst_len, char *src, char *dst) {
     gettimeofday_(&t1);
     bmcv_base64_dec(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
     gettimeofday_(&t2);
-    cout << "bmcv excution time is: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("bmcv excution time is: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     gettimeofday_(&t1);
     base64_decode(dst_soft, src, len, (char*)base64std);
     gettimeofday_(&t2);
-    cout << "soft excution time is: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("soft excution time is: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     //tt0 = (double)cv::getTickCount();
     //bmcv_base64_dec(handle, bm_mem_from_system(src), bm_mem_from_system(dst), lenth);
@@ -259,7 +259,7 @@ DWORD WINAPI test_base64_thread(LPVOID arg) {
     loop_times = *(int *)arg;
 
     seed = (unsigned)time(NULL);
-    std::cout << "seed: " << seed << std::endl;
+    printf("seed: %d\n", seed);
     srand(seed);
 
     for (i = 0; i <loop_times; i++) {
@@ -303,17 +303,16 @@ int main(int32_t argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_resize loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this "
+                     "order:test_resize loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1000000 || test_loop_times < 1) {
-        std::cout << "[TEST NMS] loop times should be 1~1000000" << std::endl;
+        printf("[TEST NMS] loop times should be 1~1000000\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST NMS] thread nums should be 1~4 " << std::endl;
+        printf("[TEST NMS] thread nums should be 1~4 \n");
         exit(-1);
     }
     #ifdef __linux__
@@ -336,7 +335,7 @@ int main(int32_t argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     #else
     #define THREAD_NUM 64

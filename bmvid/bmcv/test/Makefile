@@ -10,6 +10,8 @@
 #
 ##############################################################################
 
+TPU_PERFORMANCE_DIR = $(TEST_BMCV_DIR)/tpu_operators_performance_test_case
+
 TEST_BMCV_DIR = $(BMCV_SRC_DIR)/test
 
 VPP_DIR ?= $(OUT_DIR)/vpp
@@ -18,13 +20,15 @@ BMCV_DIR ?= $(OUT_DIR)/bmcv
 
 INCLUDE_DIR += -I$(TEST_BMCV_DIR)
 
+INCLUDE_DIR += -I$(BMVID_ROOT)/3rdparty/libbmrt/include
+
 ifeq ($(PRODUCTFORM), soc)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/
 else ifeq ($(PRODUCTFORM), pcie_arm64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/
 else ifeq ($(PRODUCTFORM), pcie_mips64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/mips/
-else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+else ifneq (,$(filter $(PRODUCTFORM), pcie_loongarch64 pcie_loongarch64_anolis))
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/
 else ifeq ($(PRODUCTFORM), pcie_sw64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/
@@ -35,11 +39,20 @@ TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/pcie/
 endif
 
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
-TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
+TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_remap.cpp  \
+					 $(TEST_BMCV_DIR)/test_bmodel/test_fisheye_correction.cpp  \
+					 $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_3channel.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_assigned_area_blur.cpp  \
+                     $(TEST_BMCV_DIR)/test_cv_median_blur.cpp  \
+					 $(TEST_BMCV_DIR)/test_faiss_indexPQ_encode.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_surf.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_matrix_prune.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_cos_similarity.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_rotate.cpp  \
 					 $(TEST_BMCV_DIR)/test_convert_to.cpp  \
 					 $(TEST_BMCV_DIR)/test_csc_convert_to.cpp  \
-                     			 $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
+                     $(TEST_BMCV_DIR)/test_cv_absdiff.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_as_strided.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_bayer2rgb.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_add_weighted.cpp \
@@ -62,6 +75,8 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_feature_match.cpp \
   					 $(TEST_BMCV_DIR)/test_cv_fft_1d.cpp \
   					 $(TEST_BMCV_DIR)/test_cv_fft_2d.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_stft.cpp \
+					 $(TEST_BMCV_DIR)/test_cv_istft.cpp \
   					 $(TEST_BMCV_DIR)/test_cv_fill_rectangle.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_fusion.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_gaussian_blur.cpp  \
@@ -71,7 +86,10 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_img_scale.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_jpeg.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_json.cpp   \
+					 $(TEST_BMCV_DIR)/test_cv_knn2.cpp	\
+					 $(TEST_BMCV_DIR)/test_cv_knn_match.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_laplacian.cpp   \
+					 $(TEST_BMCV_DIR)/test_cv_lapmatrix.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_lkpyramid.cpp   \
 					 $(TEST_BMCV_DIR)/test_cv_matmul_t_opt.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_matmul.cpp  \
@@ -129,11 +147,25 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_fill_rectangle.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_postpadding-compare.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_postpadding-haikang.cpp    \
-					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_watermask_superpose.cpp     \
+					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_watermark_superpose.cpp     \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_convert_to_comparison.cpp   \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_mul_crop_resize_haikang.cpp  \
 			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_point.cpp\
 			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_vpp_multi_thread.cpp\
+			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_gen_text_watermark.cpp\
+					 $(TPU_PERFORMANCE_DIR)/rotate_performance.cpp\
+
+ifneq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+TEST_BMCV_SRCS_CXX += $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_3channel.cpp\
+
+endif
+
+ifneq (,$(filter pcie soc,$(PRODUCTFORM)))
+TEST_BMCV_SRCS_CXX +=  $(TEST_BMCV_DIR)/test_cv_qr_cpu.cpp\
+					   $(TEST_BMCV_DIR)/test_cv_cluster.cpp  \
+					   $(TEST_BMCV_DIR)/test_cv_knn.cpp\
+
+endif
 
 TEST_BMCV_CXX_EXE1 = $(patsubst %.cpp,%,$(TEST_BMCV_SRCS_CXX))
 TEST_BMCV_CXX_EXE2 = $(patsubst $(BMVID_ROOT)/%,%,$(TEST_BMCV_CXX_EXE1))
@@ -145,7 +177,6 @@ INSTALL_EXES += $(TEST_BMCV_CXX_EXE)
 DAILY_TEST_EXES += $(TEST_BMCV_CXX_EXE)
 
 BMLIB_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libbmlib.so
-VPP_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libvpp_cmodel.so
 
 $(TEST_BMCV_OBJ_DIR):
 	@$(MKDIR) $@
@@ -160,6 +191,8 @@ ifeq ($(PRODUCTFORM), pcie)
 TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
 else ifeq ($(PRODUCTFORM),soc)
 TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else ifeq ($(PRODUCTFORM),pcie_loongarch64)
+TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
 else
     $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif
@@ -173,13 +206,13 @@ TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(BMCV_DIR)/lib/cmodel/ \
  -L$(BMVID_ROOT)/3rdparty/libbmcv/lib/pcie/pcie_cmodel/ \
 -ldl
 
-$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(VPP_DYN) | $(TEST_BMCV_OBJ_DIR)
+$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(TEST_BMCV_OBJ_DIR)
 	@echo cc -o $@ $<
-	@$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) -Wextra -o $@ $< $(TEST_BMCV_LDFLAGS) -std=c++0x -pthread
+	@$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) -Wextra -o $@ $< $(TEST_BMCV_DYN_LDFLAGS) $(TEST_BMCV_LDFLAGS) -std=c++0x -pthread
 
 else
 TEST_BMCV_STATIC = -std=c++0x -pthread
-# INCLUDE_DIR +=
+
 INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include \
 			   -I$(BMVID_ROOT)/vpp/driver/include/bm1684 \
 			   -I$(BMVID_ROOT)/vpp/driver/include/ \
@@ -189,14 +222,20 @@ INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include \
 TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(JPU_DIR)/lib/ -L$(BMION_DIR)/lib/ \
 					-L$(OUT_DIR)/lib/ -L$(BMCV_DIR)/lib/ -L$(VPP_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
+					-L$(BMVID_ROOT)/3rdparty/libbmrt/lib/$(PRODUCTFORM) \
 					-L$(TURBO_JPEG_PATH) \
-					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp -lturbojpeg -lvpp_cmodel -ldl\
+					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp -lturbojpeg -ldl\
+
+ifneq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+TEST_BMCV_LDFLAGS += -lbmrt\
+
+endif
 
 TEST_MISC_CXX = $(TEST_BMCV_DIR)/test_misc.cpp $(TEST_BMCV_DIR)/md5.cpp
 
 $(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_DYN) | $(TEST_BMCV_OBJ_DIR)
 	@echo cc -o $@ $<
-	@$(CXX) $(INCLUDE_DIR)  $(CXXFLAGS) -o $@ $< $(TEST_MISC_CXX) $(TEST_BMCV_LDFLAGS) $(TEST_BMCV_STATIC)
+	@$(CXX) $(INCLUDE_DIR)  $(CXXFLAGS) -o $@ $< $(TEST_MISC_CXX) $(TEST_BMCV_DYN_LDFLAGS) $(TEST_BMCV_LDFLAGS) $(TEST_BMCV_STATIC)
 endif
 
 test_bmcv: $(TEST_BMCV_CXX_EXE) $(BMCV_CPU_LIB)

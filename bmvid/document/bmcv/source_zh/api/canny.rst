@@ -3,23 +3,24 @@ bmcv_image_canny
 
 边缘检测Canny算子。
 
+
 **处理器型号支持：**
 
-该接口仅支持BM1684。
+该接口支持BM1684/BM1684X。
 
 
 **接口形式：**
 
     .. code-block:: c
 
-         bm_status_t bmcv_image_canny(
-                 bm_handle_t handle,
-                 bm_image input,
-                 bm_image output,
-                 float threshold1,
-                 float threshold2,
-                 int aperture_size = 3,
-                 bool l2gradient = false);
+        bm_status_t bmcv_image_canny(
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output,
+                    float threshold1,
+                    float threshold2,
+                    int aperture_size = 3,
+                    bool l2gradient = false);
 
 
 **参数说明：**
@@ -57,7 +58,7 @@ bmcv_image_canny
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **格式支持：**
@@ -95,51 +96,61 @@ bmcv_image_canny
 
     .. code-block:: c
 
+        #include "bmcv_api_ext.h"
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src_data = src_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * width * height; i++) {
-            src_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bm_image input, output;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &input);
-        bm_image_alloc_dev_mem(input);
-        bm_image_copy_host_to_device(input, (void **)&src_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_canny(handle, input, output, 0, 200)) {
-            std::cout << "bmcv canny error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bm_handle_t handle;
+            bm_image input, output;
+            float low_thresh = 100;
+            float high_thresh = 200;
+            unsigned char * src_data = (unsigned char*)malloc(channel * width * height * sizeof(unsigned char));
+            unsigned char * res_data = (unsigned char*)malloc(channel * width * height * sizeof(unsigned char));
+            const char* src_name = "path/to/src";
+            const char* dst_name = "path/to/dst";
+
+            readBin(src_name, src_data, channel * width * height);
+            bm_dev_request(&handle, dev_id);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_copy_host_to_device(input, (void **)&src_data);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &output);
+            bm_image_alloc_dev_mem(output);
+            bmcv_image_canny(handle, input, output, low_thresh, high_thresh);
+            bm_image_copy_device_to_host(output, (void **)&res_data);
+            writeBin(dst_name, res_data, channel * width * height);
+
             bm_image_destroy(input);
             bm_image_destroy(output);
             bm_dev_free(handle);
-            exit(-1);
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
-
-

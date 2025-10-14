@@ -40,6 +40,7 @@
 #include <linux/proc_fs.h>
 #include <linux/uuid.h>
 #include <linux/kthread.h>
+#include <linux/pid.h>
 
 #if defined(BM_ION_MEM)
 #include <linux/dma-buf.h>
@@ -78,9 +79,9 @@
 extern void efuse_ft_get_video_cap(int *cap);
 extern void efuse_ft_get_bin_type(int *bin_type);
 extern uint32_t sophon_get_chip_id(void);
-extern int bmctl_update_vpu_gmem(struct list_head *in_vpu_gmem_info);
 extern void bm_inval_dcache_area(void *addr, size_t size);
 extern void bm_flush_dcache_area(void *addr, size_t size);
+extern int bmctl_update_vpu_gmem(struct list_head *in_vpu_gmem_info);
 
 /* definitions to be changed as customer  configuration */
 /* if you want to have clock gating scheme frame by frame */
@@ -358,15 +359,25 @@ static u32 s_chip_reset_flag[MAX_NUM_VPU_CORE] = {0};
 
 static u32    s_vpu_reg_store[MAX_NUM_VPU_CORE][64];
 #endif
-
 typedef struct vpu_inst_info
 {
-    unsigned char uuid[16];
-    unsigned long flag;
-    unsigned long time;
-    unsigned long status;
+    int core_idx;
+    int inst_idx;
+    int channel;
+    int width;
+    int height;
+    int fps;
+    int curfps;
+    unsigned long long inframenums;
+    unsigned long long outframenums;
+    unsigned long long outframenumsold;
+    unsigned long long outframefailnums;
+    long long time;
+    long long timeold;
+    unsigned char url[256];
+    int status;
+    // int flag;
     int pid;
-    unsigned char *url;
 } vpu_inst_info_t;
 
 static vpu_inst_info_t s_vpu_inst_info[MAX_NUM_VPU_CORE * MAX_NUM_INSTANCE] = {0};
@@ -515,15 +526,15 @@ static unsigned long get_us_time(void)
 
 static void clean_exception_inst_info(void)
 {
-    int cur_tgid = current->tgid;
+    int cur_tgid = task_tgid_vnr(current);
     int i;
     //pr_info("exception tgid : %d\n", cur_tgid);
     mutex_lock(&s_vpu_proc_lock);
     for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
     {
-        if(s_vpu_inst_info[i].flag != 0 && s_vpu_inst_info[i].status == 0 && cur_tgid == s_vpu_inst_info[i].pid)
+        if(cur_tgid == s_vpu_inst_info[i].pid)
         {
-            s_vpu_inst_info[i].status = 1;
+            s_vpu_inst_info[i].status = 0;
             s_vpu_inst_info[i].time = get_us_time();
         }
     }
@@ -541,7 +552,7 @@ static int WaitBusyTimeout(u32 core, u32 addr)
         if (time_after(jiffies, timeout)) {
             return 1;
         }
-        msleep(1);
+        usleep_range(900, 1100);
     }
     return 0;
 }
@@ -630,15 +641,17 @@ static int Wave5DecGetInstanceInfo(u32 core, u32 instanceIndex, u32* instance_in
     u32 regVal;
     int count = 0;
 
-    while(SendQuery(core, instanceIndex, GET_INSTANCE_INFO) != 0)
+    ret = SendQuery(core, instanceIndex, GET_INSTANCE_INFO);
+    if(ret != 0)
     {
-        if(count > 5) {
+        if(ret == 1) {
             regVal = ReadVpuRegister(W5_RET_FAIL_REASON);
-            pr_info("core:%d Wave5DecGetInstanceInfo failed. reason: 0x%x", core, instanceIndex, current->tgid, regVal);
-            return -1;
+            pr_info("core:%d inst:%d Wave5DecGetInstanceInfo failed. reason: 0x%x", core, instanceIndex, task_tgid_vnr(current), regVal);
         }
-        msleep(1);
-        count += 1;
+        else if(ret == 2) {
+            pr_info("core:%d inst:%d Wave5DecGetInstanceInfo timeout", core, instanceIndex, task_tgid_vnr(current));
+        }
+        return -1;
     }
 
     *instance_info = ReadVpuRegister(W5_RET_QUERY_DEC_GET_INSTANCE_INFO);
@@ -734,6 +747,7 @@ static void release_vpu_create_inst_flag(int core_idx, int inst_idx)
 
 static int CloseInstanceCommand(int core, u32 instanceIndex)
 {
+#define VPU_WAIT_TIMEOUT    1
 #define VPU_STILL_RUNNING   2
 
     int product_code;
@@ -741,13 +755,13 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
     int count = 0;
 
     product_code = ReadVpuRegister(VPU_PRODUCT_CODE_REGISTER);
-    DPRINTK("[VPUDRV] CloseInstanceCommand : tgid : %x\n", current->tgid);
+    DPRINTK("[VPUDRV] CloseInstanceCommand : tgid : %x\n", task_tgid_vnr(current));
     if (PRODUCT_CODE_W_SERIES(product_code)) {
         u32 i =0;
         u32 interrupt_flag_in_q = 0;
         u32 vpu_create_inst_flag = 0;
 
-        vpu_create_inst_flag = get_vpu_create_inst_flag(core);
+        Wave5DecGetInstanceInfo(core, instanceIndex, &vpu_create_inst_flag);
         if ((vpu_create_inst_flag & (1 << instanceIndex)) != 0) {
             if(WAVE521C_CODE != product_code) {
                 Wave5VpuDecSetBitstreamFlag(core, instanceIndex);
@@ -770,8 +784,13 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
                 if(ret == 0) {
                     break;
                 }
-                if(count > 500) {
-                    pr_err("CloseInstanceCommand failed REASON=%d\n", ret);
+                if(ret == VPU_WAIT_TIMEOUT) {
+                    pr_err("[VPUDRV] self:0x%lx core:%d Wave5CloseInstanceCommand wait timeout\n", task_tgid_vnr(current) ,core);
+                    break;
+                }
+
+                if(count > 50) {
+                    pr_err("[VPUDRV] self:0x%lx core:%d CloseInstanceCommand failed REASON=%d\n", task_tgid_vnr(current), core, ret);
                     break;
                 }
 
@@ -779,13 +798,14 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
                     if(WAVE521C_CODE != product_code) {
                         FlushDecResult(core, instanceIndex);
                         Wave5VpuDecSetBitstreamFlag(core, instanceIndex);
+                        Wave5DecClrDispFlag(core, instanceIndex);
                     }
                     else {
                         FlushEncResult(core, instanceIndex);
                     }
                 }
 
-                msleep(20);
+                usleep_range(9900, 10100);
                 count += 1;
             }
 
@@ -980,7 +1000,7 @@ static int vpu_alloc_dma_buffer(vpudrv_buffer_t *vb)
         return -1;
     }
 #endif
-    vpu_update_vpu_gmem(current->tgid, vb->size, 0, 0);
+    vpu_update_vpu_gmem(task_tgid_vnr(current), vb->size, 0, 0);
 
     return 0;
 }
@@ -1005,35 +1025,45 @@ static void vpu_free_dma_buffer(vpudrv_buffer_t *vb)
         dma_free_coherent(0, PAGE_ALIGN(vb->size), (void *)vb->base, vb->phys_addr);
 #endif
 
-    vpu_update_vpu_gmem(current->tgid, vb->size, 1, 0);
+    vpu_update_vpu_gmem(task_tgid_vnr(current), vb->size, 1, 0);
 }
 #if 1
 int get_lock(int core_idx)
 {
     int val = 0;
-    int val1 = current->tgid; //in soc getpid() get the tgid.
-    int val2 = current->pid;
+    int val1 = task_tgid_vnr(current);; //in soc getpid() get the tgid.
+    int val2 = task_pid_nr(current);
+    int last_val = 0;
     int ret = 1;
     int count = 0;
     volatile int *addr = (int *)(s_instance_pool[core_idx].base +  s_instance_pool[core_idx].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
+
+    DPRINTK("[VPUDRV] self:0x%lx core: %d enter %s\n", val1, core_idx, __func__);
     //while(__atomic_compare_exchange_n(addr, &val, val1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST) == 0){
     while((val = __sync_val_compare_and_swap(addr, 0, val1)) != 0){
         if(val == val1 || val==val2) {
             ret = 1;
             break;
         }
-        else {
-            val = 0;
+
+        if(val != last_val) {
+            last_val = val;
+            count = 0;
         }
-        if(count >= 5000) {
-            pr_info("can't get lock, org: %d, ker: %d", *addr, val1);
+
+        if(count >= 5000) { // timeout 5s for ctrl-c issue
+            pr_info("[VPUDRV] self:0x%lx can't get lock, core:%d org: 0x%lx, ker: 0x%lx, val=0x%lx\n", val1, core_idx, *addr, val1, val);
+            __atomic_store_n(addr, val1, __ATOMIC_SEQ_CST);
+            pr_info("[VPUDRV] self:0x%lx forced get lock, core:%d org: 0x%lx\n", val1, core_idx, *addr);
             ret = 0;
-            // break;
+            break;
         }
-        msleep(2);
+
+        usleep_range(900, 1100);
         count += 1;
     }
 
+    DPRINTK("[VPUDRV] self:0x%lx core: %d leave %s\n", val1, core_idx, __func__);
     return ret;
 }
 
@@ -1042,6 +1072,7 @@ void release_lock(int core_idx)
     volatile int *addr = (int *)(s_instance_pool[core_idx].base + s_instance_pool[core_idx].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
     __sync_lock_release(addr);
     //__atomic_store_n(addr, 0, __ATOMIC_SEQ_CST);
+    DPRINTK("[VPUDRV] self:0x%lx core: %d leave %s org:0x%lx\n", task_tgid_vnr(current), core_idx, __func__, *addr);
 }
 
 void release_exception_lock(u64 except_info)
@@ -1050,8 +1081,10 @@ void release_exception_lock(u64 except_info)
     volatile int *current_addr = (int *)(s_instance_pool[core_idx].base + s_instance_pool[core_idx].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
     volatile int *tmp_addr;
     int i;
+    int curpid  = task_pid_nr(current);
+    int curtgid = task_tgid_vnr(current);; //in soc getpid() get the tgid.
 
-    if(*current_addr != 0 && *current_addr != current->tgid && *current_addr != current->pid)
+    if(*current_addr != 0 && *current_addr != curtgid && *current_addr != curpid)
     {
         for(i=0; i<MAX_NUM_VPU_CORE; i++)
         {
@@ -1059,7 +1092,7 @@ void release_exception_lock(u64 except_info)
                 continue;
 
             tmp_addr = (int *)(s_instance_pool[i].base + s_instance_pool[i].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
-            if(*tmp_addr ==  current->tgid || *tmp_addr == current->pid )
+            if(*tmp_addr ==  curtgid || *tmp_addr == curpid )
                 release_lock(i);
         }
     }
@@ -1068,8 +1101,8 @@ void release_exception_lock(u64 except_info)
 int get_disp_lock(int core_idx)
 {
     int val = 0;
-    int val1 = current->tgid; //in soc getpid() get the tgid.
-    int val2 = current->pid;
+    int val1 = task_tgid_vnr(current);; //in soc getpid() get the tgid.
+    int val2 = task_pid_nr(current);
     int ret = 1;
     int count = 0;
     int *addr = (int *)(s_instance_pool[core_idx].base + s_instance_pool[core_idx].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
@@ -1079,18 +1112,18 @@ int get_disp_lock(int core_idx)
             ret = 1;
             break;
         }
-        else {
-            val = 0;
-        }
-        if(count >= 50) {
-            pr_info("can't get disp lock, org: %d, ker: %d", *addr, val1);
+
+        if(count >= 1000) {
+            pr_info("[VPUDRV] self:0x%lx core:%d can't get disp lock, org: 0x%lx, ker: 0x%lx val: 0x%lx", val1, core_idx, *addr, val1, val);
             ret = 0;
             break;
         }
-        msleep(2);
+        usleep_range(900, 1000);
         count += 1;
+        val = 0;
     }
 
+    DPRINTK("[VPUDRV] self:0x%lx core: %d leave %s\n", val1, core_idx, __func__);
     return ret;
 }
 
@@ -1099,7 +1132,8 @@ void release_disp_lock(int core_idx)
     int *addr = (int *)(s_instance_pool[core_idx].base + s_instance_pool[core_idx].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
     addr = addr + 1;
 
-    __atomic_store_n(addr, 0, __ATOMIC_SEQ_CST);
+    __sync_lock_release(addr);
+    DPRINTK("[VPUDRV] self:0x%lx core: %d leave %s org:0x%lx\n", task_tgid_vnr(current), core_idx, __func__, *addr);
 }
 #endif
 static int vpu_free_instances(struct file *filp)
@@ -2327,7 +2361,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 
             if ((ret =  mutex_lock_interruptible(&s_vpu_lock)) == 0) {
                 reset_flag = kzalloc(sizeof(*reset_flag), GFP_KERNEL);
-                DPRINTK("[VPUDRV][+]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", current->tgid, current->pid);
+                DPRINTK("[VPUDRV][+]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", task_tgid_vnr(current), task_pid_nr(current));
                 ret = copy_from_user(reset_flag, (vpudrv_reset_flag *)arg, sizeof(vpudrv_reset_flag));
                 if (ret != 0) {
                     kfree(reset_flag);
@@ -2361,7 +2395,7 @@ static long vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
                return -ERESTARTSYS;
             }
 
-            DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", current->tgid, current->pid);
+            DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", task_tgid_vnr(current), task_pid_nr(current));
         }
         break;
     case VDI_IOCTL_GET_KERNEL_RESET_STATUS:
@@ -2702,7 +2736,7 @@ static int vpu_release(struct inode *inode, struct file *filp)
             {
                 if(vrf->reset_flag.core_idx == core_idx)
                 {
-                    if((vrf->reset_flag.pid == current->tgid) || (vrf->reset_flag.pid == current->pid))
+                    if((vrf->reset_flag.pid == task_tgid_vnr(current)) || (vrf->reset_flag.pid == task_pid_nr(current)))
                     {
                         list_del(&vrf->list);
                         kfree(vrf);
@@ -2736,7 +2770,9 @@ static int vpu_release(struct inode *inode, struct file *filp)
                     s_instance_pool[core_idx].phys_addr = 0;
                 }
                 if (s_common_memory[core_idx].base) {
+                    down(&s_vpu_sem);
                     vpu_free_dma_buffer(&s_common_memory[core_idx]);
+                    up(&s_vpu_sem);
                     s_common_memory[core_idx].base = 0;
                     s_common_memory[core_idx].phys_addr = 0;
                 }
@@ -2747,7 +2783,7 @@ static int vpu_release(struct inode *inode, struct file *filp)
     }
 
     down(&s_vpu_sem);
-    vpu_update_vpu_gmem(current->tgid, 0, 0, 1);
+    vpu_update_vpu_gmem(task_tgid_vnr(current), 0, 0, 1);
     up(&s_vpu_sem);
 
     vpu_fasync(-1, filp, 0);
@@ -3717,31 +3753,6 @@ static struct platform_driver vpu_driver = {
 };
 #endif /* VPU_SUPPORT_PLATFORM_DRIVER_REGISTER */
 
-static void set_stop_inst_info(unsigned long flag)
-{
-    int i;
-
-    if(flag == 0) { //set all to stop
-        for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
-        {
-            if(s_vpu_inst_info[i].flag != 0 && s_vpu_inst_info[i].status == 0) {
-                s_vpu_inst_info[i].time = get_us_time();
-                s_vpu_inst_info[i].status = 1;
-            }
-        }
-    }
-    else {
-        for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
-        {
-            if(s_vpu_inst_info[i].flag == flag && s_vpu_inst_info[i].status == 0) {
-                s_vpu_inst_info[i].time = get_us_time();
-                s_vpu_inst_info[i].status = 1;
-                break;
-            }
-        }
-    }
-}
-
 static void clean_timeout_inst_info(unsigned long timeout)
 {
     unsigned long cur_time = get_us_time();
@@ -3749,13 +3760,11 @@ static void clean_timeout_inst_info(unsigned long timeout)
 
     for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
     {
-        if(s_vpu_inst_info[i].flag != 0 && s_vpu_inst_info[i].status == 1 && cur_time - s_vpu_inst_info[i].time > timeout)
+        if(s_vpu_inst_info[i].status == 1 && cur_time - s_vpu_inst_info[i].time > timeout)
         {
-            s_vpu_inst_info[i].flag = 0;
             s_vpu_inst_info[i].status = 0;
             s_vpu_inst_info[i].time = 0;
-            vfree(s_vpu_inst_info[i].url);
-            s_vpu_inst_info[i].url = NULL;
+            memset(s_vpu_inst_info[i].url, 0, sizeof(s_vpu_inst_info[i].url));
         }
     }
 
@@ -3881,53 +3890,148 @@ int bm_vpu_monitor_thread(void *data)
 	return ret;
 }
 
-static int get_inst_info_idx(unsigned long flag)
-{
-    int i = -1;
-    for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
-    {
-        if(s_vpu_inst_info[i].flag == flag)
-            return i;
-    }
+static int extract_int(const char *json, const char *key, int *value) {
+    char *pos = strstr(json, key);
+    if (!pos) return -EINVAL;
 
-    for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
-    {
-        if(s_vpu_inst_info[i].flag == 0)
-            break;
-    }
+    pos += strlen(key);
+    pos = strchr(pos, ':');
+    if (!pos) return -EINVAL;
+    pos++;
 
-    return i;
+    *value = simple_strtol(pos, NULL, 10);
+    return 0;
 }
 
-static void printf_inst_info(void *mem, int size)
+static int extract_ll(const char *json, const char *key, long long *value) {
+    char *pos = strstr(json, key);
+    if (!pos) return -EINVAL;
+
+    pos += strlen(key);
+    pos = strchr(pos, ':');
+    if (!pos) return -EINVAL;
+    pos++;
+
+    *value = simple_strtoul(pos, NULL, 10);
+    return 0;
+}
+
+static int extract_ull(const char *json, const char *key, unsigned long long *value) {
+    char *pos = strstr(json, key);
+    if (!pos) return -EINVAL;
+
+    pos += strlen(key);
+    pos = strchr(pos, ':');
+    if (!pos) return -EINVAL;
+    pos++;
+
+    *value = simple_strtoull(pos, NULL, 10);
+    return 0;
+}
+
+static int extract_string(const char *json, const char *key, char *dest, size_t dest_size) {
+    char *pos = strstr(json, key);
+    if (!pos) return -EINVAL;
+
+    pos += strlen(key);
+    pos = strchr(pos, ':');
+    if (!pos) return -EINVAL;
+    pos++;
+
+    pos = strchr(pos, '"');
+    if (!pos) return -EINVAL;
+    pos++;
+
+    char *end = strchr(pos, '"');
+    if (!end) return -EINVAL;
+
+    size_t len = end - pos;
+    if (len >= dest_size)
+        len = dest_size - 1;
+
+    strncpy(dest, pos, len);
+    dest[len] = '\0';
+    return 0;
+}
+
+static int parsejson_vpuinfo(const char* json_str, vpu_inst_info_t* info) {
+    if (!json_str || !info) {
+        return -1;
+    }
+    int ret;
+    memset(info, 0, sizeof(vpu_inst_info_t));
+
+    ret = extract_int(json_str, "\"ci\"", &info->core_idx);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"ii\"", &info->inst_idx);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"ch\"", &info->channel);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"w\"", &info->width);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"h\"", &info->height);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"f\"", &info->fps);
+    if (ret) return ret;
+
+    ret = extract_ull(json_str, "\"ifn\"", &info->inframenums);
+    if (ret) return ret;
+
+    ret = extract_ull(json_str, "\"ofn\"", &info->outframenums);
+    if (ret) return ret;
+
+    ret = extract_ull(json_str, "\"oen\"", &info->outframefailnums);
+    if (ret) return ret;
+
+    ret = extract_ll(json_str, "\"t\"", &info->time);
+    if (ret) return ret;
+
+    ret = extract_string(json_str, "\"u\"", (char*)info->url, sizeof(info->url));
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"s\"", &info->status);
+    if (ret) return ret;
+
+    ret = extract_int(json_str, "\"p\"", &info->pid);
+    if (ret) return ret;
+
+    return 0;
+}
+
+static void printf_inst_info(int coreid, void *mem, int size)
 {
     char temp[1024]      = { 0 };
     int  single_list_len = 0;
     int  total_len       = 0;
     int  total_len_first = 0;
-    int  i;
-    sprintf(mem, "\"link\":[\n");
+    int  index = 0;
+    int  inst_idx = 0;
     total_len = strlen(mem);
     total_len_first = total_len;
-    for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++)
-    {
-        if(s_vpu_inst_info[i].flag != 0 && s_vpu_inst_info[i].url != NULL) {
-            sprintf(temp, "{\"id\" : \"%pU\", \"time\" : %lu, \"status\" : %lu, \"url\" : \"%s\"},\n", s_vpu_inst_info[i].uuid, s_vpu_inst_info[i].time, s_vpu_inst_info[i].status, s_vpu_inst_info[i].url);
-            single_list_len = strlen(temp);
-            if(single_list_len + total_len > size - 1 ){
-                pr_err("maybe overflow the memory, please check..\n");
-                break;
-            }
-            sprintf(mem + total_len, "%s",temp);
-            total_len = strlen(mem);
+    if (coreid >= get_vpu_core_num(chip_id, video_cap)) {
+        return;
+    }
+    for (inst_idx = 0; inst_idx < MAX_NUM_INSTANCE; inst_idx++) {
+        index = coreid*MAX_NUM_INSTANCE + inst_idx;
+        if (s_vpu_inst_info[index].status == 0) {
+            continue;
         }
+        unsigned long long success_not_get = s_vpu_inst_info[index].inframenums - s_vpu_inst_info[index].outframenums - s_vpu_inst_info[index].outframefailnums;
+        sprintf(temp, "        {\"channel\" : \"%d\", \"res\" : %dx%d, \"fps\" : %d(%d), \"time\" : %lu, \"in_frames\" : %lu, \"out_frames\" : %lu,  \"fail_frames\" : %lu,  \"success_not_get\" : %lu,  \"status\" : %d},\n", s_vpu_inst_info[index].inst_idx, s_vpu_inst_info[index].width, s_vpu_inst_info[index].height, s_vpu_inst_info[index].fps, s_vpu_inst_info[index].curfps, s_vpu_inst_info[index].time, s_vpu_inst_info[index].inframenums, s_vpu_inst_info[index].outframenums, s_vpu_inst_info[index].outframefailnums, success_not_get, s_vpu_inst_info[index].status);
+        single_list_len = strlen(temp);
+        if(single_list_len + total_len > size - 1 ){
+            pr_err("maybe overflow the memory, please check..\n");
+            return;
+        }
+        sprintf(mem + total_len, "%s",temp);
+        total_len = strlen(mem);
     }
-    if(total_len > total_len_first)
-        sprintf(mem + total_len - 2, "]}\n");
-    else
-    {
-        sprintf(mem + total_len, "]}\n");
-    }
+    return;
 }
 static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_t *off)
 {
@@ -3949,19 +4053,24 @@ static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_
         sprintf(dat, "{");
 #endif
         len = strlen(dat);
-        sprintf(dat + len, "\"core\" : [\n");
+
         for(i=0; i< get_vpu_core_num(chip_id, video_cap)-1; i++) {
             len = strlen(dat);
-            sprintf(dat + len, "{\"id\":%d, \"link_num\":%d, \"usage(instant|long)\":%d%%|%llu%%}, \n", i, s_vpu_usage_info.vpu_open_ref_count[i], \
+            sprintf(dat + len, "{\"vdec coreid\":%d, \"link_num\":%d, \"usage(instant|long)\":%d%%|%llu%%}, \n", i, s_vpu_usage_info.vpu_open_ref_count[i], \
                     s_vpu_usage_info.vpu_instant_usage[i], s_vpu_usage_info.vpu_working_time_in_ms[i]*100/s_vpu_usage_info.vpu_total_time_in_ms[i]);
+            len = strlen(dat);
+            if ((err =  mutex_lock_interruptible(&s_vpu_proc_lock)) == 0) {
+                printf_inst_info(i, dat+len, MAX_DATA_SIZE-len);
+                mutex_unlock(&s_vpu_proc_lock);
+            }
         }
         len = strlen(dat);
-        sprintf(dat + len, "{\"id\":%d, \"link_num\":%d, \"usage(instant|long)\":%d%%|%llu%%}],\n", i, s_vpu_usage_info.vpu_open_ref_count[i], \
+        sprintf(dat + len, "{\"venc coreid\":%d, \"link_num\":%d, \"usage(instant|long)\":%d%%|%llu%%}\n", i, s_vpu_usage_info.vpu_open_ref_count[i], \
                 s_vpu_usage_info.vpu_instant_usage[i], s_vpu_usage_info.vpu_working_time_in_ms[i]*100/s_vpu_usage_info.vpu_total_time_in_ms[i]);
 
         len = strlen(dat);
         if ((err =  mutex_lock_interruptible(&s_vpu_proc_lock)) == 0) {
-            printf_inst_info(dat+len, MAX_DATA_SIZE-len);
+            printf_inst_info(i, dat+len, MAX_DATA_SIZE-len);
             mutex_unlock(&s_vpu_proc_lock);
         }
     }
@@ -3987,99 +4096,86 @@ static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_
 }
 static ssize_t info_write(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
 {
-//for debug the vpu.
     char data[1024] = { 0 };
     int ret = 0;
-    int err = 0;
-    int core_idx = -1;
-    int inst_idx = -1;
-    int in_num = -1;
-    int out_num = -1;
-    int len;
-    int i, j;
+    size_t len;
+    int i = 0;
+    int j = 0;
     unsigned long flag;
-    data[1023] = '\0';
-    len = size > 1023 ? 1023 : size;
-    //if(size > 1024) { // not to use vmalloc here, to avoid overflow attack from application
-    //    data[1023] = '\0';
-    //    len = 1023;
-    //} else
-    //    len = size;
-    err = copy_from_user(data, buf, len);
-    if (err) return -EINVAL;
+    int core_idx = 0;
+    int inst_idx = 0;
+    int in_num = 0;
+    int out_num = 0;
+    if(size > 1024) { // not to use vmalloc here, to avoid overflow attack from application
+        data[1023] = '\0';
+        len = 1023;
+    } else
+        len = size;
+    ret = copy_from_user(data, buf, len);
+    if (ret) return -EINVAL;
+    vpu_inst_info_t vpuinfo;
+    if (*data == '{' && data[strlen(data) - 1] == '}') {
+        parsejson_vpuinfo(data, &vpuinfo);
+        static long long timeold = 0;
+        if ((ret =  mutex_lock_interruptible(&s_vpu_proc_lock)) == 0) {
+            int index = vpuinfo.core_idx * MAX_NUM_INSTANCE + vpuinfo.inst_idx;
+            s_vpu_inst_info[index].core_idx           =  vpuinfo.core_idx;
+            s_vpu_inst_info[index].inst_idx           =  vpuinfo.inst_idx;
+            s_vpu_inst_info[index].channel            =  vpuinfo.channel;
+            s_vpu_inst_info[index].width              =  vpuinfo.width;
+            s_vpu_inst_info[index].height             =  vpuinfo.height;
+            s_vpu_inst_info[index].fps                =  vpuinfo.fps;
+            s_vpu_inst_info[index].inframenums        =  vpuinfo.inframenums;
+            s_vpu_inst_info[index].outframenums       =  vpuinfo.outframenums;
+            s_vpu_inst_info[index].outframefailnums   =  vpuinfo.outframefailnums;
+            s_vpu_inst_info[index].time               =  vpuinfo.time;
+            s_vpu_inst_info[index].status             =  vpuinfo.status;
+            memcpy(s_vpu_inst_info[index].url, vpuinfo.url, sizeof(vpuinfo.url));
 
-    sscanf(data, "%ld ", &flag);
-    //pr_info("flag : %ld\n", flag);
-
-    if(flag >  get_vpu_core_num(chip_id, video_cap)) {
-        unsigned long __time;
-        unsigned long __status;
-        unsigned char *__url;
-        __url = (unsigned char *)vmalloc(1024);
-        __url[0]='\0'; //if in sscanf No URL scanned There may be no '\0' terminator
-        if(__url == NULL){
-            pr_info("vmalloc url memory failed\n");
-            return -ENOMEM;
-        }
-
-        ret = sscanf(data, "%ld %ld %ld, %s", &flag, &__time, &__status, __url);
-        if ((err =  mutex_lock_interruptible(&s_vpu_proc_lock)) == 0) {
-            if(__status == 1) {
-                set_stop_inst_info(flag);
-            }
-            else {
-                clean_timeout_inst_info(60*1000);
-
-                i = get_inst_info_idx(flag);
-                if(i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE) {
-                    if(s_vpu_inst_info[i].url != NULL)
-                        vfree(s_vpu_inst_info[i].url);
-                    j = strlen(__url);
-                    s_vpu_inst_info[i].url = vmalloc(j+1);
-                    memcpy(s_vpu_inst_info[i].url, __url, j);
-                    s_vpu_inst_info[i].url[j] = 0;
-                    s_vpu_inst_info[i].time = __time;
-                    s_vpu_inst_info[i].status = __status;
-                    s_vpu_inst_info[i].flag = flag;
-                    s_vpu_inst_info[i].pid = current->tgid;
-                    generate_random_uuid(s_vpu_inst_info[i].uuid);
+            s_vpu_inst_info[index].pid = task_pid_nr(current);
+            if ((timeold + 1000) < vpuinfo.time) {
+                timeold = vpuinfo.time;
+                for (index = 0; index < get_vpu_core_num(chip_id, video_cap) * MAX_NUM_INSTANCE; index++) {
+                    s_vpu_inst_info[index].curfps = (s_vpu_inst_info[index].outframenums - s_vpu_inst_info[index].outframenumsold);
+                    if (s_vpu_inst_info[index].curfps < 0) {
+                        s_vpu_inst_info[index].curfps = 0;
+                    }
+                    s_vpu_inst_info[index].outframenumsold = 0;
+                    s_vpu_inst_info[index].outframenumsold = s_vpu_inst_info[index].outframenums;
                 }
             }
+
             mutex_unlock(&s_vpu_proc_lock);
         }
-
-        if (__url) vfree(__url);
-        return size;
-    }
-
-    sscanf(data, "%d %d %d %d", &core_idx, &inst_idx, &in_num, &out_num);
-    pr_info("%s", data);
-    pr_info("core_idx: %d, inst: %d, in_num: %d, out_num: %d\n", core_idx, inst_idx, in_num, out_num);
-    if(s_vpu_dump_flag) {
-        if(core_idx >=0 && core_idx <  get_vpu_core_num(chip_id, video_cap) && inst_idx >= 0 && inst_idx < MAX_NUM_INSTANCE)
-        {
-            if(in_num >= 0)
-                s_vpu_dump_flag[core_idx * MAX_NUM_INSTANCE * 2 + inst_idx * 2] = in_num;
-            if(out_num >= 0)
-                s_vpu_dump_flag[core_idx * MAX_NUM_INSTANCE * 2 + inst_idx * 2 + 1] = out_num;
-        }
-        else if(core_idx == -1) {
-            for(i=0; i <  get_vpu_core_num(chip_id, video_cap); i++)
+    } else {
+        sscanf(data, "%d %d %d %d", &core_idx, &inst_idx, &in_num, &out_num);
+        pr_info("%s", data);
+        pr_info("core_idx: %d, inst: %d, in_num: %d, out_num: %d\n", core_idx, inst_idx, in_num, out_num);
+        if(s_vpu_dump_flag) {
+            if(core_idx >=0 && core_idx <  get_vpu_core_num(chip_id, video_cap) && inst_idx >= 0 && inst_idx < MAX_NUM_INSTANCE)
             {
-                for(j=0; j < 2*MAX_NUM_INSTANCE; j=j+2)
+                if(in_num >= 0)
+                    s_vpu_dump_flag[core_idx * MAX_NUM_INSTANCE * 2 + inst_idx * 2] = in_num;
+                if(out_num >= 0)
+                    s_vpu_dump_flag[core_idx * MAX_NUM_INSTANCE * 2 + inst_idx * 2 + 1] = out_num;
+            }
+            else if(core_idx == -1) {
+                for(i=0; i <  get_vpu_core_num(chip_id, video_cap); i++)
                 {
-                    pr_info("[%d, %d]; ", s_vpu_dump_flag[i*MAX_NUM_INSTANCE*2+j], s_vpu_dump_flag[i*MAX_NUM_INSTANCE*2+j+1]);
+                    for(j=0; j < 2*MAX_NUM_INSTANCE; j=j+2)
+                    {
+                        pr_info("[%d, %d]; ", s_vpu_dump_flag[i*MAX_NUM_INSTANCE*2+j], s_vpu_dump_flag[i*MAX_NUM_INSTANCE*2+j+1]);
+                    }
+                    pr_info("\n");
                 }
-                pr_info("\n");
+            }
+            else if(core_idx == -2)
+            {
+                memset(s_vpu_dump_flag, 0, sizeof(u32)* get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE*2);
             }
         }
-        else if(core_idx == -2)
-        {
-            memset(s_vpu_dump_flag, 0, sizeof(u32)* get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE*2);
-        }
     }
-
-    return size;
+    return len;
 }
 static const struct file_operations proc_info_operations = {
     .read   = info_read,
@@ -4256,15 +4352,6 @@ static void __exit vpu_exit(void)
 
     if(s_vpu_dump_flag != NULL)
         vfree(s_vpu_dump_flag);
-
-    mutex_lock(&s_vpu_proc_lock);
-    for(i=0; i< get_vpu_core_num(chip_id, video_cap)*MAX_NUM_INSTANCE; i++) {
-        if(s_vpu_inst_info[i].url != NULL) {
-            vfree(s_vpu_inst_info[i].url);
-            s_vpu_inst_info[i].url = NULL;
-        }
-    }
-    mutex_unlock(&s_vpu_proc_lock);
 }
 
 MODULE_AUTHOR("Bitmain");

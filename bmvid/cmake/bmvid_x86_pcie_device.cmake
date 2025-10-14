@@ -6,6 +6,7 @@ set(SOC_MODE 0)
 set(BM_PCIE_MODE 1)
 
 set(USING_CMODEL 0)
+set(USING_OPENBLAS 1)
 set(USING_INT_CDMA 1)
 set(USING_INT_MSGFIFO 1)
 # using fullnet

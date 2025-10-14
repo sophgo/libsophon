@@ -3,6 +3,7 @@ bmcv_nms
 
 该接口用于消除网络计算得到过多的物体框，并找到最佳物体框。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -12,11 +13,13 @@ bmcv_nms
 
     .. code-block:: c
 
-        bm_status_t bmcv_nms(bm_handle_t handle,
-                             bm_device_mem_t input_proposal_addr,
-                             int proposal_size,
-                             float nms_threshold,
-                             bm_device_mem_t output_proposal_addr)
+        bm_status_t bmcv_nms(
+                    bm_handle_t handle,
+                    bm_device_mem_t input_proposal_addr,
+                    int proposal_size,
+                    float nms_threshold,
+                    bm_device_mem_t output_proposal_addr);
+
 
 **参数说明:**
 
@@ -102,28 +105,47 @@ nms_proposal_t 描述了输出物体框的信息。
 
     .. code-block:: c
 
-        face_rect_t *proposal_rand = new face_rect_t[MAX_PROPOSAL_NUM];
-        nms_proposal_t *output_proposal = new nms_proposal_t;
-        int proposal_size =32;
-        float nms_threshold = 0.2;
-        for (int i = 0; i < proposal_size; i++)
+        #include <assert.h>
+        #include <stdint.h>
+        #include <stdio.h>
+        #include <algorithm>
+        #include <functional>
+        #include <iostream>
+        #include <memory>
+        #include <set>
+        #include <string>
+        #include <vector>
+        #include <math.h>
+        #include "bmcv_api.h"
+        #include "bmcv_internal.h"
+        #include "bmcv_common_bm1684.h"
+        #include "bmcv_api_ext.h"
+
+        int main()
         {
-            proposal_rand[i].x1 = 200;
-            proposal_rand[i].x2 = 210 ;
-            proposal_rand[i].y1 = 200;
-            proposal_rand[i].y2 = 210;
-            proposal_rand[i].score = 0.23;
+            face_rect_t *proposal_rand = new face_rect_t[MAX_PROPOSAL_NUM];
+            nms_proposal_t *output_proposal = new nms_proposal_t[1];
+            int proposal_size =32;
+            float nms_threshold = 0.2;
+            bm_handle_t handle;
+            bm_dev_request(&handle, 0);
+
+            for (int i = 0; i < proposal_size; i++) {
+                proposal_rand[i].x1 = ((float)(rand() % 100)) / 10;
+                proposal_rand[i].x2 = proposal_rand[i].x1 + ((float)(rand() % 100)) / 10;
+                proposal_rand[i].y1 = ((float)(rand() % 100)) / 10;
+                proposal_rand[i].y2 =proposal_rand[i].y1 + ((float)(rand() % 100)) / 10;
+                proposal_rand[i].score = (float)rand() / (float)RAND_MAX;
+            }
+            bmcv_nms(handle, bm_mem_from_system(proposal_rand), proposal_size, nms_threshold,
+                    bm_mem_from_system(output_proposal));
+            delete[] proposal_rand;
+            delete[] output_proposal;
+            bm_dev_free(handle);
+            return 0;
         }
-        bmcv_nms(handle,
-                 bm_mem_from_system(proposal_rand),
-                 proposal_size,
-                 nms_threshold,
-                 bm_mem_from_system(output_proposal));
-        delete[] proposal_rand;
-        delete output_proposal;
 
 
 **注意事项:**
 
 该 api 可输入的最大 proposal 数为 56000。
-

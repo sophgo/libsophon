@@ -215,8 +215,11 @@ int bm_vdi_unlock(uint32_t core_idx);
 int bm_vdi_lock2(uint32_t core_idx);
 int bm_vdi_unlock2(uint32_t core_idx);
 
-int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx);
+int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx, uint32_t width, uint32_t height, uint32_t fps);
 int bm_vdi_close_instance(uint32_t core_idx, uint32_t inst_idx);
+int bm_vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx);
+int bm_vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx);
+int bm_vdi_vpuinfo_get_failed(uint32_t core_idx, uint32_t inst_idx);
 int bm_vdi_set_bit_firmware_to_pm(uint32_t core_idx, const uint16_t *code);
 int bm_vdi_convert_endian(unsigned int endian);
 

@@ -41,8 +41,11 @@
 #include "../../../jpuapi/jpuconfig.h"
 #include "../../../jpuapi/regdefine.h"
 #include "../../../include/version.h"
-
 #include "jpu.h"
+
+static atomic_t rwlock_count = ATOMIC_INIT(0);
+extern void spacc_lock(void);
+extern void spacc_unlock(void);
 
 // #define ENABLE_DEBUG_MSG
 #ifdef ENABLE_DEBUG_MSG
@@ -130,10 +133,42 @@ typedef struct jpudrv_instance_list_t {
     struct file *filp;
 } jpudrv_instance_list_t;
 
+/* Structure representing JPU instance statistics */
+typedef struct jpu_instance_stats {
+    int instance_id;         // Instance identifier
+    int state;               // Current state (1: decoding, 2: encoding)
+    int width;               // Frame width
+    int height;              // Frame height
+    int fps;                 // Calculated frames per second
+    unsigned long long total_decoded;    // Total decoded frames
+    unsigned long long prev_decoded;     // Previous decoded frame count
+    unsigned long long decode_errors;    // Total decoding errors
+    int last_decode_err;     // Last decoding error code
+    unsigned long long total_encoded;    // Total encoded frames
+    unsigned long long prev_encoded;     // Previous encoded frame count
+    unsigned long long encode_errors;    // Total encoding errors
+    int last_encode_err;     // Last encoding error code
+    long long timestamp;     // Current timestamp
+    long long prev_timestamp;// Previous timestamp for FPS calculation
+} jpu_inst_info_t;
+
+/* Structure for parsing JPU core status updates */
+typedef struct {
+    int core_id;            // Processing core identifier
+    int instance_id;        // Associated instance ID
+    int state;              // Current operation state
+    int width;              // Frame width
+    int height;             // Frame height
+    long long timestamp;    // Event timestamp
+    int decode_err;         // Decoding error code
+    int encode_err;         // Encoding error code
+} JPUCoreStatus;
 
 typedef struct jpudrv_instance_pool_t {
     unsigned char jpgInstPool[MAX_NUM_INSTANCE][MAX_INST_HANDLE_SIZE];
 } jpudrv_instance_pool_t;
+
+static jpu_inst_info_t s_jpu_inst_info[MAX_NUM_JPU_CORE] = {0};
 
 #ifdef JPU_SUPPORT_RESERVED_VIDEO_MEMORY
 #ifdef ASIC_BOX
@@ -408,7 +443,6 @@ static int jpu_free_instances(struct file *filp)
 #endif
                 }
                 up(&s_jpu_core);
-                printk(KERN_INFO  " val = %x ,  core_index = %ld\n", val, jil->inst_idx);
             }
             jil->filp = NULL;
             jip = (jpudrv_instance_pool_t *)s_jpu_instance_pool.base;
@@ -633,6 +667,18 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 
     switch (cmd)
     {
+    case JDI_IOCTL_GET_RWLOCK:
+        {
+            spacc_lock();
+            atomic_inc(&rwlock_count);
+        }
+        break;
+    case JDI_IOCTL_RELEASE_RWLOCK:
+        {
+            spacc_unlock();
+            atomic_dec(&rwlock_count);
+        }
+        break;
     case JDI_IOCTL_GET_MAX_NUM_JPU_CORE:
         {
             int max_nums_jpu_core;
@@ -1054,28 +1100,54 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
     #endif
     case JDI_IOCTL_RESET_ALL:
         {
-            u32 i, core_num;
+            u32 i, j, core_num;
+            u64 timeout;
 
-            DPRINTK("[JPUDRV][+]JDI_IOCTL_RESET_ALL\n");
-            if (get_user(core_num, (u32 __user *) arg))
-            {
-                return -EFAULT;
-            }
+            if ((ret = down_interruptible(&s_jpu_sem)) == 0) {
+                DPRINTK("[JPUDRV][+]JDI_IOCTL_RESET_ALL\n");
 
-            // get all cores
-            i = core_num;
-            while (i > 0) {
-                if ((ret = down_interruptible(&s_jpu_sem)) == 0) {
-                    i--;
+                if (get_user(core_num, (u32 __user *) arg)) {
+                    up(&s_jpu_sem);
+                    return -EFAULT;
                 }
-                udelay(1);
-            }
 
-            for (i = 0; i < core_num; i++) {
-                jpu_hw_reset(i);
+                // get all cores
+                i = core_num;
+                timeout = jiffies + HZ / 100;  // timeout after 10 ms
+
+                while (i > 0) {
+                    if (time_after(jiffies, timeout)) {
+                        DPRINTK("get jpu core timeout\n");
+
+                        for (j = core_num; j > i; j--) {
+                            up(&s_jpu_core);
+                        }
+
+                        break;
+                    }
+
+                    if ((ret = down_trylock(&s_jpu_core)) == 0) {
+                        i--;
+                        DPRINTK("get jpu core, remain %d\n", i);
+                    }
+                    udelay(1);
+                }
+
+                if (i == 0) {
+                    for (j = 0; j < core_num; j++) {
+                        jpu_hw_reset(j);
+                        DPRINTK("core %d reset\n", j);
+                    }
+
+                    for (j = 0; j < core_num; j++) {
+                        up(&s_jpu_core);
+                    }
+                }
+
                 up(&s_jpu_sem);
+
+                DPRINTK("[JPUDRV][-]JDI_IOCTL_RESET_ALL\n");
             }
-            DPRINTK("[JPUDRV][-]JDI_IOCTL_RESET_ALL\n");
         }
         break;
     case JDI_IOCTL_GET_REGISTER_INFO:
@@ -1155,11 +1227,35 @@ static ssize_t jpu_write(struct file *filp, const char __user *buf, size_t len, 
     return -1;
 }
 
+int ctrl_c_release(unsigned int value)
+{
+    int ret = 0;
+    switch (value) {
+        case 1:
+            spacc_unlock();
+            atomic_dec(&rwlock_count);
+            break;
+        case 2:
+            spacc_unlock();
+            atomic_dec(&rwlock_count);
+            spacc_unlock();
+            atomic_dec(&rwlock_count);
+            break;
+        default:
+            break;
+    }
+
+    return ret;
+}
+
 static int jpu_release(struct inode *inode, struct file *filp)
 {
     DPRINTK("jpu_release: s_process_count=%d\n", s_process_count);
 
     down(&s_jpu_sem);
+
+    ctrl_c_release(atomic_read(&rwlock_count));
+    atomic_set(&rwlock_count, 0);
 
     LOCK(s_jpu_lock);
     jpu_free_instances(filp);
@@ -2018,91 +2114,217 @@ static struct platform_driver jpu_driver = {
     .suspend  = jpu_suspend,
     .resume   = jpu_resume,
 };
-
-static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+/**
+ * Handles read operations from JPU debugfs entry
+ * Provides formatted system status and statistics
+ */
+static ssize_t jpu_debugfs_read(struct file *file, char __user *buf,
+                              size_t size, loff_t *ppos)
 {
-    char dat[512] = { 0 };
-    int len = 0, i = 0;
+	char outputBuf[1024] = {0};
+    int bytesWritten = 0, coreIndex = 0;
     int err = 0;
-#ifdef JPU_SUPPORT_RESERVED_VIDEO_MEMORY
-    jmem_info_t jinfo;
-    jmem_get_info(&s_jmem, &jinfo);
 
-    size = jinfo.free_pages * (unsigned long)jinfo.page_size;
-    sprintf(dat, "\n\"total_mem_size\" : %lu, \"used_mem_size\" : %lu, \"free_mem_size\" : %lu,\n",
-            jinfo.total_pages * (unsigned long)jinfo.page_size, jinfo.alloc_pages * (unsigned long)jinfo.page_size, size);
+#ifdef JPU_SUPPORT_RESERVED_VIDEO_MEMORY
+    // Memory management information
+    jmem_info_t memInfo;
+    jmem_get_info(&s_jmem, &memInfo);
+
+    size = memInfo.free_pages * (unsigned long)memInfo.page_size;
+    sprintf(outputBuf, "\n\"total_mem_size\" : %lu, \"used_mem_size\" : %lu, \"free_mem_size\" : %lu,\n",
+            memInfo.total_pages * (unsigned long)memInfo.page_size,
+            memInfo.alloc_pages * (unsigned long)memInfo.page_size,
+            size);
 #endif
 
+    // Core load balancing information
 #ifdef CONFIG_ARCH_BM1684
     if (s_chip_id == CHIP_ID_1684) {
-        sprintf(dat+ strlen(dat), "JPU loadbalance:\nJPU0 = %d\nJPU1 = %d\nJPU2 = %d\nJPU3 = %d\n",s_core[0],s_core[1],s_core[2],s_core[3]);
+        sprintf(outputBuf + strlen(outputBuf),
+               "JPU load balance:\nJPU0 = %d\nJPU1 = %d\nJPU2 = %d\nJPU3 = %d\n",
+               s_core[0], s_core[1], s_core[2], s_core[3]);
     } else if (s_chip_id == CHIP_ID_1684x) {
-        sprintf(dat+ strlen(dat), "JPU loadbalance:\nJPU0 = %d\nJPU1 = %d\n",s_core[0],s_core[1]);
+        sprintf(outputBuf + strlen(outputBuf),
+               "JPU load balance:\nJPU0 = %d\nJPU1 = %d\n",
+               s_core[0], s_core[1]);
     }
 #else
-    sprintf(dat+ strlen(dat), "JPU loadbalance:\nJPU0 = %d\n\n",s_core[0]);
+    sprintf(outputBuf + strlen(outputBuf),
+           "JPU load balance:\nJPU0 = %d\n\n", s_core[0]);
 #endif
 
-    len = strlen(dat);
-    sprintf(dat + len, "\"core\" : [\n");
-    for (i = 0; i < get_max_num_jpu_core() - 1; i++) {
-        len = strlen(dat);
-        sprintf(dat + len, "{\"id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}, ", i, s_jpu_usage_info.jpu_open_status[i], \
-                s_jpu_usage_info.jpu_core_usage[i], s_jpu_usage_info.jpu_working_time_in_ms[i]*100/s_jpu_usage_info.jpu_total_time_in_ms[i]);
-    }
-    len = strlen(dat);
-    sprintf(dat + len, "{\"id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}]\n", i, s_jpu_usage_info.jpu_open_status[i], \
-            s_jpu_usage_info.jpu_core_usage[i], s_jpu_usage_info.jpu_working_time_in_ms[i]*100/s_jpu_usage_info.jpu_total_time_in_ms[i]);
+    // Generate per-core status reports
+    for (coreIndex = 0; coreIndex < get_max_num_jpu_core(); coreIndex++) {
+        bytesWritten = strlen(outputBuf);
 
-    len = strlen(dat);
-    sprintf(dat + len, "\n");
-    len = strlen(dat) + 1;
-    if (size < len) {
-        printk("read buf too small\n");
+        // Add core utilization information
+        sprintf(outputBuf + bytesWritten,
+               "{\"core id\":%d, \"open_status\":%d, \"usage(short|long)\":%d%%|%llu%%}, \n",
+               coreIndex,
+               s_jpu_usage_info.jpu_open_status[coreIndex],
+               s_jpu_usage_info.jpu_core_usage[coreIndex],
+               s_jpu_usage_info.jpu_working_time_in_ms[coreIndex] * 100 /
+               s_jpu_usage_info.jpu_total_time_in_ms[coreIndex]);
+
+        // Add detailed instance information
+        bytesWritten = strlen(outputBuf);
+        if ((err = mutex_lock_interruptible(&s_jpu_proc_lock)) == 0) {
+            sprintf(outputBuf + bytesWritten,
+                   "{\"instance\":%d, \"status\":%d, \"res\":\"%d*%d\", "
+                   "\"decoded\":%llu, \"dec_errors\":%llu, \"last_dec_err\":%d, "
+                   "\"encoded\":%llu, \"enc_errors\":%llu, \"last_enc_err\":%d, "
+                   "\"fps\":%d}, \n",
+                   s_jpu_inst_info[coreIndex].instance_id,
+                   s_jpu_inst_info[coreIndex].state,
+                   s_jpu_inst_info[coreIndex].width,
+                   s_jpu_inst_info[coreIndex].height,
+                   s_jpu_inst_info[coreIndex].total_decoded,
+                   s_jpu_inst_info[coreIndex].decode_errors,
+                   s_jpu_inst_info[coreIndex].last_decode_err,
+                   s_jpu_inst_info[coreIndex].total_encoded,
+                   s_jpu_inst_info[coreIndex].encode_errors,
+                   s_jpu_inst_info[coreIndex].last_encode_err,
+                   s_jpu_inst_info[coreIndex].fps);
+            mutex_unlock(&s_jpu_proc_lock);
+        }
+    }
+
+    bytesWritten = strlen(outputBuf) + 1;
+    if (size < bytesWritten) {
+        printk("read buffer too small\n");
         return -EIO;
     }
-    memset(s_core, 0, sizeof(s_core));
-    if (*ppos >= len) return 0;
 
-    err = copy_to_user(buf, dat, len);
+    memset(s_core, 0, sizeof(s_core));
+    if (*ppos >= bytesWritten) return 0;
+
+    err = copy_to_user(buf, outputBuf, bytesWritten);
     if (err) return 0;
 
-    *ppos = len;
+    *ppos = bytesWritten;
 
-    return len;
+    return bytesWritten;
 }
-static ssize_t info_write(struct file *file, const char __user *buf, size_t size, loff_t *ppos)
-{
-    char data[256] = { 0 };
-    int err = 0;
-    int frame_num = -1;
 
-    if (size > DUMP_FLAG_MEM_SIZE)
-        return 0;
+/**
+ * Parses JPU core status information from formatted string data
+ * @param data Input string containing status information
+ * @param status Output structure to store parsed values
+ * @return 0 on success, negative error code on failure
+ */
+static int parse_jpu_core_status(const char *data, JPUCoreStatus *status) {
+    char *token, *dataCopy;
+    char *originalCopy;
 
-    err = copy_from_user(data, buf, size);
-    if (err)
-        return 0;
-    sscanf(data, "%d", &frame_num);
-    if (s_jpu_dump_flag) {
-        if(frame_num <=0  || frame_num > 10)
-        {
-            memset(s_jpu_dump_flag, 0, DUMP_FLAG_MEM_SIZE );
-            pr_info("       example: echo > dump_frame_num  /proc/jpuinfo\n");
-            pr_info("dump_frame_num: 1 <= dump_frame_num <= 10\n");
-            pr_info("       example: echo >  5  /proc/jpuinfo\n");
-        }
-        else
-        {
-            pr_info("dump_frame_num: %d \n", frame_num);
-            s_jpu_dump_flag[0] = frame_num;
-        }
+    dataCopy = kstrdup(data, GFP_KERNEL);
+    if (!dataCopy) {
+        return -ENOMEM;
     }
+
+    originalCopy = dataCopy;
+    memset(status, 0, sizeof(JPUCoreStatus));
+
+    // Parse key-value pairs separated by commas
+    while ((token = strsep(&dataCopy, ",")) != NULL) {
+        if (sscanf(token, " core_idx:%d", &status->core_id) == 1) continue;
+        if (sscanf(token, " inst_idx:%d", &status->instance_id) == 1) continue;
+        if (sscanf(token, " status:%d", &status->state) == 1) continue;
+        if (sscanf(token, " width:%d", &status->width) == 1) continue;
+        if (sscanf(token, " height:%d", &status->height) == 1) continue;
+        if (sscanf(token, " time:%lld", &status->timestamp) == 1) continue;
+        if (sscanf(token, " dec_err_code:%d", &status->decode_err) == 1) continue;
+        if (sscanf(token, " enc_err_code:%d", &status->encode_err) == 1) continue;
+    }
+
+    kfree(originalCopy);
+    return 0;
+}
+
+/**
+ * Handles write operations to JPU debugfs entry
+ * Updates instance statistics based on received status data
+ */
+static ssize_t jpu_debugfs_write(struct file *file, const char __user *buf,
+                               size_t size, loff_t *ppos)
+{
+	char inputBuf[1024] = {0};
+    JPUCoreStatus statusUpdate;
+    int coreId = 0;
+
+    // Validate input size
+    if (size >= sizeof(inputBuf)) {
+        printk(KERN_ERR "Input exceeds max length %zu size:%zu\n",
+               sizeof(inputBuf)-1, size);
+        return -EINVAL;
+    }
+
+    // Copy data from user space
+    if (copy_from_user(inputBuf, buf, size)) {
+        printk(KERN_ERR "copy_from_user failed\n");
+        return -EFAULT;
+    }
+    inputBuf[size] = '\0';
+
+    // Parse received status update
+    if (parse_jpu_core_status(inputBuf, &statusUpdate) < 0) {
+        printk(KERN_ERR "Failed to parse JPU status\n");
+    }
+
+    mutex_lock_interruptible(&s_jpu_proc_lock);
+    coreId = statusUpdate.core_id;
+
+    // Update instance information
+    s_jpu_inst_info[coreId].instance_id = statusUpdate.instance_id;
+    s_jpu_inst_info[coreId].state = statusUpdate.state;
+    s_jpu_inst_info[coreId].width = statusUpdate.width;
+    s_jpu_inst_info[coreId].height = statusUpdate.height;
+    s_jpu_inst_info[coreId].timestamp = statusUpdate.timestamp;
+
+    // Handle decoding errors
+    if (statusUpdate.decode_err != 0) {
+        s_jpu_inst_info[coreId].decode_errors++;
+        s_jpu_inst_info[coreId].last_decode_err = statusUpdate.decode_err;
+    }
+
+    // Handle encoding errors
+    if (statusUpdate.encode_err != 0) {
+        s_jpu_inst_info[coreId].encode_errors++;
+        s_jpu_inst_info[coreId].last_encode_err = statusUpdate.encode_err;
+    }
+
+    // Update frame counters based on state
+    if (s_jpu_inst_info[coreId].state == 1) {
+        s_jpu_inst_info[coreId].total_decoded++;
+    } else if (s_jpu_inst_info[coreId].state == 2) {
+        s_jpu_inst_info[coreId].total_encoded++;
+    }
+
+    // Calculate FPS every second
+    if (s_jpu_inst_info[coreId].prev_timestamp + 1000 <
+        s_jpu_inst_info[coreId].timestamp) {
+        s_jpu_inst_info[coreId].prev_timestamp =
+            s_jpu_inst_info[coreId].timestamp;
+
+        s_jpu_inst_info[coreId].fps =
+            (s_jpu_inst_info[coreId].total_decoded -
+             s_jpu_inst_info[coreId].prev_decoded) +
+            (s_jpu_inst_info[coreId].total_encoded -
+             s_jpu_inst_info[coreId].prev_encoded);
+
+        s_jpu_inst_info[coreId].prev_decoded =
+            s_jpu_inst_info[coreId].total_decoded;
+        s_jpu_inst_info[coreId].prev_encoded =
+            s_jpu_inst_info[coreId].total_encoded;
+    }
+
+    mutex_unlock(&s_jpu_proc_lock);
+
     return size;
 }
+
 static const struct file_operations proc_info_operations = {
-    .read   = info_read,
-    .write  = info_write,
+    .read   = jpu_debugfs_read,
+    .write  = jpu_debugfs_write,
 };
 
 static int jpu_init_get_flags(void) {
@@ -2232,7 +2454,7 @@ static int __init jpu_init(void)
     if(s_jpu_dump_flag != NULL)
         memset(s_jpu_dump_flag, 0, DUMP_FLAG_MEM_SIZE);
 
-    entry = proc_create("jpuinfo", 0, NULL, &proc_info_operations);
+    entry = proc_create("jpuinfo", 0666, NULL, &proc_info_operations);
 
     printk(KERN_INFO "end jpu_init result=0x%x\n", res);
     return res;

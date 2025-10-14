@@ -220,14 +220,12 @@ int main(int argc, char *argv[]) {
         test_loop_times = atoi(argv[1]);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST CV VPP] loop times should be 1~1500" << std::endl;
+        printf("[TEST CV VPP] loop times should be 1~1500\n");
         exit(-1);
     }
-    std::cout << "[TEST CV VPP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST CV VPP] test starts... LOOP times will be %d", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST CV VPP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST CV VPP] LOOP %d------\n", loop_idx);
         int         dev_id = 0;
         bm_status_t ret    = bm_dev_request(&handle, dev_id);
         if (ret != BM_SUCCESS) {
@@ -242,7 +240,7 @@ int main(int argc, char *argv[]) {
 
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST CV VPP] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST CV VPP] ALL TEST PASSED!------\n");
 
     return 0;
 }

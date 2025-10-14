@@ -1,8 +1,7 @@
 bmcv_image_warp_perspective
 ===========================
 
-
-  The interface implments the transmission transformation of the image, also known as projection transformation or perspective transformation. The transmission transformation projects the picture to a new visual plane, which is a nonlinear transformation from two-dimensional coordinates (x0, y0) to two-dimensional coordinates (x, y). The implementation of the API is to obtain the coordinates of the corresponding input image for each pixel coordinate of the output image, and then form a new image. Its mathematical expression is as follows:
+The interface implments the transmission transformation of the image, also known as projection transformation or perspective transformation. The transmission transformation projects the picture to a new visual plane, which is a nonlinear transformation from two-dimensional coordinates (x0, y0) to two-dimensional coordinates (x, y). The implementation of the API is to obtain the coordinates of the corresponding input image for each pixel coordinate of the output image, and then form a new image. Its mathematical expression is as follows:
 
 .. math::
 
@@ -18,7 +17,6 @@ bmcv_image_warp_perspective
 
 The corresponding homogeneous coordinate matrix is expressed as:
 
-
 .. math::
 
      \left[\begin{matrix} x' \\ y' \\ w' \end{matrix} \right]=\left[\begin{matrix} a_1&b_1&c_1 \\ a_2&b_2&c_2 \\ a_3&b_3&c_3 \end{matrix} \right]\times \left[\begin{matrix} x \\ y \\ 1 \end{matrix} \right]
@@ -31,8 +29,6 @@ The corresponding homogeneous coordinate matrix is expressed as:
     y_0 = y' / w'   \\
     \end{array}
     \right.
-
-
 
 The coordinate transformation matrix is a 9-point matrix (usually c3=1). Through the transformation matrix, the corresponding coordinates of the original input image can be derived from the coordinates of the output image. The transformation matrix can be obtained by inputting the coordinates of 4 points corresponding to the output image.
 
@@ -55,13 +51,12 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
   Among them, bmcv_perspective_matrix defines a coordinate transformation matrix in the order of float m[9] = {a1, b1, c1, a2, b2, c2, a3, b3, c3}.
   bmcv_perspective_image_Matrix defines several transformation matrices in an image, which can implements the transmission transformation of multiple small images in an image.
@@ -78,19 +73,17 @@ This interface supports BM1684/BM1684X.
         } bmcv_perspective_image_matrix;
 
 
-
 **Interface form 2:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective_with_coordinate(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_coordinate coord[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_coordinate coord[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
   Among them, bmcv_perspective_coordinate defines the coordinates of the four vertices of the quadrilateral, which are stored in the order of top left, top right, bottom left and bottom right.
   bmcv_perspective_image_coordinate defines the coordinates of several groups of quadrangles in an image, which can complete the transmission transformation of multiple small images in an image.
@@ -108,21 +101,19 @@ This interface supports BM1684/BM1684X.
         } bmcv_perspective_image_coordinate;
 
 
-
 **Interface form 3:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_perspective_similar_to_opencv(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_perspective_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_perspective_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 
-  The transformation matrix defined by bmcv_perspective_image_matrix in this interface is the same as the transformation matrix required to be input by the warpPerspective interface of opencv, and is the inverse of the matrix defined by the structure of the same name in interface 1, and the other parameters are the same as interface 1.
+The transformation matrix defined by bmcv_perspective_image_matrix in this interface is the same as the transformation matrix required to be input by the warpPerspective interface of opencv, and is the inverse of the matrix defined by the structure of the same name in interface 1, and the other parameters are the same as interface 1.
 
     .. code-block:: c
 
@@ -136,7 +127,7 @@ This interface supports BM1684/BM1684X.
         } bmcv_perspective_image_matrix;
 
 
-**输入参数说明**
+**Input parameter description**
 
 * bm_handle_t handle
 
@@ -167,7 +158,6 @@ This interface supports BM1684/BM1684X.
   Input parameter. Whether to use bilinear interpolation. If it is 0, use nearest interpolation. If it is 1, use bilinear interpolation. The default is nearest interpolation. The performance of nearest interpolation is better than bilinear interpolation. Therefore, it is recommended to choose nearest interpolation first. Users can select bilinear interpolation unless there are requirements for accuracy.
 
 
-
 **Return parameter description:**
 
 * BM_SUCCESS: success
@@ -175,7 +165,7 @@ This interface supports BM1684/BM1684X.
 * Other: failed
 
 
-**注意事项**
+**Note**
 
 1. The interface requires that all coordinate points of the output image can find the corresponding coordinates in the original input image, which cannot exceed the size of the original image. It is recommended to give priority to interface 2, which can automatically meet this requirement.
 
@@ -218,31 +208,52 @@ This interface supports BM1684/BM1684X.
 
     .. code-block:: c
 
-        #inculde "common.h"
         #include "stdio.h"
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
         #include <iostream>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
 
-        int main(int argc, char *argv[]) {
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
             bm_handle_t handle;
-
             int image_h = 1080;
             int image_w = 1920;
-
             int dst_h = 1080;
             int dst_w = 1920;
             int use_bilinear = 0;
-            bm_dev_request(&handle, 0);
+            bm_image src, dst;
             bmcv_perspective_image_matrix matrix_image;
             matrix_image.matrix_num = 1;
-            std::shared_ptr<bmcv_perspective_matrix> matrix_data
-                    = std::make_shared<bmcv_perspective_matrix>();
-            matrix_image.matrix = matrix_data.get();
+            bmcv_perspective_matrix* matrix_data = (bmcv_perspective_matrix*)malloc(sizeof(bmcv_perspective_matrix) * 1);
+            unsigned char* src_data = new unsigned char[image_h * image_w * 3];
+            unsigned char* res_data = new unsigned char[dst_h * dst_w * 3];
+            const char *filename_src = "path/to/src";
+            const char *filename_dst = "path/to/dst";
 
+            matrix_image.matrix = matrix_data;
             matrix_image.matrix->m[0] = 0.529813;
             matrix_image.matrix->m[1] = -0.806194;
             matrix_image.matrix->m[2] = 1000.000;
@@ -253,26 +264,20 @@ This interface supports BM1684/BM1684X.
             matrix_image.matrix->m[7] = -0.000686;
             matrix_image.matrix->m[8] = 1.000000;
 
-            bm_image src, dst;
-            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &src);
-            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &dst);
-
-            std::shared_ptr<u8*> src_ptr = std::make_shared<u8*>(
-                    new u8[image_h * image_w * 3]);
-            memset((void *)(*src_ptr.get()), 148, image_h * image_w * 3);
-            u8 *host_ptr[] = {*src_ptr.get()};
-            bm_image_copy_host_to_device(src, (void **)host_ptr);
-
+            bm_dev_request(&handle, 0);
+            readBin(filename_src, src_data, image_h * image_w * 3);
+            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &dst);
+            bm_image_copy_host_to_device(src, (void **)&src_data);
             bmcv_image_warp_perspective(handle, 1, &matrix_image, &src, &dst, use_bilinear);
+            bm_image_copy_device_to_host(dst, (void**)&res_data);
+            writeBin(filename_dst, res_data, dst_h * dst_w * 3);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);
             bm_dev_free(handle);
-
+            delete[] src_data;
+            delete[] res_data;
+            free(matrix_data);
             return 0;
         }
-
-
-

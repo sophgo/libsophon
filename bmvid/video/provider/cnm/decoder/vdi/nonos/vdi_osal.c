@@ -89,7 +89,47 @@ typedef struct fileio_buf_t {
 #define MAX_FD_NUM  4        // 0-bitstream file 1-yuv cmp file 2-
 static fileio_buf_t s_file[MAX_FD_NUM] = {0};
 
-int max_log_level = ERR;
+static void dec_default_logging_fn(VpuDecLogLevel log_level, char const *file,
+                                    int const line, char const *fn,
+                                    const char *format, ...)
+{
+    va_list args;
+
+    char const *lvlstr = "";
+    switch (log_level)
+    {
+        case ERR:       lvlstr = "ERROR";   break;
+        case WARN:      lvlstr = "WARNING"; break;
+        case INFO:      lvlstr = "INFO";    break;
+        case DEBUG:     lvlstr = "DEBUG";   break;
+        case TRACE:     lvlstr = "TRACE";   break;
+        case LOG:       lvlstr = "LOG";     break;
+        default: break;
+    }
+
+    fprintf(stderr, "(%s:%d) %s: ", fn, line, lvlstr);
+
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+
+    fprintf(stderr, "\n");
+}
+
+VpuDecLogLevel dec_cur_log_level_threshold;
+VpuDecLoggingFunc dec_cur_logging_fn = dec_default_logging_fn;
+
+void SetLoggingFunc(VpuDecLoggingFunc logging_fn)
+{
+    if(logging_fn != NULL)
+        dec_cur_logging_fn = logging_fn;
+}
+
+VpuDecLogLevel GetLoggingFunc(void)
+{
+    return dec_cur_log_level_threshold;
+}
+
 int InitLog()
 {
     return 1;
@@ -102,11 +142,11 @@ void DeInitLog()
 
 void SetMaxLogLevel(int level)
 {
-    max_log_level = level;
+    dec_cur_log_level_threshold = level;
 }
 int GetMaxLogLevel(void)
 {
-    return max_log_level;
+    return dec_cur_log_level_threshold;
 }
 
 void SetLogColor(int level, int color)
@@ -148,7 +188,7 @@ void LogMsg(int level, const char *format, ...)
     va_start( ptr, format );
     char logBuf[MAX_PRINT_LENGTH] = {0};
 
-    if (level > max_log_level) return;
+    if (level > dec_cur_log_level_threshold) return;
 
     vsnprintf( logBuf, MAX_PRINT_LENGTH, format, ptr );
 

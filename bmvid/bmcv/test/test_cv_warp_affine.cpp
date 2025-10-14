@@ -159,31 +159,32 @@ static u8_data image_read(
     {
         res->data[i] = i % 255;
     }
-
     if (image_dh <= image_sh && image_dw <= image_sw)
         return res;
 
     if (image_dh > image_sh){
+        int x = 0;
         int pad_h_value = (image_dh - image_sh) / 2;
-        for (int i = 0;i < pad_h_value * image_sw;i++)
-            res_temp->data[i] = 0;
+        for (x = 0;x < pad_h_value * image_sw;x++)
+            res_temp->data[x] = 0;
 
-        for (int i = pad_h_value * image_sw; i < pad_h_value * image_sw + image_n * image_c * image_sh * image_sw;i++)
-            res_temp->data[i] = res->data[i];
+        for (int i = 0, x = pad_h_value * image_sw; x < pad_h_value * image_sw + image_n * image_c * image_sh * image_sw; i++,x++)
+            res_temp->data[x] = res->data[i];
 
-        for (int i = pad_h_value * image_sw + image_n * image_c * image_sh * image_sw;i <  pad_h_value * image_sw + image_n * image_c * image_sh * image_sw + pad_h_value * image_sw;i++)
-            res_temp->data[i] = 0;
+        for (int z = pad_h_value * image_sw + image_n * image_c * image_sh * image_sw;z <  pad_h_value * image_sw + image_n * image_c * image_sh * image_sw + pad_h_value * image_sw;z++)
+            res_temp->data[z] = 0;
     }
 
     if (image_dw > image_sw){
         int pad_w_value = (image_dw - image_sw) / 2;
+        int j = 0;
         for (int i = 0;i < image_dh;i++){
-            for (int i = 0;i < pad_w_value;i++)
-                res_temp_bak->data[i] = 0;
-            for (int i = pad_w_value;i < pad_w_value + image_sw;i++)
-                res_temp_bak->data[i] = res_temp->data[i-pad_w_value];
-            for (int i = pad_w_value + image_sw;i < pad_w_value + image_sw + pad_w_value + image_sw;i++)
-                res_temp_bak->data[i] = 0;
+            for (;j < pad_w_value + i * image_dw;j++)
+                res_temp_bak->data[j] = 0;
+            for (j = pad_w_value + i * image_dw ;j < pad_w_value + image_sw + i * image_dw;j++)
+                res_temp_bak->data[j] = res_temp->data[j-pad_w_value-i*image_dw + i*image_sw];
+            for (j = pad_w_value + image_sw + i * image_dw;j < pad_w_value + pad_w_value + image_sw + i * image_dw;j++)
+                res_temp_bak->data[j] = 0;
         }
     }
 
@@ -376,10 +377,9 @@ static int bmcv_warp_cmp(u8_data   p_exp,
     for (i = 0; i < image_dh; i++) {
         for (int j = 0;j < image_dw;j++){
              if (abs(p_exp->data[count] - p_got->data[count]) > 1){
-                std::cout << "image_dh = " << image_dh << "\n" << "image_dw = " << image_dw  << "\n" << std::endl;
-                std::cout << "i = " << i << "\n" << "j = " << j  << "\n" << std::endl;
-                std::cout << "p_exp->data = " << p_exp->data[count] << std::endl;
-                std::cout << "p_got->data = " << p_got->data[count] << std::endl;
+                printf("image_dh = %d, image_dw = %d\n", image_dh, image_dw);
+                printf("i = %d, j = %d\n", i, j);
+                printf("p_exp->data = %d, p_got->data = %d\n", p_exp->data[count], p_got->data[count]);
                 return -1;
             }
             count++;
@@ -453,7 +453,6 @@ static bm_status_t bmcv_affine_nearest_1n_ref(
                                     unsigned char *dst_image,
                                     bool use_opencv) {
 
-    UNUSED(image_c);
     float_data tensor_S = MAKE_BLOB(float, image_dh *image_dw * 2);
     float *tensor_SX    = tensor_S->data;
     float *   tensor_SY = tensor_SX + image_dh * image_dw;
@@ -559,24 +558,44 @@ static bm_status_t bmcv_affine_nearest_1n_ref(
     int dst_w_stride = dst_w * w_stride;
 
     // warp in source image directly.
-    unsigned char *sb = src_image;
-    unsigned char *sg = sb + src_w_stride * src_h;
-    unsigned char *sr = sg + src_w_stride * src_h;
-    unsigned char *db = dst_image;
-    unsigned char *dg = db + dst_w_stride * dst_h;
-    unsigned char *dr = dg + dst_w_stride * dst_h;
-    tensor_DX         = map;
-    tensor_DY         = tensor_DX + dst_h * dst_w;
-    for (int y = 0; y < dst_h; y++) {
-        for (int x = 0; x < dst_w; x++) {
-            unsigned short sx = tensor_DX[y * dst_w + x];
-            unsigned short sy = tensor_DY[y * dst_w + x];
-            db[y * dst_w_stride + x * w_stride] =
-                sb[sy * src_w_stride + sx * w_stride];
-            dg[y * dst_w_stride + x * w_stride] =
-                sg[sy * src_w_stride + sx * w_stride];
-            dr[y * dst_w_stride + x * w_stride] =
-                sr[sy * src_w_stride + sx * w_stride];
+    if (image_c == 1) {
+        unsigned char *sb = src_image;
+        unsigned char *db = dst_image;
+
+        tensor_DX         = map;
+        tensor_DY         = tensor_DX + dst_h * dst_w;
+
+        for (int y = 0; y < dst_h; y++) {
+            for (int x = 0; x < dst_w; x++) {
+                unsigned short sx = tensor_DX[y * dst_w + x];
+                unsigned short sy = tensor_DY[y * dst_w + x];
+                db[y * dst_w_stride + x * w_stride] =
+                    sb[sy * src_w_stride + sx * w_stride];
+            }
+        }
+    }
+    else if (image_c == 3) {
+        unsigned char *sb = src_image;
+        unsigned char *sg = sb + src_w_stride * src_h;
+        unsigned char *sr = sg + src_w_stride * src_h;
+        unsigned char *db = dst_image;
+        unsigned char *dg = db + dst_w_stride * dst_h;
+        unsigned char *dr = dg + dst_w_stride * dst_h;
+
+        tensor_DX         = map;
+        tensor_DY         = tensor_DX + dst_h * dst_w;
+
+        for (int y = 0; y < dst_h; y++) {
+            for (int x = 0; x < dst_w; x++) {
+                unsigned short sx = tensor_DX[y * dst_w + x];
+                unsigned short sy = tensor_DY[y * dst_w + x];
+                db[y * dst_w_stride + x * w_stride] =
+                    sb[sy * src_w_stride + sx * w_stride];
+                dg[y * dst_w_stride + x * w_stride] =
+                    sg[sy * src_w_stride + sx * w_stride];
+                dr[y * dst_w_stride + x * w_stride] =
+                    sr[sy * src_w_stride + sx * w_stride];
+            }
         }
     }
 
@@ -815,7 +834,7 @@ static bm_status_t bmcv_warp_tpu(bm_handle_t handle,
         int stride = 0;
         bm_image_get_stride(src_img[i], &stride);
 
-        void *ptr = (void *)(src_data->data + 3 * stride * image_sh * i);
+        void *ptr = (void *)(src_data->data + image_c * stride * image_sh * i);
         BM_CHECK_RET(
             bm_image_copy_host_to_device(src_img[i], (void **)(&ptr)));
     }
@@ -840,7 +859,7 @@ static bm_status_t bmcv_warp_tpu(bm_handle_t handle,
         gettimeofday_(&t2);
     }
 
-    std::cout << "---warp_affine TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("---warp_affine TPU using time = %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     int size = 0;
     bm_image_get_byte_size(dst_img->data[0], &size);
@@ -946,7 +965,7 @@ static void test_cv_warp_random(int trials) {
 
             auto engine = pool->get_random_engine();
             bool is_bilinear = ((*engine)() & 0x01) ? true : false;
-            // is_bilinear = false;
+            is_bilinear = true;
             printf("is_bilinear: %d \n", is_bilinear);
             int src_mode = ((*engine)() & 0x01) ? STORAGE_MODE_1N_INT8 : STORAGE_MODE_4N_INT8;
             src_mode = STORAGE_MODE_1N_INT8;
@@ -1073,15 +1092,13 @@ int main(int argc, char *argv[]) {
     }
 
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST WARP] loop times should be 1~1500" << std::endl;
+        printf("[TEST WARP] loop times should be 1~1500\n");
         exit(-1);
     }
-    std::cout << "[TEST WARP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST WARP] test starts... LOOP times will be %d", test_loop_times);
 
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST WARP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST WARP] LOOP %d------\n", loop_idx);
 
         struct timespec tp;
         clock_gettime_(0, &tp);
@@ -1090,7 +1107,7 @@ int main(int argc, char *argv[]) {
         printf("random seed %d\n", seed);
         test_cv_warp_random(2);
     }
-    std::cout << "------[TEST WARP] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST WARP] ALL TEST PASSED!------\n");
 
     return 0;
 }

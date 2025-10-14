@@ -14,9 +14,7 @@
 #endif
 #include "bmcv_api.h"
 #include "test_misc.h"
-#ifdef __riscv
 #include <cstdint>
-#endif
 
 using namespace std;
 
@@ -53,14 +51,13 @@ int main(int argc, char **argv)
     clock_gettime_(0, &tp);
 
     unsigned int seed = tp.tv_nsec;
-    std::cout << "seed: " << seed << std::endl;
+    printf("seed: %d\n", seed);
     srand(seed);
     h = rand() % 2000;
     w = rand() % 2000;
   }
 
-  std::cout << "w = " << w << std::endl;
-  std::cout << "h = " << h << std::endl;
+  printf("w = %d, h = %d\n", w, h);
   bm_dev_request(&handle, dev);
   bm_image_create(handle,
                   h,
@@ -94,7 +91,7 @@ int main(int argc, char **argv)
                     bmcv_image_in,
                     bmcv_image_out);
   gettimeofday_(&t2);
-  cout << "img transpose using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+  printf("img transpose using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
   bm_image_copy_device_to_host(image_out, (void **)&dst);
 
@@ -105,13 +102,11 @@ int main(int argc, char **argv)
 
   for (int i = 0; i < h * w * 3; i++) {
     if (ref[i] != dst[i]) {
-      std::cout << "not match at "
-      << i << " as ref is " << ref[i]
-      << " dst is " << dst[i] << std::endl;
+      printf("not match at %d as ref is %d, dst id %d\n", i, ref[i], dst[i]);
       return -1;
     }
   }
-  std::cout << "success!\n" <<std::endl;
+  printf("success!\n");
   delete[] ref;
   delete[] src;
   delete[] dst;

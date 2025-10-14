@@ -94,15 +94,15 @@ int test_topk_v1( bm_handle_t handle, int group_num, int stride, int k, int per_
     bm_memcpy_d2s(handle, out_data, dst_data_mem);
     bm_memcpy_d2s(handle, out_index, dst_index_mem);
     for (int i = 0; i < group_num; ++i) {
-      std::cout << "Group " << i << std::endl;
+      printf("Group %d\n", i);
       for (int j = 0; j < k; ++j) {
-        std::cout << out_data[j + i * k] << " ";
+        printf("%f ", out_data[j + i * k]);
       }
-      std::cout << std::endl;
+      printf("\n");
       for (int j = 0; j < k; ++j) {
-        std::cout << out_index[j + i * k] << " ";
+        printf("%d ", out_index[j + i * k]);
       }
-      std::cout << std::endl;
+      printf("\n");
     }
     printf("batch topk used time: %.3f ms\n", (float)used / 1000);
     delete [] data;
@@ -117,10 +117,10 @@ int test_topk_v1( bm_handle_t handle, int group_num, int stride, int k, int per_
 }
 
 int test_topk_v2( bm_handle_t handle, int k, int batch, int batch_num, int batch_stride, int descending, bool bottom_index_valid){
-  std::cout << "k: " << k << std::endl;
-  std::cout << "batch: " << batch << std::endl;
-  std::cout << "batch_num: " << batch_num << std::endl;
-  std::cout << "batch_stride: " << batch_stride << std::endl;
+  printf("k: %d ", k);
+  printf("batch: %d ", batch);
+  printf("batch_num: %d ", batch_num);
+  printf("batch_stride: %d \n", batch_stride);
   float* bottom_data = new float[batch * batch_stride * sizeof(float)];
   int* bottom_index = new int[batch * batch_stride];
   float* top_data = new float[batch * batch_stride * sizeof(float)];
@@ -204,7 +204,7 @@ int main() {
   bm_handle_t handle;
   bm_status_t ret = bm_dev_request(&handle, 0);
   if (ret != BM_SUCCESS) {
-    std::cout << "Create bm handle failed. ret = " << ret << std::endl;
+    printf("Create bm handle failed. ret = %d\n", ret);
     return -1;
   }
   unsigned int chipid = BM1684X;
@@ -219,10 +219,10 @@ int main() {
     int k = 100;
     int per_batch_size = 3907;
     if(0 != test_topk_v1( handle,group_num, stride, k, per_batch_size)){
-      std::cout << "test topk false! " << std::endl;
+      printf("test topk false!\n");;
       ret = BM_ERR_FAILURE;
     }else{
-      std::cout << "test topk success! " << std::endl;
+      printf("test topk success!\n");
     }
     break;
   }
@@ -234,15 +234,15 @@ int main() {
     int batch_stride = batch_num;
     bool bottom_index_valid = true;
     if(0 != test_topk_v2( handle, k, batch, batch_num, batch_stride, descending, bottom_index_valid)){
-      std::cout << "test topk false! " << std::endl;
+      printf("test topk false!\n");
       ret = BM_ERR_FAILURE;
     }else{
-      std::cout << "test topk success! " << std::endl;
+      printf("test topk success!\n");
     }
     break;
   }
   default:
-    std::cout << "chipid false! " << std::endl;
+    printf("chipid false!\n");
     ret = BM_ERR_FAILURE;
     break;
   }

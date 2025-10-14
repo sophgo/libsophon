@@ -29,28 +29,30 @@ bmcv_matmul
 * alpha和beta 是 float32 的常系数，当 C 是 float32 时才有效。
 
 
-接口的格式如下：
-
-    .. code-block:: c
-
-         bm_status_t bmcv_matmul(bm_handle_t      handle,
-                                 int              M,
-                                 int              N,
-                                 int              K,
-                                 bm_device_mem_t  A,
-                                 bm_device_mem_t  B,
-                                 bm_device_mem_t  C,
-                                 int              A_sign,
-                                 int              B_sign,
-                                 int              rshift_bit,
-                                 int              result_type,
-                                 bool             is_B_trans,
-                                 float            alpha = 1,
-                                 float            beta = 0);
-
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
+
+
+**接口形式：**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_matmul(
+                    bm_handle_t handle,
+                    int M,
+                    int N,
+                    int K,
+                    bm_device_mem_t A,
+                    bm_device_mem_t B,
+                    bm_device_mem_t C,
+                    int A_sign,
+                    int B_sign,
+                    int rshift_bit,
+                    int result_type,
+                    bool is_B_trans,
+                    float alpha = 1,
+                    float beta = 0);
 
 
 **输入参数说明：**
@@ -116,39 +118,40 @@ bmcv_matmul
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
-
+* 其他: 失败
 
 
 **示例代码**
 
-
     .. code-block:: c
 
-        int M = 3, N = 4, K = 5;
-        int result_type = 1;
-        bool is_B_trans = false;
-        int rshift_bit = 0;
-        char *A     = new char[M * K];
-        char *B     = new char[N * K];
-        short *C     = new short[M * N];
-        memset(A, 0x11, M * K * sizeof(char));
-        memset(B, 0x22, N * K * sizeof(char));
+        #include "bmcv_api_ext.h"
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include "test_misc.h"
 
-        bmcv_matmul(handle,
-                    M,
-                    N,
-                    K,
-                    bm_mem_from_system((void *)A),
-                    bm_mem_from_system((void *)B),
-                    bm_mem_from_system((void *)C),
-                    1,
-                    1,
-                    rshift_bit,
-                    result_type,
-                    is_B_trans);
+        int main()
+        {
+            int M = 3, N = 4, K = 5;
+            int result_type = 1;
+            bool is_B_trans = false;
+            int rshift_bit = 0;
+            char* A = new char[M * K];
+            char* B = new char[N * K];
+            short* C = new short[M * N];
+            bm_handle_t handle;
 
-        delete A;
-        delete B;
-        delete C;
+            bm_dev_request(&handle, 0);
+            memset(A, 0x11, M * K * sizeof(char));
+            memset(B, 0x22, N * K * sizeof(char));
+            bmcv_matmul(handle, M, N, K, bm_mem_from_system((void *)A), bm_mem_from_system((void *)B),
+                        bm_mem_from_system((void *)C), 1, 1, rshift_bit, result_type, is_B_trans);
 
+            delete[] A;
+            delete[] B;
+            delete[] C;
+            bm_dev_free(handle);
+            return 0;
+        }

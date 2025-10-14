@@ -61,7 +61,7 @@ static int pyramid_down_tpu(
     gettimeofday_(&t1);
     bmcv_image_pyramid_down(handle, img_i, img_o);
     gettimeofday_(&t2);
-    cout << "pyramid down TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("pyramid down TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     bm_image_copy_device_to_host(img_o, (void **)(&output));
     bm_image_destroy(img_i);
@@ -91,20 +91,20 @@ static int test_pyramid_down_random(
 
     unsigned int seed = tp.tv_nsec;
     srand(seed);
-    cout << "seed = " << seed << endl;
+    printf("seed = %d\n", seed);
     int ow = 960;
     int oh = 540;
-    cout << "width: " << width << "  height: " << height << endl;
-    cout << "ow: " << ow << "  oh: " << oh << endl;
+    printf("width: %d, height %d\n", width, height);
+    printf("ow: %d, oh: %d\n", ow, oh);
     int channel = 1;
-    cout << "channel: " << channel << endl;
+    printf("channel: %d\n", channel);
     unsigned char* input_data = new unsigned char [width * height * channel];
     unsigned char* output_tpu = new unsigned char [ow * oh * channel];
     unsigned char* output_ocv = new unsigned char [ow * oh * channel];
     fill(input_data, channel, width, height);
     ifstream opencv_readfile((string(opencvFile_path) + string("/opencv_pyramid.bin")), ios :: in | ios :: binary);
     if( ! opencv_readfile){
-        cout << "Error opening file" << endl;
+        printf("Error opening file\n");
         return -1;
     }
     int i = 0;
@@ -140,11 +140,11 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_pyramid_down_random(height, width);
         if (ret) {
-            cout << "test pyramid_down failed" << endl;
+            printf("test pyramid_down failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with OpenCV successfully!" << endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     return 0;
 }
 

@@ -39,8 +39,8 @@ int csc_crop_resize(int argc, char** argv) {
     bm_image_format_ext fmt_o = FORMAT_RGB_PLANAR;
 
     if (argc < 10) {
-        cout << "csc_crop_resize parameter error!" << endl;
-        cout << "parameter list: in_fmt out_fmt in_w in_h crop_w crop_h resize_w resize_h crop_num pad_w pad_h" << endl;
+        printf("csc_crop_resize parameter error!\n");;
+        printf("parameter list: in_fmt out_fmt in_w in_h crop_w crop_h resize_w resize_h crop_num pad_w pad_h\n");;
         return -1;
     }
     fmt_i = argc > 2 ? (bm_image_format_ext)atoi(argv[2]) : fmt_i;
@@ -57,19 +57,19 @@ int csc_crop_resize(int argc, char** argv) {
     int ow = rw + 2 * pad_w;
     int oh = rh + 2 * pad_h;
 
-    cout << "---------------parameter-------------" << endl;
-    cout << "fmt convert: " << fmt_i << " -> " << fmt_o << endl;
-    cout << "crop_num: " << crop_num << endl;
-    cout << "input size: " << iw << " * " << ih << endl;
-    cout << "crop size: " << crop_w << " * " << crop_h << endl;
-    cout << "resize size: " << rw << " * " << rh << endl;
-    cout << "pad_w: " << pad_w << "   pad_h: " << pad_h << endl;
-    cout << "-------------------------------------" << endl;
+    printf("---------------parameter-------------\n");
+    printf("fmt convert: %d -> %d", fmt_i, fmt_o);
+    printf("crop_num: %d\n", crop_num);
+    printf("input size: %d * %d\n", iw, ih);
+    printf("crop size: %d * %d\n", crop_w, crop_h);
+    printf("resize size: %d * %d\n", rw, rh);
+    printf("pad_w: %d, pad_h: %d\n", pad_w ,pad_h);
+    printf("-------------------------------------\n");
 
     bm_handle_t handle;
     int ret = bm_dev_request(&handle, 0);
     if (ret != BM_SUCCESS) {
-        cout << "device request failed" << endl;
+        printf("device request failed\n");
         return -1;
     }
     bmcv_rect_t rect[10];
@@ -132,7 +132,7 @@ int csc_crop_resize(int argc, char** argv) {
     }
 
     gettimeofday_(&t2);
-    cout << "vpp basic using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop << "us" << endl;
+    printf("vpp basic using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop);
     // copy result from device memory to host
     bm_image_copy_device_to_host(dst[0], (void **)host_ptr);
 
@@ -159,8 +159,8 @@ int warp_affine(int argc, char** argv) {
     int use_bilinear = 0;
 
     if (argc < 7) {
-        cout << "warp_affine parameter error!" << endl;
-        cout << "parameter list: iw ih ow oh use_bilinear" << endl;
+        printf("warp_affine parameter error!\n");
+        printf("parameter list: iw ih ow oh use_bilinear\n");
         return -1;
     }
     iw = atoi(argv[2]);
@@ -169,16 +169,16 @@ int warp_affine(int argc, char** argv) {
     oh = atoi(argv[5]);
     use_bilinear = atoi(argv[6]);
 
-    cout << "---------------parameter-------------" << endl;
-    cout << "input size: " << iw << " * " << ih << endl;
-    cout << "output size: " << ow << " * " << oh << endl;
-    cout << "use_bilinear: " << use_bilinear << endl;
-    cout << "-------------------------------------" << endl;
+    printf("---------------parameter-------------\n");
+    printf("input size: %d * %d\n", iw, ih);
+    printf("output size: %d * %d\n", ow, oh);
+    printf("use_bilinear: %d\n", use_bilinear);
+    printf("-------------------------------------\n");
 
     bm_handle_t handle;
     int ret = bm_dev_request(&handle, 0);
     if (ret != BM_SUCCESS) {
-        cout << "device request failed" << endl;
+        printf("device request failed\n");
         return -1;
     }
     bm_image src, dst;
@@ -198,7 +198,7 @@ int warp_affine(int argc, char** argv) {
     for (int i = 0; i < loop; i++)
         bmcv_image_warp_affine(handle, 1, &matrix_image, &src, &dst, use_bilinear);
     gettimeofday_(&t2);
-    cout << "using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop << "us" << endl;
+    printf("using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop);
 
     bm_image_destroy(src);
     bm_image_destroy(dst);
@@ -209,9 +209,9 @@ int warp_affine(int argc, char** argv) {
 int main(int argc, char** argv) {
     int func = argc > 1 ? atoi(argv[1]) : 0;
     if (func < 0 || func > 1) {
-        cout << "function choose error!" << endl;
-        cout << "0: csc-crop-resize" << endl;
-        cout << "1: warp-affine" <<endl;
+        printf("function choose error!\n");;
+        printf("0: csc-crop-resize\n");;
+        printf("1: warp-affine\n");;
         return -1;
     }
     switch(func) {

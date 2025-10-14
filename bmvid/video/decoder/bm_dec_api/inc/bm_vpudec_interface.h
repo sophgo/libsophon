@@ -30,14 +30,18 @@
 
 typedef enum
 {
-    BMVPU_DEC_LOG_LEVEL_NONE=0,
-    BMVPU_DEC_LOG_LEVEL_ERR,
-    BMVPU_DEC_LOG_LEVEL_WARN,
-    BMVPU_DEC_LOG_LEVEL_INFO,
-    BMVPU_DEC_LOG_LEVEL_TRACE,
-    BMVPU_DEC_LOG_LEVEL_MAX_LOG_LEVEL
+    BMVPU_DEC_LOG_LEVEL_ERROR   = 0,
+    BMVPU_DEC_LOG_LEVEL_WARNING = 1,
+    BMVPU_DEC_LOG_LEVEL_INFO    = 2,
+    BMVPU_DEC_LOG_LEVEL_DEBUG   = 3, /* only useful for developers */
+    BMVPU_DEC_LOG_LEVEL_LOG     = 4, /* only useful for developers */
+    BMVPU_DEC_LOG_LEVEL_TRACE   = 5  /* only useful for developers */
 }
 BmVpuDecLogLevel;
+
+typedef void (*BmVpuDecLoggingFunc)(BmVpuDecLogLevel level, char const *file,
+                                        int const line, char const *fn,
+                                        const char *format, ...);
 
 #ifndef BOOL
 typedef int     BOOL;

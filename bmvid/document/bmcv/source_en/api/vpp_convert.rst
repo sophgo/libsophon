@@ -3,16 +3,18 @@ bmcv_image_vpp_convert
 
 The API converts the input image format into the output image format, and supports the function of crop and resize. It supports the output of multiple crops from one input and resizing to the output image size.
 
+
+**Interface form::**
+
     .. code-block:: c
 
         bm_status_t bmcv_image_vpp_convert(
-            bm_handle_t  handle,
-            int output_num,
-            bm_image input,
-            bm_image *output,
-            bmcv_rect_t *crop_rect,
-            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR
-        );
+                    bm_handle_t handle,
+                    int output_num,
+                    bm_image input,
+                    bm_image *output,
+                    bmcv_rect_t *crop_rect,
+                    bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR);
 
 
 **Processor model support**
@@ -61,6 +63,7 @@ This interface supports BM1684/BM1684X.
 
   bm1684x supports BMCV_INTER_NEAREST and BMCV_INTER_LINEAR.
 
+
 **Return parameter description:**
 
 * BM_SUCCESS: success
@@ -95,7 +98,6 @@ This interface supports BM1684/BM1684X.
         bm_image_attach(*compressed_image, src_plane_device);
 
 
-
 **Code example:**
 
     .. code-block:: c
@@ -103,53 +105,73 @@ This interface supports BM1684/BM1684X.
         #include <iostream>
         #include <vector>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
-        #include "common.h"
         #include <memory>
         #include "stdio.h"
         #include "stdlib.h"
         #include <stdio.h>
         #include <stdlib.h>
+        #include <string.h>
 
-        int main(int argc, char *argv[]) {
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
             bm_handle_t handle;
-            int            image_h     = 1080;
-            int            image_w     = 1920;
-            bm_image       src, dst[4];
-            bm_dev_request(&handle, 0);
-            bm_image_create(handle, image_h, image_w, FORMAT_NV12,
-                    DATA_TYPE_EXT_1N_BYTE, &src);
-            bm_image_alloc_dev_mem(src, 1);
-            for (int i = 0; i < 4; i++) {
-                bm_image_create(handle,
-                    image_h / 2,
-                    image_w / 2,
-                    FORMAT_BGR_PACKED,
-                    DATA_TYPE_EXT_1N_BYTE,
-                    dst + i);
-                bm_image_alloc_dev_mem(dst[i]);
-            }
-            std::unique_ptr<u8 []> y_ptr(new u8[image_h * image_w]);
-            std::unique_ptr<u8 []> uv_ptr(new u8[image_h * image_w / 2]);
-            memset((void *)(y_ptr.get()), 148, image_h * image_w);
-            memset((void *)(uv_ptr.get()), 158, image_h * image_w / 2);
-            u8 *host_ptr[] = {y_ptr.get(), uv_ptr.get()};
-            bm_image_copy_host_to_device(src, (void **)host_ptr);
-
+            int image_h = 1080;
+            int image_w = 1920;
+            bm_image src, dst[4];
             bmcv_rect_t rect[] = {{0, 0, image_w / 2, image_h / 2},
                     {0, image_h / 2, image_w / 2, image_h / 2},
                     {image_w / 2, 0, image_w / 2, image_h / 2},
                     {image_w / 2, image_h / 2, image_w / 2, image_h / 2}};
+            unsigned char* src_data = new unsigned char[image_h * image_w * 3 / 2];
+            unsigned char* dst_data = new unsigned char[image_h / 2 * image_w / 2 * 3];
+            unsigned char* in_ptr[3] = {src_data, src_data + image_h * image_w, src_data + 2 * image_h * image_w};
+            unsigned char* out_ptr[3] = {dst_data, dst_data + image_h * image_w, dst_data + 2 * image_h * image_w};
+            const char *src_name = "/path/to/src";
+            const char *dst_names[4] = {"path/to/dst0", "path/to/dst1", "path/to/dst2", "path/to/dst3"};
 
+            bm_dev_request(&handle, 0);
+            readBin(src_name, src_data, image_h * image_w * 3 / 2);
+            bm_image_create(handle, image_h, image_w, FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_alloc_dev_mem(src, 1);
+            for (int i = 0; i < 4; i++) {
+                bm_image_create(handle, image_h / 2, image_w / 2, FORMAT_BGR_PACKED, DATA_TYPE_EXT_1N_BYTE, dst + i);
+                bm_image_alloc_dev_mem(dst[i]);
+            }
+
+            bm_image_copy_host_to_device(src, (void **)in_ptr);
             bmcv_image_vpp_convert(handle, 4, src, dst, rect);
+
+            for(int i = 0; i < 4; ++i) {
+                bm_image_copy_device_to_host(dst[i], (void**)out_ptr);
+                writeBin(dst_names[i], dst_data, image_h / 2 * image_w / 2 * 3);
+            }
 
             for (int i = 0; i < 4; i++) {
                 bm_image_destroy(dst[i]);
             }
-
             bm_image_destroy(src);
             bm_dev_free(handle);
+            delete[] src_data;
             return 0;
         }
-
-

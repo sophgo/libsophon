@@ -10,9 +10,7 @@
 #include <memory>
 #include <functional>
 #include "bmcv_common_bm1684.h"
-#ifdef __riscv
 #include <cstdlib>
-#endif
 
 extern void format_to_str(bm_image_format_ext format, char* res);
 static int bm_image_to_vpp_mat(bm_handle_t handle, bm_image image,
@@ -263,15 +261,15 @@ static bm_status_t bm_image_vpp_check_format_single(
     bm_image      input,
     int           crop_num,
     bmcv_rect_t*  crop_rect,
-    std::vector<bm_image*>&   output_ptr
-)
+    std::vector<bm_image*>&   output_ptr,
+    short         log_level)
 {
     int input_stride[4] = {0};
     vpp_limitation limitation;
 
     if(bm_image_get_stride(input, input_stride) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "not correctly create bm_image %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "not correctly create bm_image %s: %s: %d\n",
                 filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -283,7 +281,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         char dst_format[30];
         format_to_str(input.image_format, src_format);
         format_to_str(output_ptr[0][0].image_format, dst_format);
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
+        bmlib_log(BMCV_LOG_TAG, log_level, \
                   "vpp not support conversion from %s to %s %s: %s: %d\n", src_format, dst_format,
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
@@ -291,21 +289,21 @@ static bm_status_t bm_image_vpp_check_format_single(
 
     if(input.width > limitation.width_max || input.width < limitation.width_min)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src width size not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp src width size not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
 
     if(input.height > limitation.height_max || input.height < limitation.height_min)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src height size not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp src height size not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
 
     if(!check_stride(input_stride, input.image_private->plane_num, limitation.src_stride_align))
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src stride not match %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp src stride not match %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
 
         return BM_NOT_SUPPORTED;
@@ -313,7 +311,7 @@ static bm_status_t bm_image_vpp_check_format_single(
 
     if(check_address_align(input, limitation.src_address_align) != true)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp src image address not aligned %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp src image address not aligned %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
 
         return BM_NOT_SUPPORTED;
@@ -323,7 +321,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (output_ptr[i]->width > limitation.width_max ||
             output_ptr[i]->width < limitation.width_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp dst width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -334,7 +332,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (output_ptr[i]->height > limitation.height_max ||
             output_ptr[i]->height < limitation.height_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp dst height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -345,7 +343,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].crop_w > limitation.width_max ||
             crop_rect[i].crop_w < limitation.width_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp crop_rect width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -356,7 +354,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].crop_h > limitation.height_max ||
             crop_rect[i].crop_h < limitation.height_min) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp crop_rect height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -367,7 +365,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].start_x < 0 || crop_rect[i].crop_w <= 0 ||
             (crop_rect[i].start_x + crop_rect[i].crop_w > input.width)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp crop_rect width size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -378,7 +376,7 @@ static bm_status_t bm_image_vpp_check_format_single(
         if (crop_rect[i].start_y < 0 || crop_rect[i].crop_h <= 0 ||
             (crop_rect[i].start_y + crop_rect[i].crop_h > input.height)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp crop_rect height size not match %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -391,7 +389,7 @@ static bm_status_t bm_image_vpp_check_format_single(
                 crop_rect[i].crop_w != input.width ||
                 crop_rect[i].crop_h != input.height) {
                 bmlib_log(BMCV_LOG_TAG,
-                          BMLIB_LOG_ERROR,
+                          log_level,
                           "vpp not support crop on this format conversion "
                           "situation %s: %s: %d\n",
                           filename(__FILE__),
@@ -404,7 +402,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             if (crop_rect[i].crop_w != output_ptr[i]->width ||
                 crop_rect[i].crop_h != output_ptr[i]->height) {
                 bmlib_log(BMCV_LOG_TAG,
-                          BMLIB_LOG_ERROR,
+                          log_level,
                           "vpp not support scale on this format conversion "
                           "situation %s: %s: %d\n",
                           filename(__FILE__),
@@ -419,7 +417,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             (crop_rect[i].crop_h * limitation.zoom_limitation_max <
              output_ptr[i]->height)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp zoom up too much %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -432,7 +430,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             (output_ptr[i]->height * limitation.zoom_limitation_min <
              crop_rect[i].crop_h)) {
             bmlib_log(BMCV_LOG_TAG,
-                      BMLIB_LOG_ERROR,
+                      log_level,
                       "vpp zoom down too much %s: %s: %d\n",
                       filename(__FILE__),
                       __func__,
@@ -448,7 +446,7 @@ static bm_status_t bm_image_vpp_check_format_single(
             output_ptr[i]->height % limitation.dst_height_align != 0) {
             bmlib_log(
                 BMCV_LOG_TAG,
-                BMLIB_LOG_ERROR,
+                log_level,
                 "vpp offset / width / height align not match %s: %s: %d\n",
                 filename(__FILE__),
                 __func__,
@@ -1484,11 +1482,12 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
                                            bm_image*             output,
                                            bmcv_rect_t*          crop_rect_,
                                            bmcv_resize_algorithm algorithm,
-                                           csc_matrix_t*         matrix)
+                                           csc_matrix_t*         matrix,
+                                           short                 log_level)
 {
     if(input.data_type != DATA_TYPE_EXT_1N_BYTE)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1499,14 +1498,14 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     {
         if(output[i].data_type != DATA_TYPE_EXT_1N_BYTE)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, log_level, "vpp only support DATA_TYPE_EXT_1N_BYTE %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             return BM_NOT_SUPPORTED;
         }
 
         if(data_type != output[i].data_type || image_format != output[i].image_format)
         {
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "expected consistant output image format %s: %s: %d\n",
+            bmlib_log(BMCV_LOG_TAG, log_level, "expected consistant output image format %s: %s: %d\n",
                       filename(__FILE__), __func__, __LINE__);
             return BM_NOT_SUPPORTED;
         }
@@ -1518,13 +1517,13 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
         {
             if(bm_image_alloc_dev_mem(output[i], BMCV_HEAP_ANY) != BM_SUCCESS)
             {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
+                bmlib_log(BMCV_LOG_TAG, log_level, \
                     "output dev alloc fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
                 for (int j = 0; j < i; j++)
                 {
                     if(bm_image_detach(output[j]) != BM_SUCCESS)
                     {
-                        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
+                        bmlib_log(BMCV_LOG_TAG, log_level, \
                             "not correctly create bm_image %s: %s: %d\n", __FILE__, __func__, __LINE__);
                     }
                 }
@@ -1540,7 +1539,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
         char dst_format[30];
         format_to_str(input.image_format, src_format);
         format_to_str(output[0].image_format, dst_format);
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
+        bmlib_log(BMCV_LOG_TAG, log_level, \
                   "vpp not support conversion from %s to %s %s: %s: %d\n", src_format, dst_format,
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
@@ -1568,7 +1567,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     if (pre_process_for_vpp_input(
             handle, input, pre_processed_input, preprocessed_input, limitation, expand_height, expand_width) !=
         BM_SUCCESS) {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp process for input failed %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp process for input failed %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
@@ -1591,14 +1590,14 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     if(pre_process_for_vpp_output(
         handle, output, output_num, output_process_mark, dsts, output_ptr, limitation) != BM_SUCCESS)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, \
+        bmlib_log(BMCV_LOG_TAG, log_level, \
             "output image preprocess fail %s: %s: %d\n", __FILE__, __func__, __LINE__);
         return BM_ERR_FAILURE;
     }
 
     if (bm_image_vpp_check_format_single(
-            *input_ptr, output_num, crop_rect, output_ptr) != BM_SUCCESS) {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this conversion %s: %s: %d\n",
+            *input_ptr, output_num, crop_rect, output_ptr, log_level) != BM_SUCCESS) {
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp not support this conversion %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1692,7 +1691,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
     int ret = bm_image_to_vpp_mat(handle, input_ptr[0], src);
     if(ret != 0)
     {
-        bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
+        bmlib_log(BMCV_LOG_TAG, log_level, "vpp not support this format %s: %s: %d\n",
                   filename(__FILE__), __func__, __LINE__);
         return BM_NOT_SUPPORTED;
     }
@@ -1710,7 +1709,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
             ret = bm_image_to_vpp_mat(handle, output_ptr[16 * loop + k][0], &dst[k]);
             if(ret != 0)
             {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "vpp not support this format %s: %s: %d\n",
+                bmlib_log(BMCV_LOG_TAG, log_level, "vpp not support this format %s: %s: %d\n",
                           filename(__FILE__), __func__, __LINE__);
                 return BM_NOT_SUPPORTED;
             }
@@ -1746,7 +1745,7 @@ static bm_status_t bmcv_image_vpp_convert_(bm_handle_t           handle,
                     output[i].image_private->data[k],
                     output[i].image_private->memory_layout[k]) != BM_SUCCESS)
                 {
-                    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "FATAL ERROR!!! TPU CRASH %s: %s: %d\n",
+                    bmlib_log(BMCV_LOG_TAG, log_level, "FATAL ERROR!!! TPU CRASH %s: %s: %d\n",
                             filename(__FILE__), __func__, __LINE__);
                     return BM_ERR_FAILURE;
                 }
@@ -2372,8 +2371,8 @@ bm_status_t bm1684_vpp_convert_internal(
     bm_image*               output,
     bmcv_rect_t*            crop_rect_,
     bmcv_resize_algorithm   algorithm,
-    csc_matrix_t *        matrix
-    )
+    csc_matrix_t *          matrix,
+    short                   log_level)
 {
     bm_status_t ret = BM_SUCCESS;
     std::vector<bool> use_cpu;
@@ -2412,7 +2411,7 @@ bm_status_t bm1684_vpp_convert_internal(
             use_cpu[i] = false;
         }
     }
-    ret = bmcv_image_vpp_convert_(handle, output_num, input, img_before_resize, crop_rect_, algorithm, matrix);
+    ret = bmcv_image_vpp_convert_(handle, output_num, input, img_before_resize, crop_rect_, algorithm, matrix, log_level);
     if (ret != BM_SUCCESS) {
         for (int i = 0; i < output_num; i++) {
             if (use_cpu[i]) {
@@ -2671,12 +2670,13 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
     csc_type_t            csc,
     csc_matrix_t*         matrix,
     bmcv_resize_algorithm algorithm,
-    bmcv_rect_t *         crop_rect )
+    bmcv_rect_t *         crop_rect,
+    short                 log_level)
 {
     if(csc == CSC_MAX_ENUM)
     {
         return bm1684_vpp_convert_internal(
-            handle, output_num, input, output, crop_rect, algorithm, nullptr);
+            handle, output_num, input, output, crop_rect, algorithm, nullptr, log_level);
     }
     switch(csc)
     {
@@ -2685,7 +2685,7 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
         case CSC_YCbCr2RGB_BT601:
         case CSC_YPbPr2RGB_BT709:
             if (!is_csc_yuv(input.image_format)) {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+                bmlib_log(BMCV_LOG_TAG, log_level,
                        "input image format should be yuv csc and vpp should support this format %s: %s: %d",
                         filename(__FILE__), __func__, __LINE__);
                 return BM_ERR_PARAM;
@@ -2693,7 +2693,7 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
             for (int i = 0; i < output_num; i++)
             {
                 if (!is_csc_rgb(output[i].image_format)) {
-                    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+                    bmlib_log(BMCV_LOG_TAG, log_level,
                             "output image format should be rgb csc and vpp should support this format %s: %s: %d",
                             filename(__FILE__), __func__, __LINE__);
                     return BM_ERR_PARAM;
@@ -2706,7 +2706,7 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
         case CSC_RGB2YPbPr_BT601:
         case CSC_RGB2YPbPr_BT709:
             if (!is_csc_rgb(input.image_format)) {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+                bmlib_log(BMCV_LOG_TAG, log_level,
                         "input image format should be yuv csc and vpp should support this format %s: %s: %d",
                         filename(__FILE__), __func__, __LINE__);
                 return BM_ERR_PARAM;
@@ -2714,7 +2714,7 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
             for (int i = 0; i < output_num; i++)
             {
                 if (!is_csc_yuv(output[i].image_format)) {
-                    bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR,
+                    bmlib_log(BMCV_LOG_TAG, log_level,
                             "output image format should be rgb csc and vpp should support this format %s: %s: %d",
                             filename(__FILE__), __func__, __LINE__);
                     return BM_ERR_PARAM;
@@ -2724,17 +2724,17 @@ bm_status_t bm1684_vpp_csc_matrix_convert(
             break;
         case CSC_USER_DEFINED_MATRIX:
             if (matrix == nullptr) {
-                bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "please input a valid matrix\n");
+                bmlib_log(BMCV_LOG_TAG, log_level, "please input a valid matrix\n");
                 return BM_ERR_PARAM;
             }
             break;
         default:
-            bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_ERROR, "invalidate csc enum\n");
+            bmlib_log(BMCV_LOG_TAG, log_level, "invalidate csc enum\n");
             return BM_ERR_PARAM;
     }
 
     return bm1684_vpp_convert_internal(
-        handle, output_num, input, output, crop_rect, algorithm, matrix);
+        handle, output_num, input, output, crop_rect, algorithm, matrix, log_level);
 }
 
 #endif

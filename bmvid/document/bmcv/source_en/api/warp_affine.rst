@@ -1,8 +1,7 @@
 bmcv_image_warp_affine
 ======================
 
-
-  The interface implements the affine transformation of the image, and the operations of rotation, translation and scaling. Affine transformation is a linear transformation from two-dimensional coordinates (x, y) to two-dimensional coordinates (x0, y0). The implementation of this interface is to find the corresponding coordinates in the input image for each pixel of the output image, so as to form a new image. Its mathematical expression is as follows:
+The interface implements the affine transformation of the image, and the operations of rotation, translation and scaling. Affine transformation is a linear transformation from two-dimensional coordinates (x, y) to two-dimensional coordinates (x0, y0). The implementation of this interface is to find the corresponding coordinates in the input image for each pixel of the output image, so as to form a new image. Its mathematical expression is as follows:
 
 .. math::
 
@@ -15,15 +14,11 @@ bmcv_image_warp_affine
 
 The corresponding homogeneous coordinate matrix is expressed as:
 
-
 .. math::
 
      \left[\begin{matrix} x_0 \\ y_0 \\ 1 \end{matrix} \right]=\left[\begin{matrix} a_1&b_1&c_1 \\ a_2&b_2&c_2 \\ 0&0&1 \end{matrix} \right]\times \left[\begin{matrix} x \\ y \\ 1 \end{matrix} \right]
 
-
-
 The coordinate transformation matrix is a 6-point matrix, which is a coefficient matrix for deriving the input image coordinates from the output image coordinates, which can be obtained by the corresponding 3-point coordinates on the input and output image. In facial detection, the face transformation matrix can be obtained through facial detection points.
-
 
 bmcv_affine_matrix defines a coordinate transformation matrix in the order of float m[6] = {a1, b1, c1, a2, b2, c2}.
 bmcv_affine_image_matrix defines that there are several transformation matrices in an image. Generally speaking, when an image has multiple faces, it will correspond to multiple transformation matrices.
@@ -50,27 +45,27 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_affine(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_affine_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_affine_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
+
 
 **Interface form 2:**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_warp_affine_similar_to_opencv(
-                bm_handle_t handle,
-                int image_num,
-                bmcv_affine_image_matrix matrix[4],
-                bm_image* input,
-                bm_image* output,
-                int use_bilinear = 0
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bmcv_affine_image_matrix matrix[4],
+                    bm_image* input,
+                    bm_image* output,
+                    int use_bilinear = 0);
 This interface is an interface to align opencv affine transformations.
+
 
 **Input parameter description**
 
@@ -147,31 +142,53 @@ This interface is an interface to align opencv affine transformations.
 
     .. code-block:: c
 
-        #inculde "common.h"
         #include "stdio.h"
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
         #include <iostream>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
 
-        int main(int argc, char *argv[]) {
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
             bm_handle_t handle;
-
             int image_h = 1080;
             int image_w = 1920;
-
             int dst_h = 256;
             int dst_w = 256;
             int use_bilinear = 0;
-            bm_dev_request(&handle, 0);
             bmcv_affine_image_matrix matrix_image;
-            matrix_image.matrix_num = 1;
-            std::shared_ptr<bmcv_affine_matrix> matrix_data
-                    = std::make_shared<bmcv_affine_matrix>();
-            matrix_image.matrix = matrix_data.get();
+            bm_image src, dst;
+            bmcv_affine_matrix* matrix_data = (bmcv_affine_matrix*)malloc(sizeof(bmcv_affine_matrix) * 1);
+            unsigned char* src_data = new unsigned char[image_h * image_w * 3];
+            unsigned char* res_data = new unsigned char[dst_h * dst_w * 3];
+            const char *filename_src = "path/to/src";
+            const char *filename_dst = "path/to/dst";
 
+            readBin(filename_src, src_data, image_h * image_w * 3);
+            matrix_image.matrix_num = 1;
+            matrix_image.matrix = matrix_data;
             matrix_image.matrix->m[0] = 3.848430;
             matrix_image.matrix->m[1] = -0.02484;
             matrix_image.matrix->m[2] = 916.7;
@@ -179,26 +196,58 @@ This interface is an interface to align opencv affine transformations.
             matrix_image.matrix->m[4] = 3.8484;
             matrix_image.matrix->m[5] = 56.4748;
 
-            bm_image src, dst;
-            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &src);
-            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR,
-                    DATA_TYPE_EXT_1N_BYTE, &dst);
-
-            std::shared_ptr<u8*> src_ptr = std::make_shared<u8*>(
-                    new u8[image_h * image_w * 3]);
-            memset((void *)(*src_ptr.get()), 148, image_h * image_w * 3);
-            u8 *host_ptr[] = {*src_ptr.get()};
-            bm_image_copy_host_to_device(src, (void **)host_ptr);
-
+            bm_dev_request(&handle, 0);
+            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, dst_h, dst_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &dst);
+            bm_image_copy_host_to_device(src, (void**)&src_data);
             bmcv_image_warp_affine(handle, 1, &matrix_image, &src, &dst, use_bilinear);
+            bm_image_copy_device_to_host(dst, (void**)&res_data);
+            writeBin(filename_dst, res_data, dst_h * dst_w * 3);
 
             bm_image_destroy(src);
             bm_image_destroy(dst);
             bm_dev_free(handle);
-
+            delete[] src_data;
+            delete[] res_data;
+            free(matrix_data);
             return 0;
         }
 
 
+bmcv_image_warp_affine_padding
+==============================
 
+* All the uses are the same as the above bmcv_image_warp_affine, only the interface name is changed, and the specific interface name in padding zero is as follows:
+
+
+**Interface form 1:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_padding(
+                bm_handle_t handle,
+                int image_num,
+                bmcv_affine_image_matrix matrix[4],
+                bm_image* input,
+                bm_image* output,
+                int use_bilinear = 0
+        );
+
+**Interface form 2:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_similar_to_opencv_padding(
+                bm_handle_t handle,
+                int image_num,
+                bmcv_affine_image_matrix matrix[4],
+                bm_image* input,
+                bm_image* output,
+                int use_bilinear = 0
+        );
+
+This interface supports BM1684X.
+
+**Code example**
+
+* Same as the bmcv_image_warp_affine interface, Just change the interface name to bmcv_image_warp_affine_padding or bmcv_image_warp_affine_similar_to_opencv_padding.

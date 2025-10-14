@@ -3,6 +3,7 @@ bmcv_sort
 
 该接口可以实现浮点数据的排序（升序/降序），并且支持排序后可以得到原数据所对应的 index。
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -12,17 +13,17 @@ bmcv_sort
 
     .. code-block:: c
 
-        bm_status_t bmcv_sort(bm_handle_t     handle,
-                              bm_device_mem_t src_index_addr,
-                              bm_device_mem_t src_data_addr,
-                              int             data_cnt,
-                              bm_device_mem_t dst_index_addr,
-                              bm_device_mem_t dst_data_addr,
-                              int             sort_cnt,
-                              int             order,
-                              bool            index_enable,
-                              bool            auto_index);
-
+        bm_status_t bmcv_sort(
+                    bm_handle_t handle,
+                    bm_device_mem_t src_index_addr,
+                    bm_device_mem_t src_data_addr,
+                    int data_cnt,
+                    bm_device_mem_t dst_index_addr,
+                    bm_device_mem_t dst_data_addr,
+                    int sort_cnt,
+                    int order,
+                    bool index_enable,
+                    bool auto_index);
 
 
 **输入参数说明：**
@@ -68,12 +69,11 @@ bmcv_sort
   输入参数。是否使能自动生成 index 功能。使用该功能的前提是 index_enable 参数为 true，如果该参数也为 true 则表示按照输入数据的存储顺序从 0 开始计数作为 index，参数 src_index_addr 便无效，输出结果中排好序数据所对应的 index 即存放于 dst_index_addr 地址中。
 
 
-
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **注意事项：**
@@ -87,29 +87,32 @@ bmcv_sort
 
 **示例代码**
 
-
     .. code-block:: c
 
-         int data_cnt = 100;
-         int sort_cnt = 50;
-         float src_data_p[100];
-         int src_index_p[100];
-         float dst_data_p[50];
-         int dst_index_p[50];
-         for (int i = 0; i < 100; i++) {
-             src_data_p[i] = rand() % 1000;
-             src_index_p[i] = 100 - i;
-         }
-         int order = 0;
-         bmcv_sort(handle,
-                   bm_mem_from_system(src_index_p),
-                   bm_mem_from_system(src_data_p),
-                   data_cnt,
-                   bm_mem_from_system(dst_index_p),
-                   bm_mem_from_system(dst_data_p),
-                   sort_cnt,
-                   order,
-                   true,
-                   false);
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <stdio.h>
+        #include "bmcv_api_ext.h"
 
+        int main()
+        {
+            int data_cnt = 100;
+            int sort_cnt = 50;
+            float src_data_p[100];
+            int src_index_p[100];
+            float dst_data_p[50];
+            int dst_index_p[50];
+            int order = 0;
+            bm_handle_t handle;
 
+            bm_dev_request(&handle, 0);
+            for (int i = 0; i < 100; i++) {
+                src_data_p[i] = rand() % 1000;
+                src_index_p[i] = 100 - i;
+            }
+            bmcv_sort(handle, bm_mem_from_system(src_index_p), bm_mem_from_system(src_data_p), data_cnt,
+                    bm_mem_from_system(dst_index_p), bm_mem_from_system(dst_data_p), sort_cnt, order,
+                    true, false);
+            bm_dev_free(handle);
+            return 0;
+        }

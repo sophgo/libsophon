@@ -182,15 +182,12 @@ int main(int argc, char *argv[]) {
         test_loop_times = atoi(argv[1]);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST BGR SPLIT] loop times should be 1~1500"
-                  << std::endl;
+        printf("[TEST BGR SPLIT] loop times should be 1~1500\n");;
         exit(-1);
     }
-    std::cout << "[TEST BGR SPLIT] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST BGR SPLIT] test starts... LOOP times will be %d\n", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST BGR SPLIT] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST BGR SPLIT] LOOP %d------\n", loop_idx);
         int n = 1, c = 3, h = 1080, w = 1920;
         int in_type = DTYPE_I8, out_type = DTYPE_I8;
         int ret = 0;
@@ -256,7 +253,7 @@ int main(int argc, char *argv[]) {
 #endif
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST BGR SPLIT] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST BGR SPLIT] ALL TEST PASSED!------\n");;
 
     return 0;
 }

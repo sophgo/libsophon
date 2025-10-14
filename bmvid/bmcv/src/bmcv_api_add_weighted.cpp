@@ -49,9 +49,9 @@ static bm_status_t bmcv_add_weighted_check(
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "Not supported image format");
         return BM_ERR_DATA;
     }
-    if (src1_type != DATA_TYPE_EXT_1N_BYTE ||
-        src2_type != DATA_TYPE_EXT_1N_BYTE ||
-        dst_type != DATA_TYPE_EXT_1N_BYTE) {
+    if ((src1_type != DATA_TYPE_EXT_1N_BYTE && src1_type != DATA_TYPE_EXT_FLOAT32) ||
+        (src2_type != DATA_TYPE_EXT_1N_BYTE && src2_type != DATA_TYPE_EXT_FLOAT32) ||
+        (dst_type != DATA_TYPE_EXT_1N_BYTE && dst_type != DATA_TYPE_EXT_FLOAT32)) {
         bmlib_log("ADD_WEIGHTED", BMLIB_LOG_ERROR, "Not supported image data type");
         return BM_ERR_DATA;
     }
@@ -77,6 +77,7 @@ bm_status_t bmcv_image_add_weighted(
     if (BM_SUCCESS != ret) {
         return ret;
     }
+    int data_type = input1.data_type;
     bool output_alloc_flag = false;
     if (!bm_image_is_attached(output)) {
         ret = bm_image_alloc_dev_mem(output, BMCV_HEAP_ANY);
@@ -88,9 +89,11 @@ bm_status_t bmcv_image_add_weighted(
     // construct and send api
     int channel = bm_image_get_plane_num(input1);
     int input1_str[3], input2_str[3], output_str[3];
+
     bm_image_get_stride(input1, input1_str);
     bm_image_get_stride(input2, input2_str);
     bm_image_get_stride(output, output_str);
+
     bm_device_mem_t input1_mem[3];
     bm_image_get_device_mem(input1, input1_mem);
     bm_device_mem_t input2_mem[3];
@@ -114,6 +117,7 @@ bm_status_t bmcv_image_add_weighted(
         input1.image_format == FORMAT_BGR_PLANAR) {
         api.height[0] *= 3;
     }
+    api.data_type = data_type;
     api.alpha = alpha;
     api.beta = beta;
     api.gamma = gamma;
@@ -165,4 +169,3 @@ bm_status_t bmcv_image_add_weighted(
     }
     return ret;
 }
-

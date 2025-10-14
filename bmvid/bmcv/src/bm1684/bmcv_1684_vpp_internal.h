@@ -31,7 +31,8 @@ DECL_EXPORT bm_status_t bm1684_vpp_convert_internal(
     bm_image*               output,
     bmcv_rect_t*            crop_rect_,
     bmcv_resize_algorithm   algorithm,
-    csc_matrix_t *          matrix );
+    csc_matrix_t *          matrix,
+    short                   log_level = BMLIB_LOG_ERROR);
 
 DECL_EXPORT bm_status_t bm1684_vpp_cvt_padding(
     bm_handle_t             handle,
@@ -60,7 +61,8 @@ DECL_EXPORT bm_status_t bm1684_vpp_csc_matrix_convert(
     csc_type_t            csc,
     csc_matrix_t *        matrix = nullptr,
     bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
-    bmcv_rect_t *         crop_rect = NULL);
+    bmcv_rect_t *         crop_rect = NULL,
+    short                 log_level = BMLIB_LOG_ERROR);
 
 
 #endif

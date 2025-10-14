@@ -7,8 +7,8 @@
 
 #define UNUSED_VARIABLE(x)  ((x) = (x))
 
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
+extern void bm_write_bin(bm_image dst, const char *output_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
 
 static void user_usage() {
   printf(
@@ -193,7 +193,7 @@ int main(int argc, char *argv[]) {
   if(NULL == src_name)
     gen_matrix_random_data(src);
   else
-    bm1684x_vpp_read_bin(src,src_name);
+    bm_read_bin(src,src_name);
 
   bm_image_create(handle, dst_h, dst_w, FORMAT_GRAY, DATA_TYPE_EXT_FLOAT32, &dst);
   bm_image_alloc_dev_mem(dst,1);
@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
   loop_time, time_max, time_min, time_avg);
 
   if(NULL != dst_name)
-    bm1684x_vpp_write_bin(dst, dst_name);
+    bm_write_bin(dst, dst_name);
 
   if(1 == compare)
     cpu_matrix_compare(src, dst);

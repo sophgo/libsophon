@@ -90,6 +90,7 @@ function(test_bmcv)
 endfunction()
 
 test_bmcv(
+    test_cv_surf.cpp
     test_convert_to.cpp
     test_cv_absdiff.cpp
     test_cv_add_weighted.cpp
@@ -109,6 +110,8 @@ test_bmcv(
     test_cv_feature_match.cpp
     test_cv_fft_1d.cpp
     test_cv_fft_2d.cpp
+    test_cv_stft.cpp
+    test_cv_istft.cpp
     test_cv_fill_rectangle.cpp
     test_cv_gaussian_blur.cpp
     test_cv_gemm.cpp
@@ -146,10 +149,14 @@ test_bmcv(
     test_perf_vpp.cpp
     test_resize.cpp
     test_cv_laplacian.cpp
+    test_cv_lapmatrix.cpp
     test_cv_axpy.cpp
     test_cv_bayer2rgb.cpp
     test_cv_as_strided.cpp
     test_cv_hist_balance.cpp
+    test_cv_qr_cpu.cpp
+    test_cv_knn.cpp
+    test_cv_cluster.cpp
 )
 elseif(WINDOWS)
 
@@ -204,6 +211,7 @@ test_bmcv(
     test_perf_vpp.cpp
     test_resize.cpp
     test_cv_laplacian.cpp
+    test_cv_lapmatrix.cpp
     test_cv_axpy.cpp
     test_cv_bayer2rgb.cpp
     test_cv_as_strided.cpp
@@ -231,6 +239,7 @@ test_bmcv(
 	bm1684x/test_bm1684x_vpp_postpadding-haikang.cpp
 	bm1684x/test_bm1684x_vpp_convert_to_comparison.cpp
 	bm1684x/test_bm1684x_vpp_mul_crop_resize_haikang.cpp
+	bm1684x/test_bm1684x_gen_text_watermark.cpp
 )
 
 file(

@@ -18,8 +18,7 @@ bmcv_image_resize
                 int input_num,
                 bmcv_resize_image resize_attr[4],
                 bm_image* input,
-                bm_image* output
-        );
+                bm_image* output);
 
 
 **参数说明:**
@@ -49,11 +48,10 @@ bmcv_image_resize
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **数据类型说明:**
-
 
     .. code-block:: c
 
@@ -75,7 +73,6 @@ bmcv_image_resize
                 unsigned char padding_r;
                 unsigned int interpolation;
         }bmcv_resize_image;
-
 
 * bmcv_resize_image 描述了一张图中 resize 配置信息。
 
@@ -107,77 +104,120 @@ bmcv_image_resize
 
 * out_height 描述了输出图像的高。
 
+
 **代码示例:**
 
     .. code-block:: c
 
-        int image_num = 4;
-        int crop_w = 711, crop_h = 400, resize_w = 711, resize_h = 400;
-        int image_w = 1920, image_h = 1080;
-        int img_size_i = image_w * image_h * 3;
-        int img_size_o = resize_w * resize_h * 3;
-        std::unique_ptr<unsigned char[]> img_data(
-                new unsigned char[img_size_i * image_num]);
-        std::unique_ptr<unsigned char[]> res_data(
-                new unsigned char[img_size_o * image_num]);
-        memset(img_data.get(), 0x11, img_size_i * image_num);
-        memset(res_data.get(), 0, img_size_o * image_num);
-        bmcv_resize_image resize_attr[image_num];
-        bmcv_resize_t resize_img_attr[image_num];
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          resize_img_attr[img_idx].start_x = 0;
-          resize_img_attr[img_idx].start_y = 0;
-          resize_img_attr[img_idx].in_width = crop_w;
-          resize_img_attr[img_idx].in_height = crop_h;
-          resize_img_attr[img_idx].out_width = resize_w;
-          resize_img_attr[img_idx].out_height = resize_h;
-        }
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          resize_attr[img_idx].resize_img_attr = &resize_img_attr[img_idx];
-          resize_attr[img_idx].roi_num = 1;
-          resize_attr[img_idx].stretch_fit = 1;
-          resize_attr[img_idx].interpolation = BMCV_INTER_NEAREST;
+        #include <memory>
+        #include <assert.h>
+        #include <iostream>
+        #include <set>
+        #include <stdint.h>
+        #include <stdio.h>
+        #include <string>
+        #include <vector>
+        #include <cmath>
+        #include <cstring>
+        #include "bmcv_api.h"
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
+
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
 
-        bm_image input[image_num];
-        bm_image output[image_num];
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          int input_data_type = DATA_TYPE_EXT_1N_BYTE;
-          bm_image_create(handle,
-              image_h,
-              image_w,
-              FORMAT_BGR_PLANAR,
-              (bm_image_data_format_ext)input_data_type,
-              &input[img_idx]);
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
         }
-        bm_image_alloc_contiguous_mem(image_num, input, 1);
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          unsigned char * input_img_data = img_data.get() + img_size_i * img_idx;
-          bm_image_copy_host_to_device(input[img_idx],
-          (void **)&input_img_data);
+
+        int main()
+        {
+            int image_num = 4;
+            int crop_w = 711, crop_h = 400, resize_w = 711, resize_h = 400;
+            int image_w = 1920, image_h = 1080;
+            int img_size_i = image_w * image_h * 3;
+            int img_size_o = resize_w * resize_h * 3;
+            unsigned char* img_data = new unsigned char[img_size_i * image_num];
+            unsigned char* res_data = new unsigned char[img_size_o * image_num];
+            bmcv_resize_image resize_attr[image_num];
+            bmcv_resize_t resize_img_attr[image_num];
+            bm_image input[image_num];
+            bm_image output[image_num];
+            bm_handle_t handle;
+            const char *src_names[4] = {"path/to/src0", "path/to/src1", "path/to/src2", "path/to/src3"};
+            const char *dst_names[4] = {"path/to/dst0", "path/to/dst1", "path/to/dst2", "path/to/dst3"};
+
+            bm_dev_request(&handle, 0);
+
+            for(int i = 0; i < image_num; ++i) {
+                readBin(src_names[i], img_data + i * img_size_i, img_size_i);
+            }
+
+            memset(res_data, 0, img_size_o * image_num);
+
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+                resize_img_attr[img_idx].start_x = 0;
+                resize_img_attr[img_idx].start_y = 0;
+                resize_img_attr[img_idx].in_width = crop_w;
+                resize_img_attr[img_idx].in_height = crop_h;
+                resize_img_attr[img_idx].out_width = resize_w;
+                resize_img_attr[img_idx].out_height = resize_h;
+            }
+
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+            resize_attr[img_idx].resize_img_attr = &resize_img_attr[img_idx];
+            resize_attr[img_idx].roi_num = 1;
+            resize_attr[img_idx].stretch_fit = 1;
+            resize_attr[img_idx].interpolation = BMCV_INTER_NEAREST;
+            }
+
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+                bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &input[img_idx]);
+            }
+            bm_image_alloc_contiguous_mem(image_num, input, 1);
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+                unsigned char * input_img_data = img_data + img_size_i * img_idx;
+                bm_image_copy_host_to_device(input[img_idx], (void **)&input_img_data);
+            }
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+                bm_image_create(handle, resize_h, resize_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output[img_idx]);
+            }
+            bm_image_alloc_contiguous_mem(image_num, output, 1);
+            bmcv_image_resize(handle, image_num, resize_attr, input, output);
+            for (int img_idx = 0; img_idx < image_num; img_idx++) {
+                unsigned char *res_img_data = res_data + img_size_o * img_idx;
+                bm_image_copy_device_to_host(output[img_idx], (void **)&res_img_data);
+                for(int i = 0; i < image_num; ++i) {
+                    writeBin(dst_names[i], res_img_data, img_size_o);
+                }
+            }
+
+            bm_image_free_contiguous_mem(image_num, input);
+            bm_image_free_contiguous_mem(image_num, output);
+            for(int i = 0; i < image_num; i++) {
+                bm_image_destroy(input[i]);
+                bm_image_destroy(output[i]);
+            }
+            delete[] img_data;
+            delete[] res_data;
+            bm_dev_free(handle);
+            return 0;
         }
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          int output_data_type = DATA_TYPE_EXT_1N_BYTE;
-          bm_image_create(handle,
-              resize_h,
-              resize_w,
-              FORMAT_BGR_PLANAR,
-              (bm_image_data_format_ext)output_data_type,
-              &output[img_idx]);
-        }
-        bm_image_alloc_contiguous_mem(image_num, output, 1);
-        bmcv_image_resize(handle, image_num, resize_attr, input, output);
-        for (int img_idx = 0; img_idx < image_num; img_idx++) {
-          unsigned char *res_img_data = res_data.get() + img_size_o * img_idx;
-          bm_image_copy_device_to_host(output[img_idx],
-                                       (void **)&res_img_data);
-        }
-        bm_image_free_contiguous_mem(image_num, input);
-        bm_image_free_contiguous_mem(image_num, output);
-        for(int i = 0; i < image_num; i++) {
-          bm_image_destroy(input[i]);
-          bm_image_destroy(output[i]);
-        }
+
 
 **格式支持:**
 
@@ -244,4 +284,4 @@ bm1684x支持：
 
 2. bm1684支持最大尺寸为2048*2048，最小尺寸为16*16，最大缩放比为32。
 
-   bm1684x支持最大尺寸为8192*8192，最小尺寸为8*8，最大缩放比为128。
+3. bm1684x支持最大尺寸为8192*8192，最小尺寸为8*8，最大缩放比为128。

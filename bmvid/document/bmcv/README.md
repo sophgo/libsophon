@@ -15,8 +15,6 @@ sudo apt install python-is-python3
 pip install sphinx sphinx-autobuild sphinx_rtd_theme rst2pdf
 ```
 
-
-
 ## Install the stuttering Chinese word splitting library to support Chinese search:
 
 ```

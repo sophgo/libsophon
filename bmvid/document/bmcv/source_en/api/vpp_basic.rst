@@ -1,22 +1,25 @@
 bmcv_image_vpp_basic
 =========================
 
-  There is a special video post-processing module VPP on BM1684 and BM1684X. Under certain conditions, it can do the functions of clip, color-space-convert, resize and padding at one time, faster than Tensor Computing Processor.
-  The API can combine  crop, color-space-convert, resize, padding and any number of functions for multiple images.
+There is a special video post-processing module VPP on BM1684 and BM1684X. Under certain conditions, it can do the functions of clip, color-space-convert, resize and padding at one time, faster than Tensor Computing Processor.
+The API can combine  crop, color-space-convert, resize, padding and any number of functions for multiple images.
+
+
+**Interface form::**
 
     .. code-block:: c
 
         bm_status_t bmcv_image_vpp_basic(
-            bm_handle_t           handle,
-            int                   in_img_num,
-            bm_image*             input,
-            bm_image*             output,
-            int*                  crop_num_vec = NULL,
-            bmcv_rect_t*          crop_rect = NULL,
-            bmcv_padding_atrr_t*  padding_attr = NULL,
-            bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
-            csc_type_t            csc_type = CSC_MAX_ENUM,
-            csc_matrix_t*         matrix = NULL);
+                    bm_handle_t handle,
+                    int in_img_num,
+                    bm_image* input,
+                    bm_image* output,
+                    int* crop_num_vec = NULL,
+                    bmcv_rect_t* crop_rect = NULL,
+                    bmcv_padding_atrr_t* padding_attr = NULL,
+                    bmcv_resize_algorithm algorithm = BMCV_INTER_LINEAR,
+                    csc_type_t csc_type = CSC_MAX_ENUM,
+                    csc_matrix_t* matrix = NULL);
 
 
 **Processor model support**
@@ -77,8 +80,6 @@ This interface supports BM1684/BM1684X.
             unsigned char padding_b;
             int           if_memset;
         } bmcv_padding_atrr_t;
-
-
 
     1. Offset information of the top left corner vertex of the target thumbnail relative to the dst image origin (top left corner): dst_crop_stx and dst_crop_sty;
     2. The width and height of the target thumbnail after resize: dst_crop_w and dst_crop_h;
@@ -143,7 +144,6 @@ Input parameter for the selection of color space convert parameter type. Fill in
               int csc_coe22;
               int csc_add2;
           } __attribute__((packed)) csc_matrix_t;
-
 
 
 **Return value description:**
@@ -428,16 +428,118 @@ of which:
     .. code-block:: c
 
         bm_device_mem_t src_plane_device[4];
-        src_plane_device[0] = bm_mem_from_device((u64)avframe->data[6],
-                avframe->linesize[6]);
-        src_plane_device[1] = bm_mem_from_device((u64)avframe->data[4],
-                avframe->linesize[4] * avframe->h);
-        src_plane_device[2] = bm_mem_from_device((u64)avframe->data[7],
-                avframe->linesize[7]);
-        src_plane_device[3] = bm_mem_from_device((u64)avframe->data[5],
-                avframe->linesize[4] * avframe->h / 2);
-
+        src_plane_device[0] = bm_mem_from_device((u64)avframe->data[6], avframe->linesize[6]);
+        src_plane_device[1] = bm_mem_from_device((u64)avframe->data[4], avframe->linesize[4] * avframe->h);
+        src_plane_device[2] = bm_mem_from_device((u64)avframe->data[7], avframe->linesize[7]);
+        src_plane_device[3] = bm_mem_from_device((u64)avframe->data[5], avframe->linesize[4] * avframe->h / 2);
         bm_image_attach(*compressed_image, src_plane_device);
 
 
+**Code example**
 
+    .. code-block:: c
+
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <memory>
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
+        #include <string.h>
+
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int iw = 1280;
+            int ih = 720;
+            int rw = 32;
+            int rh = 32;
+            int crop_w = 32;
+            int crop_h = 32;
+            int crop_num = 1;
+            int pad_h = 0;
+            int pad_w = 0;
+            bm_image_format_ext fmt_i = FORMAT_YUV420P;
+            bm_image_format_ext fmt_o = FORMAT_RGB_PLANAR;
+            int ow = rw + 2 * pad_w;
+            int oh = rh + 2 * pad_h;
+            bmcv_rect_t rect[10];
+            bmcv_padding_atrr_t pad[10];
+            bm_image src;
+            bm_image dst[10];
+            bm_handle_t handle;
+            int dst_rgb_stride[3] = {(ow + 63) / 64 * 64, (ow + 63) / 64 * 64, (ow + 63) / 64 * 64};
+            int src_yuv_stride[3] = {(iw + 63) / 64 * 64, (iw + 31) / 32 * 32, (iw + 31) / 32 * 32};
+            unsigned char* input = (unsigned char*)malloc(ih * iw * 3 / 2);
+            unsigned char* output = (unsigned char*)malloc(oh * ow * 3);
+            unsigned char *host_ptr[3] = {input, input + ih * iw, input + ih * iw * 5 / 4};
+            unsigned char *dst_ptr[3] = {output, output + oh * ow, output + oh * ow};
+            const char *src_name = "/path/to/src";
+            const char *dst_name = "path/to/dst";
+
+            bm_dev_request(&handle, 0);
+            readBin(src_name, input, ih * iw * 3 / 2);
+            // creat input bm_image and alloc device memory for it
+            bm_image_create(handle, ih, iw, fmt_i, DATA_TYPE_EXT_1N_BYTE, &src, src_yuv_stride);
+            bm_image_alloc_dev_mem_heap_mask(src, 6);
+            bm_image_copy_host_to_device(src, (void **)host_ptr);
+
+            for (int i = 0; i < crop_num; i++) {
+                pad[i].dst_crop_stx = pad_w;
+                pad[i].dst_crop_sty = pad_h;
+                pad[i].dst_crop_w = rw;
+                pad[i].dst_crop_h = rh;
+                pad[i].padding_r = 0;
+                pad[i].padding_g = 0;
+                pad[i].padding_b = 0;
+                pad[i].if_memset = 0;
+                rect[i].start_x = 50 * i;
+                rect[i].start_y = 50 * i;
+                rect[i].crop_h = crop_h;
+                rect[i].crop_w = crop_w;
+                rect[i].start_x = rect[i].start_x + crop_w > iw ? iw - crop_w : rect[i].start_x;
+                rect[i].start_y = rect[i].start_y + crop_h > ih ? ih - crop_h : rect[i].start_y;
+                bm_image_create(handle, oh, ow, fmt_o, DATA_TYPE_EXT_1N_BYTE, dst + i, dst_rgb_stride);
+                bm_image_alloc_dev_mem(dst[i]);
+            }
+
+            if (pad_h || pad_w) {
+                for (int j = 0; j < crop_num; j++) {
+                    bm_device_mem_t dev_mem[3];
+                    bm_image_get_device_mem(dst[j], dev_mem);
+                    for (int k = 0; k < bm_image_get_plane_num(dst[j]); k++) {
+                        bm_memset_device(handle, 0, dev_mem[k]);
+                    }
+                }
+            }
+
+            bmcv_image_vpp_basic(handle, 1, &src, dst, &crop_num, rect, pad, BMCV_INTER_NEAREST);
+            bm_image_copy_device_to_host(dst[0], (void **)dst_ptr);
+            writeBin(dst_name, output, oh * ow * 3);
+
+            bm_image_destroy(src);
+            for (int i = 0; i < crop_num; i++) {
+                bm_image_destroy(dst[i]);
+            }
+            bm_dev_free(handle);
+            return 0;
+        }

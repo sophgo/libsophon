@@ -1,7 +1,7 @@
 bmcv_image_put_text
 ===================
 
-The functions of writing (English) on an image and specifying the color, size and width of words are supported.
+The functions of writing (Chinese and English) on an image and specifying the color, size and width of words are supported.
 
 
 **Processor model support**
@@ -25,13 +25,13 @@ This interface supports BM1684/BM1684X.
         } bmcv_color_t;
 
         bm_status_t bmcv_image_put_text(
-                bm_handle_t handle,
-                bm_image image,
-                const char* text,
-                bmcv_point_t org,
-                bmcv_color_t color,
-                float fontScale,
-                int thickness);
+                    bm_handle_t handle,
+                    bm_image image,
+                    const char* text,
+                    bmcv_point_t org,
+                    bmcv_color_t color,
+                    float fontScale,
+                    int thickness);
 
 
 **Parameter Description:**
@@ -46,7 +46,7 @@ This interface supports BM1684/BM1684X.
 
 * const char* text
 
-  Input parameter. The text content to be written. Currently only supports English.
+  Input parameter. The text content to be written. When there is Chinese in the text content, please set the parameter thickness to 0.
 
 * bmcv_point_t org
 
@@ -62,7 +62,7 @@ This interface supports BM1684/BM1684X.
 
 * int thickness
 
-  Input parameter. The width of the drawn line, which is recommended to be set to an even number for YUV format images.
+  Input parameter. The width of the drawn line, which is recommended to be set to an even number for YUV format images. Please set this parameter to 0 when opening the Chinese character library.
 
 
 **Return value description:**
@@ -96,6 +96,8 @@ The interface currently supports the following images_format:
 | 8   | FORMAT_NV61            |
 +-----+------------------------+
 
+The thickness parameter is configured to 0, which means that after opening the Chinese character library, the image_fata extension supports the formats supported by the bmcv_image_watermark_superpose API base image.
+
 The following data_type is currently supported:
 
 +-----+--------------------------------+
@@ -104,47 +106,65 @@ The following data_type is currently supported:
 | 1   | DATA_TYPE_EXT_1N_BYTE          |
 +-----+--------------------------------+
 
+If the text content remains unchanged, it is recommended to use the text drawing method of combining bmcv_gen_text_watermark and bmcv_image_watermark_superpose to generate a watermark image for the text. Repeat the watermark image for OSD overlay to improve processing efficiency. For an example, please refer to the documentation of the bmcv_image_watermark_superpose interface.
 
 **Code example:**
 
     .. code-block:: c
 
+        #include "bmcv_api_ext.h"
+        #include <stdio.h>
+        #include <stdlib.h>
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        int thickness = 4
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+        int channel = 1;
+        int width = 1920;
+        int height = 1080;
+        int dev_id = 0;
+        int thickness = 4;
         float fontScale = 4;
         char text[20] = "hello world";
         bmcv_point_t org = {100, 100};
         bmcv_color_t color = {255, 0, 0};
         bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> data_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        for (int i = 0; i < channel * width * height; i++) {
-            data_ptr.get()[i] = rand() % 255;
-        }
-        // calculate res
         bm_image img;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &img);
+        const char* input_path = "path/to/input";
+        const char* output_path = "path/to/output";
+        unsigned char* data_ptr = new unsigned char[channel * width * height];
+
+        readBin(input_path, data_ptr, channel * width * height);
+        bm_dev_request(&handle, dev_id);
+        bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &img);
         bm_image_alloc_dev_mem(img);
-        bm_image_copy_host_to_device(img, (void **)&(data_ptr.get()));
-        if (BM_SUCCESS != bmcv_image_put_text(handle, img, text, org, color, fontScale, thickness)) {
-            std::cout << "bmcv put text error !!!" << std::endl;
-            bm_image_destroy(img);
-            bm_dev_free(handle);
-            return;
-        }
-        bm_image_copy_device_to_host(img, (void **)&(data_ptr.get()));
+        bm_image_copy_host_to_device(img, (void**)&data_ptr);
+        bmcv_image_put_text(handle, img, text, org, color, fontScale, thickness);
+        bm_image_copy_device_to_host(img, (void**)&data_ptr);
+        writeBin(output_path, data_ptr, channel * width * height);
+
         bm_image_destroy(img);
         bm_dev_free(handle);
-
-
+        free(data_ptr);
+        return 0;
+      }

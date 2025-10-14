@@ -141,15 +141,11 @@ bool result_compare(T * tpu_result_similarity,
             // std::cout << " TPU topk distance value: [" << tpu_result_similarity[query_cnt * sort_cnt + sort_indx] << "]" << std::endl;
             // std::cout << " Ref topk distance value: [" << ref_similarity << "]" << std::endl;
             if (fabs((float)tpu_result_similarity[query_cnt * sort_cnt + sort_indx] - (float)ref_similarity) > (1e-2)) {
-                cout << "tpu_res[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << tpu_result_index[query_cnt * sort_cnt + sort_indx] << "] "
-                     << tpu_result_similarity[query_cnt * sort_cnt + sort_indx]
-
-                     << " ref_result[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << ref_index_origin << "] "
-                     << tmp_ref_result[query_cnt][ref_index] << endl;
+                printf("tpu_res[%ld][%d][%d] = %d , ref_result[%ld][%d][%d] = %d\n",
+                       query_cnt, sort_indx, tpu_result_index[query_cnt * sort_cnt + sort_indx],
+                       tpu_result_similarity[query_cnt * sort_cnt + sort_indx],
+                       query_cnt, sort_indx, ref_index_origin,
+                       tmp_ref_result[query_cnt][ref_index]);
                 return false;
             }
             tmp_ref_result[query_cnt].erase(tmp_ref_result[query_cnt].begin() + ref_index);
@@ -177,15 +173,11 @@ bool result_compare_fp16(fp16 * tpu_result_similarity,
                                       ref_similarity);
             int ref_index_origin = std::distance(ref_result[query_cnt].begin(), tmp_elem);
             if (fabs((float)fp16tofp32(tpu_result_similarity[query_cnt * sort_cnt + sort_indx]) - (float)fp16tofp32((fp32tofp16(ref_similarity, 1)))) > (3e-1)) {
-                cout << "tpu_res[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << tpu_result_index[query_cnt * sort_cnt + sort_indx] << "] "
-                     << fp16tofp32(tpu_result_similarity[query_cnt * sort_cnt + sort_indx])
-
-                     << " ref_result[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << ref_index_origin << "] " << fp16tofp32((fp32tofp16(ref_similarity, 1))) << " "
-                     << ref_similarity << endl;
+                printf("tpu_res[%ld][%d][%d] = %f , ref_result[%ld][%d][%d] = %f %f\n",
+                       query_cnt, sort_indx, tpu_result_index[query_cnt * sort_cnt + sort_indx],
+                       fp16tofp32(tpu_result_similarity[query_cnt * sort_cnt + sort_indx]),
+                       query_cnt, sort_indx, ref_index_origin,
+                       fp16tofp32((fp32tofp16(ref_similarity, 1))), ref_similarity);
                 return false;
             }
             tmp_ref_result[query_cnt].erase(tmp_ref_result[query_cnt].begin() + ref_index);
@@ -217,15 +209,11 @@ bool result_compare_fp32(float * tpu_result_similarity,
             // std::cout << " TPU topk distance value: [" << tpu_result_similarity[query_cnt * sort_cnt + sort_indx] << "]" << std::endl;
             // std::cout << " Ref topk distance value: [" << ref_similarity << "]" << std::endl;
             if (fabs((float)tpu_result_similarity[query_cnt * sort_cnt + sort_indx] - (float)ref_similarity ) > (1e-1)) {
-                cout << "tpu_res[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << tpu_result_index[query_cnt * sort_cnt + sort_indx] << "] "
-                     << tpu_result_similarity[query_cnt * sort_cnt + sort_indx]
-
-                     << " ref_result[" << query_cnt << "]"
-                     << "[" << sort_indx << "]"
-                     << "[" << ref_index_origin << "] "
-                     << ref_similarity << endl;
+                printf("tpu_res[%ld][%d][%d] = %f , ref_result[%ld][%d][%d] = %f\n",
+                       query_cnt, sort_indx, tpu_result_index[query_cnt * sort_cnt + sort_indx],
+                       tpu_result_similarity[query_cnt * sort_cnt + sort_indx],
+                       query_cnt, sort_indx, ref_index_origin,
+                       ref_similarity);
                 return false;
             }
             tmp_ref_result[query_cnt].erase(tmp_ref_result[query_cnt].begin() + ref_index);
@@ -245,7 +233,7 @@ int32_t faiss_indexflatIP_fp16_single_test(int vec_dims,
     bm_status_t ret = BM_SUCCESS;
     ret = bm_dev_request(&handle, 0);
     if (BM_SUCCESS != ret) {
-        std::cout << "request dev failed" << std::endl;
+        printf("request dev failed\n");
         return BM_ERR_FAILURE;
     }
 
@@ -355,8 +343,8 @@ int32_t faiss_indexflatIP_fp16_single_test(int vec_dims,
                            input_dtype,
                            output_dtype);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
-    std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("TPU using time(ms): %ld(ms)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000);
+    printf("TPU using time(us): %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if (output_dtype == DT_FP32)
         bm_memcpy_d2s(handle,
@@ -378,7 +366,7 @@ int32_t faiss_indexflatIP_fp16_single_test(int vec_dims,
                                         output_index.get()->data,
                                         ref_result,
                                         sort_cnt)) {
-            std::cout << "-------------faiss_indexflatIP fp16/fp32 compare failed-------" << std::endl;
+            printf("-------------faiss_indexflatIP fp16/fp32 compare failed-------\n");
             exit(-1);
         }
     } else {
@@ -386,12 +374,12 @@ int32_t faiss_indexflatIP_fp16_single_test(int vec_dims,
                                         output_index.get()->data,
                                         ref_result,
                                         sort_cnt)) {
-            std::cout << "-------------faiss_indexflatIP fp16/fp16 compare failed-------" << std::endl;
+            printf("-------------faiss_indexflatIP fp16/fp16 compare failed-------\n");
             exit(-1);
         }
     }
 
-    std::cout << "-------------faiss_indexflatIP fp16 compare succeed-----------" << std::endl;
+    printf("-------------faiss_indexflatIP fp16 compare succeed-----------\n");
     bm_free_device(handle, input_data_global_addr_device);
     bm_free_device(handle, db_data_global_addr_device);
     bm_free_device(handle, buffer_global_addr_device);
@@ -412,7 +400,7 @@ int32_t faiss_indexflatIP_fp32_single_test(int vec_dims,
     bm_status_t ret = BM_SUCCESS;
     ret = bm_dev_request(&handle, 0);
     if (BM_SUCCESS != ret) {
-        std::cout << "request dev failed" << std::endl;
+        printf("request dev failed\n");
         return BM_ERR_FAILURE;
     }
 
@@ -474,11 +462,11 @@ int32_t faiss_indexflatIP_fp32_single_test(int vec_dims,
     memcpy(input_data.get()->data, input_content_vec_con.data(), query_vecs_num * vec_dims * sizeof(float));
     memcpy(db_data.get()->data, db_content_vec_con.data(), database_vecs_num * vec_dims * sizeof(float));
     std::shared_ptr<Blob<int>> output_index = std::make_shared<Blob<int>>(query_vecs_num * sort_cnt);
-    std::cout << "vec_dims: " << vec_dims << std::endl;
-    std::cout << "query_vecs_num: " << query_vecs_num << std::endl;
-    std::cout << "database_vecs_num: " << database_vecs_num << std::endl;
-    std::cout << "sort_cnt: " << sort_cnt << std::endl;
-    std::cout << "is_transpose: " << is_transpose << std::endl;
+    printf("vec_dims: %d\n", vec_dims);
+    printf("query_vecs_num:    %d\n", query_vecs_num);
+    printf("database_vecs_num:   %d\n", database_vecs_num);
+    printf("sort_cnt:    %d\n", sort_cnt);
+    printf("transpose:    %d\n", is_transpose);
 
     bm_device_mem_t input_data_global_addr_device,
                     db_data_global_addr_device,
@@ -522,8 +510,8 @@ int32_t faiss_indexflatIP_fp32_single_test(int vec_dims,
                            input_dtype,
                            output_dtype);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
-    std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("TPU using time(ms): %ld(ms)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000);
+    printf("TPU using time(us): %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     if (output_dtype == DT_FP32)
         bm_memcpy_d2s(handle,
                   bm_mem_get_system_addr(bm_mem_from_system(output_similarity_fp32.get()->data)),
@@ -544,7 +532,7 @@ int32_t faiss_indexflatIP_fp32_single_test(int vec_dims,
                                         output_index.get()->data,
                                         ref_result,
                                         sort_cnt)) {
-            std::cout << "-------------faiss_indexflatIP fp32/fp32 compare failed-------" << std::endl;
+            printf("-------------faiss_indexflatIP fp32/fp32 compare failed-------\n");
             exit(-1);
         }
     } else {
@@ -552,11 +540,11 @@ int32_t faiss_indexflatIP_fp32_single_test(int vec_dims,
                                         output_index.get()->data,
                                         ref_result,
                                         sort_cnt)) {
-            std::cout << "-------------faiss_indexflatIP fp32/fp16 compare failed-------" << std::endl;
+            printf("-------------faiss_indexflatIP fp32/fp16 compare failed-------\n");
             exit(-1);
         }
     }
-    std::cout << "-------------faiss_indexflatIP fp32 compare succeed-----------" << std::endl;
+    printf("-------------faiss_indexflatIP fp32 compare succeed-------\n");
     bm_free_device(handle, input_data_global_addr_device);
     bm_free_device(handle, db_data_global_addr_device);
     bm_free_device(handle, buffer_global_addr_device);
@@ -577,7 +565,7 @@ int32_t faiss_indexflatIP_fix8b_single_test(int vec_dims,
     bm_status_t ret = BM_SUCCESS;
     ret = bm_dev_request(&handle, 0);
     if (BM_SUCCESS != ret) {
-        std::cout << "request dev failed" << std::endl;
+        printf("request dev failed\n");
         return BM_ERR_FAILURE;
     }
 
@@ -635,11 +623,11 @@ int32_t faiss_indexflatIP_fix8b_single_test(int vec_dims,
     memcpy(db_data.get()->data, db_content_vec_con.data(), database_vecs_num * vec_dims * sizeof(signed char));
 
     std::shared_ptr<Blob<int>> output_index = std::make_shared<Blob<int>>(query_vecs_num * sort_cnt);
-    std::cout << "vec_dims: " << vec_dims << std::endl;
-    std::cout << "query_vecs_num: " << query_vecs_num << std::endl;
-    std::cout << "database_vecs_num: " << database_vecs_num << std::endl;
-    std::cout << "sort_cnt: " << sort_cnt << std::endl;
-    std::cout << "is_transpose: " << is_transpose << std::endl;
+    printf("vec_dims: %d\n", vec_dims);
+    printf("query_vecs_num:    %d\n", query_vecs_num);
+    printf("database_vecs_num:   %d\n", database_vecs_num);
+    printf("sort_cnt:    %d\n", sort_cnt);
+    printf("transpose:    %d\n", is_transpose);
 
     bm_device_mem_t input_data_global_addr_device,
                     db_data_global_addr_device,
@@ -683,8 +671,8 @@ int32_t faiss_indexflatIP_fix8b_single_test(int vec_dims,
                            input_dtype,
                            output_dtype);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
-    std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("TPU using time(ms): %ld(ms)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000);
+    printf("TPU using time(us): %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     bm_memcpy_d2s(handle,
                   bm_mem_get_system_addr(bm_mem_from_system(output_similarity.get()->data)),
                   output_sorted_similarity_global_addr_device);
@@ -699,10 +687,10 @@ int32_t faiss_indexflatIP_fix8b_single_test(int vec_dims,
                                      output_index.get()->data,
                                      ref_result,
                                      sort_cnt)) {
-        std::cout << "------------faiss_indexflatIP FIX8B COMPARE failed-----" << std::endl;
+        printf("------------faiss_indexflatIP FIX8B COMPARE failed-----\n");
         exit(-1);
     }
-    std::cout << "-------------faiss_indexflatIP FIX8B COMPARE succeed-----------" << std::endl;
+    printf("-------------faiss_indexflatIP FIX8B COMPARE succeed-----------\n");
     bm_free_device(handle, input_data_global_addr_device);
     bm_free_device(handle, db_data_global_addr_device);
     bm_free_device(handle, buffer_global_addr_device);
@@ -715,15 +703,19 @@ int32_t faiss_indexflatIP_fix8b_single_test(int vec_dims,
 int main(int argc, char* args[]) {
     unsigned int seed = (unsigned)time(NULL);
     srand(seed);
-    std::cout << "random seed = " << seed << std::endl;
+    printf("random seed = %d\n", seed);
 
     int sort_cnt = rand() % 100 + 1;
     int database_vecs_num = rand() % 10000 + 1 + sort_cnt;
-    int query_vecs_num = rand() % 64 + 1;
+    int query_vecs_num = rand() % 50 + 1;
     int vec_dims = rand() % 256 + 1;
     int is_transpose = rand() % 2;
-    int input_dtype = rand() % 2 == 0? DT_FP32 : DT_FP16;
-    int output_dtype = rand() % 2 == 0? DT_FP32 : DT_FP16;
+    int input_dtype_num[] = {1, 3, 5};  //1-int 3-fp16 5-fp32
+    int output_dtype_num[] = {9, 3, 5};  //9-int 3-fp16 5-fp32
+    int dtype_size = sizeof(input_dtype_num) / sizeof(input_dtype_num[0]);
+    int rand_num = rand() % dtype_size;
+    int input_dtype = input_dtype_num[rand_num];
+    int output_dtype = output_dtype_num[rand_num];
 
     if (argc > 1) database_vecs_num = atoi(args[1]);
     if (argc > 2) query_vecs_num = atoi(args[2]);
@@ -733,14 +725,14 @@ int main(int argc, char* args[]) {
     if (argc > 6) input_dtype = atoi(args[6]);
     if (argc > 7) output_dtype = atoi(args[7]);
 
-    std::cout << "------------parameter------------" << std::endl;
-    std::cout << "database_num: " << database_vecs_num << std::endl;
-    std::cout << "query_num:    " << query_vecs_num << std::endl;
-    std::cout << "sort_count:   " << sort_cnt << std::endl;
-    std::cout << "data_dims:    " << vec_dims<< std::endl;
-    std::cout << "transpose:    " << is_transpose << std::endl;
-    std::cout << "input_dtype:  " << (input_dtype == DT_FP32?"fp32":"fp16") << std::endl;
-    std::cout << "output_dtype: " << (output_dtype == DT_FP32?"fp32":"fp16") << std::endl;
+   printf("------------parameter------------\n");
+    printf("database_num: %d\n", database_vecs_num);
+    printf("query_num:    %d\n", query_vecs_num);
+    printf("sort_count:   %d\n", sort_cnt);
+    printf("data_dims:    %d\n", vec_dims);
+    printf("transpose:    %d\n", is_transpose);
+    printf("input dtype:  %s\n", (input_dtype == DT_FP32?"fp32":"fp16"));
+    printf("output dtype: %s\n", (output_dtype == DT_FP32?"fp32":"fp16"));
 
     if (input_dtype == DT_FP32) {
         if (BM_SUCCESS != faiss_indexflatIP_fp32_single_test(vec_dims, query_vecs_num, database_vecs_num, sort_cnt, is_transpose, input_dtype, output_dtype)) {

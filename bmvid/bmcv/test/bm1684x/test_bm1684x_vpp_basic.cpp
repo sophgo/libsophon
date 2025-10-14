@@ -11,8 +11,8 @@
 #include <sys/time.h>
 #endif
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
+extern void bm_write_bin(bm_image dst, const char *output_name);
 
 int main(int argc, char **argv) {
 
@@ -48,10 +48,10 @@ int main(int argc, char **argv) {
   dst = new bm_image [4];
   bm_image_create(handle, 1080, 1920, (bm_image_format_ext)0, DATA_TYPE_EXT_1N_BYTE, &src[0]);
   bm_image_alloc_dev_mem(src[0]);
-  bm1684x_vpp_read_bin(src[0], "i420.bin");
+  bm_read_bin(src[0], "i420.bin");
   bm_image_create(handle, 1080, 1920, (bm_image_format_ext)0, DATA_TYPE_EXT_1N_BYTE, &src[1]);
   bm_image_alloc_dev_mem(src[1]);
-  bm1684x_vpp_read_bin(src[1], "420_1920x1088.yuv");
+  bm_read_bin(src[1], "420_1920x1088.yuv");
 
 #ifdef __linux__
     gettimeofday(&tv_start, NULL);
@@ -83,10 +83,10 @@ int main(int argc, char **argv) {
   timediff.tv_usec = tv_end.tv_usec - tv_start.tv_usec;
   printf("bmcv_image_vpp_basic spend %ld us\n" ,(timediff.tv_sec * 1000000 + timediff.tv_usec));
 #endif
-  bm1684x_vpp_write_bin(dst[0],"basic_1.bin");
-  bm1684x_vpp_write_bin(dst[1],"basic_2.bin");
-  bm1684x_vpp_write_bin(dst[2],"basic_3.bin");
-  bm1684x_vpp_write_bin(dst[3],"basic_4.bin");
+  bm_write_bin(dst[0],"basic_1.bin");
+  bm_write_bin(dst[1],"basic_2.bin");
+  bm_write_bin(dst[2],"basic_3.bin");
+  bm_write_bin(dst[3],"basic_4.bin");
   for(int i = 0; i<out_image_num; i++){
   bm_image_destroy(dst[i]);
   }

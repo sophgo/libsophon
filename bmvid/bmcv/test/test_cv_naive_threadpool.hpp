@@ -48,7 +48,8 @@ void ThreadPool::srand(u64 seed)
 	{
 		int local_seed = (*main_thread_engine)();
 		random_engines[workers[i].get_id()] = std::make_shared<std::default_random_engine>(local_seed);
-		std::cout << "On thread " << workers[i].get_id() << " the seed is " << local_seed << std::endl;
+		size_t thread_id = std::hash<std::thread::id>()(workers[i].get_id());
+		printf("On thread %zu the seed is %d\n", thread_id, local_seed);
 	}
 }
 
@@ -62,7 +63,7 @@ inline ThreadPool::ThreadPool(int thread_num) : stop(false)
 	this->threads_num = thread_num;
 	workers.reserve(threads_num);
 	tast_on_going = 0;
-	
+
 	for (int i = 0; i < threads_num; ++i)
 	{
 		workers.emplace_back([this]() {

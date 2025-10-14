@@ -18,8 +18,8 @@
 #include "vpplib.h"
 #endif
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
+extern void bm_write_bin(bm_image dst, const char *output_name);
 extern void format_to_str(bm_image_format_ext format, char* res);
 void algorithm_to_str(bmcv_resize_algorithm algorithm, char* res)
 {
@@ -87,7 +87,7 @@ static void * stitch(void* arg) {
         printf("bm_image_alloc_dev_mem_dst. ret = %d\n", ret);
         exit(-1);
     }
-    bm1684x_vpp_read_bin(src,src_name);
+    bm_read_bin(src,src_name);
     bmcv_rect_t rect = {.start_x = 0, .start_y = 0, .crop_w = src_w, .crop_h = src_h};
     bmcv_rect_t src_rect[2] = {rect, rect};
     bmcv_rect_t dst_rect[2] = {dst_rect0, dst_rect1};
@@ -120,7 +120,7 @@ static void * stitch(void* arg) {
     pixel_per_sec = src_w * src_h * fps_actual/1024/1024;
 
     if(ctx.i == 0){
-            bm1684x_vpp_write_bin(dst, dst_name);
+            bm_write_bin(dst, dst_name);
     }
     bm_image_destroy(src);
     bm_image_destroy(dst);

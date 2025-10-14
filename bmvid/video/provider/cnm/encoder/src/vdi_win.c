@@ -872,7 +872,7 @@ vpu_instance_pool_t* bm_vdi_get_instance_pool(uint32_t core_idx)
     return (vpu_instance_pool_t *)vdi->pvip;
 }
 
-int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx)
+int bm_vdi_open_instance(uint32_t core_idx, uint32_t inst_idx, uint32_t width, uint32_t height, uint32_t fps)
 {
     bm_vdi_info_t *vdi;
     vpudrv_inst_info_t inst_info = {0};
@@ -934,6 +934,21 @@ int bm_vdi_close_instance(uint32_t core_idx, uint32_t inst_idx)
     }
 
     vdi->pvip->vpu_instance_num = inst_info.inst_open_count;
+    return 0;
+}
+
+int bm_vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx)
+{
+    return 0;
+}
+
+int bm_vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx)
+{
+    return 0;
+}
+
+int bm_vdi_vpuinfo_get_failed(uint32_t core_idx, uint32_t inst_idx)
+{
     return 0;
 }
 

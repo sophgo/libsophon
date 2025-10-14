@@ -14,12 +14,12 @@ This interface supports BM1684/BM1684X.
     .. code-block:: c
 
         bm_status_t bmcv_image_threshold(
-                bm_handle_t handle,
-                bm_image input,
-                bm_image output,
-                unsigned char thresh,
-                unsigned char max_value,
-                bm_thresh_type_t type);
+                    bm_handle_t handle,
+                    bm_image input,
+                    bm_image output,
+                    unsigned char thresh,
+                    unsigned char max_value,
+                    bm_thresh_type_t type);
 
     The thresh types are as follows:
 
@@ -33,7 +33,6 @@ This interface supports BM1684/BM1684X.
             BM_THRESH_TOZERO_INV,
             BM_THRESH_TYPE_MAX
         } bm_thresh_type_t;
-
 
 
     The specific formula of each type is as follows:
@@ -134,56 +133,68 @@ The interface currently supports the following data_type:
 2. The image_format and data_type of input and output must be the same.
 
 
-
 **Code example:**
 
     .. code-block:: c
 
+        #include <stdio.h>
+        #include "bmcv_api_ext.h"
+        #include "test_misc.h"
+        #include "stdlib.h"
+        #include "string.h"
+        #include <assert.h>
+        #include <float.h>
 
-        int channel   = 1;
-        int width     = 1920;
-        int height    = 1080;
-        int dev_id    = 0;
-        bm_handle_t handle;
-        bm_status_t dev_ret = bm_dev_request(&handle, dev_id);
-        std::shared_ptr<unsigned char> src_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        std::shared_ptr<unsigned char> res_ptr(
-                new unsigned char[channel * width * height],
-                std::default_delete<unsigned char[]>());
-        unsigned char * src_data = src_ptr.get();
-        unsigned char * res_data = res_ptr.get();
-        for (int i = 0; i < channel * width * height; i++) {
-            src_data[i] = rand() % 255;
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
+
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_src);
         }
-        // calculate res
-        bm_image input, output;
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &input);
-        bm_image_alloc_dev_mem(input);
-        bm_image_copy_host_to_device(input, (void **)&src_data);
-        bm_image_create(handle,
-                        height,
-                        width,
-                        FORMAT_GRAY,
-                        DATA_TYPE_EXT_1N_BYTE,
-                        &output);
-        bm_image_alloc_dev_mem(output);
-        if (BM_SUCCESS != bmcv_image_threshold(handle, input, output, 200, 200, BM_THRESH_BINARY)) {
-            std::cout << "bmcv thresh error !!!" << std::endl;
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            int channel = 1;
+            int width = 1920;
+            int height = 1080;
+            int dev_id = 0;
+            bm_handle_t handle;
+            unsigned char* src_data = new unsigned char[channel * width * height];
+            unsigned char* res_data = new unsigned char[channel * width * height];
+            bm_image input, output;
+            const char *src_name = "/path/to/src";
+            const char *dst_name = "path/to/dst";
+
+            bm_dev_request(&handle, dev_id);
+            readBin(src_name, src_data, channel * width * height);
+
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &input);
+            bm_image_alloc_dev_mem(input);
+            bm_image_copy_host_to_device(input, (void**)&src_data);
+            bm_image_create(handle, height, width, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, &output);
+            bm_image_alloc_dev_mem(output);
+            bmcv_image_threshold(handle, input, output, 200, 200, BM_THRESH_BINARY);
+            bm_image_copy_device_to_host(output, (void**)&res_data);
+            writeBin(dst_name, res_data, channel * width * height);
+
             bm_image_destroy(input);
             bm_image_destroy(output);
             bm_dev_free(handle);
-            exit(-1);
+            delete[] src_data;
+            delete[] res_data;
+            return 0;
         }
-        bm_image_copy_device_to_host(output, (void **)&res_data);
-        bm_image_destroy(input);
-        bm_image_destroy(output);
-        bm_dev_free(handle);
-
-

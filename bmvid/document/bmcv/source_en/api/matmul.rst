@@ -29,24 +29,25 @@ Among them,
 * alpha and beta are constant coefficients of float32, which is valid only when C is float32.
 
 
-The format of the interface is as follows:
+**Interface form:**
 
     .. code-block:: c
 
-         bm_status_t bmcv_matmul(bm_handle_t      handle,
-                                 int              M,
-                                 int              N,
-                                 int              K,
-                                 bm_device_mem_t  A,
-                                 bm_device_mem_t  B,
-                                 bm_device_mem_t  C,
-                                 int              A_sign,
-                                 int              B_sign,
-                                 int              rshift_bit,
-                                 int              result_type,
-                                 bool             is_B_trans,
-                                 float            alpha = 1,
-                                 float            beta = 0);
+        bm_status_t bmcv_matmul(
+                    bm_handle_t handle,
+                    int M,
+                    int N,
+                    int K,
+                    bm_device_mem_t A,
+                    bm_device_mem_t B,
+                    bm_device_mem_t C,
+                    int A_sign,
+                    int B_sign,
+                    int rshift_bit,
+                    int result_type,
+                    bool is_B_trans,
+                    float alpha = 1,
+                    float beta = 0);
 
 
 **Processor model support**
@@ -54,7 +55,7 @@ The format of the interface is as follows:
 This interface supports BM1684/BM1684X.
 
 
-**输入参数说明：**
+**Parameter Description:**
 
 * bm_handle_t handle
 
@@ -120,36 +121,37 @@ This interface supports BM1684/BM1684X.
 * Other: failed
 
 
-
 **Sample code**
-
 
     .. code-block:: c
 
-        int M = 3, N = 4, K = 5;
-        int result_type = 1;
-        bool is_B_trans = false;
-        int rshift_bit = 0;
-        char *A     = new char[M * K];
-        char *B     = new char[N * K];
-        short *C     = new short[M * N];
-        memset(A, 0x11, M * K * sizeof(char));
-        memset(B, 0x22, N * K * sizeof(char));
+        #include "bmcv_api_ext.h"
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        #include "test_misc.h"
 
-        bmcv_matmul(handle,
-                    M,
-                    N,
-                    K,
-                    bm_mem_from_system((void *)A),
-                    bm_mem_from_system((void *)B),
-                    bm_mem_from_system((void *)C),
-                    1,
-                    1,
-                    rshift_bit,
-                    result_type,
-                    is_B_trans);
+        int main()
+        {
+            int M = 3, N = 4, K = 5;
+            int result_type = 1;
+            bool is_B_trans = false;
+            int rshift_bit = 0;
+            char* A = new char[M * K];
+            char* B = new char[N * K];
+            short* C = new short[M * N];
+            bm_handle_t handle;
 
-        delete A;
-        delete B;
-        delete C;
+            bm_dev_request(&handle, 0);
+            memset(A, 0x11, M * K * sizeof(char));
+            memset(B, 0x22, N * K * sizeof(char));
+            bmcv_matmul(handle, M, N, K, bm_mem_from_system((void *)A), bm_mem_from_system((void *)B),
+                        bm_mem_from_system((void *)C), 1, 1, rshift_bit, result_type, is_B_trans);
 
+            delete[] A;
+            delete[] B;
+            delete[] C;
+            bm_dev_free(handle);
+            return 0;
+        }

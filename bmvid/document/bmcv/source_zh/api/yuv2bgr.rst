@@ -14,11 +14,11 @@ bmcv_image_yuv2bgr_ext
     .. code-block:: c
 
         bm_status_t bmcv_image_yuv2bgr_ext(
-                bm_handle_t handle,
-                int image_num,
-                bm_image* input,
-                bm_image* output
-        );
+                    bm_handle_t handle,
+                    int image_num,
+                    bm_image* input,
+                    bm_image* output);
+
 
 **传入参数说明:**
 
@@ -39,13 +39,11 @@ bmcv_image_yuv2bgr_ext
   输出参数。输出 bm_image 对象指针。
 
 
-
 **返回值说明:**
 
 * BM_SUCCESS: 成功
 
 * 其他: 失败
-
 
 
 **代码示例**
@@ -55,40 +53,61 @@ bmcv_image_yuv2bgr_ext
         #include <iostream>
         #include <vector>
         #include "bmcv_api_ext.h"
-        #include "bmlib_utils.h"
-        #include "common.h"
         #include "stdio.h"
         #include "stdlib.h"
         #include "string.h"
         #include <memory>
 
-         int main(int argc, char *argv[]) {
-             bm_handle_t handle;
-             bm_dev_request(&handle, 0);
+        static void readBin(const char* path, unsigned char* input_data, int size)
+        {
+            FILE *fp_src = fopen(path, "rb");
 
-             int image_n = 1;
-             int image_h = 1080;
-             int image_w = 1920;
-             bm_image src, dst;
-             bm_image_create(handle, image_h, image_w, FORMAT_NV12,
-                     DATA_TYPE_EXT_1N_BYTE, &src);
-             bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR,
-                     DATA_TYPE_EXT_1N_BYTE, &dst);
-             std::shared_ptr<u8*> y_ptr = std::make_shared<u8*>(
-                     new u8[image_h * image_w]);
-             std::shared_ptr<u8*> uv_ptr = std::make_shared<u8*>(
-                     new u8[image_h * image_w / 2]);
-             memset((void *)(*y_ptr.get()), 148, image_h * image_w);
-             memset((void *)(*uv_ptr.get()), 158, image_h * image_w / 2);
-             u8 *host_ptr[] = {*y_ptr.get(), *uv_ptr.get()};
-             bm_image_copy_host_to_device(src, (void **)host_ptr);
-             bmcv_image_yuv2bgr_ext(handle, image_n, &src, &dst);
-             bm_image_destroy(src);
-             bm_image_destroy(dst);
-             bm_dev_free(handle);
-             return 0;
-         }
+            if (fread((void *)input_data, 1, size, fp_src) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
 
+            fclose(fp_src);
+        }
+
+        static void writeBin(const char * path, unsigned char* input_data, int size)
+        {
+            FILE *fp_dst = fopen(path, "wb");
+            if (fwrite((void *)input_data, 1, size, fp_dst) < (unsigned int)size) {
+                printf("file size is less than %d required bytes\n", size);
+            };
+
+            fclose(fp_dst);
+        }
+
+        int main()
+        {
+            bm_handle_t handle;
+            int image_n = 1;
+            int image_h = 1080;
+            int image_w = 1920;
+            bm_image src, dst;
+            unsigned char* src_data = new unsigned char[image_h * image_w * 3 / 2];
+            unsigned char* res_data = new unsigned char[image_h * image_w * 3];
+            const char *filename_src = "path/to/src";
+            const char *filename_dst = "path/to/dst";
+
+            bm_dev_request(&handle, 0);
+            readBin(filename_src, src_data, image_h * image_w * 3 / 2);
+            bm_image_create(handle, image_h, image_w, FORMAT_NV12, DATA_TYPE_EXT_1N_BYTE, &src);
+            bm_image_create(handle, image_h, image_w, FORMAT_BGR_PLANAR, DATA_TYPE_EXT_1N_BYTE, &dst);
+            memset(src_data, 148, image_h * image_w * 3 / 2);
+            bm_image_copy_host_to_device(src, (void**)&src_data);
+            bmcv_image_yuv2bgr_ext(handle, image_n, &src, &dst);
+            bm_image_copy_device_to_host(dst, (void**)&res_data);
+            writeBin(filename_dst, res_data, image_h * image_w * 3);
+
+            bm_image_destroy(src);
+            bm_image_destroy(dst);
+            bm_dev_free(handle);
+            delete[] src_data;
+            delete[] res_data;
+            return 0;
+        }
 
 
 **注意事项:**
@@ -160,4 +179,3 @@ bmcv_image_yuv2bgr_ext
 7. 所有输入对象必须 attach device memory，否则返回失败
 
 8. 如果输出对象未 attach device memory，则会内部调用 bm_image_alloc_dev_mem 申请内部管理的 device memory，并将转化后的 RGB 数据填充到 device memory 中。
-

@@ -1,6 +1,6 @@
 #include <iostream>
 #include <vector>
-#include "bmcv_api_ext.h"
+#include "bmcv_api_ext_c.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include <sstream>
@@ -11,18 +11,17 @@
 #include <sys/time.h>
 #endif
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
-
 int main(int argc, char **argv) {
 
   bm_handle_t handle = NULL;
-  int src_h, src_w, dst_w, dst_h;
+  int src_h, src_w, dst_w, dst_h, private_size;
   bm_image_format_ext src_fmt,dst_fmt;
   char *src_name, *dst_name;
   bm_image       src, dst;
   bmcv_rect_t rect;
   bmcv_padding_atrr_t padding_param;
+  void *src_private = NULL, *dst_private = NULL;
+
 #ifdef __linux__
   struct timeval tv_start;
   struct timeval tv_end;
@@ -58,12 +57,17 @@ int main(int argc, char **argv) {
       printf("Create bm handle failed. ret = %d\n", ret);
       exit(-1);
   }
+  private_size = bmcv_get_private_size();
+  printf("private_size = %d\n", private_size);
 
-  bm_image_create(handle, src_h, src_w, src_fmt, DATA_TYPE_EXT_1N_BYTE, &src);
+  src_private = malloc(private_size);
+  dst_private = malloc(private_size);
+
+  bm_image_create_private(handle, src_h, src_w, src_fmt, DATA_TYPE_EXT_1N_BYTE, &src, NULL, src_private);
   bm_image_alloc_dev_mem(src,1);
-  bm1684x_vpp_read_bin(src,src_name);
+  bm_read_bin(src,src_name);
 
-  bm_image_create(handle, dst_h, dst_w,dst_fmt,DATA_TYPE_EXT_1N_BYTE,&dst);
+  bm_image_create_private(handle, dst_h, dst_w,dst_fmt,DATA_TYPE_EXT_1N_BYTE,&dst, NULL, dst_private);
   bm_image_alloc_dev_mem(dst,1);
 
   if(rect.crop_w > src_w)
@@ -99,12 +103,22 @@ int main(int argc, char **argv) {
   printf("bmcv_image_vpp_convert_padding spend %ld us\n" ,(timediff.tv_sec * 1000000 + timediff.tv_usec));
 #endif
 
-  bm1684x_vpp_write_bin(dst,dst_name);
+  bm_write_bin(dst,dst_name);
+
+  bm_image_detach(dst);
+  bm_image_update(handle, 2164, 3124, FORMAT_NV21, DATA_TYPE_EXT_1N_BYTE, &dst, NULL);
+  bm_image_alloc_dev_mem(dst,1);
+
+  bmcv_image_vpp_convert(handle, 1, src ,&dst, &rect, BMCV_INTER_LINEAR);
+
+  bm_write_bin(dst,"update_dst.bin");
 
   bm_image_destroy(dst);
   bm_image_destroy(src);
   bm_dev_free(handle);
 
+  free(dst_private);
+  free(src_private);
   return 0;
 }
 

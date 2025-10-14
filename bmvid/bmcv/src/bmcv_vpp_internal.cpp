@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <vector>
 #include "bm1684/bmcv_1684_vpp_internal.h"
 #include "bm1684x/bmcv_1684x_vpp_ext.h"
 #include "bmlib_runtime.h"
@@ -264,27 +265,28 @@ bm_status_t bmcv_image_mosaic(bm_handle_t               handle,
                                   int                   is_expand){
   unsigned int chipid = BM1684X;
   bm_status_t ret = BM_SUCCESS;
+
   bm_handle_check_1(handle, input);
   ret = bm_get_chipid(handle, &chipid);
   if (BM_SUCCESS != ret)
     return ret;
-  bmcv_rect_t * crop_rect = new bmcv_rect_t [mosaic_num];
-  memcpy(crop_rect, mosaic_rect, sizeof(bmcv_rect_t) * mosaic_num);
-  ret = bmcv_image_mosaic_check(handle, mosaic_num, input, crop_rect, is_expand);
+  ret = bmcv_image_mosaic_check(handle, mosaic_num, input, mosaic_rect, is_expand);
   if (BM_SUCCESS != ret)
-    goto fail;
+    return ret;
+
+  std::vector<bmcv_rect_t> crop_rect(mosaic_num);
+  memcpy(crop_rect.data(), mosaic_rect, sizeof(bmcv_rect_t) * mosaic_num);
+
   switch(chipid)
   {
     case BM1684X:
-      ret = bm1684x_vpp_mosaic(handle, mosaic_num, input, crop_rect);
+      ret = bm1684x_vpp_mosaic(handle, mosaic_num, input, crop_rect.data());
       break;
 
     default:
       ret = BM_ERR_NOFEATURE;
       break;
   }
-fail:
-  delete [] crop_rect;
   return ret;
 }
 
@@ -332,17 +334,21 @@ bm_status_t bmcv_image_watermark_repeat_superpose(bm_handle_t         handle,
                                                 int                   pitch,
                                                 bmcv_rect_t *         rects,
                                                 bmcv_color_t          color){
+    if (bitmap_num <= 0 || bitmap_num > VPP1684X_MAX_CROP_NUM) {
+      printf("bitmap_num(%d) is out of range(1~512)\n", bitmap_num);
+      return BM_ERR_PARAM;
+    }
     bm_status_t ret = BM_SUCCESS;
-    bm_image *image_inner = new bm_image [bitmap_num];
-    bm_device_mem_t *mem_inner = new bm_device_mem_t [bitmap_num];
+    std::vector<bm_image> image_inner(bitmap_num);
+    std::vector<bm_device_mem_t> mem_inner(bitmap_num);
+
     bm_handle_check_1(handle, image);
     for(int i=0; i<bitmap_num; i++){
       image_inner[i] = image;
       mem_inner[i] = bitmap_mem;
     }
-    ret = bmcv_image_watermark_superpose(handle, image_inner, mem_inner, bitmap_num, bitmap_type, pitch, rects, color);
-    delete [] image_inner;
-    delete [] mem_inner;
+    ret = bmcv_image_watermark_superpose(handle, image_inner.data(), mem_inner.data(), bitmap_num, bitmap_type, pitch, rects, color);
+
     return ret;
 }
 

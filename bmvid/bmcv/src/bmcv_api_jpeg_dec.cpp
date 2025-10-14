@@ -816,7 +816,7 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
                 if (info.framebuffer)
                     bm_jpu_jpeg_dec_frame_finished(jpeg_dec[i]->decoder_, info.framebuffer);
                 else
-                    return BM_ERR_DATA;
+                    ret = BM_ERR_DATA;
                 bmcv_jpeg_decoder_destroy(jpeg_dec[i]);
             }
             return ret;

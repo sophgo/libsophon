@@ -104,6 +104,32 @@ int bmvpu_calc_framebuffer_sizes(int mapType, BmVpuEncPixFormat pix_format,
     return 0;
 }
 
+int bmvpu_fill_framebuffer_params_yuv(BmVpuFramebuffer *fb,
+                                   BmVpuFbInfo *info,
+                                   BmEncDmaBufferYUV *fb_dma_buffer_yuv,
+                                   int fb_id, void* context)
+{
+    if((fb == NULL) || (info == NULL)){
+        BM_VPU_ERROR("bmvpu_fill_framebuffer_params params err: fb(0X%x), info(0X%x).", fb, info);
+        return -1;
+    }
+
+    fb->context = context;
+    fb->myIndex = fb_id;
+
+    fb->dma_buffer   = NULL;
+    fb->dma_buffer_y = &(fb_dma_buffer_yuv->dmabuffers_y);
+    fb->dma_buffer_u = &(fb_dma_buffer_yuv->dmabuffers_u);
+    fb->dma_buffer_v = &(fb_dma_buffer_yuv->dmabuffers_v);
+
+    fb->y_stride    = info->y_stride;
+    fb->cbcr_stride = info->c_stride;
+
+    fb->width  = info->width;
+    fb->height = info->height;
+
+    return 0;
+}
 
 int bmvpu_fill_framebuffer_params(BmVpuFramebuffer *fb,
                                    BmVpuFbInfo *info,
@@ -147,6 +173,16 @@ int bmvpu_enc_upload_data(int vpu_core_idx,
 {
     int size = vpu_stride*height;
     int ret = 0;
+
+    /*if width exceeds stride, when memcpy for 0 <=i<height,
+    *  s0 += host_stride;
+    *  s1 += vpu_stride;
+    *  will cause out of bounds access.
+    */
+    if (width > host_stride || width > vpu_stride) {
+        BM_VPU_ERROR("width exceeds stride!");
+        return -1;
+    }
 
     if (vpu_stride != host_stride)
     {

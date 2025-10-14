@@ -11,8 +11,8 @@
 #include <sys/time.h>
 #endif
 
-extern void bm1684x_vpp_read_bin(bm_image src, const char *input_name);
-extern void bm1684x_vpp_write_bin(bm_image dst, const char *output_name);
+extern void bm_read_bin(bm_image src, const char *input_name);
+extern void bm_write_bin(bm_image dst, const char *output_name);
 
 int main(int argc, char **argv) {
 
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
   bm_image_create(handle, src_h, src_w, src_fmt, DATA_TYPE_EXT_1N_BYTE, &src);
   bm_image_alloc_dev_mem(src);
-  bm1684x_vpp_read_bin(src,src_name);
+  bm_read_bin(src,src_name);
 
   bm_image_create(handle, dst_h, dst_w, dst_fmt,DATA_TYPE_EXT_1N_BYTE,&dst);
   bm_image_alloc_dev_mem(dst);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
   printf("bmcv_image_vpp_resize spend %ld us\n" ,(timediff.tv_sec * 1000000 + timediff.tv_usec));
 #endif
 
-  bm1684x_vpp_write_bin(dst,dst_name);
+  bm_write_bin(dst,dst_name);
 
   bm_image_destroy(dst);
   bm_image_destroy(src);

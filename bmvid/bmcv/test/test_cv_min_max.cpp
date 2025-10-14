@@ -31,17 +31,17 @@ bm_status_t test() {
                             &maxVal,
                             L));
     gettimeofday_(&t2);
-    std::cout << "min max TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+    printf("min max TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     float minRef, maxRef;
     maxRef = XHost[0];
     for (int i = 1; i < L; ++i)
         maxRef = maxRef > XHost[i] ? maxRef : XHost[i];
-    std::cout << "MAX: " << maxRef << " vs " << maxVal << std::endl;
+    printf("MAX: %f, maxVal: %f\n", maxRef, maxVal);
     minRef = XHost[0];
     for (int i = 1; i < L; ++i)
         minRef = minRef < XHost[i] ? minRef : XHost[i];
-    std::cout << "MIN: " << minRef << " vs " << minVal << std::endl;
+    printf("MIN: %f vs %f\n", minRef, minVal);
     delete [] XHost;
     bm_free_device(handle, XDev);
     bm_dev_free(handle);
@@ -54,9 +54,9 @@ int main(int argc, char *argv[]) {
         struct timespec tp;
         clock_gettime_(0, &tp);
         srand(tp.tv_nsec);
-        std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+        printf("test %d random seed: %ld\n", i, tp.tv_nsec);
         test();
     }
-    std::cout << "test done." << std::endl;
+    printf("test done\n");
     return 0;
 }

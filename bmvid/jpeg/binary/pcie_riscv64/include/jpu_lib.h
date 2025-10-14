@@ -107,6 +107,7 @@ typedef enum {
 } PackedOutputFormat;
 
 typedef enum {
+    INT_JPU_TIMEOUT = -1,
     INT_JPU_DONE = 0,
     INT_JPU_ERROR = 1,
     INT_JPU_BIT_BUF_EMPTY = 2,

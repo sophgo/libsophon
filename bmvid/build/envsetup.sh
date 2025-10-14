@@ -118,6 +118,14 @@ then
     return $ret
     }
     export CROSS_COMPILE=${TOOLCHAIN_PATH}/loongarch64-linux-gnu-
+elif [ "$PRODUCTFORM" = "pcie_loongarch64_anolis" ]
+then
+    TOOLCHAIN_PATH=$(dirname `which loongarch64-unknown-linux-gnu-gcc`) || {
+    ret = $?
+    echo "Add loongarch64 linux toolchain to PATH!"
+    return $ret
+    }
+    export CROSS_COMPILE=${TOOLCHAIN_PATH}/loongarch64-unknown-linux-gnu-
 else
     TOOLCHAIN_PATH=$(dirname `which gcc`) || {
     ret = $?

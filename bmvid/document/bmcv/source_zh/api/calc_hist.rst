@@ -4,6 +4,7 @@ bmcv_calc_hist
 直方图
 _______
 
+
 **处理器型号支持：**
 
 该接口支持BM1684/BM1684X。
@@ -14,17 +15,17 @@ _______
     .. code-block:: c
 
         bm_status_t bmcv_calc_hist(
-                bm_handle_t handle,
-                bm_device_mem_t input,
-                bm_device_mem_t output,
-                int C,
-                int H,
-                int W,
-                const int *channels,
-                int dims,
-                const int *histSizes,
-                const float *ranges,
-                int inputDtype);
+                    bm_handle_t handle,
+                    bm_device_mem_t input,
+                    bm_device_mem_t output,
+                    int C,
+                    int H,
+                    int W,
+                    const int *channels,
+                    int dims,
+                    const int *histSizes,
+                    const float *ranges,
+                    int inputDtype);
 
 
 **参数说明：**
@@ -78,79 +79,65 @@ _______
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
+* 其他: 失败
 
 
 **代码示例：**
 
     .. code-block:: c
 
-        int H = 1024;
-        int W = 1024;
-        int C = 3;
-        int dim = 3;
-        int channels[3] = {0, 1, 2};
-        int histSizes[] = {15000, 32, 32};
-        float ranges[] = {0, 1000000, 0, 256, 0, 256};
-        int totalHists = 1;
-        for (int i = 0; i < dim; ++i)
-            totalHists *= histSizes[i];
-        bm_handle_t handle = nullptr;
-        bm_status_t ret = bm_dev_request(&handle, 0);
-        float *inputHost = new float[C * H * W];
-        float *outputHost = new float[totalHists];
-        for (int i = 0; i < C; ++i)
-            for (int j = 0; j < H * W; ++j)
-                inputHost[i * H * W + j] = static_cast<float>(rand() % 1000000);
-        if (ret != BM_SUCCESS) {
-            printf("bm_dev_request failed. ret = %d\n", ret);
-            exit(-1);
+        #include "bmcv_api_ext.h"
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <string.h>
+
+        int main()
+        {
+            int H = 1024;
+            int W = 1024;
+            int C = 3;
+            int dim = 3;
+            int channels[3] = {0, 1, 2};
+            int histSizes[3] = {32, 32, 32};
+            float ranges[6] = {0, 256, 0, 256, 0, 256};
+            int totalHists = 1;
+            bm_handle_t handle;
+            float *inputHost = new float[C * H * W];
+            float *outputHost = new float[totalHists];
+            bm_device_mem_t input, output;
+
+            for (int i = 0; i < dim; ++i) {
+                totalHists *= histSizes[i];
+            }
+
+            bm_dev_request(&handle, 0);
+
+            for (int i = 0; i < C; ++i) {
+                for (int j = 0; j < H * W; ++j) {
+                    inputHost[i * H * W + j] = (float)(rand() % 256);
+                }
+            }
+
+            bm_malloc_device_byte(handle, &input, C * H * W * sizeof(float));
+            bm_memcpy_s2d(handle, input, inputHost);
+            bm_malloc_device_byte(handle, &output, totalHists * sizeof(float));
+            bmcv_calc_hist(handle, input, output, C, H, W, channels, dim, histSizes, ranges, 0);
+            bm_memcpy_d2s(handle, outputHost, output);
+
+            bm_free_device(handle, input);
+            bm_free_device(handle, output);
+            bm_dev_free(handle);
+            delete[] inputHost;
+            delete[] outputHost;
+            return 0;
         }
-        bm_device_mem_t input, output;
-        ret = bm_malloc_device_byte(handle, &input, C * H * W * 4);
-        if (ret != BM_SUCCESS) {
-            printf("bm_malloc_device_byte failed. ret = %d\n", ret);
-            exit(-1);
-        }
-        ret = bm_memcpy_s2d(handle, input, inputHost);
-        if (ret != BM_SUCCESS) {
-            printf("bm_memcpy_s2d failed. ret = %d\n", ret);
-            exit(-1);
-        }
-        ret = bm_malloc_device_byte(handle, &output, totalHists * 4);
-        if (ret != BM_SUCCESS) {
-            printf("bm_malloc_device_byte failed. ret = %d\n", ret);
-            exit(-1);
-        }
-        ret = bmcv_calc_hist(handle,
-                             input,
-                             output,
-                             C,
-                             H,
-                             W,
-                             channels,
-                             dim,
-                             histSizes,
-                             ranges,
-                             0);
-        if (ret != BM_SUCCESS) {
-            printf("bmcv_calc_hist failed. ret = %d\n", ret);
-            exit(-1);
-        }
-        ret = bm_memcpy_d2s(handle, outputHost, output);
-        if (ret != BM_SUCCESS) {
-            printf("bm_memcpy_d2s failed. ret = %d\n", ret);
-            exit(-1);
-        }
-        bm_free_device(handle, input);
-        bm_free_device(handle, output);
-        bm_dev_free(handle);
-        delete [] inputHost;
-        delete [] outputHost;
 
 
 带权重的直方图
 _______________
+
 
 **处理器型号支持：**
 
@@ -162,18 +149,18 @@ _______________
     .. code-block:: c
 
         bm_status_t bmcv_calc_hist_with_weight(
-                bm_handle_t handle,
-                bm_device_mem_t input,
-                bm_device_mem_t output,
-                const float *weight,
-                int C,
-                int H,
-                int W,
-                const int *channels,
-                int dims,
-                const int *histSizes,
-                const float *ranges,
-                int inputDtype);
+                    bm_handle_t handle,
+                    bm_device_mem_t input,
+                    bm_device_mem_t output,
+                    const float *weight,
+                    int C,
+                    int H,
+                    int W,
+                    const int *channels,
+                    int dims,
+                    const int *histSizes,
+                    const float *ranges,
+                    int inputDtype);
 
 
 **参数说明：**
@@ -231,5 +218,4 @@ _______________
 
 * BM_SUCCESS: 成功
 
-* 其他:失败
-
+* 其他: 失败
