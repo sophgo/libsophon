@@ -34,14 +34,6 @@
 /****************************************************************************
  * Global parameters
  ****************************************************************************/
-static struct sclr_core_cfg g_sc_cfg[SCL_MAX_INST];
-static struct sclr_gop_cfg g_gop_cfg[SCL_MAX_INST][SCL_MAX_GOP_INST];
-static struct sclr_img_cfg g_img_cfg[SCL_MAX_INST];
-static struct sclr_cir_cfg g_cir_cfg[SCL_MAX_INST];
-static struct sclr_border_cfg g_bd_cfg[SCL_MAX_INST];
-static struct sclr_border_vpp_cfg g_bd_vpp_cfg[SCL_MAX_INST][BORDER_VPP_MAX];
-static struct sclr_odma_cfg g_odma_cfg[SCL_MAX_INST];
-static struct sclr_fbd_cfg g_fbd_cfg[SCL_MAX_INST];
 static uintptr_t reg_base_vi, reg_base_vd0, reg_base_vd1, reg_base_vo;
 static uintptr_t top_rst_reg_base, vi_sys_reg_base, vo_sys_reg_base;
 static u32 reset_mask[SCL_MAX_INST] = {BIT(16), BIT(17), BIT(18), BIT(19), BIT(10), BIT(11), BIT(14), BIT(15), BIT(4), BIT(5)};
@@ -428,16 +420,16 @@ static int scl_coef_bicubic_opencv[128][4] = {
 /****************************************************************************
  * Interfaces
  ****************************************************************************/
-void _reg_write_mask(uintptr_t addr, u32 mask, u32 data)
+void _reg_write_mask(struct scaler *scaler, uintptr_t addr, u32 mask, u32 data)
 {
 	u32 value;
 
 	// value = readl_relaxed((void __iomem *)addr) & ~mask;
-	value = vpss_reg_read(addr) & ~mask;
+	value = vpss_reg_read(scaler->bmdi, addr) & ~mask;
 	value |= (data & mask);
 	// writel(value, (void __iomem *)addr);
 	// iowrite32(value, (void __iomem *)addr);
-	vpss_reg_write(addr, value);
+	vpss_reg_write(scaler->bmdi, addr, value);
 }
 
 void sclr_set_base_addr(void *vi_base, void *vd0_base, void *vd1_base, void *vo_base)
@@ -469,9 +461,9 @@ void sclr_deinit_sys_top_addr(void)
  * sclr_reg_force_up - trigger reg update by sw.
  *
  */
-void sclr_reg_force_up(u8 inst)
+void sclr_reg_force_up(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(reg_base + REG_SCL_TOP_SHD(inst), BIT(0), BIT(0));
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_SHD(inst), BIT(0), BIT(0));
 }
 
 /**
@@ -479,7 +471,7 @@ void sclr_reg_force_up(u8 inst)
  *
  * @param cfg: scl-top's settings.
  */
-void sclr_top_set_cfg(u8 inst, bool sc_enable, bool fbd_enable)
+void sclr_top_set_cfg(struct scaler *scaler, u8 inst, bool sc_enable, bool fbd_enable)
 {
 	union sclr_top_cfg_01 cfg_01;
 	u8 qos_en = 0;
@@ -495,8 +487,8 @@ void sclr_top_set_cfg(u8 inst, bool sc_enable, bool fbd_enable)
 		qos_en |= BIT(7);
 
 	cfg_01.b.qos_en = qos_en;
-	vpss_reg_write(reg_base + REG_SCL_TOP_CFG1(inst), cfg_01.raw);
-	sclr_top_reg_done(inst);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_CFG1(inst), cfg_01.raw);
+	sclr_top_reg_done(scaler, inst);
 }
 
 /**
@@ -504,16 +496,16 @@ void sclr_top_set_cfg(u8 inst, bool sc_enable, bool fbd_enable)
  *
  * @param cfg: sc's channels real-time settings.
  */
-void sclr_rt_set_cfg(u8 inst, union sclr_rt_cfg cfg)
+void sclr_rt_set_cfg(struct scaler *scaler, u8 inst, union sclr_rt_cfg cfg)
 {
-	vpss_reg_write(reg_base + REG_SCL_TOP_AXI(inst), cfg.raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_AXI(inst), cfg.raw);
 }
 
-union sclr_rt_cfg sclr_rt_get_cfg(u8 inst)
+union sclr_rt_cfg sclr_rt_get_cfg(struct scaler *scaler, u8 inst)
 {
 	union sclr_rt_cfg cfg;
 
-	cfg.raw = vpss_reg_read(reg_base + REG_SCL_TOP_AXI(inst));
+	cfg.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_AXI(inst));
 	return cfg;
 }
 
@@ -521,23 +513,23 @@ union sclr_rt_cfg sclr_rt_get_cfg(u8 inst)
  * sclr_top_reg_done - to mark all sc-reg valid for update.
  *
  */
-void sclr_top_reg_done(u8 inst)
+void sclr_top_reg_done(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(reg_base + REG_SCL_TOP_CFG0(inst), BIT(31), BIT(31));
-	_reg_write_mask(reg_base + REG_SCL_IMG_CFG(inst), BIT(31), BIT(31));
-	_reg_write_mask(reg_base + REG_SCL_CFG(inst), BIT(31), BIT(31)); // clk apb enable
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_CFG0(inst), BIT(31), BIT(31));
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_CFG(inst), BIT(31), BIT(31));
+	_reg_write_mask(scaler, reg_base + REG_SCL_CFG(inst), BIT(31), BIT(31)); // clk apb enable
 
-	_reg_write_mask(reg_base + REG_SCL_TOP_CFG0(inst), BIT(0), BIT(0));
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_CFG0(inst), BIT(0), BIT(0));
 }
 
-u8 sclr_top_pg_late_get_bus(u8 inst)
+u8 sclr_top_pg_late_get_bus(struct scaler *scaler, u8 inst)
 {
-	return (vpss_reg_read(reg_base + REG_SCL_TOP_PG(inst)) >> 8) & 0xff;
+	return (vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_PG(inst)) >> 8) & 0xff;
 }
 
-void sclr_top_pg_late_clr(u8 inst)
+void sclr_top_pg_late_clr(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(reg_base + REG_SCL_TOP_PG(inst), 0x0f0000, 0x80000);
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_PG(inst), 0x0f0000, 0x80000);
 }
 
 void sclr_top_get_sb_default(struct sclr_top_sb_cfg *cfg)
@@ -545,11 +537,11 @@ void sclr_top_get_sb_default(struct sclr_top_sb_cfg *cfg)
 	memset(cfg, 0, sizeof(*cfg));
 }
 
-void sclr_top_set_src_share(u8 inst, bool is_share)
+void sclr_top_set_src_share(struct scaler *scaler, u8 inst, bool is_share)
 {
 	u32 val = is_share ? 0x1 : 0x0;
 
-	vpss_reg_write(reg_base + REG_SCL_TOP_SRC_SHARE(inst), val);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_SRC_SHARE(inst), val);
 }
 
 /**
@@ -557,7 +549,7 @@ void sclr_top_set_src_share(u8 inst, bool is_share)
  *
  * @param inst: (0~3), the instance of scaler which want to be configured.
  */
-void sclr_update_coef(u8 inst, enum sclr_algorithm coef)
+void sclr_update_coef(struct scaler *scaler, u8 inst, enum sclr_algorithm coef)
 {
 	u8 i = 0;
 
@@ -566,30 +558,30 @@ void sclr_update_coef(u8 inst, enum sclr_algorithm coef)
 		return;
 	}
 
-	if (g_sc_cfg[inst].coef == coef)
+	if (scaler->g_sc_cfg[inst].coef == coef)
 		return;
 
 	if (coef == SCL_COEF_BICUBIC) {
 		for (i = 0; i < 128; ++i) {
-			vpss_reg_write(reg_base + REG_SCL_COEF1(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
 				(scl_coef_bicubic[i][1] << 16) |
 				(scl_coef_bicubic[i][0] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF2(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
 				(scl_coef_bicubic[i][3] << 16) |
 				(scl_coef_bicubic[i][2] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
 		}
 	} else if (coef == SCL_COEF_NEAREST) {
 		int nearest_coef[4] = {0, 1024, 0, 0};
 
 		for (i = 0; i < 128; ++i) {
-			vpss_reg_write(reg_base + REG_SCL_COEF1(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
 				   (nearest_coef[1] << 16) |
 				   (nearest_coef[0] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF2(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
 				   (nearest_coef[3] << 16) |
 				   (nearest_coef[2] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
 		}
 	} else if (coef == SCL_COEF_BILINEAR) {
 		int bilinear_coef[4] = {0, 1024, 0, 0};
@@ -598,27 +590,27 @@ void sclr_update_coef(u8 inst, enum sclr_algorithm coef)
 			bilinear_coef[1] -= 4;
 			bilinear_coef[2] += 4;
 
-			vpss_reg_write(reg_base + REG_SCL_COEF1(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
 				   (bilinear_coef[1] << 16) |
 				   (bilinear_coef[0] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF2(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
 				   (bilinear_coef[3] << 16) |
 				   (bilinear_coef[2] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
 		}
 	} else if (coef == SCL_COEF_BICUBIC_OPENCV) {
 		for (i = 0; i < 128; ++i) {
-			vpss_reg_write(reg_base + REG_SCL_COEF1(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
 				(scl_coef_bicubic_opencv[i][1] << 16) |
 				(scl_coef_bicubic_opencv[i][0] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF2(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
 				(scl_coef_bicubic_opencv[i][3] << 16) |
 				(scl_coef_bicubic_opencv[i][2] & 0x0fff));
-			vpss_reg_write(reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (0x5 << 8) | i);
 		}
 	}
 
-	g_sc_cfg[inst].coef = coef;
+	scaler->g_sc_cfg[inst].coef = coef;
 }
 
 /**
@@ -630,15 +622,15 @@ void sclr_update_coef(u8 inst, enum sclr_algorithm coef)
  * @param cir_bypass: if bypass circle-engine.
  * @param odma_bypass: if bypass odma-engine.
  */
-void sclr_set_cfg(u8 inst, bool sc_bypass, bool gop_bypass,
+void sclr_set_cfg(struct scaler *scaler, u8 inst, bool sc_bypass, bool gop_bypass,
 		  bool cir_bypass, bool odma_bypass)
 {
-	g_sc_cfg[inst].sc_bypass = sc_bypass;
-	g_sc_cfg[inst].gop_bypass = gop_bypass;
-	g_sc_cfg[inst].cir_bypass = cir_bypass;
-	g_sc_cfg[inst].odma_bypass = odma_bypass;
+	scaler->g_sc_cfg[inst].sc_bypass = sc_bypass;
+	scaler->g_sc_cfg[inst].gop_bypass = gop_bypass;
+	scaler->g_sc_cfg[inst].cir_bypass = cir_bypass;
+	scaler->g_sc_cfg[inst].odma_bypass = odma_bypass;
 
-	vpss_reg_write(reg_base + REG_SCL_CFG(inst), g_sc_cfg[inst].raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CFG(inst), scaler->g_sc_cfg[inst].raw);
 }
 
 /**
@@ -647,11 +639,11 @@ void sclr_set_cfg(u8 inst, bool sc_bypass, bool gop_bypass,
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @return: scl_core's cfg
  */
-struct sclr_core_cfg *sclr_get_cfg(u8 inst)
+struct sclr_core_cfg *sclr_get_cfg(struct scaler *scaler, u8 inst)
 {
 	if (inst >= SCL_MAX_INST)
 		return NULL;
-	return &g_sc_cfg[inst];
+	return &scaler->g_sc_cfg[inst];
 }
 
 /**
@@ -660,16 +652,16 @@ struct sclr_core_cfg *sclr_get_cfg(u8 inst)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param read_shadow: true(shadow); false(working)
  */
-void sclr_reg_shadow_sel(u8 inst, bool read_shadow)
+void sclr_reg_shadow_sel(struct scaler *scaler, u8 inst, bool read_shadow)
 {
-	vpss_reg_write(reg_base + REG_SCL_SHD(inst), (read_shadow ? 0x0 : 0x2));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_SHD(inst), (read_shadow ? 0x0 : 0x2));
 }
 
-struct sclr_status sclr_get_status(u8 inst)
+struct sclr_status sclr_get_status(struct scaler *scaler, u8 inst)
 {
 	struct sclr_status status;
 
-	u32 tmp = vpss_reg_read(reg_base + REG_SCL_STATUS(inst));
+	u32 tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_STATUS(inst));
 
 	memcpy(&status, &tmp, sizeof(status));
 
@@ -682,13 +674,13 @@ struct sclr_status sclr_get_status(u8 inst)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param src_rect: size of input-src
  */
-void sclr_set_input_size(u8 inst, struct sclr_size src_rect, bool update)
+void sclr_set_input_size(struct scaler *scaler, u8 inst, struct sclr_size src_rect, bool update)
 {
-	vpss_reg_write(reg_base + REG_SCL_SRC_SIZE(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_SRC_SIZE(inst),
 		   ((src_rect.h - 1) << 16) | (src_rect.w - 1));
 
 	if (update)
-		g_sc_cfg[inst].sc.src = src_rect;
+		scaler->g_sc_cfg[inst].sc.src = src_rect;
 }
 
 /**
@@ -697,14 +689,14 @@ void sclr_set_input_size(u8 inst, struct sclr_size src_rect, bool update)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param crop_rect: to specify pos/size of crop
  */
-void sclr_set_crop(u8 inst, struct sclr_rect crop_rect, bool is_update)
+void sclr_set_crop(struct scaler *scaler, u8 inst, struct sclr_rect crop_rect, bool is_update)
 {
-	vpss_reg_write(reg_base + REG_SCL_CROP_OFFSET(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CROP_OFFSET(inst),
 		   (crop_rect.y << 16) | crop_rect.x);
-	vpss_reg_write(reg_base + REG_SCL_CROP_SIZE(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CROP_SIZE(inst),
 		   ((crop_rect.h - 1) << 16) | (crop_rect.w - 1));
 	if(is_update)
-		g_sc_cfg[inst].sc.crop = crop_rect;
+		scaler->g_sc_cfg[inst].sc.crop = crop_rect;
 }
 
 /**
@@ -713,23 +705,23 @@ void sclr_set_crop(u8 inst, struct sclr_rect crop_rect, bool is_update)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param src_rect: size of output-src
  */
-void sclr_set_output_size(u8 inst, struct sclr_size size)
+void sclr_set_output_size(struct scaler *scaler, u8 inst, struct sclr_size size)
 {
-	vpss_reg_write(reg_base + REG_SCL_OUT_SIZE(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_OUT_SIZE(inst),
 		   ((size.h - 1) << 16) | (size.w - 1));
 
-	g_sc_cfg[inst].sc.dst = size;
+	scaler->g_sc_cfg[inst].sc.dst = size;
 
 }
 
-void sclr_set_scale_mir(u8 inst, bool enable)
+void sclr_set_scale_mir(struct scaler *scaler, u8 inst, bool enable)
 {
 	u32 tmp = 0;
 
-	g_sc_cfg[inst].sc.mir_enable = enable;
+	scaler->g_sc_cfg[inst].sc.mir_enable = enable;
 	tmp = (enable) ? 0x03 : 0x02;
 	// enable cb_mode of scaling, since it only works on fac > 4
-	_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), 0x3, tmp);
+	_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), 0x3, tmp);
 }
 
 /**
@@ -739,10 +731,10 @@ void sclr_set_scale_mir(u8 inst, bool enable)
  * @param h_ph: initial horizontal phase
  * @param v_ph: initial vertical phase
  */
-void sclr_set_scale_phase(u8 inst, u32 h_ph, u32 v_ph)
+void sclr_set_scale_phase(struct scaler *scaler, u8 inst, u32 h_ph, u32 v_ph)
 {
-	vpss_reg_write(reg_base + REG_SCL_SC_H_INI_PH(inst), h_ph);
-	vpss_reg_write(reg_base + REG_SCL_SC_V_INI_PH(inst), v_ph);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_SC_H_INI_PH(inst), h_ph);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_SC_V_INI_PH(inst), v_ph);
 }
 
 /**
@@ -754,24 +746,24 @@ void sclr_set_scale_phase(u8 inst, u32 h_ph, u32 v_ph)
  *					 In cb mode, use it's own coeff rather than ones update by sclr_update_coef().
  * @param update: update parameter or not
  */
-void sclr_set_scale_mode(u8 inst, bool mir_enable, bool cb_enable, bool update)
+void sclr_set_scale_mode(struct scaler *scaler, u8 inst, bool mir_enable, bool cb_enable, bool update)
 {
 		u32 tmp = 0;
 
 		if (update) {
-				g_sc_cfg[inst].sc.mir_enable = mir_enable;
-				//g_sc_cfg[inst].sc.cb_enable = cb_enable;
+				scaler->g_sc_cfg[inst].sc.mir_enable = mir_enable;
+				//scaler->g_sc_cfg[inst].sc.cb_enable = cb_enable;
 		}
 
 		// mir/cb isn't suggested to enable together
-		if (g_sc_cfg[inst].sc.tile_enable) {
+		if (scaler->g_sc_cfg[inst].sc.tile_enable) {
 				tmp = mir_enable ? 0x03 : 0x02;
 		} else {
 				tmp = cb_enable ? 0x13 : 0x03;
 		}
 
 		// enable cb_mode of scaling, since it only works on fac > 4
-		vpss_reg_write(reg_base + REG_SCL_SC_CFG(inst), tmp);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_SC_CFG(inst), tmp);
 }
 
 /**
@@ -779,7 +771,7 @@ void sclr_set_scale_mode(u8 inst, bool mir_enable, bool cb_enable, bool update)
  *
  * @param inst: (0~3), the instance of scaler which want to be configured.
  */
-void sclr_set_scale(u8 inst)
+void sclr_set_scale(struct scaler *scaler, u8 inst)
 {
 	u64 fix_fac;
 	struct sclr_fac_cfg fac;
@@ -787,70 +779,70 @@ void sclr_set_scale(u8 inst)
 	fac.h_pos = 0;
 	fac.v_pos = 0;
 
-	if (g_sc_cfg[inst].sc.src.w == 0 || g_sc_cfg[inst].sc.src.h == 0)
+	if (scaler->g_sc_cfg[inst].sc.src.w == 0 || scaler->g_sc_cfg[inst].sc.src.h == 0)
 		return;
-	if (g_sc_cfg[inst].sc.crop.w == 0 || g_sc_cfg[inst].sc.crop.h == 0)
+	if (scaler->g_sc_cfg[inst].sc.crop.w == 0 || scaler->g_sc_cfg[inst].sc.crop.h == 0)
 		return;
-	if (g_sc_cfg[inst].sc.dst.w == 0 || g_sc_cfg[inst].sc.dst.h == 0)
+	if (scaler->g_sc_cfg[inst].sc.dst.w == 0 || scaler->g_sc_cfg[inst].sc.dst.h == 0)
 		return;
 
-	if(g_sc_cfg[inst].sc.algorithm == SCL_COEF_BICUBIC){
+	if(scaler->g_sc_cfg[inst].sc.algorithm == SCL_COEF_BICUBIC){
 		// scale_x, 18.13
-		fix_fac = (u64)(g_sc_cfg[inst].sc.crop.w) << 13;
-		fac.h_fac = fix_fac / (g_sc_cfg[inst].sc.dst.w);
+		fix_fac = (u64)(scaler->g_sc_cfg[inst].sc.crop.w) << 13;
+		fac.h_fac = fix_fac / (scaler->g_sc_cfg[inst].sc.dst.w);
 		is_fac_over4 |= (fac.h_fac >= (4 << 13));
 		// scale_y, 18.13
-		fix_fac = (u64)(g_sc_cfg[inst].sc.crop.h) << 13;
-		fac.v_fac = fix_fac / (g_sc_cfg[inst].sc.dst.h);
+		fix_fac = (u64)(scaler->g_sc_cfg[inst].sc.crop.h) << 13;
+		fac.v_fac = fix_fac / (scaler->g_sc_cfg[inst].sc.dst.h);
 		is_fac_over4 |= (fac.v_fac >= (4 << 13));
-		sclr_set_scale_mode(inst, g_sc_cfg[inst].sc.mir_enable, is_fac_over4, true);
+		sclr_set_scale_mode(scaler, inst, scaler->g_sc_cfg[inst].sc.mir_enable, is_fac_over4, true);
 	} else {
 		// scale_x, 8.23
-		fix_fac = (u64)(g_sc_cfg[inst].sc.crop.w) << 23;
-		fac.h_fac = fix_fac / (g_sc_cfg[inst].sc.dst.w);
+		fix_fac = (u64)(scaler->g_sc_cfg[inst].sc.crop.w) << 23;
+		fac.h_fac = fix_fac / (scaler->g_sc_cfg[inst].sc.dst.w);
 		// scale_y, 8.23
-		fix_fac = (u64)(g_sc_cfg[inst].sc.crop.h) << 23;
-		fac.v_fac = fix_fac / (g_sc_cfg[inst].sc.dst.h);
+		fix_fac = (u64)(scaler->g_sc_cfg[inst].sc.crop.h) << 23;
+		fac.v_fac = fix_fac / (scaler->g_sc_cfg[inst].sc.dst.h);
 		//23bit open
-		sclr_set_scale_mode(inst, true, false, true);
-		_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), 0xc00, 0xc00);
-		if(g_sc_cfg[inst].sc.algorithm != SCL_COEF_NEAREST){
+		sclr_set_scale_mode(scaler, inst, true, false, true);
+		_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), 0xc00, 0xc00);
+		if(scaler->g_sc_cfg[inst].sc.algorithm != SCL_COEF_NEAREST){
 			fac.h_pos = (fac.h_fac >= (1 << 23)) ? ((fac.h_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.h_fac) >> 1);
 			fac.v_pos = (fac.v_fac >= (1 << 23)) ? ((fac.v_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.v_fac) >> 1);
 			if(fac.h_fac < (1 << 23)){
-				_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), BIT(6), BIT(6));
+				_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), BIT(6), BIT(6));
 				fac.h_pos |= BIT(31);
 				fac.h_pos = (fac.h_pos ^ 0x7fffffff) + 1;
 			}
 			if(fac.v_fac < (1 << 23)){
-				_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), BIT(7), BIT(7));
+				_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), BIT(7), BIT(7));
 				fac.v_pos |= BIT(31);
 				fac.v_pos = (fac.v_pos ^ 0x7fffffff) + 1;
 			}
 			//lut round
-			_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), 0x300, 0x300);
+			_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), 0x300, 0x300);
 		} else {
 			fac.h_pos = 1 << 22;
 			fac.v_pos = 1 << 22;
-			_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), BIT(6), BIT(6));
+			_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), BIT(6), BIT(6));
 			fac.h_pos |= BIT(31);
 			fac.h_pos = (fac.h_pos ^ 0x7fffffff) + 1;
-			_reg_write_mask(reg_base + REG_SCL_SC_CFG(inst), BIT(7), BIT(7));
+			_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), BIT(7), BIT(7));
 			fac.v_pos |= BIT(31);
 			fac.v_pos = (fac.v_pos ^ 0x7fffffff) + 1;
 		}
 	}
-	_reg_write_mask(reg_base + REG_SCL_SC_H_CFG(inst), 0x7fffffff, fac.h_fac);
-	_reg_write_mask(reg_base + REG_SCL_SC_V_CFG(inst), 0x7fffffff, fac.v_fac);
-	g_sc_cfg[inst].sc.fac = fac;
-	sclr_set_scale_phase(inst, fac.h_pos, fac.v_pos);
+	_reg_write_mask(scaler, reg_base + REG_SCL_SC_H_CFG(inst), 0x7fffffff, fac.h_fac);
+	_reg_write_mask(scaler, reg_base + REG_SCL_SC_V_CFG(inst), 0x7fffffff, fac.v_fac);
+	scaler->g_sc_cfg[inst].sc.fac = fac;
+	sclr_set_scale_phase(scaler, inst, fac.h_pos, fac.v_pos);
 }
 
-union sclr_intr sclr_get_intr_mask(u8 inst)
+union sclr_intr sclr_get_intr_mask(struct scaler *scaler, u8 inst)
 {
 	union sclr_intr intr_mask;
 
-	intr_mask.raw = vpss_reg_read(reg_base + REG_SCL_TOP_INTR_MASK(inst));
+	intr_mask.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_MASK(inst));
 	return intr_mask;
 }
 
@@ -861,9 +853,9 @@ union sclr_intr sclr_get_intr_mask(u8 inst)
  *
  * @param intr_mask: On/Off ctrl of the interrupt.
  */
-void sclr_set_intr_mask(u8 inst, union sclr_intr intr_mask)
+void sclr_set_intr_mask(struct scaler *scaler, u8 inst, union sclr_intr intr_mask)
 {
-	vpss_reg_write(reg_base + REG_SCL_TOP_INTR_MASK(inst), intr_mask.raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_MASK(inst), intr_mask.raw);
 }
 
 /**
@@ -872,9 +864,9 @@ void sclr_set_intr_mask(u8 inst, union sclr_intr intr_mask)
  *
  * @param intr_mask: On/Off ctrl of the interrupt.
  */
-void sclr_intr_ctrl(u8 inst, union sclr_intr intr_mask)
+void sclr_intr_ctrl(struct scaler *scaler, u8 inst, union sclr_intr intr_mask)
 {
-	vpss_reg_write(reg_base + REG_SCL_TOP_INTR_ENABLE(inst), intr_mask.raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_ENABLE(inst), intr_mask.raw);
 }
 
 /**
@@ -883,11 +875,11 @@ void sclr_intr_ctrl(u8 inst, union sclr_intr intr_mask)
  *
  * @param intr_mask: On/Off ctrl of the interrupt.
  */
-void sclr_intr_clr(u8 inst, union sclr_intr intr_mask)
+void sclr_intr_clr(struct scaler *scaler, u8 inst, union sclr_intr intr_mask)
 {
-	vpss_reg_write(reg_base + REG_SCL_TOP_INTR_STATUS(inst), intr_mask.raw);
-	if(g_fbd_cfg[inst].enable){
-		_reg_write_mask(reg_base + REG_SCL_MAP_CONV_STATUS(inst), BIT(0), 0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_STATUS(inst), intr_mask.raw);
+	if(scaler->g_fbd_cfg[inst].enable){
+		_reg_write_mask(scaler, reg_base + REG_SCL_MAP_CONV_STATUS(inst), BIT(0), 0);
 	}
 }
 
@@ -897,11 +889,11 @@ void sclr_intr_clr(u8 inst, union sclr_intr intr_mask)
  *
  * @return: The interrupt's status
  */
-union sclr_intr sclr_intr_status(u8 inst)
+union sclr_intr sclr_intr_status(struct scaler *scaler, u8 inst)
 {
 	union sclr_intr status;
 
-	status.raw = (vpss_reg_read(reg_base + REG_SCL_TOP_INTR_STATUS(inst)) & 0xffffffff);
+	status.raw = (vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_STATUS(inst)) & 0xffffffff);
 	return status;
 }
 
@@ -914,13 +906,13 @@ union sclr_intr sclr_intr_status(u8 inst)
  * @param img_inst: (0~1), the instance of img-in which want to be configured.
  * @param cfg: img's settings.
  */
-void sclr_img_set_cfg(u8 img_inst, struct sclr_img_cfg *cfg)
+void sclr_img_set_cfg(struct scaler *scaler, u8 img_inst, struct sclr_img_cfg *cfg)
 {
 	enum sclr_format in_fmt = cfg->fmt;
 	u8 y_buf_thre = 0x80;
 	u8 c_buf_thre;
 
-	vpss_reg_write(reg_base + REG_SCL_IMG_CFG(img_inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CFG(img_inst),
 		   (cfg->csc_en << 12) | (cfg->burst << 8) |
 		   (in_fmt << 4) | cfg->src);
 
@@ -929,31 +921,31 @@ void sclr_img_set_cfg(u8 img_inst, struct sclr_img_cfg *cfg)
 	else
 		c_buf_thre = y_buf_thre;
 
-	_reg_write_mask(reg_base + REG_SCL_IMG_FIFO_THR(img_inst), 0xff00ff, ((c_buf_thre << 16) | y_buf_thre));
-	vpss_reg_write(reg_base + REG_SCL_IMG_OUTSTANDING(img_inst), 0xf);
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_FIFO_THR(img_inst), 0xff00ff, ((c_buf_thre << 16) | y_buf_thre));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_OUTSTANDING(img_inst), 0xf);
 /*
-	_reg_write_mask(reg_base + REG_SCL_IMG_FIFO_THR(img_inst), 0xff00ff, ((cfg->fifo_c) << 16 | (cfg->fifo_y)));
-	_reg_write_mask(reg_base + REG_SCL_IMG_OUTSTANDING(img_inst), 0xf, cfg->outstanding);
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_FIFO_THR(img_inst), 0xff00ff, ((cfg->fifo_c) << 16 | (cfg->fifo_y)));
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_OUTSTANDING(img_inst), 0xf, cfg->outstanding);
 */
-	sclr_img_set_mem(img_inst, &cfg->mem, true);
+	sclr_img_set_mem(scaler, img_inst, &cfg->mem, true);
 
-	if (cfg->src == SCL_INPUT_ISP && !(g_fbd_cfg[img_inst].enable))
-		sclr_img_set_trig(img_inst, SCL_IMG_TRIG_SRC_ISP);
+	if (cfg->src == SCL_INPUT_ISP && !(scaler->g_fbd_cfg[img_inst].enable))
+		sclr_img_set_trig(scaler, img_inst, SCL_IMG_TRIG_SRC_ISP);
 	else if (cfg->src == SCL_INPUT_MEM)
-		sclr_img_set_trig(img_inst, SCL_IMG_TRIG_SRC_SW);
+		sclr_img_set_trig(scaler, img_inst, SCL_IMG_TRIG_SRC_SW);
 	else if (cfg->src == SCL_INPUT_SHARE)
-		sclr_img_set_trig(img_inst, SCL_IMG_TRIG_SRC_ISP);
+		sclr_img_set_trig(scaler, img_inst, SCL_IMG_TRIG_SRC_ISP);
 
 	if (cfg->csc == SCL_CSC_NONE) {
-		sclr_img_csc_en(img_inst, false);
+		sclr_img_csc_en(scaler, img_inst, false);
 	} else {
-		sclr_img_csc_en(img_inst, true);
-		sclr_img_set_csc(img_inst, &csc_mtrx[cfg->csc]);
+		sclr_img_csc_en(scaler, img_inst, true);
+		sclr_img_set_csc(scaler, img_inst, &csc_mtrx[cfg->csc]);
 	}
 
-	sclr_img_dup2fancy_bypass(img_inst, cfg->dup2fancy_enable);
+	sclr_img_dup2fancy_bypass(scaler, img_inst, cfg->dup2fancy_enable);
 
-	g_img_cfg[img_inst] = *cfg;
+	scaler->g_img_cfg[img_inst] = *cfg;
 }
 
 /**
@@ -962,7 +954,7 @@ void sclr_img_set_cfg(u8 img_inst, struct sclr_img_cfg *cfg)
  * @param inst: (0~1), the instance of img-in which want to be configured.
  * @param trig_src: img's src of job_start.
  */
-void sclr_img_set_trig(u8 inst, enum sclr_img_trig_src trig_src)
+void sclr_img_set_trig(struct scaler *scaler, u8 inst, enum sclr_img_trig_src trig_src)
 {
 	u32 mask = BIT(13) | BIT(9);
 	u32 val = 0;
@@ -979,7 +971,7 @@ void sclr_img_set_trig(u8 inst, enum sclr_img_trig_src trig_src)
 	default:
 		return;
 	}
-	_reg_write_mask(reg_base + REG_SCL_TOP_IMG_CTRL(inst), mask, val);
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_IMG_CTRL(inst), mask, val);
 }
 
 /**
@@ -988,11 +980,11 @@ void sclr_img_set_trig(u8 inst, enum sclr_img_trig_src trig_src)
  * @param inst: 0~7
  * @return: scl_img's cfg
  */
-struct sclr_img_cfg *sclr_img_get_cfg(u8 inst)
+struct sclr_img_cfg *sclr_img_get_cfg(struct scaler *scaler, u8 inst)
 {
 	if (inst >= VPSS_MAX)
 		return NULL;
-	return &g_img_cfg[inst];
+	return &scaler->g_img_cfg[inst];
 }
 
 /**
@@ -1001,11 +993,11 @@ struct sclr_img_cfg *sclr_img_get_cfg(u8 inst)
  * @param inst: 0~7
  * @return: scl_3fbd's cfg
  */
-struct sclr_fbd_cfg *sclr_fbd_get_cfg(u8 inst)
+struct sclr_fbd_cfg *sclr_fbd_get_cfg(struct scaler *scaler, u8 inst)
 {
 	if (inst >= VPSS_MAX)
 		return NULL;
-	return &g_fbd_cfg[inst];
+	return &scaler->g_fbd_cfg[inst];
 }
 
 /**
@@ -1013,9 +1005,9 @@ struct sclr_fbd_cfg *sclr_fbd_get_cfg(u8 inst)
  *
  * @param read_shadow: true(shadow); false(working)
  */
-void sclr_img_reg_shadow_sel(u8 inst, bool read_shadow)
+void sclr_img_reg_shadow_sel(struct scaler *scaler, u8 inst, bool read_shadow)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_SHD(inst), (read_shadow ? 0x0 : 0x4));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_SHD(inst), (read_shadow ? 0x0 : 0x4));
 }
 
 /**
@@ -1024,80 +1016,80 @@ void sclr_img_reg_shadow_sel(u8 inst, bool read_shadow)
  * @param mask: true(mask); false(unmask)
  * @return: mask status before this modification.
  */
-bool sclr_img_reg_shadow_mask(u8 inst, bool mask)
+bool sclr_img_reg_shadow_mask(struct scaler *scaler, u8 inst, bool mask)
 {
-	bool is_masked = (vpss_reg_read(reg_base + REG_SCL_IMG_SHD(inst)) & BIT(1));
+	bool is_masked = (vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_SHD(inst)) & BIT(1));
 
 	if (is_masked != mask)
-		_reg_write_mask(reg_base + REG_SCL_IMG_SHD(inst), BIT(1),
+		_reg_write_mask(scaler, reg_base + REG_SCL_IMG_SHD(inst), BIT(1),
 				(mask ? 0x0 : BIT(1)));
 
 	return is_masked;
 }
 
-void vpss_v_sw_top_reset(u8 inst)
+void vpss_v_sw_top_reset(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(vi_sys_reg_base, reset_mask[inst], reset_mask[inst]);
+	_reg_write_mask(scaler, vi_sys_reg_base, reset_mask[inst], reset_mask[inst]);
 	udelay(20);
-	_reg_write_mask(vi_sys_reg_base, reset_mask[inst], 0);
+	_reg_write_mask(scaler, vi_sys_reg_base, reset_mask[inst], 0);
 
 	return;
 }
 
-void vpss_d_sw_top_reset(u8 inst)
+void vpss_d_sw_top_reset(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(vo_sys_reg_base, reset_mask[inst], reset_mask[inst]);
+	_reg_write_mask(scaler, vo_sys_reg_base, reset_mask[inst], reset_mask[inst]);
 	udelay(20);
-	_reg_write_mask(vo_sys_reg_base, reset_mask[inst], 0);
+	_reg_write_mask(scaler, vo_sys_reg_base, reset_mask[inst], 0);
 
 	return;
 }
 
-void vpss_t_sw_top_reset(u8 inst)
+void vpss_t_sw_top_reset(struct scaler *scaler, u8 inst)
 {
-	_reg_write_mask(top_rst_reg_base, reset_mask[inst], 0);
+	_reg_write_mask(scaler, top_rst_reg_base, reset_mask[inst], 0);
 	udelay(20);
-	_reg_write_mask(top_rst_reg_base, reset_mask[inst], reset_mask[inst]);
+	_reg_write_mask(scaler, top_rst_reg_base, reset_mask[inst], reset_mask[inst]);
 
 	return;
 }
 
-void sclr_vpss_sw_top_reset(u8 inst)
+void sclr_vpss_sw_top_reset(struct scaler *scaler, u8 inst)
 {
 	if(inst <= VPSS_V3)
-		vpss_v_sw_top_reset(inst);
+		vpss_v_sw_top_reset(scaler, inst);
 	else if(inst <= VPSS_T3)
-		vpss_t_sw_top_reset(inst);
+		vpss_t_sw_top_reset(scaler, inst);
 	else
-		vpss_d_sw_top_reset(inst);
+		vpss_d_sw_top_reset(scaler, inst);
 
-	sclr_ctrl_init(inst, false);
+	sclr_ctrl_init(scaler, inst, false);
 }
 
-void sclr_img_reset(u8 inst)
+void sclr_img_reset(struct scaler *scaler, u8 inst)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_DBG(inst), 0xfffff); // img reset
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_DBG(inst), 0xfffff); // img reset
 	if(inst > VPSS_V3)
-		_reg_write_mask(reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(2), BIT(2)); // fbd reset
+		_reg_write_mask(scaler, reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(2), BIT(2)); // fbd reset
 }
 
-void sclr_img_start(u8 inst)
+void sclr_img_start(struct scaler *scaler, u8 inst)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_DBG(inst), 0xfffff); // img reset
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_DBG(inst), 0xfffff); // img reset
 
-	if((inst > VPSS_V3) && (vpss_reg_read(reg_base + REG_SCL_MAP_CONV_CTRL(inst)) & BIT(2)))
-		_reg_write_mask(reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(2), 0); // fbd init
+	if((inst > VPSS_V3) && (vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_CTRL(inst)) & BIT(2)))
+		_reg_write_mask(scaler, reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(2), 0); // fbd init
 
-	_reg_write_mask(reg_base + REG_SCL_TOP_IMG_CTRL(inst), BIT(1), BIT(1)); // sc start
+	_reg_write_mask(scaler, reg_base + REG_SCL_TOP_IMG_CTRL(inst), BIT(1), BIT(1)); // sc start
 
-	if(g_fbd_cfg[inst].enable){
-		_reg_write_mask(reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(0), BIT(0)); // fbd start
+	if(scaler->g_fbd_cfg[inst].enable){
+		_reg_write_mask(scaler, reg_base + REG_SCL_MAP_CONV_CTRL(inst), BIT(0), BIT(0)); // fbd start
 	}
 }
 
-void sclr_slave_ready(u8 inst)
+void sclr_slave_ready(struct scaler *scaler, u8 inst)
 {
-	sclr_reg_force_up(inst);
+	sclr_reg_force_up(scaler, inst);
 }
 
 /**
@@ -1106,11 +1098,11 @@ void sclr_slave_ready(u8 inst)
  * @param inst: 0~1
  * @param fmt: scl_img's input format
  */
-void sclr_img_set_fmt(u8 inst, enum sclr_format fmt)
+void sclr_img_set_fmt(struct scaler *scaler, u8 inst, enum sclr_format fmt)
 {
-	_reg_write_mask(reg_base + REG_SCL_IMG_CFG(inst), 0x000000f0, fmt << 4);
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_CFG(inst), 0x000000f0, fmt << 4);
 
-	g_img_cfg[inst].fmt = fmt;
+	scaler->g_img_cfg[inst].fmt = fmt;
 }
 
 /**
@@ -1118,19 +1110,19 @@ void sclr_img_set_fmt(u8 inst, enum sclr_format fmt)
  *
  * @param mem: mem settings for img
  */
-void sclr_img_set_mem(u8 inst, struct sclr_mem *mem, bool update)
+void sclr_img_set_mem(struct scaler *scaler, u8 inst, struct sclr_mem *mem, bool update)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_OFFSET(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_OFFSET(inst),
 		   (mem->start_y << 16) | mem->start_x);
-	vpss_reg_write(reg_base + REG_SCL_IMG_SIZE(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_SIZE(inst),
 		   ((mem->height - 1) << 16) | (mem->width - 1));
-	vpss_reg_write(reg_base + REG_SCL_IMG_PITCH_Y(inst), mem->pitch_y);
-	vpss_reg_write(reg_base + REG_SCL_IMG_PITCH_C(inst), mem->pitch_c);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_PITCH_Y(inst), mem->pitch_y);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_PITCH_C(inst), mem->pitch_c);
 
-	sclr_img_set_addr(inst, mem->addr0, mem->addr1, mem->addr2);
+	sclr_img_set_addr(scaler, inst, mem->addr0, mem->addr1, mem->addr2);
 
 	if (update)
-		g_img_cfg[inst].mem = *mem;
+		scaler->g_img_cfg[inst].mem = *mem;
 }
 
 /**
@@ -1140,23 +1132,23 @@ void sclr_img_set_mem(u8 inst, struct sclr_mem *mem, bool update)
  * @param addr1: address of planar1
  * @param addr2: address of planar2
  */
-void sclr_img_set_addr(u8 inst, u64 addr0, u64 addr1, u64 addr2)
+void sclr_img_set_addr(struct scaler *scaler, u8 inst, u64 addr0, u64 addr1, u64 addr2)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR0_L(inst), addr0);
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR0_H(inst), addr0 >> 32);
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR1_L(inst), addr1);
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR1_H(inst), addr1 >> 32);
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR2_L(inst), addr2);
-	vpss_reg_write(reg_base + REG_SCL_IMG_ADDR2_H(inst), addr2 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR0_L(inst), addr0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR0_H(inst), addr0 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR1_L(inst), addr1);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR1_H(inst), addr1 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR2_L(inst), addr2);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR2_H(inst), addr2 >> 32);
 
-	g_img_cfg[inst].mem.addr0 = addr0;
-	g_img_cfg[inst].mem.addr1 = addr1;
-	g_img_cfg[inst].mem.addr2 = addr2;
+	scaler->g_img_cfg[inst].mem.addr0 = addr0;
+	scaler->g_img_cfg[inst].mem.addr1 = addr1;
+	scaler->g_img_cfg[inst].mem.addr2 = addr2;
 }
 
-void sclr_img_csc_en(u8 inst, bool enable)
+void sclr_img_csc_en(struct scaler *scaler, u8 inst, bool enable)
 {
-	_reg_write_mask(reg_base + REG_SCL_IMG_CFG(inst), BIT(12),
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_CFG(inst), BIT(12),
 			enable ? BIT(12) : 0);
 }
 
@@ -1166,51 +1158,51 @@ void sclr_img_csc_en(u8 inst, bool enable)
  * @param inst: (0~1)
  * @param cfg: The settings for CSC
  */
-void sclr_img_set_csc(u8 inst, struct sclr_csc_matrix *cfg)
+void sclr_img_set_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg)
 {
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF0(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF0(inst),
 		   (cfg->coef[0][1] << 16) | cfg->coef[0][0]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF1(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF1(inst),
 		   cfg->coef[0][2]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF2(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF2(inst),
 		   (cfg->coef[1][1] << 16) | cfg->coef[1][0]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF3(inst), cfg->coef[1][2]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF4(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF3(inst), cfg->coef[1][2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF4(inst),
 		   (cfg->coef[2][1] << 16) | cfg->coef[2][0]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_COEF5(inst), cfg->coef[2][2]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_SUB(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_COEF5(inst), cfg->coef[2][2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_SUB(inst),
 		   (cfg->sub[2] << 16) | (cfg->sub[1] << 8) | cfg->sub[0]);
-	vpss_reg_write(reg_base + REG_SCL_IMG_CSC_ADD(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_CSC_ADD(inst),
 		   (cfg->add[2] << 16) | (cfg->add[1] << 8) | cfg->add[0]);
 }
 
-union sclr_img_dbg_status sclr_img_get_dbg_status(u8 inst, bool clr)
+union sclr_img_dbg_status sclr_img_get_dbg_status(struct scaler *scaler, u8 inst, bool clr)
 {
 	union sclr_img_dbg_status status;
 
-	status.raw = vpss_reg_read(reg_base + REG_SCL_IMG_DBG(inst));
+	status.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_DBG(inst));
 
 	if (clr) {
 		status.b.err_fwr_clr = 1;
 		status.b.err_erd_clr = 1;
 		status.b.ip_clr = 1;
 		status.b.ip_int_clr = 1;
-		vpss_reg_write(reg_base + REG_SCL_IMG_DBG(inst), status.raw);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_IMG_DBG(inst), status.raw);
 	}
 
 	return status;
 }
 
-void sclr_img_checksum_en(u8 inst, bool enable)
+void sclr_img_checksum_en(struct scaler *scaler, u8 inst, bool enable)
 {
-	_reg_write_mask(reg_base + REG_SCL_IMG_CHECKSUM0(inst), BIT(31),
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_CHECKSUM0(inst), BIT(31),
 					enable ? BIT(31) : 0);
 }
 
-void sclr_img_get_checksum_status(u8 inst, struct sclr_img_checksum_status *status)
+void sclr_img_get_checksum_status(struct scaler *scaler, u8 inst, struct sclr_img_checksum_status *status)
 {
-	status->checksum_base.raw = vpss_reg_read(reg_base + REG_SCL_IMG_CHECKSUM0(inst));
-	status->axi_read_data = vpss_reg_read(reg_base + REG_SCL_IMG_CHECKSUM1(inst));
+	status->checksum_base.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_CHECKSUM0(inst));
+	status->axi_read_data = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_CHECKSUM1(inst));
 }
 
 int sclr_img_validate_cb_cfg(struct sclr_img_in_sb_cfg *cfg)
@@ -1241,10 +1233,10 @@ void sclr_img_get_sb_default(struct sclr_img_in_sb_cfg *cfg)
  * sclr_img_dup2fancy_bypass - dup2fancy bypass
  *
  */
-void sclr_img_dup2fancy_bypass(u8 inst, bool enable)
+void sclr_img_dup2fancy_bypass(struct scaler *scaler, u8 inst, bool enable)
 {
 	//default 0: enable dup2fancy   1: disable dup2fancy
-	_reg_write_mask(reg_base + REG_SCL_IMG_DUP2FANCY(inst), BIT(0),
+	_reg_write_mask(scaler, reg_base + REG_SCL_IMG_DUP2FANCY(inst), BIT(0),
 					enable ? 0 : BIT(0));
 }
 
@@ -1257,30 +1249,30 @@ void sclr_img_dup2fancy_bypass(u8 inst, bool enable)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: cir's settings.
  */
-void sclr_cir_set_cfg(u8 inst, struct sclr_cir_cfg *cfg)
+void sclr_cir_set_cfg(struct scaler *scaler, u8 inst, struct sclr_cir_cfg *cfg)
 {
 	if (cfg->mode == SCL_CIR_DISABLE) {
-		_reg_write_mask(reg_base + REG_SCL_CFG(inst), 0x20, 0x20);
+		_reg_write_mask(scaler, reg_base + REG_SCL_CFG(inst), 0x20, 0x20);
 	} else {
-		vpss_reg_write(reg_base + REG_SCL_CIR_CFG(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_CFG(inst),
 			   (cfg->line_width << 8) | cfg->mode);
-		vpss_reg_write(reg_base + REG_SCL_CIR_CENTER_X(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_CENTER_X(inst),
 			   cfg->center.x);
-		vpss_reg_write(reg_base + REG_SCL_CIR_CENTER_Y(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_CENTER_Y(inst),
 			   cfg->center.y);
-		vpss_reg_write(reg_base + REG_SCL_CIR_RADIUS(inst), cfg->radius);
-		vpss_reg_write(reg_base + REG_SCL_CIR_SIZE(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_RADIUS(inst), cfg->radius);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_SIZE(inst),
 			   ((cfg->rect.h - 1) << 16) | (cfg->rect.w - 1));
-		vpss_reg_write(reg_base + REG_SCL_CIR_OFFSET(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_OFFSET(inst),
 			   (cfg->rect.y << 16) | cfg->rect.x);
-		vpss_reg_write(reg_base + REG_SCL_CIR_COLOR(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CIR_COLOR(inst),
 			   (cfg->color_b << 16) | (cfg->color_g << 8) |
 			   cfg->color_r);
 
-		_reg_write_mask(reg_base + REG_SCL_CFG(inst), 0x20, 0x00);
+		_reg_write_mask(scaler, reg_base + REG_SCL_CFG(inst), 0x20, 0x00);
 	}
 
-	g_cir_cfg[inst] = *cfg;
+	scaler->g_cir_cfg[inst] = *cfg;
 }
 
 /****************************************************************************
@@ -1292,30 +1284,30 @@ void sclr_cir_set_cfg(u8 inst, struct sclr_cir_cfg *cfg)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: new border config
  */
-void sclr_border_set_cfg(u8 inst, struct sclr_border_cfg *cfg)
+void sclr_border_set_cfg(struct scaler *scaler, u8 inst, struct sclr_border_cfg *cfg)
 {
-	if ((g_sc_cfg[inst].sc.dst.w + cfg->start.x) >
-		g_odma_cfg[inst].mem.width) {
+	if ((scaler->g_sc_cfg[inst].sc.dst.w + cfg->start.x) >
+		scaler->g_odma_cfg[inst].mem.width) {
 		TRACE_VPSS(DBG_DEBUG, "[sc%d] sc_width(%d) + offset(%d) > odma_width(%d)\n",
-			   inst, g_sc_cfg[inst].sc.dst.w, cfg->start.x, g_odma_cfg[inst].mem.width);
-		cfg->start.x = g_odma_cfg[inst].mem.width - g_sc_cfg[inst].sc.dst.w;
+			   inst, scaler->g_sc_cfg[inst].sc.dst.w, cfg->start.x, scaler->g_odma_cfg[inst].mem.width);
+		cfg->start.x = scaler->g_odma_cfg[inst].mem.width - scaler->g_sc_cfg[inst].sc.dst.w;
 	}
 
-	if ((g_sc_cfg[inst].sc.dst.h + cfg->start.y) >
-		g_odma_cfg[inst].mem.height) {
+	if ((scaler->g_sc_cfg[inst].sc.dst.h + cfg->start.y) >
+		scaler->g_odma_cfg[inst].mem.height) {
 		TRACE_VPSS(DBG_DEBUG, "[sc%d] sc_height(%d) + offset(%d) > odma_height(%d)\n",
-			   inst, g_sc_cfg[inst].sc.dst.h, cfg->start.y, g_odma_cfg[inst].mem.height);
-		cfg->start.y = g_odma_cfg[inst].mem.height - g_sc_cfg[inst].sc.dst.h;
+			   inst, scaler->g_sc_cfg[inst].sc.dst.h, cfg->start.y, scaler->g_odma_cfg[inst].mem.height);
+		cfg->start.y = scaler->g_odma_cfg[inst].mem.height - scaler->g_sc_cfg[inst].sc.dst.h;
 	}
 
-	vpss_reg_write(reg_base + REG_SCL_BORDER_CFG(inst), cfg->cfg.raw);
-	vpss_reg_write(reg_base + REG_SCL_BORDER_OFFSET(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_CFG(inst), cfg->cfg.raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_OFFSET(inst),
 		   (cfg->start.y << 16) | cfg->start.x);
 
-	g_bd_cfg[inst] = *cfg;
+	scaler->g_bd_cfg[inst] = *cfg;
 }
 
-void sclr_border_vpp_set_cfg(u8 inst, u8 border_idx, struct sclr_border_vpp_cfg *cfg, bool update)
+void sclr_border_vpp_set_cfg(struct scaler *scaler, u8 inst, u8 border_idx, struct sclr_border_vpp_cfg *cfg, bool update)
 {
 	if(cfg->inside_start.x > cfg->inside_end.x || cfg->inside_start.y > cfg->inside_end.y){
 		TRACE_VPSS(DBG_WARN, "[sc%d] border_idx(%d), inside(%d %d %d %d)\n", inst, border_idx,
@@ -1325,24 +1317,24 @@ void sclr_border_vpp_set_cfg(u8 inst, u8 border_idx, struct sclr_border_vpp_cfg 
 		TRACE_VPSS(DBG_WARN, "[sc%d] idx(%d), outside(%d %d %d %d)\n", inst, border_idx,
 				cfg->outside_start.x, cfg->outside_start.y, cfg->outside_end.x, cfg->outside_end.y);
 	}
-	vpss_reg_write(reg_base + REG_SCL_BORDER_VPP_CFG(inst, border_idx), cfg->cfg.raw);
-	vpss_reg_write(reg_base + REG_SCL_BORDER_VPP_INX(inst, border_idx),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_VPP_CFG(inst, border_idx), cfg->cfg.raw);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_VPP_INX(inst, border_idx),
 		   (cfg->inside_end.x << 16) | cfg->inside_start.x);
-	vpss_reg_write(reg_base + REG_SCL_BORDER_VPP_INY(inst, border_idx),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_VPP_INY(inst, border_idx),
 		   (cfg->inside_end.y << 16) | cfg->inside_start.y);
-	vpss_reg_write(reg_base + REG_SCL_BORDER_VPP_OUTX(inst, border_idx),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_VPP_OUTX(inst, border_idx),
 		   (cfg->outside_end.x << 16) | cfg->outside_start.x);
-	vpss_reg_write(reg_base + REG_SCL_BORDER_VPP_OUTY(inst, border_idx),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_BORDER_VPP_OUTY(inst, border_idx),
 		   (cfg->outside_end.y << 16) | cfg->outside_start.y);
 	if(update)
-		g_bd_vpp_cfg[inst][border_idx] = *cfg;
+		scaler->g_bd_vpp_cfg[inst][border_idx] = *cfg;
 }
 
-struct sclr_border_vpp_cfg * sclr_border_vpp_get_cfg(u8 inst, u8 border_idx)
+struct sclr_border_vpp_cfg * sclr_border_vpp_get_cfg(struct scaler *scaler, u8 inst, u8 border_idx)
 {
 	if (inst >= SCL_MAX_INST)
 		return NULL;
-	return &g_bd_vpp_cfg[inst][border_idx];
+	return &scaler->g_bd_vpp_cfg[inst][border_idx];
 }
 
 /**
@@ -1351,11 +1343,11 @@ struct sclr_border_vpp_cfg * sclr_border_vpp_get_cfg(u8 inst, u8 border_idx)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @return: scl_border's cfg
  */
-struct sclr_border_cfg *sclr_border_get_cfg(u8 inst)
+struct sclr_border_cfg *sclr_border_get_cfg(struct scaler *scaler, u8 inst)
 {
 	if (inst >= SCL_MAX_INST)
 		return NULL;
-	return &g_bd_cfg[inst];
+	return &scaler->g_bd_cfg[inst];
 }
 
 /****************************************************************************
@@ -1368,17 +1360,17 @@ struct sclr_border_cfg *sclr_border_get_cfg(u8 inst)
  * @param burst: dma's burst length
  * @param fmt: dma's format
  */
-void sclr_odma_set_cfg(u8 inst, struct sclr_odma_cfg *cfg)
+void sclr_odma_set_cfg(struct scaler *scaler, u8 inst, struct sclr_odma_cfg *cfg)
 {
 	enum sclr_format odma_fmt = cfg->fmt;
 
-	vpss_reg_write(reg_base + REG_SCL_ODMA_CFG(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_CFG(inst),
 		   (cfg->flip << 16) |	(odma_fmt << 8) | cfg->burst | BIT(1));
 
-	sclr_odma_set_mem(inst, &cfg->mem);
-	sclr_ctrl_set_output(inst, &cfg->csc_cfg, cfg->fmt);
+	sclr_odma_set_mem(scaler, inst, &cfg->mem);
+	sclr_ctrl_set_output(scaler, inst, &cfg->csc_cfg, cfg->fmt);
 
-	g_odma_cfg[inst] = *cfg;
+	scaler->g_odma_cfg[inst] = *cfg;
 }
 
 /**
@@ -1387,11 +1379,11 @@ void sclr_odma_set_cfg(u8 inst, struct sclr_odma_cfg *cfg)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @return: scl_odma's cfg
  */
-struct sclr_odma_cfg *sclr_odma_get_cfg(u8 inst)
+struct sclr_odma_cfg *sclr_odma_get_cfg(struct scaler *scaler, u8 inst)
 {
 	if (inst >= SCL_MAX_INST)
 		return NULL;
-	return &g_odma_cfg[inst];
+	return &scaler->g_odma_cfg[inst];
 }
 
 /**
@@ -1400,15 +1392,15 @@ struct sclr_odma_cfg *sclr_odma_get_cfg(u8 inst)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param fmt: scl_odma's output format
  */
-void sclr_odma_set_fmt(u8 inst, enum sclr_format fmt)
+void sclr_odma_set_fmt(struct scaler *scaler, u8 inst, enum sclr_format fmt)
 {
 	u32 tmp = fmt << 8;
 
 	if (fmt == SCL_FMT_BF16)
 		tmp |= BIT(23);
-	_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0080ff00, tmp);
+	_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0080ff00, tmp);
 
-	g_odma_cfg[inst].fmt = fmt;
+	scaler->g_odma_cfg[inst].fmt = fmt;
 }
 
 /**
@@ -1416,18 +1408,18 @@ void sclr_odma_set_fmt(u8 inst, enum sclr_format fmt)
  *
  * @param mem: mem settings for odma
  */
-void sclr_odma_set_mem(u8 inst, struct sclr_mem *mem)
+void sclr_odma_set_mem(struct scaler *scaler, u8 inst, struct sclr_mem *mem)
 {
-	vpss_reg_write(reg_base + REG_SCL_ODMA_OFFSET_X(inst), mem->start_x);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_OFFSET_Y(inst), mem->start_y);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_WIDTH(inst), mem->width - 1);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_HEIGHT(inst), mem->height - 1);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_PITCH_Y(inst), mem->pitch_y);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_PITCH_C(inst), mem->pitch_c);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_OFFSET_X(inst), mem->start_x);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_OFFSET_Y(inst), mem->start_y);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_WIDTH(inst), mem->width - 1);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_HEIGHT(inst), mem->height - 1);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_PITCH_Y(inst), mem->pitch_y);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_PITCH_C(inst), mem->pitch_c);
 
-	sclr_odma_set_addr(inst, mem->addr0, mem->addr1, mem->addr2);
+	sclr_odma_set_addr(scaler, inst, mem->addr0, mem->addr1, mem->addr2);
 
-	g_odma_cfg[inst].mem = *mem;
+	scaler->g_odma_cfg[inst].mem = *mem;
 }
 
 /**
@@ -1437,25 +1429,25 @@ void sclr_odma_set_mem(u8 inst, struct sclr_mem *mem)
  * @param addr1: address of planar1
  * @param addr2: address of planar2
  */
-void sclr_odma_set_addr(u8 inst, u64 addr0, u64 addr1, u64 addr2)
+void sclr_odma_set_addr(struct scaler *scaler, u8 inst, u64 addr0, u64 addr1, u64 addr2)
 {
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR0_L(inst), addr0);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR0_H(inst), addr0 >> 32);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR1_L(inst), addr1);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR1_H(inst), addr1 >> 32);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR2_L(inst), addr2);
-	vpss_reg_write(reg_base + REG_SCL_ODMA_ADDR2_H(inst), addr2 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR0_L(inst), addr0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR0_H(inst), addr0 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR1_L(inst), addr1);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR1_H(inst), addr1 >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR2_L(inst), addr2);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR2_H(inst), addr2 >> 32);
 
-	g_odma_cfg[inst].mem.addr0 = addr0;
-	g_odma_cfg[inst].mem.addr1 = addr1;
-	g_odma_cfg[inst].mem.addr2 = addr2;
+	scaler->g_odma_cfg[inst].mem.addr0 = addr0;
+	scaler->g_odma_cfg[inst].mem.addr1 = addr1;
+	scaler->g_odma_cfg[inst].mem.addr2 = addr2;
 }
 
-union sclr_odma_dbg_status sclr_odma_get_dbg_status(u8 inst)
+union sclr_odma_dbg_status sclr_odma_get_dbg_status(struct scaler *scaler, u8 inst)
 {
 	union sclr_odma_dbg_status status;
 
-	status.raw = vpss_reg_read(reg_base + REG_SCL_ODMA_DBG(inst));
+	status.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_DBG(inst));
 
 	return status;
 }
@@ -1466,13 +1458,13 @@ union sclr_odma_dbg_status sclr_odma_get_dbg_status(u8 inst)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: The settings for CSC
  */
-void sclr_set_csc_ctrl(u8 inst, struct sclr_csc_cfg *cfg)
+void sclr_set_csc_ctrl(struct scaler *scaler, u8 inst, struct sclr_csc_cfg *cfg)
 {
 	u32 tmp = 0;
 
 	if(cfg->datatype != SCL_DATATYPE_DISABLE){
 		// tmp |= BIT(11) | BIT(1) | BIT(0);
-		// sclr_set_csc(inst, &csc_mtrx[SCL_CSC_DATATYPE]);
+		// sclr_set_csc(scaler, inst, &csc_mtrx[SCL_CSC_DATATYPE]);
 		tmp |= BIT(1);
 	}
 
@@ -1485,7 +1477,7 @@ void sclr_set_csc_ctrl(u8 inst, struct sclr_csc_cfg *cfg)
 			tmp |= BIT(5);
 		if (!cfg->work_on_border)
 			tmp |= BIT(9);
-		sclr_set_csc(inst, &csc_mtrx[SCL_CSC_NONE]);
+		sclr_set_csc(scaler, inst, &csc_mtrx[SCL_CSC_NONE]);
 	} else if (cfg->mode == SCL_OUT_QUANT) {
 		tmp |= (cfg->quant_round << 2) | BIT(1) | BIT(0);
 		if (!cfg->work_on_border)
@@ -1495,41 +1487,41 @@ void sclr_set_csc_ctrl(u8 inst, struct sclr_csc_cfg *cfg)
 		if(cfg->datatype == SCL_DATATYPE_BF16)
 			if (cfg->quant_border_type == SCL_QUANT_BORDER_TYPE_127)
 				tmp |= BIT(10);
-		sclr_set_quant(inst, &cfg->quant_form);
+		sclr_set_quant(scaler, inst, &cfg->quant_form);
 	} else if (cfg->mode == SCL_OUT_CONVERT_TO) {
 		tmp |= BIT(11) | BIT(1) | BIT(0);
-		sclr_set_csc(inst, &csc_mtrx[SCL_CSC_DATATYPE]);
-		sclr_set_convert_to(inst, &cfg->convert_to_cfg);
+		sclr_set_csc(scaler, inst, &csc_mtrx[SCL_CSC_DATATYPE]);
+		sclr_set_convert_to(scaler, inst, &cfg->convert_to_cfg);
 	} else if (cfg->mode == SCL_OUT_CSC){
 		tmp |= BIT(0);
 		if (!cfg->work_on_border)
 			tmp |= BIT(8);
-		// sclr_set_csc(inst, &csc_mtrx[cfg->csc_type]);
+		// sclr_set_csc(scaler, inst, &csc_mtrx[cfg->csc_type]);
 	} else
 		if (!cfg->work_on_border)
 			tmp |= BIT(8);
 
-	_reg_write_mask(reg_base + REG_SCL_CSC_EN(inst), 0x00000fff, tmp);
+	_reg_write_mask(scaler, reg_base + REG_SCL_CSC_EN(inst), 0x00000fff, tmp);
 
 	if (cfg->datatype == SCL_DATATYPE_BF16) {
-		_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(23));
+		_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(23));
 	} else if (cfg->datatype == SCL_DATATYPE_FP16) {
-		_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(24));
+		_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(24));
 	} else if (cfg->datatype == SCL_DATATYPE_FP32) {
-		_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(25));
+		_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(25));
 	} else if (cfg->datatype == SCL_DATATYPE_INT8) {
-		_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(26));
+		_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(26));
 	} else if (cfg->datatype == SCL_DATATYPE_U8) {
-		_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(27));
+		_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), 0x0F800000, BIT(27));
 	}
 
-	g_odma_cfg[inst].csc_cfg = *cfg;
+	scaler->g_odma_cfg[inst].csc_cfg = *cfg;
 }
 
-struct sclr_csc_cfg *sclr_get_csc_ctrl(u8 inst)
+struct sclr_csc_cfg *sclr_get_csc_ctrl(struct scaler *scaler, u8 inst)
 {
 	if (inst < SCL_MAX_INST)
-		return &g_odma_cfg[inst].csc_cfg;
+		return &scaler->g_odma_cfg[inst].csc_cfg;
 
 	return NULL;
 }
@@ -1540,22 +1532,22 @@ struct sclr_csc_cfg *sclr_get_csc_ctrl(u8 inst)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: The settings for CSC
  */
-void sclr_set_csc(u8 inst, struct sclr_csc_matrix *cfg)
+void sclr_set_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg)
 {
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF0(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF0(inst),
 		   (cfg->coef[0][1] << 16) | cfg->coef[0][0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF1(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF1(inst),
 		   (cfg->coef[1][0] << 16) | cfg->coef[0][2]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF2(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF2(inst),
 		   (cfg->coef[1][2] << 16) | cfg->coef[1][1]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF3(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF3(inst),
 		   (cfg->coef[2][1] << 16) | cfg->coef[2][0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF4(inst), cfg->coef[2][2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF4(inst), cfg->coef[2][2]);
 
-	vpss_reg_write(reg_base + REG_SCL_CSC_OFFSET(inst),
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_OFFSET(inst),
 		   (cfg->add[2] << 16) | (cfg->add[1] << 8) | cfg->add[0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_FRAC0(inst), 0);
-	vpss_reg_write(reg_base + REG_SCL_CSC_FRAC1(inst), 0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_FRAC0(inst), 0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_FRAC1(inst), 0);
 }
 
 /**
@@ -1564,29 +1556,29 @@ void sclr_set_csc(u8 inst, struct sclr_csc_matrix *cfg)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: The settings of quantization
  */
-void sclr_set_quant(u8 inst, struct sclr_quant_formula *cfg)
+void sclr_set_quant(struct scaler *scaler, u8 inst, struct sclr_quant_formula *cfg)
 {
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF0(inst), cfg->sc_frac[0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF1(inst), 0);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF2(inst), cfg->sc_frac[1]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF3(inst), 0);
-	vpss_reg_write(reg_base + REG_SCL_CSC_COEF4(inst), cfg->sc_frac[2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF0(inst), cfg->sc_frac[0]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF1(inst), 0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF2(inst), cfg->sc_frac[1]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF3(inst), 0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_COEF4(inst), cfg->sc_frac[2]);
 
-	vpss_reg_write(reg_base + REG_SCL_CSC_OFFSET(inst), (cfg->sub[2] << 16) | (cfg->sub[1] << 8) | cfg->sub[0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_FRAC0(inst), (cfg->sub_frac[1] << 16) | cfg->sub_frac[0]);
-	vpss_reg_write(reg_base + REG_SCL_CSC_FRAC1(inst), cfg->sub_frac[2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_OFFSET(inst), (cfg->sub[2] << 16) | (cfg->sub[1] << 8) | cfg->sub[0]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_FRAC0(inst), (cfg->sub_frac[1] << 16) | cfg->sub_frac[0]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CSC_FRAC1(inst), cfg->sub_frac[2]);
 }
 
-void sclr_set_convert_to(u8 inst, struct sclr_convertto_formula *cfg)
+void sclr_set_convert_to(struct scaler *scaler, u8 inst, struct sclr_convertto_formula *cfg)
 {
-	_reg_write_mask(reg_base + REG_SCL_ODMA_CFG(inst), BIT(28), BIT(28));
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_A0(inst), cfg->a_frac[0]);
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_A1(inst), cfg->a_frac[1]);
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_A2(inst), cfg->a_frac[2]);
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_B0(inst), cfg->b_frac[0]);
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_B1(inst), cfg->b_frac[1]);
-	vpss_reg_write(reg_base + REG_SCL_CONVERT_TO_B2(inst), cfg->b_frac[2]);
-	g_odma_cfg[inst].csc_cfg.convert_to_cfg = *cfg;
+	_reg_write_mask(scaler, reg_base + REG_SCL_ODMA_CFG(inst), BIT(28), BIT(28));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_A0(inst), cfg->a_frac[0]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_A1(inst), cfg->a_frac[1]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_A2(inst), cfg->a_frac[2]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_B0(inst), cfg->b_frac[0]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_B1(inst), cfg->b_frac[1]);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_CONVERT_TO_B2(inst), cfg->b_frac[2]);
+	scaler->g_odma_cfg[inst].csc_cfg.convert_to_cfg = *cfg;
 }
 
 /**
@@ -1595,50 +1587,50 @@ void sclr_set_convert_to(u8 inst, struct sclr_convertto_formula *cfg)
  * @param inst: (0~3), the instance of scaler which want to be configured.
  * @param cfg: The settings of CSC
  */
-void sclr_get_csc(u8 inst, struct sclr_csc_matrix *cfg)
+void sclr_get_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg)
 {
 	u32 tmp;
 
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_COEF0(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_COEF0(inst));
 	cfg->coef[0][0] = tmp;
 	cfg->coef[0][1] = tmp >> 16;
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_COEF1(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_COEF1(inst));
 	cfg->coef[0][2] = tmp;
 	cfg->coef[1][0] = tmp >> 16;
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_COEF2(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_COEF2(inst));
 	cfg->coef[1][1] = tmp;
 	cfg->coef[1][2] = tmp >> 16;
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_COEF3(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_COEF3(inst));
 	cfg->coef[2][0] = tmp;
 	cfg->coef[2][1] = tmp >> 16;
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_COEF4(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_COEF4(inst));
 	cfg->coef[2][2] = tmp;
 
-	tmp = vpss_reg_read(reg_base + REG_SCL_CSC_OFFSET(inst));
+	tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CSC_OFFSET(inst));
 	cfg->add[0] = tmp;
 	cfg->add[1] = tmp >> 8;
 	cfg->add[2] = tmp >> 16;
 	memset(cfg->sub, 0, sizeof(cfg->sub));
 }
 
-void sclr_core_set_cfg(u8 inst, struct sclr_core_cfg *cfg)
+void sclr_core_set_cfg(struct scaler *scaler, u8 inst, struct sclr_core_cfg *cfg)
 {
-	sclr_ctrl_set_scale(inst, &cfg->sc);
-	sclr_update_coef(inst, cfg->sc.algorithm);
+	sclr_ctrl_set_scale(scaler, inst, &cfg->sc);
+	sclr_update_coef(scaler, inst, cfg->sc.algorithm);
 }
 
-void sclr_core_checksum_en(u8 inst, bool enable)
+void sclr_core_checksum_en(struct scaler *scaler, u8 inst, bool enable)
 {
-	_reg_write_mask(reg_base + REG_SCL_CHECKSUM0(inst), BIT(31),
+	_reg_write_mask(scaler, reg_base + REG_SCL_CHECKSUM0(inst), BIT(31),
 					enable ? BIT(31) : 0);
 }
 
-void sclr_core_get_checksum_status(u8 inst, struct sclr_core_checksum_status *status)
+void sclr_core_get_checksum_status(struct scaler *scaler, u8 inst, struct sclr_core_checksum_status *status)
 {
-	status->checksum_base.raw = vpss_reg_read(reg_base + REG_SCL_CHECKSUM0(inst));
-	status->axi_read_gop0_data = vpss_reg_read(reg_base + REG_SCL_CHECKSUM1(inst));
-	status->axi_read_gop1_data = vpss_reg_read(reg_base + REG_SCL_CHECKSUM2(inst));
-	status->axi_write_data = vpss_reg_read(reg_base + REG_SCL_CHECKSUM3(inst));
+	status->checksum_base.raw = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CHECKSUM0(inst));
+	status->axi_read_gop0_data = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CHECKSUM1(inst));
+	status->axi_read_gop1_data = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CHECKSUM2(inst));
+	status->axi_write_data = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CHECKSUM3(inst));
 }
 
 /****************************************************************************
@@ -1652,28 +1644,28 @@ void sclr_core_get_checksum_status(u8 inst, struct sclr_core_checksum_status *st
  * @param layer: (0~1) 0 is layer 0(gop0). 1 is layer 1(gop1).
  * @param cfg: gop's settings
  */
-void sclr_gop_set_cfg(u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update)
+void sclr_gop_set_cfg(struct scaler *scaler, u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update)
 {
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
-			vpss_reg_write(reg_base + REG_SCL_GOP0_CFG(inst), cfg->gop_ctrl.raw);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_FONTCOLOR(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_CFG(inst), cfg->gop_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_FONTCOLOR(inst),
 					   (cfg->font_fg_color << 16) | cfg->font_bg_color);
 			if (cfg->gop_ctrl.b.colorkey_en)
-			vpss_reg_write(reg_base + REG_SCL_GOP0_COLORKEY(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_COLORKEY(inst),
 					   cfg->colorkey);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_FONTBOX_CTRL(inst), cfg->fb_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_FONTBOX_CTRL(inst), cfg->fb_ctrl.raw);
 
-			vpss_reg_write(reg_base + REG_SCL_GOP0_DEC_CTRL(inst), cfg->odec_cfg.odec_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_DEC_CTRL(inst), cfg->odec_cfg.odec_ctrl.raw);
 		} else if (layer == 1) {
-			vpss_reg_write(reg_base + REG_SCL_GOP1_CFG(inst), cfg->gop_ctrl.raw);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_FONTCOLOR(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_CFG(inst), cfg->gop_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_FONTCOLOR(inst),
 					   (cfg->font_fg_color << 16) | cfg->font_bg_color);
 			if (cfg->gop_ctrl.b.colorkey_en)
-				vpss_reg_write(reg_base + REG_SCL_GOP1_COLORKEY(inst), cfg->colorkey);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_FONTBOX_CTRL(inst), cfg->fb_ctrl.raw);
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_COLORKEY(inst), cfg->colorkey);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_FONTBOX_CTRL(inst), cfg->fb_ctrl.raw);
 
-			vpss_reg_write(reg_base + REG_SCL_GOP1_DEC_CTRL(inst), cfg->odec_cfg.odec_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_DEC_CTRL(inst), cfg->odec_cfg.odec_ctrl.raw);
 
 		} else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
@@ -1681,7 +1673,7 @@ void sclr_gop_set_cfg(u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update)
 			return;
 		}
 		if (update)
-			g_gop_cfg[inst][layer] = *cfg;
+			scaler->g_gop_cfg[inst][layer] = *cfg;
 	}
 }
 
@@ -1692,10 +1684,10 @@ void sclr_gop_set_cfg(u8 inst, u8 layer, struct sclr_gop_cfg *cfg, bool update)
  *		0~3 is on scl, 4 is on disp.
  * @param layer: (0~1) 0 is layer 0(gop0). 1 is layer 1(gop1).
  */
-struct sclr_gop_cfg *sclr_gop_get_cfg(u8 inst, u8 layer)
+struct sclr_gop_cfg *sclr_gop_get_cfg(struct scaler *scaler, u8 inst, u8 layer)
 {
 	if (inst < SCL_MAX_INST && layer < SCL_MAX_GOP_INST)
-		return &g_gop_cfg[inst][layer];
+		return &scaler->g_gop_cfg[inst][layer];
 
 	return NULL;
 }
@@ -1710,7 +1702,7 @@ struct sclr_gop_cfg *sclr_gop_get_cfg(u8 inst, u8 layer)
  *		There should be smaller than 256 instances.
  * @param data: values of 256LUT-table. There should be 256 instances.
  */
-int sclr_gop_setup_256LUT(u8 inst, u8 layer, u16 length, u16 *data)
+int sclr_gop_setup_256LUT(struct scaler *scaler, u8 inst, u8 layer, u16 length, u16 *data)
 {
 	u16 i = 0;
 
@@ -1720,17 +1712,17 @@ int sclr_gop_setup_256LUT(u8 inst, u8 layer, u16 length, u16 *data)
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
 			for (i = 0; i < length; ++i) {
-				vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT0(inst),
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT0(inst),
 						   (i << 16) | *(data + i));
-				vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT1(inst), (u32)(~BIT(16)));
-				vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT1(inst), BIT(16));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT1(inst), (u32)(~BIT(16)));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT1(inst), BIT(16));
 			}
 		} else if (layer == 1) {
 			for (i = 0; i < length; ++i) {
-				vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT0(inst),
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT0(inst),
 						   (i << 16) | *(data + i));
-				vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT1(inst), (u32)(~BIT(16)));
-				vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT1(inst), BIT(16));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT1(inst), (u32)(~BIT(16)));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT1(inst), BIT(16));
 			}
 		} else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
@@ -1750,22 +1742,22 @@ int sclr_gop_setup_256LUT(u8 inst, u8 layer, u16 length, u16 *data)
  * @param index: start address of 256LUT-table. There should be 256 instances.
  * @param data: value of 256LUT-table.
  */
-int sclr_gop_update_256LUT(u8 inst, u8 layer, u8 index, u16 data)
+int sclr_gop_update_256LUT(struct scaler *scaler, u8 inst, u8 layer, u8 index, u16 data)
 {
 	//if (index > 255)
 	//	return -1;
 
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
-			vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT0(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT0(inst),
 					   (index << 16) | data);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT1(inst), (u32)(~BIT(16)));
-			vpss_reg_write(reg_base + REG_SCL_GOP0_256LUT1(inst), BIT(16));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT1(inst), (u32)(~BIT(16)));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_256LUT1(inst), BIT(16));
 		} else if (layer == 1) {
-			vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT0(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT0(inst),
 					   (index << 16) | data);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT1(inst), (u32)(~BIT(16)));
-			vpss_reg_write(reg_base + REG_SCL_GOP1_256LUT1(inst), BIT(16));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT1(inst), (u32)(~BIT(16)));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_256LUT1(inst), BIT(16));
 		} else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
 				inst, layer);
@@ -1785,7 +1777,7 @@ int sclr_gop_update_256LUT(u8 inst, u8 layer, u8 index, u16 data)
  *		There should be smaller than 16 instances.
  * @param data: values of 16LUT-table. There should be 16 instances.
  */
-int sclr_gop_setup_16LUT(u8 inst, u8 layer, u8 length, u16 *data)
+int sclr_gop_setup_16LUT(struct scaler *scaler, u8 inst, u8 layer, u8 length, u16 *data)
 {
 	u16 i = 0;
 	//if (length > 15)
@@ -1794,12 +1786,12 @@ int sclr_gop_setup_16LUT(u8 inst, u8 layer, u8 length, u16 *data)
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
 			for (i = 0; i < length; i += 2 ) {
-				vpss_reg_write(reg_base + REG_SCL_GOP0_16LUT(inst, i),
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_16LUT(inst, i),
 						   ((*(data + i + 1) << 16) | (*(data + i))));
 			}
 		} else if (layer == 1) {
 			for (i = 0; i <= length; i += 2) {
-				vpss_reg_write(reg_base + REG_SCL_GOP1_16LUT(inst, i),
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_16LUT(inst, i),
 						   ((*(data + i + 1) << 16) | (*(data + i))));
 			}
 		} else {
@@ -1820,7 +1812,7 @@ int sclr_gop_setup_16LUT(u8 inst, u8 layer, u8 length, u16 *data)
  * @param index: start address of 16LUT-table. There should be 16 instances.
  * @param data: value of 16LUT-table.
  */
-int sclr_gop_update_16LUT(u8 inst, u8 layer, u8 index, u16 data)
+int sclr_gop_update_16LUT(struct scaler *scaler, u8 inst, u8 layer, u8 index, u16 data)
 {
 	u16 tmp;
 	if (index > 15)
@@ -1829,22 +1821,22 @@ int sclr_gop_update_16LUT(u8 inst, u8 layer, u8 index, u16 data)
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
 			if (index % 2 == 0) {
-				tmp = vpss_reg_read(reg_base + REG_SCL_GOP0_16LUT(inst, index + 1));
-				vpss_reg_write(reg_base + REG_SCL_GOP0_16LUT(inst, index),
+				tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP0_16LUT(inst, index + 1));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_16LUT(inst, index),
 						   ((tmp << 16) | data));
 			} else {
-				tmp = vpss_reg_read(reg_base + REG_SCL_GOP0_16LUT(inst, index - 1));
-				vpss_reg_write(reg_base + REG_SCL_GOP0_16LUT(inst, index - 1),
+				tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP0_16LUT(inst, index - 1));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_16LUT(inst, index - 1),
 						   ((data << 16) | tmp));
 			}
 		} else if (layer == 1) {
 			if (index % 2 == 0) {
-				tmp = vpss_reg_read(reg_base + REG_SCL_GOP1_16LUT(inst, index + 1));
-				vpss_reg_write(reg_base + REG_SCL_GOP1_16LUT(inst, index),
+				tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP1_16LUT(inst, index + 1));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_16LUT(inst, index),
 						   ((tmp << 16) | data));
 			} else {
-				tmp = vpss_reg_read(reg_base + REG_SCL_GOP1_16LUT(inst, index - 1));
-				vpss_reg_write(reg_base + REG_SCL_GOP1_16LUT(inst, index - 1),
+				tmp = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP1_16LUT(inst, index - 1));
+				vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_16LUT(inst, index - 1),
 						   ((data << 16) | tmp));
 			}
 		} else {
@@ -1865,7 +1857,7 @@ int sclr_gop_update_16LUT(u8 inst, u8 layer, u8 index, u16 data)
  * @param ow_inst: (0~7), the instance of ow which want to be configured.
  * @param cfg: ow's settings.
  */
-void sclr_gop_ow_set_cfg(u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *ow_cfg, bool update)
+void sclr_gop_ow_set_cfg(struct scaler *scaler, u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *ow_cfg, bool update)
 {
 	//OW Format
 	//4'b0000: ARGB8888
@@ -1881,34 +1873,34 @@ void sclr_gop_ow_set_cfg(u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *
 
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
-			vpss_reg_write(reg_base + REG_SCL_GOP0_FMT(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_FMT(inst, ow_inst),
 					   reg_map_fmt[ow_cfg->fmt]);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_H_RANGE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_H_RANGE(inst, ow_inst),
 					   (ow_cfg->end.x << 16) | ow_cfg->start.x);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_V_RANGE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_V_RANGE(inst, ow_inst),
 					   (ow_cfg->end.y << 16) | ow_cfg->start.y);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_ADDR_L(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_ADDR_L(inst, ow_inst),
 					   ow_cfg->addr);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_ADDR_H(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_ADDR_H(inst, ow_inst),
 					   ow_cfg->addr >> 32);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_CROP_PITCH(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_CROP_PITCH(inst, ow_inst),
 					   (ow_cfg->crop_pixels << 16) | ow_cfg->pitch);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_SIZE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_SIZE(inst, ow_inst),
 					   (ow_cfg->mem_size.h << 16) | ow_cfg->mem_size.w);
 		} else if (layer == 1) {
-			vpss_reg_write(reg_base + REG_SCL_GOP1_FMT(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_FMT(inst, ow_inst),
 					   reg_map_fmt[ow_cfg->fmt]);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_H_RANGE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_H_RANGE(inst, ow_inst),
 					   (ow_cfg->end.x << 16) | ow_cfg->start.x);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_V_RANGE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_V_RANGE(inst, ow_inst),
 					   (ow_cfg->end.y << 16) | ow_cfg->start.y);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_ADDR_L(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_ADDR_L(inst, ow_inst),
 					   ow_cfg->addr);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_ADDR_H(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_ADDR_H(inst, ow_inst),
 					   ow_cfg->addr >> 32);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_CROP_PITCH(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_CROP_PITCH(inst, ow_inst),
 					   (ow_cfg->crop_pixels << 16) | ow_cfg->pitch);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_SIZE(inst, ow_inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_SIZE(inst, ow_inst),
 					   (ow_cfg->mem_size.h << 16) | ow_cfg->mem_size.w);
 		} else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
@@ -1916,7 +1908,7 @@ void sclr_gop_ow_set_cfg(u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *
 			return;
 		}
 		if (update)
-			g_gop_cfg[inst][layer].ow_cfg[ow_inst] = *ow_cfg;
+			scaler->g_gop_cfg[inst][layer].ow_cfg[ow_inst] = *ow_cfg;
 
 	}
 }
@@ -1930,7 +1922,7 @@ void sclr_gop_ow_set_cfg(u8 inst, u8 layer, u8 ow_inst, struct sclr_gop_ow_cfg *
  * @param fb_inst: (0~1), the instance of ow which want to be configured.
  * @param cfg: fontbox configuration
  */
-void sclr_gop_fb_set_cfg(u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *fb_cfg)
+void sclr_gop_fb_set_cfg(struct scaler *scaler, u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *fb_cfg)
 {
 	if (fb_inst >= SCL_MAX_GOP_FB_INST)
 		return;
@@ -1942,11 +1934,11 @@ void sclr_gop_fb_set_cfg(u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *
 
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0) {
-			vpss_reg_write(reg_base + REG_SCL_GOP0_FONTBOX_CFG(inst, fb_inst), fb_cfg->fb_ctrl.raw);
-			vpss_reg_write(reg_base + REG_SCL_GOP0_FONTBOX_INIT(inst, fb_inst), fb_cfg->init_st);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_FONTBOX_CFG(inst, fb_inst), fb_cfg->fb_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP0_FONTBOX_INIT(inst, fb_inst), fb_cfg->init_st);
 		} else if (layer == 1) {
-			vpss_reg_write(reg_base + REG_SCL_GOP1_FONTBOX_CFG(inst, fb_inst), fb_cfg->fb_ctrl.raw);
-			vpss_reg_write(reg_base + REG_SCL_GOP1_FONTBOX_INIT(inst, fb_inst), fb_cfg->init_st);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_FONTBOX_CFG(inst, fb_inst), fb_cfg->fb_ctrl.raw);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_GOP1_FONTBOX_INIT(inst, fb_inst), fb_cfg->init_st);
 		} else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
 				inst, layer);
@@ -1965,13 +1957,13 @@ void sclr_gop_fb_set_cfg(u8 inst, u8 layer, u8 fb_inst, struct sclr_gop_fb_cfg *
  * @param fb_inst: (0~1), the instance of ow which want to be configured.
  * @return: fontbox's record
  */
-u32 sclr_gop_fb_get_record(u8 inst, u8 layer, u8 fb_inst)
+u32 sclr_gop_fb_get_record(struct scaler *scaler, u8 inst, u8 layer, u8 fb_inst)
 {
 	if (inst < SCL_MAX_INST) {
 		if (layer == 0)
-			return vpss_reg_read(reg_base + REG_SCL_GOP0_FONTBOX_REC(inst, fb_inst));
+			return vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP0_FONTBOX_REC(inst, fb_inst));
 		else if (layer == 1)
-			return vpss_reg_read(reg_base + REG_SCL_GOP1_FONTBOX_REC(inst, fb_inst));
+			return vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_GOP1_FONTBOX_REC(inst, fb_inst));
 		else {
 			TRACE_VPSS(DBG_WARN, "[sc%d] only 0 or 1 layer, no such layer(%d).\n",
 				inst, layer);
@@ -1988,16 +1980,16 @@ u32 sclr_gop_fb_get_record(u8 inst, u8 layer, u8 fb_inst)
  *		0~3 is on scl, 4 is on disp.
  * @param cover_cfg: cover_cfg configuration
  */
-void sclr_cover_set_cfg(u8 inst, u8 cover_w_inst, struct sclr_cover_cfg *cover_cfg, bool update)
+void sclr_cover_set_cfg(struct scaler *scaler, u8 inst, u8 cover_w_inst, struct sclr_cover_cfg *cover_cfg, bool update)
 {
 	if (inst < SCL_MAX_INST) {
-		vpss_reg_write(reg_base + REG_SCL_COVER_CFG(inst, cover_w_inst), cover_cfg->start.raw);
-		vpss_reg_write(reg_base + REG_SCL_COVER_SIZE(inst, cover_w_inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COVER_CFG(inst, cover_w_inst), cover_cfg->start.raw);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COVER_SIZE(inst, cover_w_inst),
 				   (cover_cfg->img_size.h << 16) | cover_cfg->img_size.w);
-		vpss_reg_write(reg_base + REG_SCL_COVER_COLOR(inst, cover_w_inst), cover_cfg->color.raw);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COVER_COLOR(inst, cover_w_inst), cover_cfg->color.raw);
 	}
 	if (update)
-		g_sc_cfg[inst].cover_cfg[cover_w_inst] = *cover_cfg;
+		scaler->g_sc_cfg[inst].cover_cfg[cover_w_inst] = *cover_cfg;
 
 }
 
@@ -2011,45 +2003,45 @@ void sclr_cover_set_cfg(u8 inst, u8 cover_w_inst, struct sclr_cover_cfg *cover_c
  *		0~3 is on scl, 4 is on disp.
  * @param cfg: privacy mask's settings
  */
-void sclr_pri_set_cfg(u8 inst, struct sclr_privacy_cfg *cfg)
+void sclr_pri_set_cfg(struct scaler *scaler, u8 inst, struct sclr_privacy_cfg *cfg)
 {
 	u16 grid_line_per_frame, grid_num_per_line;
 	u16 w, h;
 	u16 pitch;
 
 	if (inst < SCL_MAX_INST) {
-		vpss_reg_write(reg_base + REG_SCL_PRI_CFG(inst), cfg->cfg.raw);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_CFG(inst), cfg->cfg.raw);
 
 		if (cfg->cfg.b.fit_picture) {
-			w = g_sc_cfg[inst].sc.dst.w;
-			h = g_sc_cfg[inst].sc.dst.h;
+			w = scaler->g_sc_cfg[inst].sc.dst.w;
+			h = scaler->g_sc_cfg[inst].sc.dst.h;
 		} else {
-			vpss_reg_write(reg_base + REG_SCL_PRI_START(inst), (cfg->start.y << 16) | cfg->start.x);
-			vpss_reg_write(reg_base + REG_SCL_PRI_END(inst), (cfg->end.y << 16) | cfg->end.x);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_START(inst), (cfg->start.y << 16) | cfg->start.x);
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_END(inst), (cfg->end.y << 16) | cfg->end.x);
 			w = cfg->end.x - cfg->start.x + 1;
 			h = cfg->end.y - cfg->start.y + 1;
 		}
 
-		vpss_reg_write(reg_base + REG_SCL_PRI_ALPHA(inst),
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_ALPHA(inst),
 			   (cfg->map_cfg.alpha_factor << 8) | cfg->map_cfg.no_mask_idx);
-		vpss_reg_write(reg_base + REG_SCL_PRI_MAP_ADDR_L(inst), cfg->map_cfg.base);
-		vpss_reg_write(reg_base + REG_SCL_PRI_MAP_ADDR_H(inst), cfg->map_cfg.base >> 32);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_MAP_ADDR_L(inst), cfg->map_cfg.base);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_MAP_ADDR_H(inst), cfg->map_cfg.base >> 32);
 
 		if (cfg->cfg.b.mode == 0) {
 			u8 grid_shift = cfg->cfg.b.grid_size ? 4 : 3;
 
 			grid_num_per_line = UPPER(w, grid_shift);
 			grid_line_per_frame = UPPER(h, grid_shift);
-			vpss_reg_write(reg_base + REG_SCL_PRI_GRID_CFG(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_GRID_CFG(inst),
 				   (grid_num_per_line << 16) | (grid_line_per_frame - 1));
 			pitch = ALIGN(grid_num_per_line, 16);
 		} else {
-			vpss_reg_write(reg_base + REG_SCL_PRI_GRID_CFG(inst),
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_GRID_CFG(inst),
 				   (w << 16) | (h - 1));
 			pitch = ALIGN(w, 16);
 		}
 
-		vpss_reg_write(reg_base + REG_SCL_PRI_MAP_AXI_CFG(inst), (cfg->map_cfg.axi_burst << 16) | pitch);
+		vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_PRI_MAP_AXI_CFG(inst), (cfg->map_cfg.axi_burst << 16) | pitch);
 	}
 }
 
@@ -2060,7 +2052,7 @@ void sclr_pri_set_cfg(u8 inst, struct sclr_privacy_cfg *cfg)
  * sclr_ctrl_init - setup all sc instances.
  *
  */
-void sclr_ctrl_init(u8 inst, bool is_resume)
+void sclr_ctrl_init(struct scaler* scaler, u8 inst, bool is_resume)
 {
 	union sclr_intr intr_mask;
 	union sclr_rt_cfg rt_cfg;
@@ -2073,32 +2065,32 @@ void sclr_ctrl_init(u8 inst, bool is_resume)
 
 	if (!is_resume) {
 		// init variables
-		memset(&g_sc_cfg[inst], 0, sizeof(g_sc_cfg[0]));
-		memset(&g_bd_cfg[inst], 0, sizeof(g_bd_cfg[0]));
-		memset(&g_cir_cfg[inst], 0, sizeof(g_cir_cfg[0]));
-		memset(&g_img_cfg[inst], 0, sizeof(g_img_cfg[0]));
-		memset(&g_odma_cfg[inst], 0, sizeof(g_odma_cfg[0]));
-		memset(&g_gop_cfg[inst], 0, sizeof(g_gop_cfg[0]));
+		memset(&scaler->g_sc_cfg[inst], 0, sizeof(scaler->g_sc_cfg[0]));
+		memset(&scaler->g_bd_cfg[inst], 0, sizeof(scaler->g_bd_cfg[0]));
+		memset(&scaler->g_cir_cfg[inst], 0, sizeof(scaler->g_cir_cfg[0]));
+		memset(&scaler->g_img_cfg[inst], 0, sizeof(scaler->g_img_cfg[0]));
+		memset(&scaler->g_odma_cfg[inst], 0, sizeof(scaler->g_odma_cfg[0]));
+		memset(&scaler->g_gop_cfg[inst], 0, sizeof(scaler->g_gop_cfg[0]));
 
 		for (i = 0; i < SCL_MAX_GOP_INST; ++i) {
-			g_gop_cfg[inst][i].fb_ctrl.b.hi_thr = 0x30;
-			g_gop_cfg[inst][i].fb_ctrl.b.lo_thr = 0x20;
-			g_gop_cfg[inst][i].fb_ctrl.b.detect_fnum = 1;
-			g_gop_cfg[inst][i].fb_ctrl.b.hi_thr = 0x30;
-			g_gop_cfg[inst][i].fb_ctrl.b.lo_thr = 0x20;
-			g_gop_cfg[inst][i].fb_ctrl.b.detect_fnum = 1;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.hi_thr = 0x30;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.lo_thr = 0x20;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.detect_fnum = 1;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.hi_thr = 0x30;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.lo_thr = 0x20;
+			scaler->g_gop_cfg[inst][i].fb_ctrl.b.detect_fnum = 1;
 		}
-		g_odma_cfg[inst].flip = SCL_FLIP_NO;
-		g_odma_cfg[inst].burst = false;
-		g_img_cfg[inst].burst = 7;
-		g_img_cfg[inst].src = SCL_INPUT_MEM;
-		g_sc_cfg[inst].coef = SCL_COEF_MAX;
-		g_sc_cfg[inst].sc.mir_enable = true;
+		scaler->g_odma_cfg[inst].flip = SCL_FLIP_NO;
+		scaler->g_odma_cfg[inst].burst = false;
+		scaler->g_img_cfg[inst].burst = 7;
+		scaler->g_img_cfg[inst].src = SCL_INPUT_MEM;
+		scaler->g_sc_cfg[inst].coef = SCL_COEF_MAX;
+		scaler->g_sc_cfg[inst].sc.mir_enable = true;
 	} else {
-		g_sc_cfg[inst].coef = SCL_COEF_MAX;
+		scaler->g_sc_cfg[inst].coef = SCL_COEF_MAX;
 	}
 
-	sclr_img_reg_shadow_sel(inst, false);
+	sclr_img_reg_shadow_sel(scaler, inst, false);
 
 	rt_cfg.b.sc_d_rt = 0;
 	rt_cfg.b.sc_v_rt = 0;
@@ -2114,18 +2106,18 @@ void sclr_ctrl_init(u8 inst, bool is_resume)
 	intr_mask.b.cmdq = true;
 	//intr_mask.b.scl_line_target_hit = true;
 
-	sclr_rt_set_cfg(inst, rt_cfg);
-	sclr_set_intr_mask(inst, intr_mask);
-	sclr_reg_shadow_sel(inst, false);
-	sclr_update_coef(inst, SCL_COEF_BILINEAR);
-	sclr_set_cfg(inst, false, false, false, false);
-	sclr_reg_force_up(inst);
+	sclr_rt_set_cfg(scaler, inst, rt_cfg);
+	sclr_set_intr_mask(scaler, inst, intr_mask);
+	sclr_reg_shadow_sel(scaler, inst, false);
+	sclr_update_coef(scaler, inst, SCL_COEF_BILINEAR);
+	sclr_set_cfg(scaler, inst, false, false, false, false);
+	sclr_reg_force_up(scaler, inst);
 
-	sclr_top_reg_done(inst);
-	sclr_top_pg_late_clr(inst);
+	sclr_top_reg_done(scaler, inst);
+	sclr_top_pg_late_clr(scaler, inst);
 
 	intr_mask.raw = 0xffffffff;
-	sclr_intr_ctrl(inst, intr_mask);
+	sclr_intr_ctrl(scaler, inst, intr_mask);
 }
 
 /**
@@ -2134,16 +2126,14 @@ void sclr_ctrl_init(u8 inst, bool is_resume)
  * @param inst: (0~3), the instance of sc
  * @param cfg: scaling settings, include in/crop/out size.
  */
-void sclr_ctrl_set_scale(u8 inst, struct sclr_scale_cfg *cfg)
+void sclr_ctrl_set_scale(struct scaler *scaler, u8 inst, struct sclr_scale_cfg *cfg)
 {
 	if (inst >= SCL_MAX_INST) {
 		TRACE_VPSS(DBG_ERR, "[sc%d] no enough sclr-instance\n", inst);
 		return;
 	}
-	//if (memcmp(cfg, &g_sc_cfg[inst].sc, sizeof(*cfg)) == 0)
-	//	return;
 
-	sclr_set_input_size(inst, cfg->src, true);
+	sclr_set_input_size(scaler, inst, cfg->src, true);
 
 	// if crop invalid, use src-size
 	if (cfg->crop.w + cfg->crop.x > cfg->src.w) {
@@ -2154,16 +2144,11 @@ void sclr_ctrl_set_scale(u8 inst, struct sclr_scale_cfg *cfg)
 		cfg->crop.y = 0;
 		cfg->crop.h = cfg->src.h;
 	}
-	sclr_set_crop(inst, cfg->crop, true);
-	sclr_set_output_size(inst, cfg->dst);
+	sclr_set_crop(scaler, inst, cfg->crop, true);
+	sclr_set_output_size(scaler, inst, cfg->dst);
 
-	//if (cfg->tile_enable)
-	//	_tile_cal_size(cfg);
-	//g_sc_cfg[inst].sc.mir_enable = cfg->mir_enable;
-	//g_sc_cfg[inst].sc.tile_enable = cfg->tile_enable;
-	//g_sc_cfg[inst].sc.tile = cfg->tile;
-	g_sc_cfg[inst].sc = *cfg;
-	sclr_set_scale(inst);
+	scaler->g_sc_cfg[inst].sc = *cfg;
+	sclr_set_scale(scaler, inst);
 }
 
 /**
@@ -2175,7 +2160,7 @@ void sclr_ctrl_set_scale(u8 inst, struct sclr_scale_cfg *cfg)
  * @param csc: csc which used to convert from yuv to rgb.
  * @return: 0 if success
  */
-int sclr_ctrl_set_input(u8 inst, enum sclr_input input,
+int sclr_ctrl_set_input(struct scaler *scaler, u8 inst, enum sclr_input input,
 			enum sclr_format fmt, enum sclr_csc csc)
 {
 	int ret = 0;
@@ -2184,17 +2169,17 @@ int sclr_ctrl_set_input(u8 inst, enum sclr_input input,
 	if ((inst >= VPSS_MAX) || (csc >= SCL_CSC_601_LIMIT_RGB2YUV))
 		return -EINVAL;
 
-	g_img_cfg[inst].src = input;
+	scaler->g_img_cfg[inst].src = input;
 
-	g_img_cfg[inst].fmt = fmt;
-	sclr_img_set_cfg(inst, &g_img_cfg[inst]);
+	scaler->g_img_cfg[inst].fmt = fmt;
+	sclr_img_set_cfg(scaler, inst, &scaler->g_img_cfg[inst]);
 
-	g_img_cfg[inst].csc = csc;
+	scaler->g_img_cfg[inst].csc = csc;
 	if (csc == SCL_CSC_NONE) {
-		sclr_img_csc_en(inst, false);
+		sclr_img_csc_en(scaler, inst, false);
 	} else {
-		sclr_img_csc_en(inst, true);
-		sclr_img_set_csc(inst, &csc_mtrx[csc]);
+		sclr_img_csc_en(scaler, inst, true);
+		sclr_img_set_csc(scaler, inst, &csc_mtrx[csc]);
 	}
 
 	return ret;
@@ -2208,7 +2193,7 @@ int sclr_ctrl_set_input(u8 inst, enum sclr_input input,
  * @param fmt: color format
  * @return: 0 if success
  */
-int sclr_ctrl_set_output(u8 inst, struct sclr_csc_cfg *cfg,
+int sclr_ctrl_set_output(struct scaler *scaler, u8 inst, struct sclr_csc_cfg *cfg,
 			 enum sclr_format fmt)
 {
 	if (inst >= SCL_MAX_INST)
@@ -2235,7 +2220,7 @@ int sclr_ctrl_set_output(u8 inst, struct sclr_csc_cfg *cfg,
 		}
 	}
 
-	sclr_set_csc_ctrl(inst, cfg);
+	sclr_set_csc_ctrl(scaler, inst, cfg);
 
 	return 0;
 }
@@ -2248,25 +2233,25 @@ struct sclr_csc_matrix *sclr_get_csc_mtrx(enum sclr_csc csc)
 	return &csc_mtrx[SCL_CSC_601_LIMIT_RGB2YUV];
 }
 
-int sclr_set_fbd(u8 inst, struct sclr_fbd_cfg *cfg, bool is_update)
+int sclr_set_fbd(struct scaler *scaler, u8 inst, struct sclr_fbd_cfg *cfg, bool is_update)
 {
 	if (inst >= SCL_MAX_INST || inst < VPSS_T0)
 		return -EINVAL;
 
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_OFF_BASE_Y(inst), cfg->offset_base_y & 0xfffffff0);
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_OFF_BASE_C(inst), cfg->offset_base_c & 0xfffffff0);
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_COMP_BASE_Y(inst), cfg->comp_base_y & 0xfffffff0);
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_COMP_BASE_C(inst), cfg->comp_base_c & 0xfffffff0);
-	vpss_reg_write(reg_base + REG_SCL_TOP_FBD_HIGNDDR(inst), cfg->offset_base_y >> 32);
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_CROP_POS(inst), (cfg->crop.x << 16) | (cfg->crop.y));
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_CROP_SIZE(inst), (cfg->crop.w << 16) | (cfg->crop.h));
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_COMP_STRIDE(inst), (cfg->stride_y << 16) | (cfg->stride_c));
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_OFF_STRIDE(inst), (cfg->height_y << 16) | (cfg->height_c));
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_ENDIAN(inst), (cfg->endian << 4) | (cfg->endian));
-	vpss_reg_write(reg_base + REG_SCL_MAP_CONV_BIT_DEPTH(inst), (cfg->mono_en << 12) | (cfg->otbg_64x64_en << 8) | (cfg->depth_y << 2) | (cfg->depth_c));
-	_reg_write_mask(reg_base + REG_SCL_MAP_CONV_OUT_CTRL(inst), 0x770000, (cfg->out_mode_y << 20) | (cfg->out_mode_c) << 16);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_OFF_BASE_Y(inst), cfg->offset_base_y & 0xfffffff0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_OFF_BASE_C(inst), cfg->offset_base_c & 0xfffffff0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_COMP_BASE_Y(inst), cfg->comp_base_y & 0xfffffff0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_COMP_BASE_C(inst), cfg->comp_base_c & 0xfffffff0);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_TOP_FBD_HIGNDDR(inst), cfg->offset_base_y >> 32);
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_CROP_POS(inst), (cfg->crop.x << 16) | (cfg->crop.y));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_CROP_SIZE(inst), (cfg->crop.w << 16) | (cfg->crop.h));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_COMP_STRIDE(inst), (cfg->stride_y << 16) | (cfg->stride_c));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_OFF_STRIDE(inst), (cfg->height_y << 16) | (cfg->height_c));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_ENDIAN(inst), (cfg->endian << 4) | (cfg->endian));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_MAP_CONV_BIT_DEPTH(inst), (cfg->mono_en << 12) | (cfg->otbg_64x64_en << 8) | (cfg->depth_y << 2) | (cfg->depth_c));
+	_reg_write_mask(scaler, reg_base + REG_SCL_MAP_CONV_OUT_CTRL(inst), 0x770000, (cfg->out_mode_y << 20) | (cfg->out_mode_c) << 16);
 	if(is_update)
-		g_fbd_cfg[inst] = *cfg;
+		scaler->g_fbd_cfg[inst] = *cfg;
 	return 0;
 }
 
@@ -2275,39 +2260,10 @@ int sclr_set_fbd(u8 inst, struct sclr_fbd_cfg *cfg, bool is_update)
  *
  * @param inst: (0~7), the instance of sc
  */
-u8 sclr_tile_cal_size(u8 inst, u16 out_l_end)
+u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 {
-#ifndef TILE_ON_IMG
-	struct sclr_scale_cfg *cfg = &g_sc_cfg[inst].sc;
-	struct sclr_size crop_size = { .w = cfg->crop.w, .h = cfg->crop.h };
-	struct sclr_size out_size = cfg->dst;
-	u8 fix = (cfg->algorithm == SCL_BICUBIC) ? 13 : 23;
-	u32 out_l_width = (out_size.w >> 1) & ~0x01; // make sure op on even pixels.
-	u32 h_sc_fac = cfg->fac.h_fac;
-	u32 h_pos = cfg->fac.h_pos;
-	if(cfg->algorithm != SCL_COEF_BICUBIC && cfg->algorithm != SCL_COEF_NEAREST && (in_size.w < out_size.w))
-		h_pos = (((1 << 23) - h_sc_fac) >> 1);
-	else if (cfg->algorithm == SCL_COEF_NEAREST)
-		h_pos = 1 << 22;
-	u64 L_last_phase, R_first_phase;
-	u16 L_last_pixel, R_first_pixel;
-	u8 mode = SCL_TILE_BOTH;
-
-	L_last_phase = (u64)out_l_width * h_sc_fac;
-	L_last_pixel = (L_last_phase >> fix) + ((cfg->mir_enable) ? 0 : 1);
-	cfg->tile.src_l_width = L_last_pixel + 1
-				+ ((L_last_phase) ? 1 : 0);
-	cfg->tile.out_l_width = out_l_width;
-
-	// right tile no mirror
-	R_first_phase = L_last_phase + h_sc_fac;
-	R_first_pixel = (R_first_phase >> fix) + ((cfg->mir_enable) ? 0 : 1);
-	cfg->tile.r_ini_phase = R_first_phase - ((R_first_pixel - 2) << fix) + h_pos * ((in_size.w < out_size.w) ? -1 : 1);
-	cfg->tile.src_r_offset = R_first_pixel - 2;
-	cfg->tile.src_r_width = crop_size.w - cfg->tile.src_r_offset;
-#else
 	u16 src_l_last_pixel_max = out_l_end;
-	struct sclr_scale_cfg *cfg = &g_sc_cfg[inst].sc;
+	struct sclr_scale_cfg *cfg = &scaler->g_sc_cfg[inst].sc;
 	struct sclr_size crop_size = { .w = cfg->crop.w, .h = cfg->crop.h };
 	struct sclr_size out_size = cfg->dst;
 	u8 fix = (cfg->algorithm == SCL_COEF_BICUBIC) ? 13 : 23;
@@ -2324,7 +2280,7 @@ u8 sclr_tile_cal_size(u8 inst, u16 out_l_end)
 
 	TRACE_VPSS(DBG_DEBUG, "%s: on sc(%d)\n", __func__, inst);
 	TRACE_VPSS(DBG_DEBUG, "width: src(%d), crop(%d), dst(%d)\n",
-		g_sc_cfg[inst].sc.src.w, crop_size.w, out_size.w);
+		scaler->g_sc_cfg[inst].sc.src.w, crop_size.w, out_size.w);
 
 	if (cfg->crop.x >= src_l_last_pixel_max) {
 		// do nothing on left tile if crop out-of-range.
@@ -2372,36 +2328,35 @@ u8 sclr_tile_cal_size(u8 inst, u16 out_l_end)
 				mode = SCL_TILE_BOTH;
 		}
 	}
-#endif
-	cfg->tile.in_mem.w = g_img_cfg[inst].mem.width;
-	cfg->tile.in_mem.h = g_img_cfg[inst].mem.height;
+	cfg->tile.in_mem.w = scaler->g_img_cfg[inst].mem.width;
+	cfg->tile.in_mem.h = scaler->g_img_cfg[inst].mem.height;
 	cfg->tile.src = crop_size;
 	cfg->tile.out = out_size;
-	cfg->tile.border_enable = g_bd_cfg[inst].cfg.b.enable;
-	if (g_bd_cfg[inst].cfg.b.enable) {
+	cfg->tile.border_enable = scaler->g_bd_cfg[inst].cfg.b.enable;
+	if (scaler->g_bd_cfg[inst].cfg.b.enable) {
 		// if border, then only on left tile enabled to fill bgcolor.
-		cfg->tile.dma_l_x = g_bd_cfg[inst].start.x & ~0x01;
-		cfg->tile.dma_l_y = g_bd_cfg[inst].start.y;
+		cfg->tile.dma_l_x = scaler->g_bd_cfg[inst].start.x & ~0x01;
+		cfg->tile.dma_l_y = scaler->g_bd_cfg[inst].start.y;
 		cfg->tile.dma_r_x = cfg->tile.dma_l_x + out_l_width;
-		cfg->tile.dma_r_y = g_bd_cfg[inst].start.y;
-		cfg->tile.dma_l_width = g_odma_cfg[inst].mem.width;
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
+		cfg->tile.dma_r_y = scaler->g_bd_cfg[inst].start.y;
+		cfg->tile.dma_l_width = scaler->g_odma_cfg[inst].mem.width;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
 			cfg->tile.dma_r_x
-				= g_odma_cfg[inst].frame_size.w - out_size.w - (g_bd_cfg[inst].start.x & ~0x01);
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
-			cfg->tile.dma_r_y = g_odma_cfg[inst].frame_size.h - out_size.h - g_bd_cfg[inst].start.y;
+				= scaler->g_odma_cfg[inst].frame_size.w - out_size.w - (scaler->g_bd_cfg[inst].start.x & ~0x01);
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
+			cfg->tile.dma_r_y = scaler->g_odma_cfg[inst].frame_size.h - out_size.h - scaler->g_bd_cfg[inst].start.y;
 	} else {
-		cfg->tile.dma_l_x = g_odma_cfg[inst].mem.start_x;
-		cfg->tile.dma_l_y = g_odma_cfg[inst].mem.start_y;
-		cfg->tile.dma_r_x = g_odma_cfg[inst].mem.start_x + out_l_width;
-		cfg->tile.dma_r_y = g_odma_cfg[inst].mem.start_y;
+		cfg->tile.dma_l_x = scaler->g_odma_cfg[inst].mem.start_x;
+		cfg->tile.dma_l_y = scaler->g_odma_cfg[inst].mem.start_y;
+		cfg->tile.dma_r_x = scaler->g_odma_cfg[inst].mem.start_x + out_l_width;
+		cfg->tile.dma_r_y = scaler->g_odma_cfg[inst].mem.start_y;
 		cfg->tile.dma_l_width = out_l_width;
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
-			cfg->tile.dma_l_x = g_odma_cfg[inst].frame_size.w - out_l_width - g_odma_cfg[inst].mem.start_x;
-			cfg->tile.dma_r_x = g_odma_cfg[inst].frame_size.w - out_size.w - g_odma_cfg[inst].mem.start_x;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
+			cfg->tile.dma_l_x = scaler->g_odma_cfg[inst].frame_size.w - out_l_width - scaler->g_odma_cfg[inst].mem.start_x;
+			cfg->tile.dma_r_x = scaler->g_odma_cfg[inst].frame_size.w - out_size.w - scaler->g_odma_cfg[inst].mem.start_x;
 		}
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
-			cfg->tile.dma_l_y = g_odma_cfg[inst].frame_size.h - out_size.h - g_odma_cfg[inst].mem.start_y;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
+			cfg->tile.dma_l_y = scaler->g_odma_cfg[inst].frame_size.h - out_size.h - scaler->g_odma_cfg[inst].mem.start_y;
 			cfg->tile.dma_r_y = cfg->tile.dma_l_y;
 		}
 	}
@@ -2425,39 +2380,10 @@ u8 sclr_tile_cal_size(u8 inst, u16 out_l_end)
  *
  * @param inst: (0~7), the instance of sc
  */
-u8 sclr_v_tile_cal_size(u8 inst, u16 out_l_end)
+u8 sclr_v_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 {
-#ifndef TILE_ON_IMG
-	struct sclr_scale_cfg *cfg = &g_sc_cfg[inst].sc;
-	struct sclr_size crop_size = { .w = cfg->crop.w, .h = cfg->crop.h };
-	struct sclr_size out_size = cfg->dst;
-	u8 fix = (cfg->algorithm == SCL_BICUBIC) ? 13 : 23;
-	u32 out_l_width = (out_size.h >> 1) & ~0x01; // make sure op on even pixels.
-	u32 v_sc_fac = cfg->fac.v_fac;
-	u32 v_pos = cfg->fac.v_pos;
-	if(cfg->algorithm != SCL_COEF_BICUBIC && cfg->algorithm != SCL_COEF_NEAREST && (crop_size.h < out_size.h))
-		v_pos = (((1 << 23) - v_sc_fac) >> 1);
-	else if (cfg->algorithm == SCL_COEF_NEAREST)
-		v_pos = 1 << 22;
-	u64 L_last_phase, R_first_phase;
-	u16 L_last_pixel, R_first_pixel;
-	u8 mode = SCL_TILE_BOTH;
-
-	L_last_phase = (u64)out_l_width * v_sc_fac;
-	L_last_pixel = (L_last_phase >> fix);
-	cfg->v_tile.src_l_width = L_last_pixel + 1
-				+ ((L_last_phase) ? 1 : 0);
-	cfg->v_tile.out_l_width = out_l_width;
-
-	// right tile no mirror
-	R_first_phase = L_last_phase;
-	R_first_pixel = (R_first_phase >> fix);
-	cfg->v_tile.r_ini_phase = R_first_phase - ((R_first_pixel - 2) << fix) + v_pos * ((crop_size.h < out_size.h) ? -1 : 1);
-	cfg->v_tile.src_r_offset = R_first_pixel - 2;
-	cfg->v_tile.src_r_width = crop_size.h - cfg->v_tile.src_r_offset;
-#else
 	u16 src_l_last_pixel_max = out_l_end;
-	struct sclr_scale_cfg *cfg = &g_sc_cfg[inst].sc;
+	struct sclr_scale_cfg *cfg = &scaler->g_sc_cfg[inst].sc;
 	struct sclr_size crop_size = { .w = cfg->crop.w, .h = cfg->crop.h };
 	struct sclr_size out_size = cfg->dst;
 	u8 fix = (cfg->algorithm == SCL_COEF_BICUBIC) ? 13 : 23;
@@ -2473,7 +2399,7 @@ u8 sclr_v_tile_cal_size(u8 inst, u16 out_l_end)
 		v_pos = 1 << 22;
 	TRACE_VPSS(DBG_DEBUG, "%s: on sc(%d)\n", __func__, inst);
 	TRACE_VPSS(DBG_DEBUG, "width: src(%d), crop(%d), dst(%d)\n",
-		g_sc_cfg[inst].sc.src.w, crop_size.w, out_size.w);
+		scaler->g_sc_cfg[inst].sc.src.w, crop_size.w, out_size.w);
 
 	if (cfg->crop.y >= src_l_last_pixel_max) {
 		// do nothing on left tile if crop out-of-range.
@@ -2518,36 +2444,35 @@ u8 sclr_v_tile_cal_size(u8 inst, u16 out_l_end)
 			mode = SCL_TILE_BOTH;
 		}
 	}
-#endif
-	cfg->v_tile.in_mem.w = g_img_cfg[inst].mem.width;
-	cfg->v_tile.in_mem.h = g_img_cfg[inst].mem.height;
+	cfg->v_tile.in_mem.w = scaler->g_img_cfg[inst].mem.width;
+	cfg->v_tile.in_mem.h = scaler->g_img_cfg[inst].mem.height;
 	cfg->v_tile.src = crop_size;
 	cfg->v_tile.out = out_size;
-	cfg->v_tile.border_enable = g_bd_cfg[inst].cfg.b.enable;
-	if (g_bd_cfg[inst].cfg.b.enable) {
+	cfg->v_tile.border_enable = scaler->g_bd_cfg[inst].cfg.b.enable;
+	if (scaler->g_bd_cfg[inst].cfg.b.enable) {
 		// if border, then only on left tile enabled to fill bgcolor.
-		cfg->v_tile.dma_l_x = g_bd_cfg[inst].start.x;
-		cfg->v_tile.dma_l_y = g_bd_cfg[inst].start.y & ~0x01;
-		cfg->v_tile.dma_r_x = g_bd_cfg[inst].start.x;
+		cfg->v_tile.dma_l_x = scaler->g_bd_cfg[inst].start.x;
+		cfg->v_tile.dma_l_y = scaler->g_bd_cfg[inst].start.y & ~0x01;
+		cfg->v_tile.dma_r_x = scaler->g_bd_cfg[inst].start.x;
 		cfg->v_tile.dma_r_y = cfg->v_tile.dma_l_y + out_l_width;
-		cfg->v_tile.dma_l_width = g_odma_cfg[inst].mem.width;
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
-			cfg->v_tile.dma_r_x = g_odma_cfg[inst].frame_size.w - out_size.w - (g_bd_cfg[inst].start.x);
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
-			cfg->v_tile.dma_r_y = g_odma_cfg[inst].frame_size.h - out_size.h - (g_bd_cfg[inst].start.y & ~0x01);
+		cfg->v_tile.dma_l_width = scaler->g_odma_cfg[inst].mem.width;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
+			cfg->v_tile.dma_r_x = scaler->g_odma_cfg[inst].frame_size.w - out_size.w - (scaler->g_bd_cfg[inst].start.x);
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
+			cfg->v_tile.dma_r_y = scaler->g_odma_cfg[inst].frame_size.h - out_size.h - (scaler->g_bd_cfg[inst].start.y & ~0x01);
 	} else {
-		cfg->v_tile.dma_l_x = g_odma_cfg[inst].mem.start_x;
-		cfg->v_tile.dma_l_y = g_odma_cfg[inst].mem.start_y;
-		cfg->v_tile.dma_r_x = g_odma_cfg[inst].mem.start_x;
-		cfg->v_tile.dma_r_y = g_odma_cfg[inst].mem.start_y + out_l_width;
+		cfg->v_tile.dma_l_x = scaler->g_odma_cfg[inst].mem.start_x;
+		cfg->v_tile.dma_l_y = scaler->g_odma_cfg[inst].mem.start_y;
+		cfg->v_tile.dma_r_x = scaler->g_odma_cfg[inst].mem.start_x;
+		cfg->v_tile.dma_r_y = scaler->g_odma_cfg[inst].mem.start_y + out_l_width;
 		cfg->v_tile.dma_l_width = out_l_width;
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
-			cfg->v_tile.dma_l_x = g_odma_cfg[inst].frame_size.w - out_size.w - g_odma_cfg[inst].mem.start_x;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
+			cfg->v_tile.dma_l_x = scaler->g_odma_cfg[inst].frame_size.w - out_size.w - scaler->g_odma_cfg[inst].mem.start_x;
 			cfg->v_tile.dma_r_x = cfg->v_tile.dma_l_x;
 		}
-		if ((g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
-			cfg->v_tile.dma_l_y = g_odma_cfg[inst].frame_size.h - out_l_width - g_odma_cfg[inst].mem.start_y;
-			cfg->v_tile.dma_r_y = g_odma_cfg[inst].frame_size.h - out_size.h - g_odma_cfg[inst].mem.start_y;
+		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_VFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP)) {
+			cfg->v_tile.dma_l_y = scaler->g_odma_cfg[inst].frame_size.h - out_l_width - scaler->g_odma_cfg[inst].mem.start_y;
+			cfg->v_tile.dma_r_y = scaler->g_odma_cfg[inst].frame_size.h - out_size.h - scaler->g_odma_cfg[inst].mem.start_y;
 		}
 	}
 
@@ -2646,7 +2571,7 @@ static void _gop_v_tile_shift(struct sclr_gop_ow_cfg *gop_ow_cfg, u16 left_heigh
  * @param src_l_w: width of left tile from img
  * @return: true if success; false if no need or something wrong
  */
-bool sclr_left_tile(u8 inst, u16 src_l_w)
+bool sclr_left_tile(struct scaler *scaler, u8 inst, u16 src_l_w)
 {
 	struct sclr_scale_cfg *sc;
 	struct sclr_odma_cfg *odma_cfg;
@@ -2662,17 +2587,17 @@ bool sclr_left_tile(u8 inst, u16 src_l_w)
 		return false;
 	}
 
-	sc = &(sclr_get_cfg(inst)->sc);
-	odma_cfg = sclr_odma_get_cfg(inst);
+	sc = &(sclr_get_cfg(scaler, inst)->sc);
+	odma_cfg = sclr_odma_get_cfg(scaler, inst);
 
 	sc->tile_enable = true;
 
 	// skip if crop in the right tile.
 	if (sc->tile.src_l_width == 0) {
-		sclr_top_set_cfg(inst, false, false);
+		sclr_top_set_cfg(scaler, inst, false, false);
 		return false;
 	}
-	sclr_top_set_cfg(inst, true, g_fbd_cfg[inst].enable);
+	sclr_top_set_cfg(scaler, inst, true, scaler->g_fbd_cfg[inst].enable);
 
 	src.w = src_l_w;
 	src.h = sc->src.h;
@@ -2683,25 +2608,25 @@ bool sclr_left_tile(u8 inst, u16 src_l_w)
 	dst.w = sc->tile.out_l_width;
 	dst.h = sc->tile.out.h;
 
-	sclr_set_input_size(inst, src, true);
-	sclr_set_crop(inst, crop, true);
-	sclr_set_output_size(inst, dst);
+	sclr_set_input_size(scaler, inst, src, true);
+	sclr_set_crop(scaler, inst, crop, true);
+	sclr_set_output_size(scaler, inst, dst);
 
 	if (sc->tile.border_enable) {
 		odma_cfg->mem.start_x = 0;
 		odma_cfg->mem.start_y = 0;
 		odma_cfg->mem.width = sc->tile.dma_l_width;
-		sclr_odma_set_mem(inst, &odma_cfg->mem);
+		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 
-		g_bd_cfg[inst].cfg.b.enable = true;
-		g_bd_cfg[inst].start.x = sc->tile.dma_l_x;
-		g_bd_cfg[inst].start.y = sc->tile.dma_l_y;
-		sclr_border_set_cfg(inst, &g_bd_cfg[inst]);
+		scaler->g_bd_cfg[inst].cfg.b.enable = true;
+		scaler->g_bd_cfg[inst].start.x = sc->tile.dma_l_x;
+		scaler->g_bd_cfg[inst].start.y = sc->tile.dma_l_y;
+		sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
 	} else {
 		odma_cfg->mem.start_x = sc->tile.dma_l_x;
 		odma_cfg->mem.start_y = sc->tile.dma_l_y;
 		odma_cfg->mem.width = sc->tile.dma_l_width;
-		sclr_odma_set_mem(inst, &odma_cfg->mem);
+		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 	}
 	TRACE_VPSS(DBG_DEBUG, "sc%d input size: w=%d h=%d\n", inst, src.w, src.h);
 	TRACE_VPSS(DBG_DEBUG, "sc%d crop size: x=%d y=%d w=%d h=%d\n", inst, crop.x, crop.y, crop.w, crop.h);
@@ -2711,7 +2636,7 @@ bool sclr_left_tile(u8 inst, u16 src_l_w)
 		odma_cfg->mem.height, odma_cfg->mem.pitch_y, odma_cfg->mem.pitch_c);
 
 	for (j = 0; j < SCL_MAX_GOP_INST; ++j) {
-		gop_cfg = *sclr_gop_get_cfg(inst, j);
+		gop_cfg = *sclr_gop_get_cfg(scaler, inst, j);
 		for (i = 0; i < SCL_MAX_GOP_OW_INST; ++i) {
 			if (gop_cfg.gop_ctrl.raw & BIT(i)) {
 				gop_ow_cfg = gop_cfg.ow_cfg[i];
@@ -2725,24 +2650,24 @@ bool sclr_left_tile(u8 inst, u16 src_l_w)
 				}
 				// gop-window on left tile: ok to go
 				if (gop_ow_cfg.end.x <= sc->tile.out_l_width) {
-					sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+					sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 					continue;
 				}
 
 				// gop-window on both tile: workaround
 				_gop_tile_shift(&gop_ow_cfg, sc->tile.out_l_width, sc->tile.out.w, false);
-				sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+				sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 			}
 		}
 		TRACE_VPSS(DBG_DEBUG, "gop_cfg:%#x\n", gop_cfg.gop_ctrl.raw);
-		sclr_gop_set_cfg(inst, j, &gop_cfg, false);
+		sclr_gop_set_cfg(scaler, inst, j, &gop_cfg, false);
 	}
 
-	sclr_reg_force_up(inst);
+	sclr_reg_force_up(scaler, inst);
 	return true;
 }
 
-bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
+bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_left)
 {
 	struct sclr_scale_cfg *sc;
 	struct sclr_odma_cfg *odma_cfg;
@@ -2758,17 +2683,17 @@ bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
 		return false;
 	}
 
-	sc = &(sclr_get_cfg(inst)->sc);
-	odma_cfg = sclr_odma_get_cfg(inst);
+	sc = &(sclr_get_cfg(scaler, inst)->sc);
+	odma_cfg = sclr_odma_get_cfg(scaler, inst);
 
 	sc->v_tile_enable = true;
 
 	// skip if crop in the right tile.
 	if (sc->v_tile.src_l_width == 0) {
-		sclr_top_set_cfg(inst, false, false);
+		sclr_top_set_cfg(scaler, inst, false, false);
 		return false;
 	}
-	sclr_top_set_cfg(inst, true, g_fbd_cfg[inst].enable);
+	sclr_top_set_cfg(scaler, inst, true, scaler->g_fbd_cfg[inst].enable);
 
 	src.w = sc->src.w;
 	src.h = src_l_h;
@@ -2779,22 +2704,22 @@ bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
 	dst.w = sc->dst.w;
 	dst.h = sc->v_tile.out_l_width;
 
-	sclr_set_input_size(inst, src, false);
-	sclr_set_crop(inst, crop, false);
-	sclr_set_output_size(inst, dst);
+	sclr_set_input_size(scaler, inst, src, false);
+	sclr_set_crop(scaler, inst, crop, false);
+	sclr_set_output_size(scaler, inst, dst);
 
 	if (sc->v_tile.border_enable && (!is_left)) {
 		odma_cfg->mem.start_y = 0;
 		odma_cfg->mem.height = sc->v_tile.dma_l_width;
-		sclr_odma_set_mem(inst, &odma_cfg->mem);
+		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 
-		g_bd_cfg[inst].cfg.b.enable = true;
-		g_bd_cfg[inst].start.y = sc->v_tile.dma_l_y;
-		sclr_border_set_cfg(inst, &g_bd_cfg[inst]);
+		scaler->g_bd_cfg[inst].cfg.b.enable = true;
+		scaler->g_bd_cfg[inst].start.y = sc->v_tile.dma_l_y;
+		sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
 	} else {
 		odma_cfg->mem.start_y = sc->v_tile.dma_l_y;
 		odma_cfg->mem.height = sc->v_tile.dma_l_width;
-		sclr_odma_set_mem(inst, &odma_cfg->mem);
+		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 	}
 	TRACE_VPSS(DBG_DEBUG, "sc%d input size: w=%d h=%d\n", inst, src.w, src.h);
 	TRACE_VPSS(DBG_DEBUG, "sc%d crop size: x=%d y=%d w=%d h=%d\n", inst, crop.x, crop.y, crop.w, crop.h);
@@ -2804,7 +2729,7 @@ bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
 		odma_cfg->mem.height, odma_cfg->mem.pitch_y, odma_cfg->mem.pitch_c);
 
 	for (j = 0; j < SCL_MAX_GOP_INST; ++j) {
-		gop_cfg = *sclr_gop_get_cfg(inst, j);
+		gop_cfg = *sclr_gop_get_cfg(scaler, inst, j);
 		for (i = 0; i < SCL_MAX_GOP_OW_INST; ++i) {
 			if (gop_cfg.gop_ctrl.raw & BIT(i)) {
 				gop_ow_cfg = gop_cfg.ow_cfg[i];
@@ -2818,20 +2743,20 @@ bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
 				}
 				// gop-window on left tile: ok to go
 				if (gop_ow_cfg.end.y <= sc->v_tile.out_l_width) {
-					sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+					sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 					continue;
 				}
 
 				// gop-window on both tile: workaround
 				_gop_v_tile_shift(&gop_ow_cfg, sc->v_tile.out_l_width, sc->v_tile.out.w, sc->tile.out_l_width, false);
-				sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+				sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 			}
 		}
 		TRACE_VPSS(DBG_DEBUG, "gop_cfg:%#x\n", gop_cfg.gop_ctrl.raw);
-		sclr_gop_set_cfg(inst, j, &gop_cfg, false);
+		sclr_gop_set_cfg(scaler, inst, j, &gop_cfg, false);
 	}
 
-	sclr_reg_force_up(inst);
+	sclr_reg_force_up(scaler, inst);
 	return true;
 }
 
@@ -2842,7 +2767,7 @@ bool sclr_top_tile(u8 inst, u16 src_l_h, u8 is_left)
  * @param src_offset: offset of the right tile relative to original image
  * @return: true if success; false if no need or something wrong
  */
-bool sclr_right_tile(u8 inst, u16 src_offset)
+bool sclr_right_tile(struct scaler *scaler, u8 inst, u16 src_offset)
 {
 	struct sclr_scale_cfg *sc;
 	struct sclr_odma_cfg *odma_cfg;
@@ -2860,16 +2785,16 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 		TRACE_VPSS(DBG_DEBUG, "for the requirement(%d)\n", inst);
 		return false;
 	}
-	sc = &(sclr_get_cfg(inst)->sc);
-	odma_cfg = sclr_odma_get_cfg(inst);
+	sc = &(sclr_get_cfg(scaler, inst)->sc);
+	odma_cfg = sclr_odma_get_cfg(scaler, inst);
 
 	// skip if crop in the right tile.
 	if (sc->tile.src_r_width == 0) {
-		sclr_top_set_cfg(inst, false, false);
+		sclr_top_set_cfg(scaler, inst, false, false);
 		sc->tile_enable = false;
 		return false;
 	}
-	sclr_top_set_cfg(inst, true, g_fbd_cfg[inst].enable);
+	sclr_top_set_cfg(scaler, inst, true, scaler->g_fbd_cfg[inst].enable);
 
 	src.w = sc->tile.in_mem.w - src_offset;
 	src.h = sc->src.h;
@@ -2880,20 +2805,20 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 	dst.w = sc->tile.out.w - sc->tile.out_l_width;
 	dst.h = sc->tile.out.h;
 
-	sclr_set_input_size(inst, src, true);
-	sclr_set_crop(inst, crop, true);
-	sclr_set_output_size(inst, dst);
-	sclr_set_scale_phase(inst, sc->tile.r_ini_phase, sc->fac.v_pos);
+	sclr_set_input_size(scaler, inst, src, true);
+	sclr_set_crop(scaler, inst, crop, true);
+	sclr_set_output_size(scaler, inst, dst);
+	sclr_set_scale_phase(scaler, inst, sc->tile.r_ini_phase, sc->fac.v_pos);
 
 	odma_cfg->mem.start_x = sc->tile.dma_r_x;
 	odma_cfg->mem.start_y = sc->tile.dma_r_y;
 	odma_cfg->mem.width = dst.w;
 	odma_cfg->mem.height = dst.h;
-	sclr_odma_set_mem(inst, &odma_cfg->mem);
+	sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 
 	// right tile don't do border.
-	g_bd_cfg[inst].cfg.b.enable = false;
-	sclr_border_set_cfg(inst, &g_bd_cfg[inst]);
+	scaler->g_bd_cfg[inst].cfg.b.enable = false;
+	sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
 
 	TRACE_VPSS(DBG_DEBUG, "sc%d input size: w=%d h=%d\n", inst, src.w, src.h);
 	TRACE_VPSS(DBG_DEBUG, "sc%d crop size: x=%d y=%d w=%d h=%d\n", inst, crop.x, crop.y, crop.w, crop.h);
@@ -2903,7 +2828,7 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 		odma_cfg->mem.height, odma_cfg->mem.pitch_y, odma_cfg->mem.pitch_c);
 
 	for (j = 0; j < COVER_MAX; ++j){
-		cover_cfg = g_sc_cfg[inst].cover_cfg[j];
+		cover_cfg = scaler->g_sc_cfg[inst].cover_cfg[j];
 		if(cover_cfg.start.b.enable){
 			if((cover_cfg.img_size.w + cover_cfg.start.b.x) < sc->tile.out_l_width)
 				cover_cfg.img_size.w = 0;
@@ -2918,10 +2843,10 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 			TRACE_VPSS(DBG_DEBUG, "right_tile: cover(%d) start.x(%d) img_size.w(%d), v_tile_l_width(%d)\n",
 				j, cover_cfg.start.b.x, cover_cfg.img_size.w, sc->tile.out_l_width);
 		}
-		sclr_cover_set_cfg(inst, j, &cover_cfg, true);
+		sclr_cover_set_cfg(scaler, inst, j, &cover_cfg, true);
 	}
 	for (j = 0; j < SCL_MAX_GOP_INST; ++j) {
-		gop_cfg = *sclr_gop_get_cfg(inst, j);
+		gop_cfg = *sclr_gop_get_cfg(scaler, inst, j);
 		for (i = 0; i < SCL_MAX_GOP_OW_INST; ++i) {
 			if (gop_cfg.gop_ctrl.raw & BIT(i)) {
 				gop_ow_cfg = gop_cfg.ow_cfg[i];
@@ -2937,20 +2862,20 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 				if (gop_ow_cfg.start.x >= sc->tile.out_l_width) {
 					gop_ow_cfg.start.x -= sc->tile.out_l_width;
 					gop_ow_cfg.end.x -= sc->tile.out_l_width;
-					sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+					sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 					continue;
 				}
 
 				// gop-window on both tile: workaround
 				_gop_tile_shift(&gop_ow_cfg, sc->tile.out_l_width, sc->tile.out.w, true);
-				sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+				sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 			}
 		}
 		TRACE_VPSS(DBG_DEBUG, "gop_cfg:%#x\n", gop_cfg.gop_ctrl.raw);
-		sclr_gop_set_cfg(inst, j, &gop_cfg, false);
+		sclr_gop_set_cfg(scaler, inst, j, &gop_cfg, false);
 	}
 	for(j = 0; j < BORDER_VPP_MAX; ++j){
-		border_vpp_cfg = *sclr_border_vpp_get_cfg(inst, j);
+		border_vpp_cfg = *sclr_border_vpp_get_cfg(scaler, inst, j);
 		is_need_fill = 0;
 		if(border_vpp_cfg.cfg.b.enable){
 			if(border_vpp_cfg.inside_end.x < sc->tile.out_l_width && border_vpp_cfg.outside_end.x > sc->tile.out_l_width)
@@ -2982,15 +2907,15 @@ bool sclr_right_tile(u8 inst, u16 src_offset)
 			TRACE_VPSS(DBG_DEBUG, "right_tile: border_vpp(%d) inside_start_x(%d) inside_end_x(%d) outside_start_x(%d) outside_end_x(%d), tile_l_width(%d)\n",
 				j, border_vpp_cfg.inside_start.x, border_vpp_cfg.inside_end.x, border_vpp_cfg.outside_start.x, border_vpp_cfg.outside_end.x, sc->tile.out_l_width);
 		}
-		sclr_border_vpp_set_cfg(inst, j, &border_vpp_cfg, true);
+		sclr_border_vpp_set_cfg(scaler, inst, j, &border_vpp_cfg, true);
 	}
-	sclr_reg_force_up(inst);
+	sclr_reg_force_up(scaler, inst);
 
 	sc->tile_enable = false;
 	return true;
 }
 
-bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
+bool sclr_down_tile(struct scaler *scaler, u8 inst, u16 src_offset, u8 is_right)
 {
 	struct sclr_scale_cfg *sc;
 	struct sclr_odma_cfg *odma_cfg;
@@ -3008,16 +2933,16 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 		TRACE_VPSS(DBG_DEBUG, "for the requirement(%d)\n", inst);
 		return false;
 	}
-	sc = &(sclr_get_cfg(inst)->sc);
-	odma_cfg = sclr_odma_get_cfg(inst);
+	sc = &(sclr_get_cfg(scaler, inst)->sc);
+	odma_cfg = sclr_odma_get_cfg(scaler, inst);
 
 	// skip if crop in the right tile.
 	if (sc->v_tile.src_r_width == 0) {
-		sclr_top_set_cfg(inst, false, false);
+		sclr_top_set_cfg(scaler, inst, false, false);
 		sc->v_tile_enable = false;
 		return false;
 	}
-	sclr_top_set_cfg(inst, true, g_fbd_cfg[inst].enable);
+	sclr_top_set_cfg(scaler, inst, true, scaler->g_fbd_cfg[inst].enable);
 
 	src.w = sc->src.w;
 	src.h = sc->v_tile.in_mem.h - src_offset;
@@ -3028,21 +2953,21 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 	dst.w = sc->dst.w;
 	dst.h = sc->v_tile.out.h - sc->v_tile.out_l_width;
 
-	sclr_set_input_size(inst, src, false);
-	sclr_set_crop(inst, crop, false);
-	sclr_set_output_size(inst, dst);
+	sclr_set_input_size(scaler, inst, src, false);
+	sclr_set_crop(scaler, inst, crop, false);
+	sclr_set_output_size(scaler, inst, dst);
 	if(is_right)
-		sclr_set_scale_phase(inst, sc->tile.r_ini_phase, sc->v_tile.r_ini_phase);
+		sclr_set_scale_phase(scaler, inst, sc->tile.r_ini_phase, sc->v_tile.r_ini_phase);
 	else
-		sclr_set_scale_phase(inst, sc->fac.h_pos, sc->v_tile.r_ini_phase);
+		sclr_set_scale_phase(scaler, inst, sc->fac.h_pos, sc->v_tile.r_ini_phase);
 
 	odma_cfg->mem.start_y = sc->v_tile.out_l_width;
 	odma_cfg->mem.height = dst.h;
-	sclr_odma_set_mem(inst, &odma_cfg->mem);
+	sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 
 	// right tile don't do border.
-	g_bd_cfg[inst].cfg.b.enable = false;
-	sclr_border_set_cfg(inst, &g_bd_cfg[inst]);
+	scaler->g_bd_cfg[inst].cfg.b.enable = false;
+	sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
 
 	TRACE_VPSS(DBG_DEBUG, "sc%d input size: w=%d h=%d\n", inst, src.w, src.h);
 	TRACE_VPSS(DBG_DEBUG, "sc%d crop size: x=%d y=%d w=%d h=%d\n", inst, crop.x, crop.y, crop.w, crop.h);
@@ -3052,7 +2977,7 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 		odma_cfg->mem.height, odma_cfg->mem.pitch_y, odma_cfg->mem.pitch_c);
 
 	for(j = 0; j < COVER_MAX; ++j){
-		cover_cfg = g_sc_cfg[inst].cover_cfg[j];
+		cover_cfg = scaler->g_sc_cfg[inst].cover_cfg[j];
 		if(cover_cfg.start.b.enable){
 			if((cover_cfg.img_size.h + cover_cfg.start.b.y) < sc->v_tile.out_l_width)
 				cover_cfg.img_size.h = 0;
@@ -3067,10 +2992,10 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 			TRACE_VPSS(DBG_DEBUG, "down_tile: cover(%d) start.y(%d) img_size.h(%d), v_tile_l_width(%d)\n",
 				j, cover_cfg.start.b.y, cover_cfg.img_size.h, sc->v_tile.out_l_width);
 		}
-		sclr_cover_set_cfg(inst, j, &cover_cfg, false);
+		sclr_cover_set_cfg(scaler, inst, j, &cover_cfg, false);
 	}
 	for (j = 0; j < SCL_MAX_GOP_INST; ++j) {
-		gop_cfg = *sclr_gop_get_cfg(inst, j);
+		gop_cfg = *sclr_gop_get_cfg(scaler, inst, j);
 		for (i = 0; i < SCL_MAX_GOP_OW_INST; ++i) {
 			if (gop_cfg.gop_ctrl.raw & BIT(i)) {
 				gop_ow_cfg = gop_cfg.ow_cfg[i];
@@ -3086,20 +3011,20 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 				if (gop_ow_cfg.start.y >= sc->v_tile.out_l_width) {
 					gop_ow_cfg.start.y -= sc->v_tile.out_l_width;
 					gop_ow_cfg.end.y -= sc->v_tile.out_l_width;
-					sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+					sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 					continue;
 				}
 
 				// gop-window on both tile: workaround
 				_gop_v_tile_shift(&gop_ow_cfg, sc->v_tile.out_l_width, sc->v_tile.out.h, sc->tile.out_l_width, true);
-				sclr_gop_ow_set_cfg(inst, j, i, &gop_ow_cfg, false);
+				sclr_gop_ow_set_cfg(scaler, inst, j, i, &gop_ow_cfg, false);
 			}
 		}
 		TRACE_VPSS(DBG_DEBUG, "gop_cfg:%#x\n", gop_cfg.gop_ctrl.raw);
-		sclr_gop_set_cfg(inst, j, &gop_cfg, false);
+		sclr_gop_set_cfg(scaler, inst, j, &gop_cfg, false);
 	}
 	for(j = 0; j < BORDER_VPP_MAX; ++j){
-		border_vpp_cfg = *sclr_border_vpp_get_cfg(inst, j);
+		border_vpp_cfg = *sclr_border_vpp_get_cfg(scaler, inst, j);
 		is_need_fill = 0;
 		if(border_vpp_cfg.cfg.b.enable){
 			if(border_vpp_cfg.inside_end.y < sc->v_tile.out_l_width && border_vpp_cfg.outside_end.y > sc->v_tile.out_l_width)
@@ -3131,14 +3056,14 @@ bool sclr_down_tile(u8 inst, u16 src_offset, u8 is_right)
 			TRACE_VPSS(DBG_DEBUG, "down_tile: border_vpp(%d) inside_start_y(%d) inside_end_y(%d) outside_start_y(%d) outside_end_y(%d), tile_l_width(%d)\n",
 				j, border_vpp_cfg.inside_start.y, border_vpp_cfg.inside_end.y, border_vpp_cfg.outside_start.y, border_vpp_cfg.outside_end.y, sc->v_tile.out_l_width);
 		}
-		sclr_border_vpp_set_cfg(inst, j, &border_vpp_cfg, false);
+		sclr_border_vpp_set_cfg(scaler, inst, j, &border_vpp_cfg, false);
 	}
-	sclr_reg_force_up(inst);
+	sclr_reg_force_up(scaler, inst);
 	return true;
 }
 
 
-void sclr_dump_top_register(u8 inst)
+void sclr_dump_top_register(struct scaler *scaler, u8 inst)
 {
 	u32 val;
 
@@ -3147,24 +3072,24 @@ void sclr_dump_top_register(u8 inst)
 
 	TRACE_VPSS(DBG_DEBUG, "vpss(%d) top base address=0x%lx\n", inst, reg_base + REG_SCL_TOP_BASE(inst));
 
-	val = vpss_reg_read(reg_base + REG_SCL_TOP_CFG1(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_CFG1(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t sc_en=%d, fbd_en=%d, dma_qos_en=0x%x\n",
 		(val >> 1) & 0x1, (val >> 5) & 0x1, (val >> 16) & 0xff);
 
-	val = vpss_reg_read(reg_base + REG_SCL_TOP_INTR_STATUS(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_INTR_STATUS(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t interrupter status=0x%x, img_in satrt=%d, img_in end=%d, sc end=%d\n",
 		val, (val >> 4) & 0x1, (val >> 5) & 0x1, (val >> 7) & 0x1);
 
-	val = vpss_reg_read(reg_base + REG_SCL_TOP_IMG_CTRL(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_IMG_CTRL(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t trig_by_isp=%d trig_by_disp=%d\n",
 		(val >> 13) & 0x1, (val >> 9) & 0x1);
 
-	val = vpss_reg_read(reg_base + REG_SCL_TOP_SRC_SHARE(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_SRC_SHARE(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t share=%d\n", val & 0x1);
 
 }
 
-void sclr_dump_img_in_register(int inst)
+void sclr_dump_img_in_register(struct scaler *scaler, int inst)
 {
 	u32 val, val2;
 	union sclr_img_dbg_status status;
@@ -3174,36 +3099,36 @@ void sclr_dump_img_in_register(int inst)
 
 	TRACE_VPSS(DBG_DEBUG, "img(%d) base addr 0x%lx\n", inst, reg_base + REG_SCL_IMG_BASE(inst));
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_CFG(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_CFG(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t source=%d, fmt=%d, csc_en=%d\n",
 		val & 0x3, (val >> 4) & 0xf, (val >> 12) & 0x1);
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_OFFSET(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_IMG_SIZE(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_OFFSET(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_SIZE(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t crop(%d %d %d %d)\n",
 		val & 0xffff, (val >> 16) & 0xffff, val2 & 0xffff, (val2 >> 16) & 0xffff);
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_PITCH_Y(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_IMG_PITCH_C(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_PITCH_Y(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_PITCH_C(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t pitch_y=%d pitch_c=%d\n",
 		val & 0xfffffff, val2 & 0xfffffff);
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR0_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR0_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR0_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR0_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t Y: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR1_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR1_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR1_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR1_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t U: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	val = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR2_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_IMG_ADDR2_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR2_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_ADDR2_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t V: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	status = sclr_img_get_dbg_status(inst, true);
+	status = sclr_img_get_dbg_status(scaler, inst, true);
 
 	TRACE_VPSS(DBG_DEBUG, "\t err_fwr_yuv(%d%d%d err_erd_yuv(%d%d%d) "
 									"lb_full_yuv(%d%d%d) lb_empty_yuv(%d%d%d)\n"
@@ -3214,7 +3139,7 @@ void sclr_dump_img_in_register(int inst)
 
 }
 
-void sclr_dump_core_register(int inst)
+void sclr_dump_core_register(struct scaler *scaler, int inst)
 {
 	u32 val, val2;
 	struct sclr_status status;
@@ -3224,30 +3149,30 @@ void sclr_dump_core_register(int inst)
 
 	TRACE_VPSS(DBG_DEBUG, "sc(%d) core base address=0x%lx\n", inst, reg_base + REG_SCL_CORE_BASE(inst));
 
-	val = vpss_reg_read(reg_base + REG_SCL_CFG(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CFG(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t bypass: sc_core(%d) vgop(%d) cir(%d) dma(%d)\n",
 		(val >> 1) & 0x1, (val >> 2) & 0x1, (val >> 5) & 0x1, (val >> 6) & 0x1);
 
-	val = vpss_reg_read(reg_base + REG_SCL_SRC_SIZE(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_SRC_SIZE(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t src_w=%d src_h=%d\n",
 		val & 0x3fff, (val >> 16) & 0x3fff);
 
-	val = vpss_reg_read(reg_base + REG_SCL_CROP_OFFSET(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_CROP_SIZE(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CROP_OFFSET(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CROP_SIZE(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t crop(%d %d %d %d)\n",
 		val & 0x3fff, (val >> 16) & 0x3fff, val2 & 0x3fff, (val2 >> 16) & 0x3fff);
 
-	val = vpss_reg_read(reg_base + REG_SCL_OUT_SIZE(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_OUT_SIZE(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t out_w=%d out_h=%d\n",
 		val & 0x3fff, (val >> 16) & 0x3fff);
 
-	status = sclr_get_status(inst);
+	status = sclr_get_status(scaler, inst);
 
 	TRACE_VPSS(DBG_DEBUG, "\t crop(%d) hscale(%d) vscale(%d) gop(%d) dma(%d)\n",
 		status.crop_idle, status.hscale_idle, status.vscale_idle, status.gop_idle, status.wdma_idle);
 }
 
-void sclr_dump_odma_register(u8 inst)
+void sclr_dump_odma_register(struct scaler *scaler, u8 inst)
 {
 	u32 val, val2;
 
@@ -3256,123 +3181,123 @@ void sclr_dump_odma_register(u8 inst)
 
 	TRACE_VPSS(DBG_DEBUG, "sc(%d) odma base address=0x%lx\n", inst, reg_base + REG_SCL_ODMA_BASE(inst));
 
-	vpss_reg_write(reg_base + REG_SCL_ODMA_LATCH_LINE_CNT(inst), 0x1);
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_LATCH_LINE_CNT(inst));
+	vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_ODMA_LATCH_LINE_CNT(inst), 0x1);
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_LATCH_LINE_CNT(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t latch line count=%d\n", val >> 8);
 
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_CFG(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_CFG(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t fmt=%d hflip=%d vflip=%d\n",
 		(val >> 8) & 0xf, (val >> 16) & 0x1, (val >> 17) & 0x1);
 	TRACE_VPSS(DBG_DEBUG, "\t bf16_en=%d fp16_en=%d fp32_en=%d int8_en=%d uint8_en=%d convert_en=%d\n",
 		(val >> 23) & 0x1, (val >> 24) & 0x1, (val >> 25) & 0x1,
 		(val >> 26) & 0x1, (val >> 27) & 0x1, (val >> 28) & 0x1);
 
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR0_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR0_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR0_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR0_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t Y: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR1_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR1_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR1_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR1_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t U: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR2_L(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_ODMA_ADDR2_H(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR2_L(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_ADDR2_H(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t V: addr_h=0x%x addr_l=0x%x\n",
 		val2 & 0xff, val);
 
-	val = vpss_reg_read(reg_base + REG_SCL_ODMA_PITCH_Y(inst));
-	val2 = vpss_reg_read(reg_base + REG_SCL_ODMA_PITCH_C(inst));
+	val = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_PITCH_Y(inst));
+	val2 = vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_PITCH_C(inst));
 	TRACE_VPSS(DBG_DEBUG, "\t pitch_y=%d pitch_c=%d\n",
 		val & 0xfffffff, val2 & 0xfffffff);
 
 	TRACE_VPSS(DBG_DEBUG, "\t odma x=%d y=%d w=%d h=%d\n",
-		vpss_reg_read(reg_base + REG_SCL_ODMA_OFFSET_X(inst)),
-		vpss_reg_read(reg_base + REG_SCL_ODMA_OFFSET_Y(inst)),
-		vpss_reg_read(reg_base + REG_SCL_ODMA_WIDTH(inst)),
-		vpss_reg_read(reg_base + REG_SCL_ODMA_HEIGHT(inst)));
+		vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_OFFSET_X(inst)),
+		vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_OFFSET_Y(inst)),
+		vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_WIDTH(inst)),
+		vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_HEIGHT(inst)));
 }
 
-void sclr_dump_register(u8 inst) {
+void sclr_dump_register(struct scaler *scaler, u8 inst) {
 	int i;
 
 	TRACE_VPSS(DBG_ERR, "---dump vpss(%d) register---\n", inst);
 	TRACE_VPSS(DBG_ERR, "---sc top register---\n");
 	for(i = 0; i <= 0xf4; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + i + 0x4));
 	}
 	TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-		(unsigned int)(0x104), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + 0x104),
-		(unsigned int)(0x108), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + 0x108));
+		(unsigned int)(0x104), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + 0x104),
+		(unsigned int)(0x108), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + 0x108));
 	for(i = 0x220; i <= 0x22c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_TOP_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_TOP_BASE(inst) + i + 0x4));
 	}
 
 	TRACE_VPSS(DBG_ERR, "---sc img register---\n");
 	for(i = 0; i <= 0x9c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_IMG_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_IMG_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_IMG_BASE(inst) + i + 0x4));
 	}
 
 	TRACE_VPSS(DBG_ERR, "---sc fbd register---\n");
 	for(i = 0; i <= 0x34; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_FBD_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_FBD_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_FBD_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_FBD_BASE(inst) + i + 0x4));
 	}
 
 	TRACE_VPSS(DBG_ERR, "---sc core register---\n");
 	for(i = 0; i <= 0x28; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x40; i <= 0x4c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x80; i <= 0x9c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x118; i <= 0x14c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x200; i <= 0x218; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x280; i <= 0x2ac; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x300; i <= 0x370; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_CORE_BASE(inst) + i + 0x4));
 	}
 
 	TRACE_VPSS(DBG_ERR, "---sc odma register---\n");
 	for(i = 0; i <= 0x5c; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_ODMA_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_ODMA_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_BASE(inst) + i + 0x4));
 	}
 	for(i = 0x100; i <= 0x138; i += 8){
 		TRACE_VPSS(DBG_ERR, "addr:0x%x 0x%x  addr:0x%x 0x%x\n",
-			(unsigned int)(i), (unsigned int)vpss_reg_read(reg_base + REG_SCL_ODMA_BASE(inst) + i),
-			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(reg_base + REG_SCL_ODMA_BASE(inst) + i + 0x4));
+			(unsigned int)(i), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_BASE(inst) + i),
+			(unsigned int)(i + 0x4), (unsigned int)vpss_reg_read(scaler->bmdi, reg_base + REG_SCL_ODMA_BASE(inst) + i + 0x4));
 	}
 }

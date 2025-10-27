@@ -134,6 +134,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	struct chip_info *cinfo;
 	struct bm_chip_attr *c_attr;
 	int i;
+	int ret;
 #ifndef SOC_MODE
 	struct bm_card *b_card;
 	vpu_statistic_info_t *vpu_usage_info;
@@ -175,10 +176,17 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
 	}
 
-	if (c_attr->bm_get_chip_temp != NULL)
-		pattr->chip_temp =c_attr->chip_temp;
-	else
+	if (c_attr->bm_get_chip_temp != NULL) {
+		//pattr->chip_temp =c_attr->chip_temp;
+		ret = c_attr->bm_get_chip_temp(bmdi, &(pattr->chip_temp));
+		if (ret != 0) {
+			pattr->chip_temp = ATTR_NOTSUPPORTED_VALUE;
+			PR_DEBUG("bm_get_chip_temp fail\n");
+		}
+	} else {
 		pattr->chip_temp = ATTR_NOTSUPPORTED_VALUE;
+	}
+
 	if(P_SHOW)pr_err("pattr->chip_temp = 0x%x\n", pattr->chip_temp);
 	if (c_attr->bm_get_board_temp != NULL)
 		pattr->board_temp = c_attr->board_temp;
@@ -292,6 +300,12 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_max_clock = 1000;
 		}
 		pattr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+
+		pattr->npu_mem_used = pattr->stat.heap_stat[0].mem_used;
+		pattr->npu_mem_total = pattr->stat.heap_stat[0].mem_total;
+		pattr->vpp_mem_used = pattr->stat.heap_stat[1].mem_used;
+		pattr->vpp_mem_total = pattr->stat.heap_stat[1].mem_total;
+
 		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
 	default:

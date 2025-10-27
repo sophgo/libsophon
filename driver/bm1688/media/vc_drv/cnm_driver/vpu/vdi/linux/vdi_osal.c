@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/moduleparam.h>
+
 #include "vpuconfig.h"
 #include "../vdi_osal.h"
 
@@ -233,7 +234,6 @@ osal_file_t osal_fopen(const char * file_name, const char * mode)
         return NULL;
     }
 
-    // vdi_fp->old_fs = get_fs();
     return vdi_fp;
 }
 size_t osal_fwrite(const void * p, int size, int count, osal_file_t fp)
@@ -242,9 +242,7 @@ size_t osal_fwrite(const void * p, int size, int count, osal_file_t fp)
     struct file *filep = vdi_fp->filep;
     size_t write_size;
 
-    // set_fs(KERNEL_DS);
     write_size = kernel_write(filep, p, size * count, &filep->f_pos);
-    // set_fs(vdi_fp->old_fs);
 
     return write_size;
 }
@@ -254,9 +252,7 @@ size_t osal_fread(void *p, int size, int count, osal_file_t fp)
     struct file *filep = vdi_fp->filep;
     size_t read_size;
 
-    // set_fs(KERNEL_DS);
     read_size = kernel_read(filep, p, size * count, &filep->f_pos);
-    // set_fs(vdi_fp->old_fs);
 
     return read_size;
 }
@@ -285,7 +281,6 @@ int osal_fclose(osal_file_t fp)
         return -1;
 
     filp_close(filep, 0);
-    // set_fs(vdi_fp->old_fs);
     vfree(vdi_fp);
     return 0;
 }
@@ -535,22 +530,23 @@ void osal_msleep(Uint32 millisecond)
     msleep(millisecond);
 }
 
-osal_thread_t osal_thread_create(int(*start_routine)(void*), void*arg)
+osal_thread_t osal_thread_create(int(*start_routine)(void*), void*arg, char* name)
 {
     osal_thread_t   handle = NULL;
-    static int i = 0;
-    // struct sched_param param = {
-    //     .sched_priority = 95,
-    // };
-
-    handle = kthread_run(start_routine, arg, "vcodec_thread_%d", i++);
+#ifdef PLATFORM_SOC
+    struct sched_param param = {
+        .sched_priority = 95,
+    };
+#endif
+    handle = kthread_run(start_routine, arg, name);
     if (IS_ERR(handle)) {
         VLOG(ERR, "<%s:%d> Failed to kthread_create\n", __FUNCTION__, __LINE__);
         return NULL;
     }
-    // sched_setscheduler(handle, SCHED_RR, &param);
-
-    return handle;  //lint !e593
+#ifdef PLATFORM_SOC
+    sched_setscheduler(handle, SCHED_RR, &param);
+#endif
+    return handle;
 }
 
 Int32 osal_thread_join(osal_thread_t thread, void** retval)
@@ -638,4 +634,3 @@ Int32 osal_snprintf(char* str, size_t buf_size, const char *format, ...)
 {
     return snprintf(str, buf_size, format);
 }
-

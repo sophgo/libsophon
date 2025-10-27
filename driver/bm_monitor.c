@@ -89,7 +89,7 @@ int bm_monitor_thread_init(struct bm_device_info *bmdi)
 int bm_monitor_thread_deinit(struct bm_device_info *bmdi)
 {
 	struct bm_arm9fw_log_mem *log_mem0 = &bmdi->monitor_thread_info.log_mem[CORE_ID0];
-	struct bm_arm9fw_log_mem *log_mem1 = &bmdi->monitor_thread_info.log_mem[CORE_ID0];
+	struct bm_arm9fw_log_mem *log_mem1 = &bmdi->monitor_thread_info.log_mem[CORE_ID1];
 
 	if (bmdi->monitor_thread_info.monitor_task != NULL) {
 		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size);

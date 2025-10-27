@@ -627,6 +627,7 @@ int drv_vdec_create_chn(vdec_chn VdChn, const vdec_chn_attr_s *pstAttr)
         pInitDecCfg->chnNum = VdChn;
         pInitDecCfg->bsBufferSize = pChnHandle->ChnAttr.u32StreamBufSize;
         pInitDecCfg->frameBufferCount = pChnHandle->ChnAttr.u32FrameBufCnt;
+        pInitDecCfg->async_getframe = pChnHandle->ChnAttr.u8AsyncGetframe;
 
         if (pstAttr->enMode == VIDEO_MODE_STREAM)
             pInitDecCfg->BsMode = BS_MODE_INTERRUPT;
@@ -1056,7 +1057,7 @@ int drv_vdec_get_frame(vdec_chn VdChn, video_frame_info_s *pstFrameInfo,
         }
     }else {
         DispFrameCfg dfc = {0};
-        s32Ret = vdec_get_frame(pChnHandle->pHandle, &dfc);
+        s32Ret = vdec_get_frame(pChnHandle->pHandle, &dfc, s32MilliSec);
         if (s32Ret >= 0) {
             pChnHandle->u32GetFrameCnt++;
             set_video_frame_info(pstFrameInfo, &dfc);

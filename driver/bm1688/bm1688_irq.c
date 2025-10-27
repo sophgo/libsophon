@@ -70,7 +70,7 @@ void bm1688_pcie_remap_msi_init(struct pci_dev *pdev, struct bm_device_info *bmd
 	if (bmdi->cinfo.pcie_func_index == 0) {
 		value = REG_READ32(pcie_axi_base, 0x30);
 		value &= ~0x3;
-		if (bmdi->cinfo.mode & 0x1)
+		if (bmdi->cinfo.mode & BM1688_PCIE_EP_SEL_0)
 			value |= 0x1;
 		REG_WRITE32(pcie_axi_base, 0x30, value);
 	}

@@ -106,6 +106,8 @@ typedef struct decoder_handle{
     int frameBufFlag;
     int emptyBufSize;
     int wait_decoded_finish;
+    unsigned char async_getframe;
+    struct completion semGetFrameCmd;
 }DECODER_HANDLE;
 
 typedef struct _handle_pool{
@@ -123,20 +125,14 @@ static int thread_decode(void *param);
 int vdec_init_handle_pool(void)
 {
     int i;
-    // struct sched_param param = {
-    //     .sched_priority = 95,
-    // };
+    char thread_name[32] = {0};
 
     for (i=1; i<MAX_NUM_VPU_CORE; i++) {
         mutex_init(&vdec_handle_pool[i].handle_mutex);
 
         stop_thread[i] = 0;
-        thread_handle[i] = kthread_run(thread_decode, &core_idx[i], "vdec_core%d", core_idx[i]);
-        if (IS_ERR(thread_handle[i])) {
-            thread_handle[i] = NULL;
-        }
-        //  else
-        //     sched_setscheduler(thread_handle[i], SCHED_RR, &param);
+        sprintf(thread_name, "vdec_core%d", core_idx[i]);
+        thread_handle[i] = osal_thread_create(thread_decode, &core_idx[i], thread_name);
     }
 
     return 0;
@@ -471,24 +467,17 @@ static int release_framebuffer(void *pHandle)
         if (pst_handle->pst_frame_blk[i] == 0)
             break;
 
-        if (is_available(pst_handle->pst_frame_blk[i]))
-            break;
+        if (is_available(pst_handle->pst_frame_blk[i])) {
+            if (pst_handle->open_param->wtlEnable)
+                frame_idx = i - pst_handle->numOfDecFbc;
+            else
+                frame_idx = i;
+
+            ret = VPU_DecClrDispFlag(pst_handle->handle, frame_idx);
+            if (ret == RETCODE_SUCCESS)
+                add_user_cnt(pst_handle->pst_frame_blk[i]);
+        }
     }
-
-    if (i == MAX_REG_FRAME)
-        return 0;
-
-    if (pst_handle->pst_frame_blk[i] == 0)
-        return 0;
-
-    if (pst_handle->open_param->wtlEnable)
-        frame_idx = i - pst_handle->numOfDecFbc;
-    else
-        frame_idx = i;
-
-    ret = VPU_DecClrDispFlag(pst_handle->handle, frame_idx);
-    if (ret == RETCODE_SUCCESS)
-        add_user_cnt(pst_handle->pst_frame_blk[i]);
 
     return 0;
 }
@@ -577,6 +566,8 @@ static int fill_vbbuffer(void *pHandle)
 static int sequence_change(void *pHandle)
 {
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
+    CodecInst *pCodecInst = pst_handle->handle;
+    DecInfo *pDecInfo = &pCodecInst->CodecInfo->decInfo;
     int ret;
 
     if (Queue_Get_Cnt(pst_handle->display_frame)) {
@@ -585,6 +576,9 @@ static int sequence_change(void *pHandle)
 
     free_framebuffer(pst_handle);
     VPU_DecGiveCommand(pst_handle->handle, DEC_GET_SEQ_INFO, pst_handle->seq_info);
+
+    pst_handle->frameBufFlag = 0;
+    pDecInfo->frameBufFlag = 0;
     ret = alloc_framebuffer(pst_handle);
     if (ret ==  RETCODE_SUCCESS)
         pst_handle->seq_status = SEQ_DECODE_START;
@@ -684,7 +678,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
     int ret;
     SecAxiUse  sec_axi_info = {0};
     int cycle_per_tick = 256;
-    int height_from_user, width_from_user;
+    unsigned int height_from_user, width_from_user;
     int numOfDecFbc, numOfDecwtl;
 
     ret = VPU_WaitInterruptEx(pst_handle->handle, timeout);
@@ -727,15 +721,16 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
         }
         VPU_DecGiveCommand(pst_handle->handle, SET_SEC_AXI, &sec_axi_info);
 
-        if(height_from_user != 0 && width_from_user != 0 && (height_from_user != pst_handle->seq_info->picHeight || width_from_user != pst_handle->seq_info->picWidth)){
-            VLOG(ERR, "The size information does not match. input width:%d pic width:%d input height:%d pic height:%d",
-                width_from_user, pst_handle->seq_info->picWidth, height_from_user, pst_handle->seq_info->picHeight);
-            pst_handle->seq_status = SEQ_DECODE_WRONG_RESOLUTION;
-            return RETCODE_FAILURE;
-        }
 
         if(pst_handle->frameBufFlag == 1)
         {
+            if(height_from_user != 0 && width_from_user != 0 && (height_from_user != pst_handle->seq_info->picHeight || width_from_user != pst_handle->seq_info->picWidth)){
+                VLOG(ERR, "The size information does not match. input width:%d pic width:%d input height:%d pic height:%d",
+                    width_from_user, pst_handle->seq_info->picWidth, height_from_user, pst_handle->seq_info->picHeight);
+                pst_handle->seq_status = SEQ_DECODE_WRONG_RESOLUTION;
+                return RETCODE_FAILURE;
+            }
+
             if (pst_handle->open_param->wtlEnable){
                 numOfDecFbc = pst_handle->seq_info->minFrameBufferCount + pst_handle->cmd_queue_depth;
                 numOfDecwtl = pst_handle->seq_info->frameBufDelay + pst_handle->frame_buffer_count + pst_handle->cmd_queue_depth;
@@ -807,6 +802,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
             }
 
             wake_up(&tVdecWaitQueue[pst_handle->channel_index]);
+            complete(&pst_handle->semGetFrameCmd);
         }
 
         if (pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
@@ -1005,6 +1001,7 @@ reinit:
     pst_handle->map_type = COMPRESSED_FRAME_MAP;
     pst_handle->core_idx = core_idx;
     pst_handle->frame_buffer_count = pInitDecCfg->frameBufferCount;
+    pst_handle->async_getframe = pInitDecCfg->async_getframe;
     pst_handle->open_param->coreIdx = core_idx;
     pst_handle->open_param->bitstreamMode = pInitDecCfg->BsMode;
     pst_handle->channel_index = pInitDecCfg->chnNum;
@@ -1012,6 +1009,7 @@ reinit:
     pst_handle->open_param->wtlEnable = pInitDecCfg->wtl_enable;
     pst_handle->seq_info->picWidth = pInitDecCfg->picWidth;
     pst_handle->seq_info->picHeight = pInitDecCfg->picHeight;
+    init_completion(&pst_handle->semGetFrameCmd);
     if (pInitDecCfg->codec == CODEC_H265)
         pst_handle->open_param->bitstreamFormat = STD_HEVC;
     else
@@ -1034,7 +1032,7 @@ reinit:
     if (pst_handle->open_param->bitstreamMode == BS_MODE_PIC_END) {
         for (i=0; i<pst_handle->cmd_queue_depth; i++) {
             if(pst_handle->bsBufFlag == 0) {
-                vdi_allocate_dma_memory(core_idx, &vb_buffer, 0, 0);
+                vdi_allocate_dma_memory(core_idx, &vb_buffer, "DEC_BS", 0);
             }
             else {
                 buf_info = (buffer_info_s *)pInitDecCfg->bitstream_buffer;
@@ -1053,7 +1051,7 @@ reinit:
 
     } else if (pst_handle->open_param->bitstreamMode == BS_MODE_INTERRUPT) {
         if(pst_handle->bsBufFlag == 0) {
-            vdi_allocate_dma_memory(core_idx, &vb_buffer, 0, 0);
+            vdi_allocate_dma_memory(core_idx, &vb_buffer, "DEC_BS", 0);
         }
         else {
             buf_info = (buffer_info_s *)pInitDecCfg->bitstream_buffer;
@@ -1094,11 +1092,15 @@ reinit:
         for(i=0; i<(pst_handle->numOfDecFbc); i++) {
             pDecInfo->vbFbcYTbl[i].phys_addr = buf_info[i].phys_addr;
             pDecInfo->vbFbcYTbl[i].size = buf_info[i].size;
+            pDecInfo->vbFbcYTbl[i].virt_addr =  (unsigned long)phys_to_virt(buf_info[i].phys_addr);
+            vdi_attach_dma_memory(core_idx, &pDecInfo->vbFbcYTbl[i], 1);
         }
         buf_info = (buffer_info_s *)pInitDecCfg->Ctable_buffer;
         for(i=0; i<(pst_handle->numOfDecFbc); i++) {
             pDecInfo->vbFbcCTbl[i].phys_addr = buf_info[i].phys_addr;
             pDecInfo->vbFbcCTbl[i].size = buf_info[i].size;
+            pDecInfo->vbFbcCTbl[i].virt_addr =  (unsigned long)phys_to_virt(buf_info[i].phys_addr);
+            vdi_attach_dma_memory(core_idx, &pDecInfo->vbFbcCTbl[i], 1);
         }
     }
 
@@ -1290,7 +1292,7 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
             pst_handle->seq_status = SEQ_INIT_START;
         } else if (pdopc->bsLen == 0) {
             if(pst_handle->seq_status == SEQ_INIT_NON)
-                return RETCODE_SUCCESS;
+                return RETCODE_QUEUEING_FAILURE;
 
             if (queue_status.instanceQueueCount || Queue_Get_Cnt(pst_handle->display_frame)) {
                 if (pst_handle->is_bind_mode)
@@ -1450,12 +1452,33 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
     return 0;
 }
 
-int vdec_get_frame(void *pHandle, DispFrameCfg *pdfc)
+int vdec_get_frame(void *pHandle, DispFrameCfg *pdfc, int timeout_ms)
 {
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
+    int ret = RETCODE_SUCCESS;
 
-    if (!pst_handle->user_pic_enable) //disable user pic
+    timeout_ms = (timeout_ms < 0) ? (2 * 1000) : timeout_ms;
+    if (timeout_ms > 10 * 1000)
+        timeout_ms = 10 * 1000;
+
+    if (!pst_handle->user_pic_enable && pst_handle->async_getframe)     // async get frame
         return get_codec_pic(pHandle, pdfc);
+
+    if (!pst_handle->user_pic_enable && !pst_handle->async_getframe) {  //sync get frame
+        if (timeout_ms == 0) {
+            return get_codec_pic(pHandle, pdfc);
+        } else {
+            ret = wait_for_completion_timeout(&pst_handle->semGetFrameCmd,
+                msecs_to_jiffies(timeout_ms));
+
+            if (ret >= 0) {
+                if (Queue_Get_Cnt(pst_handle->display_frame) > 0)
+                    return get_codec_pic(pHandle, pdfc);
+
+                return -2;
+            }
+        }
+    }
 
     if (!pst_handle->user_pic_mode &&
         pst_handle->seq_status != SEQ_DECODE_FINISH &&
@@ -1605,9 +1628,7 @@ int enable_user_pic(void *pHandle, int instant)
 {
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
     void *thread_handle;
-    // struct sched_param param = {
-    //     .sched_priority = 95,
-    // };
+    char thread_name[32] = {0};
 
     pst_handle->user_pic_enable = 1;
     pst_handle->user_pic_mode = instant;
@@ -1616,11 +1637,10 @@ int enable_user_pic(void *pHandle, int instant)
         return 0;
 
     //create thread to flush vcodec
-    thread_handle = kthread_run(flush_decode, pst_handle, "vdec_core%d_%d_flush",
-                                pst_handle->core_idx, pst_handle->channel_index);
-    if (IS_ERR(thread_handle))
+    sprintf(thread_name, "vdec_core%d_%d_flush", pst_handle->core_idx, pst_handle->channel_index);
+    thread_handle = osal_thread_create(flush_decode, pst_handle, thread_name);
+    if (thread_handle == NULL)
         return RETCODE_FAILURE;
-    // sched_setscheduler(thread_handle, SCHED_RR, &param);
 
     return 0;
 }

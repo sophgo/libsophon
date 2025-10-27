@@ -4,6 +4,7 @@
 #include "bm_smi_test.hpp"
 #include "bm_smi_display.hpp"
 #include "bm_smi_core_util.hpp"
+#include "bm_smi_mem_info.hpp"
 #include "bm_smi_ecc.hpp"
 #include "bm_smi_led.hpp"
 #include "bm_smi_recovery.hpp"

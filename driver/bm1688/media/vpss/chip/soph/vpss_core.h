@@ -79,13 +79,21 @@ struct vpss_device {
 	struct miscdevice miscdev;
 	spinlock_t lock;
 	struct vpss_core vpss_cores[VPSS_MAX];
+	struct timer_list vpss_timer;
+	struct semaphore g_vpss_core_sem;
+	struct scaler *scaler;
+	void *vpss_hal;
+	void *bmdi;
 };
 
 unsigned long vpss_dmabuf_fd_to_paddr(int dmabuf_fd);
 long vpss_get_diff_in_us(struct timespec64 start, struct timespec64 end);
 void vpss_dev_init(struct vpss_device *dev);
 void vpss_dev_deinit(struct vpss_device *dev);
-void vpss_hw_init(void);
+void vpss_hw_init(struct scaler *scaler);
 irqreturn_t vpss_isr(int irq, void *data);
+
+int vpss_proc_init(struct proc_dir_entry *proc_dir, struct vpss_device *dev);
+int vpss_proc_remove(struct proc_dir_entry *proc_dir, struct vpss_device *dev);
 
 #endif /* _VPSS_CORE_H_ */

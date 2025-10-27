@@ -160,6 +160,7 @@ struct bm_reg {
 
 #define BMDEV_SEND_API			_IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API		_IOW('p', 0x21, unsigned long)
+#define BMDEV_SYNC_TIMEOUT_API		_IOW('p', 0x22, unsigned long)
 #define BMDEV_DEVICE_SYNC_API		_IOW('p', 0x23, unsigned long)
 #define BMDEV_HANDLE_SYNC_API		_IOW('p', 0x27, unsigned long)
 #define BMDEV_SEND_API_EXT		_IOW('p', 0x28, unsigned long)
@@ -258,6 +259,7 @@ struct bm_reg {
 #define BMDEV_GET_LIB_INFO             _IOWR('p', 0x98, unsigned long)
 
 #define BMDEV_GET_IDLE_COREID          _IOR('p', 0xB0, unsigned long)
+#define BMDEV_GET_FW_VERSION           _IOR('p', 0xB1, unsigned long)
 
 #define BMCTL_GET_DEV_CNT               _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR              _IOWR('q', 0x01, unsigned long)
@@ -292,8 +294,18 @@ struct bm_smi_attr {
 	int card_index;
 	int chip_index_of_card;
 
+	int ion_mem_used;
+	int ion_mem_total;
+	int npu_mem_used;
+	int npu_mem_total;
+	int vpp_mem_used;
+	int vpp_mem_total;
 	int mem_used;
 	int mem_total;
+	int cma_mem_used;
+	int cma_mem_total;
+	int system_mem;
+	int ddr_size;
 	int tpu_util;
 	int tpu_util0;
 	int tpu_util1;

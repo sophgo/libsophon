@@ -122,7 +122,7 @@ extern int vdi_release(unsigned long core_idx);
 extern vpu_instance_pool_t * vdi_get_instance_pool(unsigned long core_idx);
 extern int vdi_allocate_common_memory(unsigned long core_idx);
 extern int vdi_get_common_memory(unsigned long core_idx, vpu_buffer_t *vb);
-extern int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTypes, int instIndex);
+extern int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, char* buf_name, int instIndex);
 extern int vdi_attach_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, unsigned char is_cached);
 extern void vdi_free_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTypes, int instIndex);
 extern int vdi_get_sram_memory(unsigned long core_idx, vpu_buffer_t *vb);

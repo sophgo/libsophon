@@ -419,7 +419,7 @@ Store mode
 
 bm_store_mode_t表示数据的存储方式。用户可以只关注BM_STORE_1N即可，若要关注底层并优化性能，此时才需要去关心BM_STORE_2N和BM_STORE_4N。
 
-BM_STORE_1N是默认存储方式，用于数据类型，表示数据按正常方式存储。
+BM_STORE_1N是默认存储方式，可用于所有数据类型，表示数据按正常方式存储。
 
 BM_STORE_2N只用于BM_FLOAT16/BM_INT16/BM_UINT16，表示一个32bit的数据空间将放置2个不同batch，但是其它维度位置相同的数据。例如(n, c, h, w)的四维tensor，32bit的低16bit放置(0, ci, hi, wi)的数据，高16bit放置(1, ci, hi, wi)的数据。
 
@@ -1052,7 +1052,7 @@ bmrt_launch_tensor_multi_cores
 **需要注意:** 该接口为异步接口，用户需要调用bm_thread_sync_from_core确保推理完成。
 
 bmrt_pre_alloc_neuron_multi_cores
->>>>>>>>>>>>>>>>>>>>>>
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 对指定的网络，预先申请深度学习处理器推理计算所需要的设备内存。接口声明如下:
 
@@ -1077,6 +1077,71 @@ bmrt_pre_alloc_neuron_multi_cores
 
 * 该函数仅对于支持多核深度学习处理器的硬件架构有效，可以减少第一次调用bmrt_launch_tensor_multi_cores接口时的时间。
 * 默认不使用该函数的情况下，在指定模型第一次调用bmrt_launch_tensor_multi_cores时会自动地花费时间申请深度学习处理器推理计算所需要的设备内存。
+
+bmrt_get_neuron_number
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+用于获取内部网络中运行时的设备内存数量，该接口通常配合 `bmrt_get_neuron_memory` 使用
+
+.. code-block:: cpp
+
+  /**
+  * @name    bmrt_get_neuron_number
+  * @brief   get inner runtime device mem number in bmruntime
+  * @ingroup bmruntime
+  *
+  * For simple bmodel, the number of mem is always 1
+  *
+  * @param [in]    p_bmrt            Bmruntime that had been created
+  * @param [in]    net_name          The name of the neuron network
+  * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+  * @param [in]    core_list         core id list those will be used to inference
+  * @param [in]    core_num          number of the core list
+  * @return int    the number of neuron mem
+  */
+  int bmrt_get_neuron_number(void *p_bmrt, const char* net_name);
+
+
+bmrt_get_neuron_memory
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+该函数用于获取内部网络中运行时的设备内存，该接口通常配合 `bmrt_get_neuron_number` 使用。
+需要注意：
+
+- 调用该函数前，要先调用 `bmrt_pre_alloc_neuron_multi_cores`, 确保内部neuron空间已经分配。
+- 用户要自行保证返回的neuron memory仅在确保未进行推理时使用，比如串行执行，用于前处理或后处理。
+
+.. code-block:: cpp
+
+  /**
+  * @name    bmrt_get_neuron_memory
+  * @brief   get inner runtime device mem in bmruntime
+  * @ingroup bmruntime
+  *
+  * This API should be called after calling bmrt_launch_tensor_multi_cores or bmrt_pre_alloc_neuron_multi_cores
+  * After calling this API, the memory for inference is returned.
+  * Different core list uses independent runtime device memory to support parallel inference
+  * Note: User should make sure NOT to use the memory during launching inference
+  *
+  * @param [in]    p_bmrt            Bmruntime that had been created
+  * @param [in]    net_name          The name of the neuron network
+  * @param [in]    mem_index         The memory index must less than the returned number calling bmrt_get_runtime_device_mem_number
+  * @param [in]    core_list         core id list those will be used to inference
+  * @param [in]    core_num          number of the core list
+  * @return the neuron memory on device
+  */
+  bm_device_mem_t bmrt_get_neuron_memory(void *p_bmrt, const char* net_name, int mem_index, const int* core_list, int core_num);
+
+使用示例如下
+
+.. code-block:: cpp
+
+  auto neuron_num = bmrt_get_neuron_number(p_bmrt, net_info->name);
+  for(int neuron_index = 0; neuron_index<neuron_num; neuron_index++){
+    auto neuron_mem = bmrt_get_neuron_memory(p_bmrt, net_info->name, neuron_index, core_list, core_num);
+    BMRT_LOG(DEBUG, "neuron[%d]: addr=0x%0llX, size=%d\n", neuron_index, bm_mem_get_device_addr(neuron_mem), bm_mem_get_device_size(neuron_mem));
+  }
+
 
 bmrt_trace
 >>>>>>>>>>>>>>>>>>>>
@@ -1129,6 +1194,7 @@ bmrt_free_api_info
 >>>>>>>>>>>>>>>>>>>
 
 .. code-block:: cpp
+
   /**
   * @name    bmrt_free_api_info
   * @brief   To release memory allocated by the get_bmodel_api_info_c function's return value.

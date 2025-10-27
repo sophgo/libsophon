@@ -560,6 +560,12 @@ int bm1688_modules_reset_init(struct bm_device_info* bmdi)
 		dev_err(dev, "failed to retrieve tc906b1 reset");
 		return ret;
 	}
+	cinfo->hau = devm_reset_control_get(dev, "hau");
+	if (IS_ERR(cinfo->hau)) {
+		ret = PTR_ERR(cinfo->hau);
+		dev_err(dev, "failed to retrieve hau reset");
+		return ret;
+	}
 	return ret;
 }
 
@@ -567,7 +573,9 @@ void bm1688_modules_reset(struct bm_device_info* bmdi)
 {
 	bm1688_tpu_reset(bmdi);
 	bm1688_gdma_reset(bmdi);
+	bm1688_tc906_reset(bmdi);
 	bm1688_hau_reset(bmdi);
+	bm1688_tpusys_reset(bmdi);
 }
 
 void bm1688_modules_tpu_system_reset(struct bm_device_info *bmdi)
@@ -581,6 +589,7 @@ void bm1688_modules_tpu_system_reset(struct bm_device_info *bmdi)
 		pr_err("load firmware fail\n");
 	}
 
+	
 	bmdrv_clear_lib_list(bmdi);
 	bmdrv_clear_func_list(bmdi);
 }
@@ -621,6 +630,13 @@ int bm1688_modules_clk_init(struct bm_device_info* bmdi)
 		dev_err(dev, "failed to retrieve gdma clk");
 		return ret;
 	}
+	cinfo->cdma_clk = devm_clk_get(dev, "cdma");
+	if (IS_ERR(cinfo->cdma_clk)) {
+		ret = PTR_ERR(cinfo->cdma_clk);
+		dev_err(dev, "failed to retrieve cdma clk");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -643,6 +659,7 @@ void bm1688_modules_clk_enable(struct bm_device_info* bmdi)
 	bm1688_tc906b_clk_enable(bmdi);
 	bm1688_timer_clk_enable(bmdi);
 	bm1688_gdma_clk_enable(bmdi);
+	bm1688_cdma_clk_enable(bmdi);
 }
 
 void bm1688_modules_clk_disable(struct bm_device_info* bmdi)
@@ -652,5 +669,6 @@ void bm1688_modules_clk_disable(struct bm_device_info* bmdi)
 	bm1688_tc906b_clk_disable(bmdi);
 	bm1688_timer_clk_disable(bmdi);
 	bm1688_gdma_clk_disable(bmdi);
+	bm1688_cdma_clk_disable(bmdi);
 }
 #endif

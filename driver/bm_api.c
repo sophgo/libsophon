@@ -674,7 +674,6 @@ int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg
 	u64 local_send_api_seq;
 	u32 channel;
 	int fifo_avail;
-	int is_pm_enable = 0;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -783,18 +782,8 @@ int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg
 		return -EBUSY;
 	}
 	kfree(api_entry);
-	is_pm_enable = bmdi->pm_thread_info.is_pm_enable;
 	/* copy api data to fifo */
-	mutex_lock(&bmdi->pm_thread_info.pm_mutex);
-		if (is_pm_enable == 1) {
-			bmdi->pm_thread_info.is_clk_enable = 1;
-			bm1688_tpu_clk_enable(bmdi);
-			bm1688_gdma_clk_enable(bmdi);
-			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)&bm_api, NULL, channel, false);
-		} else {
-			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)&bm_api, NULL, channel, false);
-		}
-	mutex_unlock(&bmdi->pm_thread_info.pm_mutex);
+	ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)&bm_api, NULL, channel, false);
 
 	mutex_unlock(&apinfo->api_mutex);
 	return ret;
@@ -869,7 +858,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	unsigned int param_num;
 	bm_api_ext_t *bm_api_list = NULL;
 	int i;
-	int is_pm_enable = 0;
 	int func_id;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
@@ -987,7 +975,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 		mutex_lock(&apinfo->api_mutex);
 	}
 
-	is_pm_enable = bmdi->pm_thread_info.is_pm_enable;
 
 	api_pid = current->pid;
 	for (i = 0; i < param_num; i++){
@@ -1118,16 +1105,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			api_opt_header.global_api_seq = local_send_api_seq;
 			api_opt_header.api_data = 0;
 			/* copy api data to fifo */
-			mutex_lock(&bmdi->pm_thread_info.pm_mutex);
-			if (is_pm_enable == 1) {
-				bmdi->pm_thread_info.is_clk_enable = 1;
-				bm1688_tpu_clk_enable(bmdi);
-				bm1688_gdma_clk_enable(bmdi);
-				ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, &api_opt_header, channel, api_from_userspace);
-			} else {
-				ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, &api_opt_header, channel, api_from_userspace);
-			}
-			mutex_unlock(&bmdi->pm_thread_info.pm_mutex);
+			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, &api_opt_header, channel, api_from_userspace);;
 		} else {
 			mutex_unlock(&apinfo->api_fifo_mutex);
 			fifo_avail = kfifo_avail(&apinfo->api_fifo);
@@ -1150,16 +1128,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			}
 			kfree(api_entry);
 			/* copy api data to fifo */
-			mutex_lock(&bmdi->pm_thread_info.pm_mutex);
-			if (is_pm_enable == 1) {
-				bmdi->pm_thread_info.is_clk_enable = 1;
-				bm1688_tpu_clk_enable(bmdi);
-				bm1688_gdma_clk_enable(bmdi);
-				ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, NULL, channel, api_from_userspace);
-			} else {
-				ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, NULL, channel, api_from_userspace);
-			}
-			mutex_unlock(&bmdi->pm_thread_info.pm_mutex);
+			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, NULL, channel, api_from_userspace);
 		}
 		if (bm_api.api_id == 0x90000013) {
 			kfree(bm_api_p->api_addr);
@@ -1505,4 +1474,24 @@ void print_dny_lib_info(struct bm_device_info *bmdi)
 		pr_err("lib_name=%s,file=%p,refcount=%d\n", lib_temp->lib_name, lib_temp->file,
 				lib_temp->refcount);
 	}
+}
+
+int bmdrv_set_sync_timeout(struct bm_device_info *bmdi, unsigned long arg)
+{
+	int ret, timeout;
+
+	ret = copy_from_user(&timeout, (int __user *)arg, sizeof(int));
+	if (ret) {
+		pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
+		return ret;
+	}
+
+	if (timeout < 0) {
+		pr_info("set sync timeout error!\n");
+		return -1;
+	}
+
+	bmdi->cinfo.delay_ms = timeout;
+
+	return 0;
 }

@@ -476,12 +476,32 @@ void bm1688_gdma_reset(struct bm_device_info *bmdi)
 	reset_control_deassert(bmdi->cinfo.gdma1);
 }
 
+void bm1688_tc906_reset(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 tc906b0 reset\n");
+	reset_control_assert(bmdi->cinfo.tc906b0);
+	udelay(1000);
+	reset_control_deassert(bmdi->cinfo.tc906b0);
+	PR_TRACE("bm1688 tc906b1 reset\n");
+	reset_control_assert(bmdi->cinfo.tc906b1);
+	udelay(1000);
+	reset_control_deassert(bmdi->cinfo.tc906b1);
+}
+
 void bm1688_hau_reset(struct bm_device_info *bmdi)
 {
 	PR_TRACE("bm1688 hau reset\n");
 	reset_control_assert(bmdi->cinfo.hau);
 	udelay(1000);
 	reset_control_deassert(bmdi->cinfo.hau);
+}
+
+void bm1688_tpusys_reset(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 tpusys reset\n");
+	reset_control_assert(bmdi->cinfo.tpusys);
+	udelay(1000);
+	reset_control_deassert(bmdi->cinfo.tpusys);
 }
 
 void bm1688_tpu_clk_enable(struct bm_device_info *bmdi)
@@ -542,6 +562,18 @@ void bm1688_gdma_clk_disable(struct bm_device_info *bmdi)
 {
 	PR_TRACE("bm1688 gdma clk is gating\n");
 	clk_disable_unprepare(bmdi->cinfo.gdma_clk);
+}
+
+void bm1688_cdma_clk_enable(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 cdma clk is enable\n");
+	clk_prepare_enable(bmdi->cinfo.cdma_clk);
+}
+
+void bm1688_cdma_clk_disable(struct bm_device_info *bmdi)
+{
+	PR_TRACE("bm1688 cdma clk is gating\n");
+	clk_disable_unprepare(bmdi->cinfo.cdma_clk);
 }
 #else
 void bm1688_tpu_clk_enable(struct bm_device_info *bmdi){ }

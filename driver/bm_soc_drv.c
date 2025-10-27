@@ -40,6 +40,7 @@ struct proc_dir_entry *bmdi_folder;
 extern int dev_count;
 extern struct bm_ctrl_info *bmci;
 u32 c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h;
+u32 gp_reg1[32] = {0};
 
 static struct kobj_type bmdrv_ktype = {
 	NULL
@@ -419,6 +420,7 @@ static int bmdi_proc_show(struct seq_file *m, void *v)
 
 	seq_printf(m, "libsophon git version:%s\n", GIT_VER_STRING);
 	seq_printf(m, "status:%d\n", bmdi->status);
+	seq_printf(m, "timeout:%d\n", bmdi->cinfo.delay_ms);
 
 	return 0;
 }
@@ -767,6 +769,8 @@ static int bmdrv_tpu_suspend(struct device *dev)
 	u32 pm_status1 = 0x1;
 	u32 timeout_cnt = 0;
 	char *name;
+	u32 gp_reg_num1 = 30;
+	u32 i = 0;
 
 	name = base_get_chip_id(bmdi);
 	if (!strcmp(name, "BM1688-SOC")) {
@@ -795,6 +799,14 @@ static int bmdrv_tpu_suspend(struct device *dev)
 	c906_park_1_l = gp_reg_read_enh(bmdi, GP_REG_C906_1_ADDR_L);
 	c906_park_1_h = gp_reg_read_enh(bmdi, GP_REG_C906_1_ADDR_H);
 
+	for (i = 0; i < gp_reg_num1; i++) {
+		gp_reg1[i] = gp_reg_read_enh(bmdi, i);
+	}
+
+	gp_reg1[30] = bdc_reg_read(bmdi, 0);
+	if (!(is_tpu1_power_down(bmdi)))
+		gp_reg1[31] = tpu_reg_read_idx(bmdi, 0x100, 1);
+
 	//bm1688_tpu_clk_disable(bmdi);
 	bm1688_tc906b_clk_disable(bmdi);
 	//bm1688_gdma_clk_disable(bmdi);
@@ -806,12 +818,23 @@ static int bmdrv_tpu_suspend(struct device *dev)
 static int bmdrv_tpu_resume(struct device *dev)
 {
 	struct bm_device_info *bmdi = dev_get_drvdata(dev);
+	u32 gp_reg_num = 29;
+	u32 i = 0;
 
-	//bm1688_tpu_clk_enable(bmdi);
+	bm1688_tpu_clk_enable(bmdi);
+	bm1688_top_fab0_clk_enable(bmdi);
 	bm1688_tc906b_clk_enable(bmdi);
-	//bm1688_gdma_clk_enable(bmdi);
+	bm1688_timer_clk_enable(bmdi);
+	bm1688_gdma_clk_enable(bmdi);
 
 	bm1688_resume_tpu(bmdi, c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h);
+	for (i = 0; i < gp_reg_num; i++) {
+		gp_reg_write_enh(bmdi, i, gp_reg1[i]);
+	}
+
+	bdc_reg_write(bmdi, 0, gp_reg1[30]);
+	if (!(is_tpu1_power_down(bmdi)))
+		tpu_reg_write_idx(bmdi, 0x100, gp_reg1[31], 1);
 
 	pr_err("bmdrv_tpu_resume done\n");
 	return 0;

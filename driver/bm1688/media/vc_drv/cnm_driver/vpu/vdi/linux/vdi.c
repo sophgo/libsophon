@@ -28,6 +28,7 @@
 #include "device.h"
 #include "main_helper.h"
 #include "misc/debug.h"
+#include "platform.h"
 
 #define VPU_BIT_REG_SIZE                    (0x4000*MAX_NUM_VPU_CORE)
 
@@ -50,7 +51,6 @@ typedef struct  {
     vpu_buffer_t            vpu_common_memory;
     int                     vpu_buffer_pool_count;
     pid_t pid;
-    unsigned int chip_id;
     unsigned char             ext_addr;
     unsigned int instance_start_flag;
     atomic_t instance_count;
@@ -62,12 +62,7 @@ static vdi_info_t s_vdi_info[MAX_NUM_VPU_CORE];
 #define VDI_SYSTEM_ENDIAN                   VDI_LITTLE_ENDIAN
 #define VDI_128BIT_BUS_SYSTEM_ENDIAN        VDI_128BIT_LITTLE_ENDIAN
 
-extern int chip_id;
 extern vpudrv_buffer_t s_vpu_register[MAX_NUM_VPU_CORE];
-extern unsigned int vc_read_reg(unsigned int addr);
-extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
-extern int vc_memcpy_s2d(void *src, uint64_t dst, uint32_t size);
-extern int vc_memcpy_d2s(void *dst, uint64_t src, uint32_t size);
 
 int swap_endian(unsigned long core_idx, unsigned char *data, int len, int endian);
 
@@ -126,7 +121,6 @@ int vdi_init(unsigned long core_idx)
     }
     vdi->vpu_fd = 'v' + core_idx;
 
-    vdi->chip_id = chip_id;
     memset(vdi->vpu_buffer_pool, 0x00, sizeof(vpudrv_buffer_pool_t)*MAX_VPU_BUFFER_POOL);
 
     if (!vdi_get_instance_pool(core_idx))
@@ -147,13 +141,7 @@ int vdi_init(unsigned long core_idx)
     }
     vdi->vdb_register.size = core_idx;
     memcpy(&vdi->vdb_register, &s_vpu_register[vdi->vdb_register.size], sizeof(vpudrv_buffer_t));
-    // vdi->vdb_register.virt_addr = (unsigned long)ioremap(vdi->vdb_register.phys_addr, vdi->vdb_register.size);
-
-    // if ((void *)vdi->vdb_register.virt_addr == NULL)
-    // {
-    //     VLOG(ERR, "[VDI] fail to map vpu registers \n");
-    //     goto ERR_VDI_INIT;
-    // }
+    vdi->vdb_register.virt_addr = (unsigned long)platform_ioremap(vdi->vdb_register.phys_addr, vdi->vdb_register.size);
 
     VLOG(INFO, "[VDI] map vdb_register core_idx=%d, virtaddr=0x%x, size=%d\n", core_idx, (int)vdi->vdb_register.virt_addr, vdi->vdb_register.size);
 
@@ -250,7 +238,7 @@ int vdi_release(unsigned long core_idx)
     }
 
     if (vdi->vdb_register.virt_addr)
-        iounmap((void *)vdi->vdb_register.virt_addr);
+        platform_iounmap((void *)vdi->vdb_register.virt_addr);
 
     osal_memset(&vdi->vdb_register, 0x00, sizeof(vpudrv_buffer_t));
     vdb.size = 0;
@@ -318,14 +306,6 @@ int vdi_allocate_common_memory(unsigned long core_idx)
     if (vpu_get_common_memory(&vdb) < 0)
     {
         VLOG(ERR, "[VDI] fail to vdi_allocate_common_memory size=%d\n", vdb.size);
-        return -1;
-    }
-
-    //vdb.virt_addr = (unsigned long)phys_to_virt(vdb.phys_addr);
-    vdb.virt_addr = vdb.base;
-    if ((void *)vdb.virt_addr == NULL)
-    {
-        VLOG(ERR, "[VDI] fail to map common memory phyaddr=0x%lx, size = %d\n", vdb.phys_addr, (int)vdb.size);
         return -1;
     }
 
@@ -536,7 +516,6 @@ static void vmem_unlock(unsigned long core_idx)
 void vdi_write_register(unsigned long core_idx, unsigned int addr, unsigned int data)
 {
     vdi_info_t *vdi;
-    unsigned int reg_addr;
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return;
@@ -546,15 +525,12 @@ void vdi_write_register(unsigned long core_idx, unsigned int addr, unsigned int 
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return;
 
-    reg_addr = (addr + (unsigned long)vdi->vdb_register.phys_addr);
-    vc_write_reg(reg_addr, data);
+    platform_write_register(addr + vdi->vdb_register.phys_addr, (unsigned int *)(addr + vdi->vdb_register.virt_addr), data);
 }
 
 unsigned int vdi_read_register(unsigned long core_idx, unsigned int addr)
 {
     vdi_info_t *vdi;
-    unsigned int ret = 0;
-    unsigned int reg_addr;
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return (unsigned int)-1;
@@ -564,9 +540,7 @@ unsigned int vdi_read_register(unsigned long core_idx, unsigned int addr)
     if(!vdi || vdi->vpu_fd == (VPU_FD)-1 || vdi->vpu_fd == (VPU_FD)0x00)
         return (unsigned int)-1;
 
-    reg_addr = (addr + vdi->vdb_register.phys_addr);
-    ret = vc_read_reg(reg_addr);
-    return ret;
+    return platform_read_register(addr + vdi->vdb_register.phys_addr, (unsigned int *)(addr + vdi->vdb_register.virt_addr));
 }
 
 #define FIO_TIMEOUT         100
@@ -618,6 +592,9 @@ int vdi_clear_memory(unsigned long core_idx, PhysicalAddress addr, int len, int 
     vpudrv_buffer_t vdb;
     int i;
     Uint8*  zero;
+#ifdef PLATFORM_SOC
+    unsigned long offset;
+#endif
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
@@ -646,8 +623,13 @@ int vdi_clear_memory(unsigned long core_idx, PhysicalAddress addr, int len, int 
 
     zero = (Uint8*)osal_malloc(len);
     osal_memset((void*)zero, 0x00, len);
-    vc_memcpy_s2d(zero, addr, len);
 
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)vdb.phys_addr;
+    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), zero, len);
+#else
+    pcie_memcpy_s2d(addr, zero, len);
+#endif
     if (vpu_flush_dcache(&vdb) < 0) {
         VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
     }
@@ -663,6 +645,9 @@ int vdi_set_memory(unsigned long core_idx, PhysicalAddress addr, int len, int en
     vpudrv_buffer_t vdb;
     int i;
     Uint8*  zero;
+#ifdef PLATFORM_SOC
+    unsigned long offset;
+#endif
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
@@ -691,7 +676,13 @@ int vdi_set_memory(unsigned long core_idx, PhysicalAddress addr, int len, int en
 
     zero = (Uint8*)osal_malloc(len);
     osal_memset((void*)zero, data, len);
-    vc_memcpy_s2d(zero, addr, len);
+
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)vdb.phys_addr;
+    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), zero, len);
+#else
+	pcie_memcpy_s2d(addr, zero, len);
+#endif
     if (vpu_flush_dcache(&vdb) < 0) {
         VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
     }
@@ -706,7 +697,9 @@ int vdi_write_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char
     vdi_info_t *vdi;
     vpudrv_buffer_t vdb;
     int i;
+#ifdef PLATFORM_SOC
     unsigned long offset;
+#endif
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
@@ -737,10 +730,13 @@ int vdi_write_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char
         return -1;
     }
 
-    offset = addr - (unsigned long)vdb.phys_addr;
     swap_endian(core_idx, data, len, endian);
-    vc_memcpy_s2d(data, addr, len);
-
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)vdb.phys_addr;
+    osal_memcpy((void *)((unsigned long)vdb.virt_addr+offset), data, len);
+#else
+    pcie_memcpy_s2d(addr, data, len);
+#endif
     if (vdb.is_cached) {
         if (vpu_flush_dcache(&vdb) < 0) {
             VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
@@ -756,7 +752,9 @@ int vdi_read_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char 
     vdi_info_t *vdi;
     vpudrv_buffer_t vdb;
     int i;
+#ifdef PLATFORM_SOC
     unsigned long offset;
+#endif
 
     if (core_idx >= MAX_NUM_VPU_CORE)
         return -1;
@@ -781,19 +779,22 @@ int vdi_read_memory(unsigned long core_idx, PhysicalAddress addr, unsigned char 
     if (!vdb.size)
         return -1;
 
-    offset = addr - (unsigned long)vdb.phys_addr;
     if (vpu_invalidate_dcache(&vdb) < 0) {
         VLOG(ERR, "[VDI] fail to fluch dcache mem addr 0x%lx size=%d\n", vdb.phys_addr, vdb.size);
         return -1;
     }
-
-    vc_memcpy_d2s(data, addr, len);
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)vdb.phys_addr;
+    osal_memcpy(data, (const void *)((unsigned long)vdb.virt_addr+offset), len);
+#else
+    pcie_memcpy_d2s(data, addr, len);
+#endif
     swap_endian(core_idx, data, len,  endian);
 
     return len;
 }
 
-int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTypes, int instIndex)
+int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, char* buf_name, int instIndex)
 {
     vdi_info_t *vdi;
     int i;
@@ -812,25 +813,14 @@ int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTyp
     vdb.core_idx = core_idx;
     vdb.size = vb->size;
 
-    if (vpu_allocate_physical_memory(&vdb) < 0)
+    if (vpu_allocate_physical_memory(&vdb, buf_name) < 0)
     {
-        VLOG(ERR, "[VDI] fail to vdi_allocate_dma_memory type:%d, size=%d\n", memTypes, vdb.size);
+        VLOG(ERR, "[VDI] fail to vdi_allocate_dma_memory type:%s, size=%d\n", buf_name, vdb.size);
         return -1;
     }
 
     vb->phys_addr = (unsigned long)vdb.phys_addr;
     vb->base = (unsigned long)vdb.base;
-
-    //map to virtual address
-    //vdb.virt_addr = (unsigned long)phys_to_virt(vdb.phys_addr);
-    vdb.virt_addr = vdb.base;
-
-    if ((void *)vdb.virt_addr == NULL)
-    {
-        memset(vb, 0x00, sizeof(vpu_buffer_t));
-        return -1;
-    }
-
     vb->virt_addr = vdb.virt_addr;
 
     vmem_lock(core_idx);
@@ -852,8 +842,8 @@ int vdi_allocate_dma_memory(unsigned long core_idx, vpu_buffer_t *vb, int memTyp
     }
     vmem_unlock(core_idx);
 
-    VLOG(INFO, "[VDI] vdi_allocate_dma_memory, physaddr=0x%llx, virtaddr=0x%llx~0x%llx, size=%d, memType=%d, count:%d\n",
-       vb->phys_addr, vb->virt_addr, vb->virt_addr + vb->size, vb->size, memTypes, vdi->vpu_buffer_pool_count);
+    VLOG(INFO, "[VDI] vdi_allocate_dma_memory, physaddr=0x%llx, virtaddr=0x%llx~0x%llx, size=%d, mem type:%s, count:%d\n",
+       vb->phys_addr, vb->virt_addr, vb->virt_addr + vb->size, vb->size, buf_name, vdi->vpu_buffer_pool_count);
 
     return 0;
 }
@@ -1552,7 +1542,7 @@ int vdi_release_instance(unsigned long core_idx)
 
 int vdi_get_suspend_state(void)
 {
-#ifdef VPU_SUPPORT_CLOCK_CONTROL
+#ifdef VC_SUPPORT_CLOCK_CONTROL
     return vpu_get_suspend_state();
 #else
     return 0;

@@ -6,6 +6,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/kthread.h>
+#include <linux/slab.h>
 #include <uapi/linux/sched/types.h>
 
 #include "vpss_hal.h"
@@ -52,22 +53,23 @@ struct vpss_convert_to_bak {
 	struct vip_rect chn_rect;
 };
 
-static struct vpss_task_ctx task_ctx;
-static struct vpss_device *vpss_dev;
-struct vpss_convert_to_bak convert_to_bak[VPSS_MAX];
+struct vpss_hal {
+	struct vpss_task_ctx task_ctx;
+	struct vpss_convert_to_bak convert_to_bak[VPSS_MAX];
+	unsigned short reset_time[VPSS_MAX];
+	unsigned char core_last_sign[VPSS_MAX];
+	unsigned char g_is_init;
+};
 
 int work_mask = 0xff; //default vpss_v + vpss_t
 int avail_mask = 0xff;
 int sche_thread_enable = 1;
-unsigned short reset_time[VPSS_MAX];
-unsigned char core_last_sign[VPSS_MAX];
-static unsigned char g_is_init = false;
 
 module_param(work_mask, int, 0644);
 
 module_param(sche_thread_enable, int, 0644);
 
-static void show_hw_state(void)
+static void show_hw_state(struct vpss_device *vpss_dev)
 {
 	u8 state[VPSS_MAX];
 	u8 i;
@@ -80,7 +82,7 @@ static void show_hw_state(void)
 		state[7], state[8], state[9]);
 }
 
-static int find_available_dev(u8 chn_num, struct vpss_hal_grp_cfg cfg, int after_core)
+static int find_available_dev(struct vpss_device *vpss_dev, u8 chn_num, struct vpss_hal_grp_cfg cfg, int after_core)
 {
 	int i;
 	int start_idx = VPSS_V0;
@@ -88,6 +90,7 @@ static int find_available_dev(u8 chn_num, struct vpss_hal_grp_cfg cfg, int after
 	//int dev_num = 4;
 	u8 mask = 0, mask_tmp;
 	u8 user_mask = BIT(chn_num) - 1;
+	struct vpss_hal *hal = (struct vpss_hal *)vpss_dev->vpss_hal;
 
 	for (i = start_idx; i <= end_idx; i++)
 		if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE))
@@ -97,7 +100,7 @@ static int find_available_dev(u8 chn_num, struct vpss_hal_grp_cfg cfg, int after
 		mask_tmp = mask;
 		mask_tmp &= user_mask;
 		if (!(user_mask ^ mask_tmp)){
-			if (cfg.addr[2] && core_last_sign[i]){ // 3chn format limit
+			if (cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
 				after_core = i;
 				mask = mask >> 1;
 				continue;
@@ -115,7 +118,7 @@ static int find_available_dev(u8 chn_num, struct vpss_hal_grp_cfg cfg, int after
 		else { // slt scene, single core, find alternative core
 			for (i = VPSS_V0; i < VPSS_MAX; ++i) {
 				if ((avail_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-					if (cfg.addr[2] && core_last_sign[i])
+					if (cfg.addr[2] && hal->core_last_sign[i])
 						continue;
 					return i;
 				}
@@ -126,9 +129,10 @@ static int find_available_dev(u8 chn_num, struct vpss_hal_grp_cfg cfg, int after
 	return -1;
 }
 
-static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg cfg)
+static int job_check_hw_ready(struct vpss_device *vpss_dev, bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg cfg)
 {
 	int i, start_core, after_core;
+	struct vpss_hal *hal = (struct vpss_hal *)vpss_dev->vpss_hal;
 
 	if (is_fbd && (chn_num > FBD_MAX_CHN)) {
 		TRACE_VPSS(DBG_ERR, "FBD maximum number of channels(%d), job chn num(%d).\n",
@@ -142,7 +146,7 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 	if (cfg.bm_scene) {
 		for (i = start_core; i < VPSS_MAX; ++i) {
 			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-				if ((!is_fbd) && cfg.addr[2] && core_last_sign[i]){ // 3chn format limit
+				if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
 					after_core = i;
 					continue;
 				}
@@ -153,7 +157,7 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 			return -1;
 		for (i = VPSS_V0; i < VPSS_T0; ++i) {
 			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-				if (cfg.addr[2] && core_last_sign[i])
+				if (cfg.addr[2] && hal->core_last_sign[i])
 					continue;
 				return i;
 			}
@@ -166,7 +170,7 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 	if (chn_num == 1) {
 		for (i = start_core; i < VPSS_MAX; ++i) {
 			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)){
-				if ((!is_fbd) && cfg.addr[2] && core_last_sign[i]){ // 3chn format limit
+				if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
 					after_core = i;
 					continue;
 				}
@@ -179,14 +183,14 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 	} else if (chn_num == 2) {
 		if ((atomic_read(&vpss_dev->vpss_cores[VPSS_T0].state) == VIP_IDLE)
 			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_T1].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && core_last_sign[VPSS_T0]) // 3chn format limit
+			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_T0]) // 3chn format limit
 				after_core = i;
 			else
 				return VPSS_T0;
 		}
 		if ((atomic_read(&vpss_dev->vpss_cores[VPSS_T2].state) == VIP_IDLE)
 			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_T3].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && core_last_sign[VPSS_T2]) // 3chn format limit
+			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_T2]) // 3chn format limit
 				after_core = i;
 			else
 				return VPSS_T2;
@@ -194,7 +198,7 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 		if ((work_mask & BIT(VPSS_D0))  && (work_mask & BIT(VPSS_D1))
 			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_D0].state) == VIP_IDLE)
 			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_D1].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && core_last_sign[VPSS_D0]) // 3chn format limit
+			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_D0]) // 3chn format limit
 				after_core = i;
 			else
 				return VPSS_D0;
@@ -204,7 +208,7 @@ static int job_check_hw_ready(bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg c
 			return -1;
 	}
 
-	return find_available_dev(chn_num, cfg, after_core);
+	return find_available_dev(vpss_dev, chn_num, cfg, after_core);
 }
 
 static int online_get_dev(struct vpss_job *job)
@@ -212,22 +216,23 @@ static int online_get_dev(struct vpss_job *job)
 	u8 i;
 	u8 chn_num = job->cfg.chn_num;
 	unsigned long flags;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
 
-	if (task_ctx.online_dev_max_num >= chn_num)
+	if (hal->task_ctx.online_dev_max_num >= chn_num)
 		return 0;
 
-	for (i = task_ctx.online_dev_max_num; i < chn_num; ++i)
-		if (!(atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
+	for (i = hal->task_ctx.online_dev_max_num; i < chn_num; ++i)
+		if (!(atomic_read(&job->dev->vpss_cores[i].state) == VIP_IDLE)) {
 			return -1;
 		}
 
-	spin_lock_irqsave(&vpss_dev->lock, flags);
-	for (i = task_ctx.online_dev_max_num; i < chn_num; i++) {
-		atomic_set(&vpss_dev->vpss_cores[i].state, VIP_ONLINE);
-		vpss_dev->vpss_cores[i].is_online = 1;
+	spin_lock_irqsave(&job->dev->lock, flags);
+	for (i = hal->task_ctx.online_dev_max_num; i < chn_num; i++) {
+		atomic_set(&job->dev->vpss_cores[i].state, VIP_ONLINE);
+		job->dev->vpss_cores[i].is_online = 1;
 	}
-	task_ctx.online_dev_max_num = chn_num;
-	spin_unlock_irqrestore(&vpss_dev->lock, flags);
+	hal->task_ctx.online_dev_max_num = chn_num;
+	spin_unlock_irqrestore(&job->dev->lock, flags);
 
 	return 0;
 }
@@ -245,12 +250,13 @@ static bool check_convert_to_addr(struct vpss_hw_cfg *cfg, u8 chn_num){
 static int job_convert_to_min_update(struct vpss_job *job, int dev_idx, u8 *chn_idx){
 	struct vpss_hw_cfg *cfg = &job->cfg;
 	u8 i, chn_id;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
 
-	convert_to_bak[dev_idx].enable = true;
-	convert_to_bak[dev_idx].grp_src_size = cfg->grp_cfg.src_size;
-	convert_to_bak[dev_idx].grp_bytesperline[0] = cfg->grp_cfg.bytesperline[0];
-	convert_to_bak[dev_idx].grp_bytesperline[1] = cfg->grp_cfg.bytesperline[1];
-	convert_to_bak[dev_idx].grp_crop = cfg->grp_cfg.crop;
+	hal->convert_to_bak[dev_idx].enable = true;
+	hal->convert_to_bak[dev_idx].grp_src_size = cfg->grp_cfg.src_size;
+	hal->convert_to_bak[dev_idx].grp_bytesperline[0] = cfg->grp_cfg.bytesperline[0];
+	hal->convert_to_bak[dev_idx].grp_bytesperline[1] = cfg->grp_cfg.bytesperline[1];
+	hal->convert_to_bak[dev_idx].grp_crop = cfg->grp_cfg.crop;
 
 	cfg->grp_cfg.src_size.width = 16;
 	cfg->grp_cfg.src_size.height = 16;
@@ -263,12 +269,12 @@ static int job_convert_to_min_update(struct vpss_job *job, int dev_idx, u8 *chn_
 
 	for (i = dev_idx; i < (dev_idx + cfg->chn_num); i++) {
 		chn_id = chn_idx[i - dev_idx];
-		convert_to_bak[i].chn_src_size = cfg->chn_cfg[chn_id].src_size;
-		convert_to_bak[i].chn_crop = cfg->chn_cfg[chn_id].crop;
-		convert_to_bak[i].chn_bytesperline[0] = cfg->chn_cfg[chn_id].bytesperline[0];
-		convert_to_bak[i].chn_bytesperline[1] = cfg->chn_cfg[chn_id].bytesperline[1];
-		convert_to_bak[i].chn_dst_size = cfg->chn_cfg[chn_id].dst_size;
-		convert_to_bak[i].chn_rect = cfg->chn_cfg[chn_id].dst_rect;
+		hal->convert_to_bak[i].chn_src_size = cfg->chn_cfg[chn_id].src_size;
+		hal->convert_to_bak[i].chn_crop = cfg->chn_cfg[chn_id].crop;
+		hal->convert_to_bak[i].chn_bytesperline[0] = cfg->chn_cfg[chn_id].bytesperline[0];
+		hal->convert_to_bak[i].chn_bytesperline[1] = cfg->chn_cfg[chn_id].bytesperline[1];
+		hal->convert_to_bak[i].chn_dst_size = cfg->chn_cfg[chn_id].dst_size;
+		hal->convert_to_bak[i].chn_rect = cfg->chn_cfg[chn_id].dst_rect;
 
 		cfg->chn_cfg[chn_id].src_size = cfg->grp_cfg.src_size;
 		cfg->chn_cfg[chn_id].crop = cfg->grp_cfg.crop;
@@ -298,6 +304,8 @@ static int job_try_schedule(struct vpss_job *job)
 							? job->online_param.r_in.start : 0;
 	u16 online_r_end = (job->is_online && job->online_param.is_tile)
 							? job->online_param.r_in.end : 0;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
+	struct scaler *scaler = job->dev->scaler;
 
 	for (i = 0; i < VPSS_MAX_CHN_NUM; i++)
 		if (cfg->chn_enable[i]) {
@@ -305,23 +313,23 @@ static int job_try_schedule(struct vpss_job *job)
 			j++;
 		}
 
-	spin_lock_irqsave(&vpss_dev->lock, flags);
-	if (!g_is_init) {
-		vpss_hw_init();
-		g_is_init = true;
+	spin_lock_irqsave(&job->dev->lock, flags);
+	if (!hal->g_is_init) {
+		vpss_hw_init(scaler);
+		hal->g_is_init = true;
 	}
 	if (job->is_online)
 		dev_idx = 0;
 	else
-		dev_idx = job_check_hw_ready(is_fbd, chn_num, cfg->grp_cfg);
+		dev_idx = job_check_hw_ready(job->dev, is_fbd, chn_num, cfg->grp_cfg);
 	if (dev_idx < 0) {
 		TRACE_VPSS(DBG_DEBUG, "Grp(%d), hw not ready.\n", job->grp_id);
-		show_hw_state();
-		spin_unlock_irqrestore(&vpss_dev->lock, flags);
+		show_hw_state(job->dev);
+		spin_unlock_irqrestore(&job->dev->lock, flags);
 		return -1;
 	}
 
-	convert_to_bak[dev_idx].enable = false;
+	hal->convert_to_bak[dev_idx].enable = false;
 	if (check_convert_to_addr(cfg, chn_num)){
 		job_convert_to_min_update(job, dev_idx, chn_idx);
 	}
@@ -346,9 +354,9 @@ static int job_try_schedule(struct vpss_job *job)
 
 	if(job->cfg.grp_cfg.pixelformat == PIXEL_FORMAT_NV12 ||
 		job->cfg.grp_cfg.pixelformat == PIXEL_FORMAT_NV21)
-		core_last_sign[dev_idx] = true;
+		hal->core_last_sign[dev_idx] = true;
 	else
-		core_last_sign[dev_idx] = false;
+		hal->core_last_sign[dev_idx] = false;
 
 	TRACE_VPSS(DBG_DEBUG, "Scheduling Grp(%d), tile(%d).\n",
 		job->grp_id, job->is_tile);
@@ -356,41 +364,41 @@ static int job_try_schedule(struct vpss_job *job)
 	for (i = dev_idx; i < dev_idx_max; i++) {
 		chn_id = chn_idx[i - dev_idx];
 		dev_list[chn_id] = i;
-		atomic_set(&vpss_dev->vpss_cores[i].state, VIP_RUNNING);
-		vpss_dev->vpss_cores[i].job = (void *)job;
-		vpss_dev->vpss_cores[i].map_chn = chn_id;
-		vpss_dev->vpss_cores[i].start_cnt++;
+		atomic_set(&job->dev->vpss_cores[i].state, VIP_RUNNING);
+		job->dev->vpss_cores[i].job = (void *)job;
+		job->dev->vpss_cores[i].map_chn = chn_id;
+		job->dev->vpss_cores[i].start_cnt++;
 		//job->dev_idx[i] = dev_idx;
 		job->vpss_dev_mask |= BIT(i);
 
-		if (vpss_dev->vpss_cores[i].clk_vpss)
-			clk_enable(vpss_dev->vpss_cores[i].clk_vpss);
+		if (job->dev->vpss_cores[i].clk_vpss)
+			clk_enable(job->dev->vpss_cores[i].clk_vpss);
 
 		if (i == dev_idx)
-			img_update(i, true, &cfg->grp_cfg);
+			img_update(scaler, i, true, &cfg->grp_cfg);
 		else
-			img_update(i, false, &cfg->grp_cfg); //use dma share
-		sc_update(i, &cfg->chn_cfg[chn_id]);
+			img_update(scaler, i, false, &cfg->grp_cfg); //use dma share
+		sc_update(scaler, i, &cfg->chn_cfg[chn_id]);
 
 		if (job->is_tile) {
 			out_l_end = job->is_online ? job->online_param.l_out.end :
 				((job->cfg.chn_cfg[chn_id].src_size.width >> 1) - 1);
-			vpss_dev->vpss_cores[i].tile_mode = sclr_tile_cal_size(i, out_l_end);
-			job->tile_mode |= vpss_dev->vpss_cores[i].tile_mode;
+			job->dev->vpss_cores[i].tile_mode = sclr_tile_cal_size(scaler, i, out_l_end);
+			job->tile_mode |= job->dev->vpss_cores[i].tile_mode;
 		}
 
 		if (job->is_v_tile) {
-			vpss_dev->vpss_cores[i].tile_mode |= (sclr_v_tile_cal_size(i,
+			job->dev->vpss_cores[i].tile_mode |= (sclr_v_tile_cal_size(scaler, i,
 				(job->cfg.chn_cfg[chn_id].src_size.height >> 1) - 1)) << SCL_V_TILE_OFFSET;
-			job->tile_mode |= vpss_dev->vpss_cores[i].tile_mode;
+			job->tile_mode |= job->dev->vpss_cores[i].tile_mode;
 			if((job->tile_mode & SCL_TILE_BOTH) == SCL_TILE_BOTH)
 				job->tile_mode |= (job->tile_mode & SCL_V_TILE_BOTH) << SCL_V_TILE_OFFSET;
 		}
 
 		if (i == (dev_idx_max - 1))
-			top_update(i, false, is_fbd); //last chn,not share
+			top_update(scaler, i, false, is_fbd); //last chn,not share
 		else
-			top_update(i, true, is_fbd);
+			top_update(scaler, i, true, is_fbd);
 	}
 
 	if (job->is_tile) {
@@ -398,14 +406,14 @@ static int job_try_schedule(struct vpss_job *job)
 			job->tile_mode &= ~SCL_TILE_LEFT;
 			job->is_work_on_r_tile = false;
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_left_tile_cfg(i, online_l_width))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_left_tile_cfg(scaler, i, online_l_width))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		} else if (job->tile_mode & SCL_TILE_RIGHT) {
 			job->tile_mode &= ~SCL_TILE_RIGHT;
 			job->is_work_on_r_tile = true;
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_right_tile_cfg(i, online_r_start, online_r_end))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_right_tile_cfg(scaler, i, online_r_start, online_r_end))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		}
 	}
 
@@ -413,16 +421,16 @@ static int job_try_schedule(struct vpss_job *job)
 		if ((job->tile_mode) & SCL_TILE_TOP) {
 			job->tile_mode &= ~(SCL_TILE_TOP);
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_top_tile_cfg(i, false))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_top_tile_cfg(scaler, i, false))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		} else if ((job->tile_mode) & SCL_TILE_DOWN) {
 			job->tile_mode &= ~(SCL_TILE_DOWN);
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_down_tile_cfg(i, false))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_down_tile_cfg(scaler, i, false))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		}
 	}
-	spin_unlock_irqrestore(&vpss_dev->lock, flags);
+	spin_unlock_irqrestore(&job->dev->lock, flags);
 	job->job_state = JOB_WORKING;
 
 	TRACE_VPSS(DBG_INFO, "Grp(%d) job working, chn enable(%d %d %d %d), dev(%d %d %d %d).\n",
@@ -431,15 +439,15 @@ static int job_try_schedule(struct vpss_job *job)
 		dev_list[2], dev_list[3]);
 
 	for (i = dev_idx; i < dev_idx_max; i++)
-		ktime_get_ts64(&vpss_dev->vpss_cores[i].ts_start);
+		ktime_get_ts64(&job->dev->vpss_cores[i].ts_start);
 
-	img_start(dev_idx, chn_num);
+	img_start(scaler, dev_idx, chn_num);
 
 	return 0;
 }
 
 
-static void vpss_hal_reset(u32 vpss_dev_mask, bool is_online)
+static void vpss_hal_reset(struct vpss_device *vpss_dev, u32 vpss_dev_mask, bool is_online)
 {
 	unsigned long flags;
 	int i;
@@ -448,7 +456,7 @@ static void vpss_hal_reset(u32 vpss_dev_mask, bool is_online)
 	for (i = 0; i < VPSS_MAX; i++) {
 		if (!(vpss_dev_mask & BIT(i)))
 			continue;
-		img_reset(i);
+		img_reset(vpss_dev->scaler, i);
 		vpss_dev->vpss_cores[i].job = NULL;
 		vpss_dev->vpss_cores[i].intr_status = 0;
 		if (is_online)
@@ -459,15 +467,15 @@ static void vpss_hal_reset(u32 vpss_dev_mask, bool is_online)
 	spin_unlock_irqrestore(&vpss_dev->lock, flags);
 }
 
-int hal_try_schedule(void)
+int hal_try_schedule(struct vpss_task_ctx *task_ctx)
 {
 	struct vpss_job *job = NULL;
 	unsigned long flags, flags_job;
 	int ret = -1;
 
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	while (!list_empty(&task_ctx.job_wait_queue)) {
-		job = list_first_entry(&task_ctx.job_wait_queue,
+	spin_lock_irqsave(&task_ctx->task_lock, flags);
+	while (!list_empty(&task_ctx->job_wait_queue)) {
+		job = list_first_entry(&task_ctx->job_wait_queue,
 			struct vpss_job, list);
 
 		spin_lock_irqsave(&job->lock, flags_job);
@@ -476,9 +484,9 @@ int hal_try_schedule(void)
 				spin_unlock_irqrestore(&job->lock, flags_job);
 				break;
 			}
-			list_move_tail(&job->list, &task_ctx.job_online_queue);
-			task_ctx.online_status[job->grp_id] = VPSS_ONLINE_READY;
-			TRACE_VPSS(DBG_DEBUG, "online max chn num:%d.\n", task_ctx.online_dev_max_num);
+			list_move_tail(&job->list, &task_ctx->job_online_queue);
+			task_ctx->online_status[job->grp_id] = VPSS_ONLINE_READY;
+			TRACE_VPSS(DBG_DEBUG, "online max chn num:%d.\n", task_ctx->online_dev_max_num);
 		} else {
 			if (job_try_schedule(job)) {
 				//TRACE_VPSS(DBG_DEBUG, "Grp(%d), try schedule fail, wait for next time.\n",
@@ -492,7 +500,7 @@ int hal_try_schedule(void)
 
 		ret = 0;
 	}
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+	spin_unlock_irqrestore(&task_ctx->task_lock, flags);
 
 	return ret;
 }
@@ -516,21 +524,21 @@ static int schedule_thread(void *arg)
 			break;
 
 		ctx->available = 0;
-		hal_try_schedule();
+		hal_try_schedule(ctx);
 	}
 
 	return 0;
 }
 
-int vpss_hal_try_schedule(void)
+int vpss_hal_try_schedule(struct vpss_task_ctx *task_ctx)
 {
 	int ret = 0;
 
 	if (sche_thread_enable) {
-		task_ctx.available = 1;
-		wake_up_interruptible(&task_ctx.wait);
+		task_ctx->available = 1;
+		wake_up_interruptible(&task_ctx->wait);
 	} else {
-		ret = hal_try_schedule();
+		ret = hal_try_schedule(task_ctx);
 	}
 
 	return ret;
@@ -539,89 +547,90 @@ int vpss_hal_try_schedule(void)
 int vpss_hal_init(struct vpss_device *dev)
 {
 	int i;
-	// struct sched_param tsk;
+	struct vpss_hal *hal;
+	dev->vpss_hal = (void *)kmalloc(sizeof(struct vpss_hal), GFP_ATOMIC);
+	dev->scaler = (struct scaler *)kmalloc(sizeof(struct scaler), GFP_ATOMIC);
+	hal = (struct vpss_hal *)dev->vpss_hal;
+	dev->scaler->bmdi = dev->bmdi;
 
-	vpss_dev = dev;
-	init_waitqueue_head(&task_ctx.wait);
-	spin_lock_init(&task_ctx.task_lock);
-	INIT_LIST_HEAD(&task_ctx.job_wait_queue);
-	INIT_LIST_HEAD(&task_ctx.job_online_queue);
-	task_ctx.online_dev_max_num = 0;
-	task_ctx.available = 0;
-	task_ctx.is_suspend = 0;
+	init_waitqueue_head(&hal->task_ctx.wait);
+	spin_lock_init(&hal->task_ctx.task_lock);
+	INIT_LIST_HEAD(&hal->task_ctx.job_wait_queue);
+	INIT_LIST_HEAD(&hal->task_ctx.job_online_queue);
+	hal->task_ctx.online_dev_max_num = 0;
+	hal->task_ctx.available = 0;
+	hal->task_ctx.is_suspend = 0;
+	hal->g_is_init = 0;
 
 	for (i = 0; i < VPSS_ONLINE_NUM; i++)
-		task_ctx.online_status[i] = VPSS_ONLINE_UNEXIST;
+		hal->task_ctx.online_status[i] = VPSS_ONLINE_UNEXIST;
 
 	for (i = 0; i < 2; i++) {
-		task_ctx.cmdq_buf[i].cmdq_phy_addr = 0;
-		task_ctx.cmdq_buf[i].cmdq_vir_addr = NULL;
-		task_ctx.cmdq_buf[i].cmdq_buf_size = 0;
+		hal->task_ctx.cmdq_buf[i].cmdq_phy_addr = 0;
+		hal->task_ctx.cmdq_buf[i].cmdq_vir_addr = NULL;
+		hal->task_ctx.cmdq_buf[i].cmdq_buf_size = 0;
 	}
 
 	if (sche_thread_enable) {
-		task_ctx.thread = kthread_run(schedule_thread, &task_ctx,
+		hal->task_ctx.thread = kthread_run(schedule_thread, &hal->task_ctx,
 			"vpss_task_schedule");
-		if (IS_ERR(task_ctx.thread))
+		if (IS_ERR(hal->task_ctx.thread))
 			TRACE_VPSS(DBG_ERR, "failed to create vpss kthread\n");
-
-		// tsk.sched_priority = MAX_RT_PRIO - 4;
-		// ret = sched_setscheduler(task_ctx.thread, SCHED_FIFO, &tsk);
-		// if (ret)
-		// 	TRACE_VPSS(DBG_WARN, "vpss schedule thread priority update failed: %d\n", ret);
 	}
 
 	return 0;
 }
 
-void vpss_hal_deinit(void)
+void vpss_hal_deinit(struct vpss_device *dev)
 {
 	int ret;
 	struct vpss_job *job;
 	unsigned long flags;
+	struct vpss_hal *hal = (struct vpss_hal *)dev->vpss_hal;
 
 	if (sche_thread_enable) {
-		if (!task_ctx.thread) {
+		if (!hal->task_ctx.thread) {
 			TRACE_VPSS(DBG_ERR, "vpss schedule thread not initialized yet\n");
 			return;
 		}
-		ret = kthread_stop(task_ctx.thread);
+		ret = kthread_stop(hal->task_ctx.thread);
 		if (ret)
 			TRACE_VPSS(DBG_ERR, "fail to stop vpss thread, err=%d\n", ret);
 
-		task_ctx.thread = NULL;
+		hal->task_ctx.thread = NULL;
 	}
 
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	while (!list_empty(&task_ctx.job_wait_queue)) {
-		job = list_first_entry(&task_ctx.job_wait_queue,
+	spin_lock_irqsave(&hal->task_ctx.task_lock, flags);
+	while (!list_empty(&hal->task_ctx.job_wait_queue)) {
+		job = list_first_entry(&hal->task_ctx.job_wait_queue,
 				struct vpss_job, list);
 		list_del_init(&job->list);
 	}
-	while (!list_empty(&task_ctx.job_online_queue)) {
-		job = list_first_entry(&task_ctx.job_online_queue,
+	while (!list_empty(&hal->task_ctx.job_online_queue)) {
+		job = list_first_entry(&hal->task_ctx.job_online_queue,
 				struct vpss_job, list);
 		list_del_init(&job->list);
 	}
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
-
-	vpss_dev = NULL;
+	spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
+	kfree(dev->scaler);
+	kfree(dev->vpss_hal);
 }
 
 int vpss_hal_push_job(struct vpss_job *job)
 {
 	unsigned long flags, flags_job;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
 
 	if (!job || !job->cfg.chn_num)
 		return -1;
 
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	list_add_tail(&job->list, &task_ctx.job_wait_queue);
+	spin_lock_irqsave(&hal->task_ctx.task_lock, flags);
+	list_add_tail(&job->list, &hal->task_ctx.job_wait_queue);
 
 	spin_lock_irqsave(&job->lock, flags_job);
 	job->job_state = JOB_WAIT;
 	spin_unlock_irqrestore(&job->lock, flags_job);
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+	spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 
 	return 0;
 }
@@ -629,17 +638,18 @@ int vpss_hal_push_job(struct vpss_job *job)
 int vpss_hal_push_online_job(struct vpss_job *job)
 {
 	unsigned long flags, flags_job;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
 
 	if (!job || !job->cfg.chn_num)
 		return -1;
 
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	list_add_tail(&job->list, &task_ctx.job_online_queue);
+	spin_lock_irqsave(&hal->task_ctx.task_lock, flags);
+	list_add_tail(&job->list, &hal->task_ctx.job_online_queue);
 
 	spin_lock_irqsave(&job->lock, flags_job);
 	job->job_state = JOB_WAIT;
 	spin_unlock_irqrestore(&job->lock, flags_job);
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+	spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 
 	return 0;
 }
@@ -650,15 +660,16 @@ int vpss_hal_remove_job(struct vpss_job *job)
 	unsigned long flags, flags_job;
 	struct vpss_job *job_item;
 	enum job_state job_state;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
 
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
+	spin_lock_irqsave(&hal->task_ctx.task_lock, flags);
 	spin_lock_irqsave(&job->lock, flags_job);
 
 	job_state = job->job_state;
 
 	if ((job_state == JOB_WORKING) || (job_state == JOB_HALF)) {
 		spin_unlock_irqrestore(&job->lock, flags_job);
-		spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+		spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 
 		//wait hw done
 		while (--count > 0) {
@@ -675,43 +686,44 @@ int vpss_hal_remove_job(struct vpss_job *job)
 			for (i = 0; i < VPSS_MAX; i++) {
 				if (!(job->vpss_dev_mask & BIT(i)))
 					continue;
-				vpss_stauts(i);
+				vpss_stauts(job->dev->scaler, i);
 				// BIT(10) always reset; BIT(11) never reset
-				if((work_mask & BIT(10)) || ((!reset_time[i]) && ((work_mask & BIT(11)) == 0))){
-					vpss_hal_reset(job->vpss_dev_mask, job->is_online);
-					reset_time[i] = 1000;
+				if((work_mask & BIT(10)) || ((!hal->reset_time[i]) && ((work_mask & BIT(11)) == 0))){
+					vpss_hal_reset(job->dev, job->vpss_dev_mask, job->is_online);
+					hal->reset_time[i] = 1000;
 				} else {
 					work_mask &= (~BIT(i));
 					avail_mask &= (~BIT(i));
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 				}
-				if (vpss_dev->vpss_cores[i].clk_vpss &&
-					__clk_is_enabled(vpss_dev->vpss_cores[i].clk_vpss))
-					clk_disable(vpss_dev->vpss_cores[i].clk_vpss);
+				if (job->dev->vpss_cores[i].clk_vpss &&
+					__clk_is_enabled(job->dev->vpss_cores[i].clk_vpss))
+					clk_disable(job->dev->vpss_cores[i].clk_vpss);
 			}
 		}
 		return 0;
 	} else if (job_state == JOB_WAIT) {
-		list_for_each_entry(job_item, &task_ctx.job_wait_queue, list) {
+		list_for_each_entry(job_item, &hal->task_ctx.job_wait_queue, list) {
 			if (job_item == job) {
 				job->job_state = JOB_INVALID;
 				list_del_init(&job->list);
 				spin_unlock_irqrestore(&job->lock, flags_job);
-				spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+				spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 				return 0;
 			}
 		}
-		list_for_each_entry(job_item, &task_ctx.job_online_queue, list) {
+		list_for_each_entry(job_item, &hal->task_ctx.job_online_queue, list) {
 			if (job_item == job) {
 				job->job_state = JOB_INVALID;
 				list_del_init(&job->list);
 				spin_unlock_irqrestore(&job->lock, flags_job);
-				spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+				spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 				return 0;
 			}
 		}
 	}
 	spin_unlock_irqrestore(&job->lock, flags_job);
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
+	spin_unlock_irqrestore(&hal->task_ctx.task_lock, flags);
 
 	return 0;
 }
@@ -734,6 +746,8 @@ static int vpss_job_restart(struct vpss_job *job){
 							? job->online_param.r_in.start : 0;
 	u16 online_r_end = (job->is_online && job->online_param.is_tile)
 							? job->online_param.r_in.end : 0;
+	struct vpss_hal *hal = (struct vpss_hal *)job->dev->vpss_hal;
+	struct scaler *scaler = job->dev->scaler;
 
 	for (i = 0; i < VPSS_MAX_CHN_NUM; i++)
 		if (cfg->chn_enable[i]) {
@@ -741,10 +755,10 @@ static int vpss_job_restart(struct vpss_job *job){
 			j++;
 		}
 
-	cfg->grp_cfg.src_size = convert_to_bak[dev_idx].grp_src_size;
-	cfg->grp_cfg.bytesperline[0] = convert_to_bak[dev_idx].grp_bytesperline[0];
-	cfg->grp_cfg.bytesperline[1] = convert_to_bak[dev_idx].grp_bytesperline[1];
-	cfg->grp_cfg.crop = convert_to_bak[dev_idx].grp_crop;
+	cfg->grp_cfg.src_size = hal->convert_to_bak[dev_idx].grp_src_size;
+	cfg->grp_cfg.bytesperline[0] = hal->convert_to_bak[dev_idx].grp_bytesperline[0];
+	cfg->grp_cfg.bytesperline[1] = hal->convert_to_bak[dev_idx].grp_bytesperline[1];
+	cfg->grp_cfg.crop = hal->convert_to_bak[dev_idx].grp_crop;
 
 	if (cfg->grp_cfg.crop.width > VPSS_HW_LIMIT_WIDTH) { //output > 4608 ?
 		job->is_tile = true;
@@ -760,35 +774,35 @@ static int vpss_job_restart(struct vpss_job *job){
 		job->is_v_tile = false;
 	}
 
-	spin_lock_irqsave(&vpss_dev->lock, flags);
+	spin_lock_irqsave(&job->dev->lock, flags);
 	for (i = dev_idx; i < dev_idx_max; i++) {
 		chn_id = chn_idx[i - dev_idx];
 
-		cfg->chn_cfg[chn_id].src_size = convert_to_bak[i].chn_src_size;
-		cfg->chn_cfg[chn_id].crop = convert_to_bak[i].chn_crop;
-		cfg->chn_cfg[chn_id].bytesperline[0] = convert_to_bak[i].chn_bytesperline[0];
-		cfg->chn_cfg[chn_id].bytesperline[1] = convert_to_bak[i].chn_bytesperline[1];
-		cfg->chn_cfg[chn_id].dst_size = convert_to_bak[i].chn_dst_size;
-		cfg->chn_cfg[chn_id].dst_rect = convert_to_bak[i].chn_rect;
+		cfg->chn_cfg[chn_id].src_size = hal->convert_to_bak[i].chn_src_size;
+		cfg->chn_cfg[chn_id].crop = hal->convert_to_bak[i].chn_crop;
+		cfg->chn_cfg[chn_id].bytesperline[0] = hal->convert_to_bak[i].chn_bytesperline[0];
+		cfg->chn_cfg[chn_id].bytesperline[1] = hal->convert_to_bak[i].chn_bytesperline[1];
+		cfg->chn_cfg[chn_id].dst_size = hal->convert_to_bak[i].chn_dst_size;
+		cfg->chn_cfg[chn_id].dst_rect = hal->convert_to_bak[i].chn_rect;
 
-		atomic_set(&vpss_dev->vpss_cores[i].state, VIP_RUNNING);
+		atomic_set(&job->dev->vpss_cores[i].state, VIP_RUNNING);
 
 		if (i == dev_idx)
-			img_update(i, true, &cfg->grp_cfg);
+			img_update(scaler, i, true, &cfg->grp_cfg);
 		else
-			img_update(i, false, &cfg->grp_cfg); //use dma share
-		sc_update(i, &cfg->chn_cfg[chn_id]);
+			img_update(scaler, i, false, &cfg->grp_cfg); //use dma share
+		sc_update(scaler, i, &cfg->chn_cfg[chn_id]);
 
 		if (job->is_tile) {
-			vpss_dev->vpss_cores[i].tile_mode = sclr_tile_cal_size(i,
+			job->dev->vpss_cores[i].tile_mode = sclr_tile_cal_size(scaler, i,
 				(job->cfg.chn_cfg[chn_id].src_size.width >> 1) - 1);
-			job->tile_mode |= vpss_dev->vpss_cores[i].tile_mode;
+			job->tile_mode |= job->dev->vpss_cores[i].tile_mode;
 		}
 
 		if (job->is_v_tile) {
-			vpss_dev->vpss_cores[i].tile_mode |= (sclr_v_tile_cal_size(i,
+			job->dev->vpss_cores[i].tile_mode |= (sclr_v_tile_cal_size(scaler, i,
 				(job->cfg.chn_cfg[chn_id].src_size.height >> 1) - 1)) << SCL_V_TILE_OFFSET;
-			job->tile_mode |= vpss_dev->vpss_cores[i].tile_mode;
+			job->tile_mode |= job->dev->vpss_cores[i].tile_mode;
 			if((job->tile_mode & SCL_TILE_BOTH) == SCL_TILE_BOTH)
 				job->tile_mode |= (job->tile_mode & SCL_V_TILE_BOTH) << SCL_V_TILE_OFFSET;
 		}
@@ -798,14 +812,14 @@ static int vpss_job_restart(struct vpss_job *job){
 			job->tile_mode &= ~SCL_TILE_LEFT;
 			job->is_work_on_r_tile = false;
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_left_tile_cfg(i, online_l_width))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_left_tile_cfg(scaler, i, online_l_width))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		} else if (job->tile_mode & SCL_TILE_RIGHT) {
 			job->tile_mode &= ~SCL_TILE_RIGHT;
 			job->is_work_on_r_tile = true;
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_right_tile_cfg(i, online_r_start, online_r_end))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_right_tile_cfg(scaler, i, online_r_start, online_r_end))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		}
 	}
 
@@ -813,25 +827,25 @@ static int vpss_job_restart(struct vpss_job *job){
 		if ((job->tile_mode) & SCL_TILE_TOP) {
 			job->tile_mode &= ~(SCL_TILE_TOP);
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_top_tile_cfg(i, false))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_top_tile_cfg(scaler, i, false))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		} else if ((job->tile_mode) & SCL_TILE_DOWN) {
 			job->tile_mode &= ~(SCL_TILE_DOWN);
 			for (i = dev_idx; i < dev_idx_max; i++)
-				if (!img_down_tile_cfg(i, false))
-					atomic_set(&vpss_dev->vpss_cores[i].state, VIP_END);
+				if (!img_down_tile_cfg(scaler, i, false))
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
 		}
 	}
-	spin_unlock_irqrestore(&vpss_dev->lock, flags);
+	spin_unlock_irqrestore(&job->dev->lock, flags);
 
 	TRACE_VPSS(DBG_INFO, "Grp(%d) job working, chn enable(%d %d %d %d).\n",
 		job->grp_id, cfg->chn_enable[0], cfg->chn_enable[1],
 		cfg->chn_enable[2], cfg->chn_enable[3]);
 
-	convert_to_bak[dev_idx].enable = false;
+	hal->convert_to_bak[dev_idx].enable = false;
 	job->job_state = JOB_WORKING;
 
-	img_start(dev_idx, cfg->chn_num);
+	img_start(scaler, dev_idx, cfg->chn_num);
 
 	return 0;
 }
@@ -840,8 +854,10 @@ static void vpss_job_finish(struct vpss_job *job)
 {
 	u8 i, chn_id;
 	u32 max_duration = 0;
-	struct vpss_device *dev = vpss_dev;
+	struct vpss_device *dev = job->dev;
 	unsigned long flags_job;
+	struct vpss_hal *hal = (struct vpss_hal *)dev->vpss_hal;
+	struct scaler *scaler = dev->scaler;
 
 	spin_lock_irqsave(&job->lock, flags_job);
 	for (i = 0; i < VPSS_MAX; i++) {
@@ -861,7 +877,7 @@ static void vpss_job_finish(struct vpss_job *job)
 		return;
 	}
 
-	if (convert_to_bak[job->dev_idx_start].enable == true){
+	if (hal->convert_to_bak[job->dev_idx_start].enable == true){
 		vpss_job_restart(job);
 		spin_unlock_irqrestore(&job->lock, flags_job);
 		return;
@@ -873,14 +889,14 @@ static void vpss_job_finish(struct vpss_job *job)
 		for (i = 0; i < VPSS_MAX; i++) {
 			if (!(job->vpss_dev_mask & BIT(i)))
 				continue;
-			if (img_down_tile_cfg(i, (job->tile_mode & SCL_RIGHT_DOWN_TILE_FLAG)))
+			if (img_down_tile_cfg(scaler, i, (job->tile_mode & SCL_RIGHT_DOWN_TILE_FLAG)))
 				atomic_set(&dev->vpss_cores[i].state, VIP_RUNNING);
 			else
 				atomic_set(&dev->vpss_cores[i].state, VIP_END);
 		}
 		job->tile_mode &= ~SCL_RIGHT_DOWN_TILE_FLAG;
 		job->job_state = JOB_WORKING;
-		img_start(job->dev_idx_start, job->cfg.chn_num);
+		img_start(scaler, job->dev_idx_start, job->cfg.chn_num);
 		spin_unlock_irqrestore(&job->lock, flags_job);
 		return;
 	}
@@ -896,7 +912,7 @@ static void vpss_job_finish(struct vpss_job *job)
 		for (i = 0; i < VPSS_MAX; i++) {
 			if (!(job->vpss_dev_mask & BIT(i)))
 				continue;
-			if (img_right_tile_cfg(i, online_r_start, online_r_end))
+			if (img_right_tile_cfg(scaler, i, online_r_start, online_r_end))
 				atomic_set(&dev->vpss_cores[i].state, VIP_RUNNING);
 			else
 				atomic_set(&dev->vpss_cores[i].state, VIP_END);
@@ -908,7 +924,7 @@ static void vpss_job_finish(struct vpss_job *job)
 				for (i = 0; i < VPSS_MAX; i++){
 					if (!(job->vpss_dev_mask & BIT(i)))
 						continue;
-					if (!img_top_tile_cfg(i, false))
+					if (!img_top_tile_cfg(scaler, i, false))
 						atomic_set(&dev->vpss_cores[i].state, VIP_END);
 					else
 						atomic_set(&dev->vpss_cores[i].state, VIP_RUNNING);
@@ -920,7 +936,7 @@ static void vpss_job_finish(struct vpss_job *job)
 				for (i = 0; i < VPSS_MAX; i++){
 					if (!(job->vpss_dev_mask & BIT(i)))
 						continue;
-					if (!img_down_tile_cfg(i, true))
+					if (!img_down_tile_cfg(scaler, i, true))
 						atomic_set(&dev->vpss_cores[i].state, VIP_END);
 					else
 						atomic_set(&dev->vpss_cores[i].state, VIP_RUNNING);
@@ -929,7 +945,7 @@ static void vpss_job_finish(struct vpss_job *job)
 		}
 
 		job->job_state = JOB_WORKING;
-		img_start(job->dev_idx_start, job->cfg.chn_num);
+		img_start(scaler, job->dev_idx_start, job->cfg.chn_num);
 		spin_unlock_irqrestore(&job->lock, flags_job);
 		return;
 	}
@@ -941,8 +957,8 @@ static void vpss_job_finish(struct vpss_job *job)
 			if (!(job->vpss_dev_mask & BIT(i)))
 				continue;
 
-			if(reset_time[i] != 0 && reset_time[i] <= 1000)
-				reset_time[i]--;
+			if(hal->reset_time[i] != 0 && hal->reset_time[i] <= 1000)
+				hal->reset_time[i]--;
 
 			max_duration = dev->vpss_cores[i].hw_duration > max_duration ?
 							dev->vpss_cores[i].hw_duration : max_duration;
@@ -953,7 +969,7 @@ static void vpss_job_finish(struct vpss_job *job)
 			if (!job->is_online)
 				atomic_set(&dev->vpss_cores[i].state, VIP_IDLE);
 			else
-				task_ctx.online_status[job->grp_id] = VPSS_ONLINE_READY;
+				hal->task_ctx.online_status[job->grp_id] = VPSS_ONLINE_READY;
 
 			chn_id = dev->vpss_cores[i].map_chn;
 			if (chn_id >= VPSS_MAX_CHN_NUM)
@@ -969,7 +985,7 @@ static void vpss_job_finish(struct vpss_job *job)
 		job->job_cb(&job->data);
 
 		spin_unlock_irqrestore(&job->lock, flags_job);
-		vpss_hal_try_schedule();
+		vpss_hal_try_schedule(&hal->task_ctx);
 		return;
 	}
 	spin_unlock_irqrestore(&job->lock, flags_job);
@@ -1012,85 +1028,7 @@ void vpss_irq_handler(struct vpss_core *core)
 	vpss_job_finish(job);
 }
 
-void vpss_hal_suspend(void)
-{
-	unsigned long flags;
-	int i, count;
-
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	task_ctx.is_suspend = 1;
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
-
-	//stop online
-	for (i = 0; i < VPSS_ONLINE_NUM; i++) {
-		count = 20;
-		//wait online frame done
-		while ((task_ctx.online_status[i] == VPSS_ONLINE_RUN) ||
-			(task_ctx.online_status[i] == VPSS_ONLINE_CONTINUE)) {
-			usleep_range(1000, 2000);
-			if (--count <= 0)
-				break;
-		}
-		if (count == 0) {
-			TRACE_VPSS(DBG_ERR, "Grp(%d) Wait timeout, online HW hang.\n", i);
-			//TODO: reset dev and job
-		}
-	}
-
-	//stop stitch
-	for (i = VPSS_D0; i <= VPSS_D1; i++) {
-		count = 20;
-		while (atomic_read(&vpss_dev->vpss_cores[i].state) != VIP_IDLE) {
-			usleep_range(1000, 2000);
-			if (--count <= 0)
-				break;
-		}
-		if (count == 0) {
-			TRACE_VPSS(DBG_ERR, "vpss(%d) Wait timeout, HW hang.\n", i);
-			//TODO: reset dev and job
-		}
-	}
-}
-
-void vpss_hal_down_reg(unsigned char inst){
+void vpss_hal_down_reg(struct scaler *scaler, unsigned char inst){
 	if(work_mask & BIT(12)) // BIT(12) always dump reg
-		vpss_error_stauts(inst);
-}
-
-void vpss_hal_resume(void)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&task_ctx.task_lock, flags);
-	task_ctx.is_suspend = 0;
-	spin_unlock_irqrestore(&task_ctx.task_lock, flags);
-}
-
-void vpss_clk_disable(void)
-{
-	u8 i = 0;
-
-	for (i = 0; i < VPSS_MAX; i++) {
-		if (vpss_dev->vpss_cores[i].clk_src)
-			clk_disable(vpss_dev->vpss_cores[i].clk_src);
-		if (vpss_dev->vpss_cores[i].clk_apb && __clk_is_enabled(vpss_dev->vpss_cores[i].clk_apb))
-			clk_disable(vpss_dev->vpss_cores[i].clk_apb);
-	}
-}
-
-void vpss_clk_enable(void)
-{
-	u8 i = 0;
-
-	for (i = 0; i < VPSS_MAX; i++) {
-		if (vpss_dev->vpss_cores[i].clk_src)
-			clk_enable(vpss_dev->vpss_cores[i].clk_src);
-		if (vpss_dev->vpss_cores[i].clk_apb && !__clk_is_enabled(vpss_dev->vpss_cores[i].clk_apb))
-			clk_enable(vpss_dev->vpss_cores[i].clk_apb);
-	}
-}
-
-bool vpss_check_suspend(void)
-{
-	return task_ctx.is_suspend == 1;
+		vpss_error_stauts(scaler, inst);
 }

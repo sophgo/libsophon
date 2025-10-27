@@ -11,11 +11,13 @@
 #include "bm_drv.h"
 #include "bm_thread.h"
 #include "bm_debug.h"
+#include "bm_thermal.h"
 #include <linux/version.h>
 
 /* be carefull with global variables, keep multi-card support in mind */
 dev_t bm_devno_base;
 dev_t bm_ctl_devno_base;
+__attribute__((used)) const char* const DRIVER_VERSION = "version: "GIT_VER_STRING;
 
 static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 {
@@ -112,6 +114,7 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	u32 api_size = 0;
 	u32 api_duration = 0;
 	u32 api_result = 0;
+	u32 func_id = 0;
 
 	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, api_id) / sizeof(u32));
 	api_id = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
@@ -121,6 +124,10 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	api_duration = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
 	next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, offsetof(bm_kapi_header_t, result) / sizeof(u32));
 	api_result = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
+	if (api_id == 0x90000003) {
+		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, sizeof(bm_kapi_header_t) / sizeof(u32) + 1);
+		func_id = shmem_reg_read_enh(bmdi, next_rp, channel, core_id);
+	}
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (channel == BM_MSGFIFO_CHANNEL_CPU)
 		next_rp = bmdev_msgfifo_add_pointer(bmdi, bmdi->api_info[core_id][channel].sw_rp, (sizeof(bm_kapi_header_t) + sizeof(bm_kapi_opt_header_t)) / sizeof(u32) + api_size);
@@ -133,6 +140,8 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 		pr_err("[%s: %d] error: bm-sophon%d, api_id=0x%x, core_id=0x%x, api_result=0x%x\n",
 			 __func__, __LINE__, bmdi->dev_index, api_id, core_id, api_result);
 		print_api_log(api_id, api_result);
+		if (api_id == 0x90000003)
+			pr_err("func id: 0x%x\n", func_id);
 	}
 	if (ti) {
 		if (core_id == 0) {
@@ -245,7 +254,12 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 
 	bmdrv_print_cardinfo(cinfo);
 
-	bmdi->enable_dyn_freq = 1;
+	bmdi->enable_dyn_freq = 0;
+
+	// init thermal
+#ifndef SOC_MODE
+	bm_thermal_init(bmdi);
+#endif
 
 	return ret;
 }
@@ -272,6 +286,10 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 
 	if (bmdi->trace_info.bm_trace_deinit)
 		bmdi->trace_info.bm_trace_deinit(bmdi);
+
+#ifndef SOC_MODE
+	bm_thermal_uninit(bmdi);
+#endif
 }
 
 struct class bmdev_class = {

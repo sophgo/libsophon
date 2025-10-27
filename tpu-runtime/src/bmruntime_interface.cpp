@@ -847,3 +847,11 @@ bool bmrt_memcpy_d2d_stride_ex_parallel(
         src_tensors, src_offsets, src_strides,
         shapes, tensor_num, device_num);
 }
+
+int bmrt_get_neuron_number(void *p_bmrt, const char* net_name) {
+  return ((Bmruntime*)p_bmrt)->get_inner_neuron_number(net_name);
+}
+
+bm_device_mem_t bmrt_get_neuron_memory(void *p_bmrt, const char* net_name, int mem_index, const int* core_list, int core_num) {
+  return ((Bmruntime*)p_bmrt)->get_inner_neuron_memory(net_name, mem_index, core_list, core_num);
+}

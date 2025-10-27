@@ -25,6 +25,7 @@
 
 #define BMDEV_SEND_API                _IOW('p', 0x20, unsigned long)
 #define BMDEV_THREAD_SYNC_API         _IOW('p', 0x21, unsigned long)
+#define BMDEV_SYNC_TIMEOUT_API        _IOW('p', 0x22, unsigned long)
 #define BMDEV_DEVICE_SYNC_API         _IOW('p', 0x23, unsigned long)
 #define BMDEV_HANDLE_SYNC_API         _IOW('p', 0x27, unsigned long)
 #define BMDEV_SEND_API_EXT            _IOW('p', 0x28, unsigned long)
@@ -123,6 +124,7 @@
 #define BMDEV_GET_LIB_INFO            _IOWR('p', 0x98, unsigned long)
 
 #define BMDEV_GET_IDLE_COREID        _IOR('p', 0xB0, unsigned long)
+#define BMDEV_GET_FW_VERSION         _IOR('p', 0xB1, unsigned long)
 
 #define BMCTL_GET_DEV_CNT             _IOR('q', 0x0, unsigned long)
 #define BMCTL_GET_SMI_ATTR            _IOWR('q', 0x01, unsigned long)

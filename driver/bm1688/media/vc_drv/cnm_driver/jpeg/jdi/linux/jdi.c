@@ -16,6 +16,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/io.h>
+#include <linux/delay.h>
 
 #include "driver/jpu.h"
 #include "../jdi.h"
@@ -23,8 +24,7 @@
 #include "jpuapifunc.h"
 #include "jputypes.h"
 #include "regdefine.h"
-
-#include <linux/delay.h>
+#include "platform.h"
 
 #define JPU_DEVICE_NAME "/dev/jpu"
 #define JDI_INSTANCE_POOL_SIZE          sizeof(jpu_instance_pool_t)
@@ -51,10 +51,7 @@ extern void jpu_set_extension_address(int core_idx, uint32_t addr);
 extern void jpu_sw_top_reset(int core_idx);
 extern void jpu_lock(void);
 extern void jpu_unlock(void);
-extern unsigned int vc_read_reg(unsigned int addr);
-extern unsigned int vc_write_reg(unsigned int addr, unsigned int data);
-extern int vc_memcpy_s2d(void *src, uint64_t dst, uint32_t size);
-extern int vc_memcpy_d2s(void *dst, uint64_t src, uint32_t size);
+
 static Uint32 jdi_core_stat_fps[MAX_NUM_JPU_CORE] = {0};
 static Uint64 jdi_core_stat_lastts[MAX_NUM_JPU_CORE] = {0};
 static int jpu_show_fps = 0;
@@ -67,7 +64,6 @@ module_param(jpu_show_fps, uint, 0644);
 #define JDI_DRAM_PHYSICAL_BASE          0x00
 #define JDI_DRAM_PHYSICAL_SIZE          (4*1024*1024*1024)
 #define JDI_SYSTEM_ENDIAN               JDI_LITTLE_ENDIAN
-#define JPU_REG_SIZE                    0x300
 #define JDI_NUM_LOCK_HANDLES            4
 
 typedef struct jpudrv_buffer_pool_t
@@ -305,60 +301,28 @@ void jdi_unlock(void)
     jpu_unlock();
 }
 
-void jdi_write_register_ext(int core_idx, unsigned long addr, unsigned int data)
-{
-    jdi_info_t *jdi = &s_jdi_info;
-    unsigned int reg_addr;
-
-    if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
-        return;
-
-    reg_addr = (addr + jdi->jdb_register[core_idx].phys_addr);
-    vc_write_reg(reg_addr, data);
-    //JLOG(INGO, "jdi_write_register core[%d] reg_addr:%x data:%x\n", core_idx, addr, data);
-}
-
-unsigned long jdi_read_register_ext(int core_idx, unsigned long addr)
-{
-    jdi_info_t *jdi;
-    unsigned int reg_addr;
-
-    jdi = &s_jdi_info;
-
-    if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
-        return (unsigned int)-1;
-
-    reg_addr = (addr + jdi->jdb_register[core_idx].phys_addr);
-    //JLOG(ERR, "jdi_read_register core[%d] reg_addr:0x%lx\n", core_idx, reg_addr);
-    return vc_read_reg(reg_addr);
-}
-
 void jdi_write_register(int core_idx, unsigned long addr, unsigned int data)
 {
     jdi_info_t *jdi = &s_jdi_info;
-    unsigned int reg_addr;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return;
 
-    reg_addr = (addr + jdi->jdb_register[core_idx].phys_addr);
     //JLOG(INFO, "jdi_write_register core[%d] reg_addr:%x data:%x\n", core_idx, addr, data);
-    vc_write_reg(reg_addr, data);
+    platform_write_register(addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr), data);
 }
 
 unsigned long jdi_read_register(int core_idx, unsigned long addr)
 {
     jdi_info_t *jdi;
-    unsigned int reg_addr;
 
     jdi = &s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return (unsigned int)-1;
 
-    reg_addr = (addr + jdi->jdb_register[core_idx].phys_addr);
     // JLOG(INFO, "jdi_read_register core[%d] reg_addr:0x%x\n", core_idx, addr);
-    return vc_read_reg(reg_addr);
+    return platform_read_register(addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr));
 }
 
 size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int endian)
@@ -366,6 +330,9 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb;
     Uint32          i;
+#ifdef PLATFORM_SOC
+    unsigned long offset;
+#endif
 
     jdi = &s_jdi_info;
 
@@ -400,10 +367,13 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
     if (data == NULL) {
         return 0;
     }
-
     swap_endian(data, len, endian);
-    vc_memcpy_s2d(data, addr, len);
-
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)jdb.phys_addr;
+    memcpy((void *)((unsigned long)jdb.virt_addr+offset), data, len);
+#else
+    pcie_memcpy_s2d(addr, (void *)data, len);
+#endif
     if(jdb.is_cached)
     {
         if (jpu_flush_cache(&jdb) < 0) {
@@ -419,8 +389,10 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
 {
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb;
-    unsigned long offset;
     int i;
+#ifdef PLATFORM_SOC
+    unsigned long offset;
+#endif
 
     jdi = &s_jdi_info;
 
@@ -448,8 +420,6 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
     if (!jdb.size)
         return -1;
 
-    offset = addr - (unsigned long)jdb.phys_addr;
-
     if(jdb.is_cached)
     {
         if (jpu_invalidate_cache(&jdb) < 0) {
@@ -457,8 +427,12 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
             return -1;
         }
     }
-
-    vc_memcpy_d2s(data, addr, len);
+#ifdef PLATFORM_SOC
+    offset = addr - (unsigned long)jdb.phys_addr;
+    memcpy(data, (const void *)((unsigned long)jdb.virt_addr+offset), len);
+#else
+    pcie_memcpy_d2s((void *)data, addr, len);
+#endif
     swap_endian(data, len,  endian);
 
     return len;
@@ -701,7 +675,7 @@ int jdi_wait_inst_ctrl_busy(int core_idx, int timeout, unsigned int addr_flag_re
 
     while(1)
     {
-        data_flag_reg = jdi_read_register_ext(core_idx, addr_flag_reg);
+        data_flag_reg = jdi_read_register(core_idx, addr_flag_reg);
 
         if (((data_flag_reg >> 4)&0xf) == flag) {
             break;
@@ -712,7 +686,7 @@ int jdi_wait_inst_ctrl_busy(int core_idx, int timeout, unsigned int addr_flag_re
 
         if (timeout > 0 && (cur - elapse) > timeout)
         {
-            JLOG(ERR, "0x%x=0x%lx\n", addr_flag_reg, jdi_read_register_ext(core_idx, addr_flag_reg));
+            JLOG(ERR, "0x%x=0x%lx\n", addr_flag_reg, jdi_read_register(core_idx, addr_flag_reg));
             return -1;
         }
     }

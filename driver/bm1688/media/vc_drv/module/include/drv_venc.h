@@ -467,6 +467,11 @@ int drv_venc_set_extern_buf(venc_chn VeChn, const venc_extern_buf_s *pstExternBu
 #define DRV_H26X_SENSOR_EN_MIN          0
 #define DRV_H26X_SENSOR_EN_MAX          1
 
+#define DRV_H26X_VENC_PIC_WIDTH_MAX     8192
+#define DRV_H26X_VENC_PIC_WIDTH_MIN     256
+#define DRV_H26X_VENC_PIC_HEIGHT_MAX    8192
+#define DRV_H26X_VENC_PIC_HEIGHT_MIN    128
+
 #define DEF_STAT_TIME -1
 #define DEF_GOP 30
 #define DEF_IQP 32

@@ -211,29 +211,22 @@ struct vpss_job {
 	struct list_head list;
 	u32 hw_duration;
 	struct work_struct job_work;
+	struct vpss_device *dev;
 };
 
 void vpss_irq_handler(struct vpss_core *vpss_dev);
 int vpss_hal_init(struct vpss_device *dev);
-void vpss_hal_deinit(void);
+void vpss_hal_deinit(struct vpss_device *dev);
 
 int vpss_hal_push_job(struct vpss_job *job);
 int vpss_hal_push_online_job(struct vpss_job *job);
 int vpss_hal_remove_job(struct vpss_job *job);
-int vpss_hal_try_schedule(void);
 int vpss_hal_direct_schedule(struct vpss_job *job);
 int vpss_hal_online_run(struct vpss_online_cb *param);
 void vpss_hal_online_release_dev(void);
 
 void vpss_cmdq_irq_handler(struct vpss_core *vpss_dev);
 
-void vpss_hal_suspend(void);
-void vpss_hal_resume(void);
-bool vpss_check_suspend(void);
-
-void vpss_clk_disable(void);
-void vpss_clk_enable(void);
-
-void vpss_hal_down_reg(unsigned char inst);
+void vpss_hal_down_reg(struct scaler *scaler, unsigned char inst);
 
 #endif // _U_SC_UAPI_H_

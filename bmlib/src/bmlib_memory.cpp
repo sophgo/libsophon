@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <dlfcn.h>
 #include "api.h"
 #include "bmlib_log.h"
 #include "bmlib_internal.h"
@@ -101,8 +102,35 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	#ifdef __linux__
 	char key[64] = {0};
 	char lib_path[512] = {0};
-	strcpy(lib_path, KERNEL_MODULE_PATH);
+	Dl_info dl_info;
+	int ret;
+	char* ptr;
+	const char rel_path[64] = "tpu_module/libbm1688_kernel_module.so";
+	char default_lib_path[80];
+	strcpy(default_lib_path, KERNEL_MODULE_PATH);
 	strcpy(key, KERNEL_MODULE_NAME);
+	ret = dladdr((void *)bm_init_basic_func_id, &dl_info);
+	if (ret != 0 && dl_info.dli_fname != NULL) {
+		ptr = (char *)strrchr(dl_info.dli_fname, '/');
+		if (ptr) {
+			strncpy(lib_path, dl_info.dli_fname, ptr - dl_info.dli_fname + 1);
+			strcat(lib_path, rel_path);
+		} else {
+			strcat(lib_path, rel_path);
+		}
+		ret = access(lib_path, F_OK);
+	} else {
+		strcpy(lib_path, KERNEL_MODULE_PATH);
+		ret = access(lib_path, F_OK);
+	}
+	if (ret != 0) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG,
+					BMLIB_LOG_ERROR,
+						"failed to find libbm1688_kernel_module.so\n");
+		pthread_mutex_unlock(&mutex);
+
+		return BM_ERR_FAILURE;
+	}
 	#else
 	static char lib_path[512] = {0};
 	const char key[64] = KERNEL_MODULE_NAME;
@@ -114,7 +142,6 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	#endif
 
 	int key_size = strlen(key);
-
 
 	if (bm_is_dynamic_loading(handle)) {
 		bm_module0 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 0);
@@ -955,7 +982,7 @@ bm_status_t sg_malloc_neuron_device(bm_handle_t handle, sg_device_mem_t *pmem,
 bm_status_t bm_malloc_neuron_device_u64(bm_handle_t handle, bm_device_mem_u64_t *pmem,
                                     u64 n, u64 c, u64 h, u64 w)
 {
-	u32 size = 0;
+	u64 size = 0;
 	u64 size_tmp = 0ULL;
 	int any_heap_mask = 0;
 	any_heap_mask = (2 << (ION_MAX_HEAP_CNT - 1)) - 1;
@@ -969,7 +996,7 @@ bm_status_t bm_malloc_neuron_device_u64(bm_handle_t handle, bm_device_mem_u64_t 
 
 	size_tmp = bm_get_neuron_size_u64(n, c, h, w);
 
-	size = (u32)size_tmp;
+	size = size_tmp;
 	pmem->flags.u.mem_type = BM_MEM_TYPE_DEVICE;
 	pmem->size = size;
 	BM_CHECK_RET(__alloc_bm_device_mem_raw_u64(handle, pmem, any_heap_mask));
@@ -4339,6 +4366,15 @@ bm_system_mem_t bm_mem_from_system(void *system_addr) {
   return mem;
 }
 
+bm_system_mem_u64_t bm_mem_from_system_u64(void *system_addr) {
+  bm_system_mem_u64_t mem;
+  memset(&mem, 0x0, sizeof(bm_device_mem_t));
+  mem.u.system.system_addr = system_addr;
+  mem.flags.u.mem_type = BM_MEM_TYPE_SYSTEM;
+  return mem;
+}
+
+
 /* this function is designed to use in SOC_MODE, the parameter should be the
  * device memory from ION or something like that and the address is desired to
  * be used directly by NPU, no data copy is needed. and the right shift means
@@ -4392,6 +4428,42 @@ bm_status_t bm_mem_convert_system_to_device_neuron(bm_handle_t handle,
 	return BM_SUCCESS;
 }
 
+
+
+bm_status_t bm_mem_convert_system_to_device_neuron_u64(bm_handle_t handle,
+                                                   struct bm_mem_desc_u64 *dev_mem,
+                                                   struct bm_mem_desc_u64 sys_mem,
+                                                   bool need_copy, int n, int c,
+                                                   int h, int w)
+{
+	if (bm_mem_get_type_u64(sys_mem) != BM_MEM_TYPE_SYSTEM) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+			"mem type is illegal %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	if (BM_SUCCESS != bm_malloc_neuron_device_u64(handle, dev_mem, n, c, h, w)) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+			"bm_malloc_neuron_device error %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+
+		return BM_ERR_FAILURE;
+	}
+
+	if (need_copy) {
+		if (BM_SUCCESS != bm_memcpy_s2d_u64(handle, *dev_mem, bm_mem_get_system_addr_u64(sys_mem))) {
+			bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+					"bm_memcpy_s2d error %s: %s: %d\n",
+					__FILE__, __func__, __LINE__);
+			bm_free_device_u64(handle, *dev_mem);
+
+			return BM_ERR_FAILURE;
+		}
+	}
+	return BM_SUCCESS;
+}
+
 bm_status_t bm_mem_convert_system_to_device_neuron_byte(bm_handle_t handle,
 														struct bm_mem_desc *dev_mem,
 														struct bm_mem_desc sys_mem,
@@ -4409,6 +4481,29 @@ bm_status_t bm_mem_convert_system_to_device_neuron_byte(bm_handle_t handle,
 
 	if (need_copy) {
 		BM_CHECK_RET(bm_memcpy_s2d(handle, *dev_mem, bm_mem_get_system_addr(sys_mem)));
+	}
+	return BM_SUCCESS;
+}
+
+
+
+bm_status_t bm_mem_convert_system_to_device_neuron_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy,
+														int n, int c, int h, int w)
+{
+	if (bm_mem_get_type_u64(sys_mem) != BM_MEM_TYPE_SYSTEM) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+			"mem type is illegal %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	BM_CHECK_RET(bm_malloc_device_byte_u64(handle, dev_mem, n * c * h * w));
+
+	if (need_copy) {
+		BM_CHECK_RET(bm_memcpy_s2d_u64(handle, *dev_mem, bm_mem_get_system_addr_u64(sys_mem)));
 	}
 	return BM_SUCCESS;
 }
@@ -4439,6 +4534,28 @@ bm_status_t bm_mem_convert_system_to_device_coeff(bm_handle_t handle,
 	return BM_SUCCESS;
 }
 
+
+bm_status_t bm_mem_convert_system_to_device_coeff_u64(bm_handle_t handle,
+                                                  struct bm_mem_desc_u64 *dev_mem,
+                                                  struct bm_mem_desc_u64 sys_mem,
+                                                  bool need_copy,
+                                                  int coeff_count)
+{
+	if (bm_mem_get_type_u64(sys_mem) != BM_MEM_TYPE_SYSTEM) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+			"mem type is illegal %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	BM_CHECK_RET(bm_malloc_device_dword_u64(handle, dev_mem, coeff_count));
+
+	if (need_copy) {
+		BM_CHECK_RET(bm_memcpy_s2d_u64(handle, *dev_mem, bm_mem_get_system_addr_u64(sys_mem)));
+	}
+	return BM_SUCCESS;
+}
+
 bm_status_t bm_mem_convert_system_to_device_coeff_byte(bm_handle_t handle,
 														struct bm_mem_desc *dev_mem,
 														struct bm_mem_desc sys_mem,
@@ -4455,6 +4572,27 @@ bm_status_t bm_mem_convert_system_to_device_coeff_byte(bm_handle_t handle,
 
 	if (need_copy) {
 		BM_CHECK_RET(bm_memcpy_s2d(handle, *dev_mem, bm_mem_get_system_addr(sys_mem)));
+	}
+	return BM_SUCCESS;
+}
+
+
+bm_status_t bm_mem_convert_system_to_device_coeff_byte_u64(bm_handle_t handle,
+														struct bm_mem_desc_u64 *dev_mem,
+														struct bm_mem_desc_u64 sys_mem,
+														bool need_copy, int coeff_count)
+{
+	if (bm_mem_get_type_u64(sys_mem) != BM_MEM_TYPE_SYSTEM) {
+		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+			"mem type is illegal %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	BM_CHECK_RET(bm_malloc_device_byte_u64(handle, dev_mem, coeff_count));
+
+	if (need_copy) {
+		BM_CHECK_RET(bm_memcpy_s2d_u64(handle, *dev_mem, bm_mem_get_system_addr_u64(sys_mem)));
 	}
 	return BM_SUCCESS;
 }

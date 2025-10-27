@@ -4370,8 +4370,8 @@ int create_sw_uart_thread(unsigned long coreIdx, unsigned long productId)
 
     VpuWriteReg(coreIdx, s_SwUartContext.status_reg,  (1<<0)); // enable SW UART. this will be checked by firmware to know SW UART enabled
 
-    s_SwUartContext.thread_id = osal_thread_create((void*)SwUartHandler, &s_SwUartContext);
-    if (IS_ERR(s_SwUartContext.thread_id)) {
+    s_SwUartContext.thread_id = osal_thread_create((void*)SwUartHandler, &s_SwUartContext, "sw_uart_thread");
+    if (s_SwUartContext.thread_id == NULL) {
         destroy_sw_uart_thread(coreIdx);
         return 0;
     }

@@ -45,16 +45,14 @@
 #define VPP_ERR_IDLE_BIT_MAP               (-256)
 #define VPP_ERESTARTSYS                    (-512)
 
-static struct bm_device_info *vpp_bmdi;
-
-void vpss_reg_write(uintptr_t addr, u32 data)
+void vpss_reg_write(void *bmdi, uintptr_t addr, u32 data)
 {
-	bm_write32(vpp_bmdi, addr, data);
+	bm_write32((struct bm_device_info *)bmdi, addr, data);
 }
 
-u32 vpss_reg_read(uintptr_t addr)
+u32 vpss_reg_read(void *bmdi, uintptr_t addr)
 {
-	return bm_read32(vpp_bmdi, addr);
+	return bm_read32((struct bm_device_info *)bmdi, addr);
 }
 
 int bm1688_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg)
@@ -90,7 +88,7 @@ int bm1688_trigger_vpp(struct bm_device_info *bmdi, unsigned long arg)
 		return ret;
 	}
 
-	ret = vpss_bm_send_frame(batch.cmd);
+	ret = vpss_bm_send_frame(&bmdi->vppdrvctx.vpss_dev, batch.cmd);
 	kfree(batch.cmd);
 	return ret;
 }
@@ -99,10 +97,7 @@ int bm1688_vpp_init(struct bm_device_info *bmdi)
 {
 	struct vpss_device *dev = &bmdi->vppdrvctx.vpss_dev;
 	void *reg_base[4] = {(void *)REG_VPSS_V_BASE, (void *)REG_VPSS_T1_BASE, (void *)REG_VPSS_T2_BASE, (void *)REG_VPSS_D_BASE};
-	vpp_bmdi = bmdi;
-
-	vpss_proc_init(dev);
-	vpss_mode_init();
+	dev->bmdi = (void *)bmdi;
 
 	dev->vpss_cores[0].irq_num = VPP0_IRQ_ID;
 	dev->vpss_cores[1].irq_num = VPP1_IRQ_ID;
@@ -125,9 +120,7 @@ int bm1688_vpp_init(struct bm_device_info *bmdi)
 void bm1688_vpp_exit(struct bm_device_info *bmdi)
 {
 	struct vpss_device *dev = &bmdi->vppdrvctx.vpss_dev;
-	vpss_mode_deinit();
 	vpss_dev_deinit(dev);
-	vpss_proc_remove(dev);
 }
 
 static void bmdrv_vpp_irq_handler(struct bm_device_info *bmdi, int irq, int idx)

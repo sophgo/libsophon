@@ -1361,7 +1361,7 @@ static long _vc_drv_venc_ioctl(struct file *filp, u_int cmd, u_long arg)
         vdb.core_idx = 0;
         vdb.size = phys_buf.size;
 
-        s32Ret = vpu_allocate_extern_memory(&vdb);
+        s32Ret = vpu_allocate_extern_memory(&vdb, "ENC_EXTERNBUF");
         if (s32Ret != 0) {
             pr_err("drv_venc_alloc_phys_buf with %d\n", s32Ret);
         }
@@ -2163,7 +2163,7 @@ static int _vc_drv_register_cdev(struct vc_drv_device *vdev)
     return err;
 }
 
-static int vc_drv_plat_probe(struct platform_device *pdev)
+int vc_drv_plat_probe(struct platform_device *pdev)
 {
     int ret = 0;
     ret = jpeg_platform_init(pdev);
@@ -2183,7 +2183,7 @@ static int vc_drv_plat_probe(struct platform_device *pdev)
     return ret;
 }
 
-static int vc_drv_plat_remove(struct platform_device *pdev)
+int vc_drv_plat_remove(struct platform_device *pdev)
 {
     int ret = 0;
     jpeg_platform_exit();
@@ -2220,10 +2220,31 @@ int _vc_drv_resume(struct platform_device *pdev)
 }
 #endif
 
-static int __init _vc_drv_init(void)
+#ifdef PLATFORM_SOC
+static const struct of_device_id vc_drv_match_table[] = {
+    {.compatible = "sophgo,vc_drv"},
+    {},
+};
+
+static struct platform_driver vc_plat_driver = {
+    .driver = {
+        .name = "sophgo,vc_drv",
+        .of_match_table = vc_drv_match_table,
+    },
+    .probe      = vc_drv_plat_probe,
+    .remove     = vc_drv_plat_remove,
+    #if defined(CONFIG_PM)
+    .suspend    = _vc_drv_suspend,
+    .resume     = _vc_drv_resume,
+    #endif
+};
+#endif
+int vc_drv_init(void)
 {
     int ret = 0;
+#ifdef VC_SUPPORT_CLOCK_CONTROL
     int core;
+#endif
     struct vc_drv_device *vdev;
 
     vdev = vzalloc( sizeof(*vdev));
@@ -2241,26 +2262,26 @@ static int __init _vc_drv_init(void)
     }
 
     pVcDrvDevice = vdev;
-
+#ifdef PLATFORM_SOC
+    ret = platform_driver_register(&vc_plat_driver);
+#endif
+#ifdef VC_SUPPORT_CLOCK_CONTROL
     for (core = 0; core < MAX_NUM_VPU_CORE; core++) {
-#ifdef VPU_SUPPORT_CLOCK_CONTROL
         vpu_clk_enable(core);
         vpu_clk_disable(core);
-#endif
     }
 
     for (core = 0; core < MAX_NUM_JPU_CORE; core++) {
-#ifdef JPU_SUPPORT_CLOCK_CONTROL
         jpu_clk_enable(core);
         jpu_clk_disable(core);
-#endif
     }
+#endif
     pr_info("_vc_drv_init result = 0x%x\n", ret);
 
     return ret;
 }
 
-static void __exit _vc_drv_exit(void)
+void vc_drv_exit(void)
 {
     struct vc_drv_device *vdev = pVcDrvDevice;
 
@@ -2290,19 +2311,17 @@ static void __exit _vc_drv_exit(void)
     class_destroy(vdev->vc_class);
     vfree(vdev);
     pVcDrvDevice = NULL;
+
+#ifdef PLATFORM_SOC
+    platform_driver_unregister(&vc_plat_driver);
+#endif
 }
 
-int drv_vpu_init(void)
-{
-    _vc_drv_init();
-    vc_drv_plat_probe(NULL);
+#ifdef PLATFORM_SOC
+MODULE_AUTHOR("vc sdk driver.");
+MODULE_DESCRIPTION("vc sdk driver");
+MODULE_LICENSE("GPL");
 
-    return 0;
-}
-
-int drv_vpu_deinit(void)
-{
-    _vc_drv_exit();
-    vc_drv_plat_remove(NULL);
-    return 0;
-}
+module_init(vc_drv_init);
+module_exit(vc_drv_exit);
+#endif

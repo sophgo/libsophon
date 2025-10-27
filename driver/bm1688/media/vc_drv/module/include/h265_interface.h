@@ -614,6 +614,7 @@ enum H26X_OP_NUM {
     H26X_OP_GET_SEARCH_WINDOW,
     H26X_OP_SET_EXTERN_BS_BUF,
     H26X_OP_GET_BS_PACKS_NUM,
+    H26X_OP_RELEASE_HEADER,
     H26X_OP_MAX,
 };
 
@@ -672,6 +673,7 @@ typedef enum _VEncIoctlOp_ {
     DRV_H26X_OP_GET_SEARCH_WINDOW       = (H26X_OP_GET_SEARCH_WINDOW << DRV_H26X_OP_SHIFT),
     DRV_H26X_OP_SET_EXTERN_BS_BUF       = (H26X_OP_SET_EXTERN_BS_BUF << DRV_H26X_OP_SHIFT),
     DRV_H26X_OP_GET_BS_PACKS_NUM        = (H26X_OP_GET_BS_PACKS_NUM << DRV_H26X_OP_SHIFT),
+    DRV_H26X_OP_RELEASE_HEADER          = (H26X_OP_RELEASE_HEADER << DRV_H26X_OP_SHIFT),
     DRV_H26X_OP_MAX                     = (H26X_OP_MAX << DRV_H26X_OP_SHIFT),
 } VEncIoctlOp;
 
@@ -699,6 +701,7 @@ typedef struct _InitDecConfig_ {
     int reorder_enable;
     unsigned int picWidth;
     unsigned int picHeight;
+    unsigned char async_getframe;
 
     // alloc buffer by user
     void* bitstream_buffer;
@@ -771,7 +774,7 @@ int vdec_open(InitDecConfig *pInitDecCfg, void **pHandle);
 int vdec_close(void *pHandle);
 int vdec_reset(void *pHandle);
 int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms);
-int vdec_get_frame(void *pHandle, DispFrameCfg *pdfc);
+int vdec_get_frame(void *pHandle, DispFrameCfg *pdfc, int timeout_ms);
 void vdec_release_frame(void *pHandle, void *arg, PhysicalAddress addr);
 void vdec_attach_vb(void *pHandle, VB_INFO vb_info);
 void vdec_attach_callback(DRV_VDEC_DRV_CALLBACK pCbFunc);

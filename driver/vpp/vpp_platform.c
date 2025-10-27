@@ -3,77 +3,85 @@
 
 int vpp_init(struct bm_device_info *bmdi)
 {
-  if (bmdi->cinfo.chip_id == 0x1686a200) {
-    bmdi->vppdrvctx.vpp_init           = bm1688_vpp_init;
-    bmdi->vppdrvctx.vpp_exit           = bm1688_vpp_exit;
-    bmdi->vppdrvctx.trigger_vpp        = bm1688_trigger_vpp;
-    bmdi->vppdrvctx.bm_vpp_request_irq = bm1688_vpp_request_irq;
-    bmdi->vppdrvctx.bm_vpp_free_irq    = bm1688_vpp_free_irq;
-  }
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		bmdi->vppdrvctx.vpp_init           = bm1688_vpp_init;
+		bmdi->vppdrvctx.vpp_exit           = bm1688_vpp_exit;
+		bmdi->vppdrvctx.trigger_vpp        = bm1688_trigger_vpp;
+		bmdi->vppdrvctx.bm_vpp_request_irq = bm1688_vpp_request_irq;
+		bmdi->vppdrvctx.bm_vpp_free_irq    = bm1688_vpp_free_irq;
+	}
 
-  if(NULL == bmdi->vppdrvctx.vpp_init) {
-    printk("vpp_init failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
-    return -1;
-  }
+	if(NULL == bmdi->vppdrvctx.vpp_init) {
+		printk("vpp_init failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		return -1;
+	}
 
-  bmdi->vppdrvctx.vpp_init(bmdi);
-  return 0;
+	bmdi->vppdrvctx.vpp_init(bmdi);
+	vpp_usage_info_init(bmdi);
+	return 0;
 }
 
 void vpp_exit(struct bm_device_info *bmdi)
 {
-  if(NULL == bmdi->vppdrvctx.vpp_exit) {
-    printk("vpp_exit failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
-    return;
-  }
-
-  bmdi->vppdrvctx.vpp_exit(bmdi);
-  return;
+	if(NULL == bmdi->vppdrvctx.vpp_exit) {
+		printk("vpp_exit failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		return;
+	}
+	vpp_usage_info_exit(bmdi);
+	bmdi->vppdrvctx.vpp_exit(bmdi);
+	return;
 }
 
 int trigger_vpp(struct bm_device_info *bmdi, unsigned long arg)
 {
-  int ret = 0;
+	int ret = 0;
 
-  if(NULL == bmdi->vppdrvctx.trigger_vpp) {
-    printk("trigger_vpp failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
-    return -1;
-  }
+	if(NULL == bmdi->vppdrvctx.trigger_vpp) {
+		printk("trigger_vpp failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		return -1;
+	}
 
-  ret = bmdi->vppdrvctx.trigger_vpp(bmdi,arg);
-  return ret;
+	ret = bmdi->vppdrvctx.trigger_vpp(bmdi,arg);
+	return ret;
 }
 
 void bm_vpp_request_irq(struct bm_device_info *bmdi)
 {
-  if(NULL == bmdi->vppdrvctx.bm_vpp_request_irq) {
-    printk("bm_vpp_request_irqfailed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
-    return;
-  }
+	if(NULL == bmdi->vppdrvctx.bm_vpp_request_irq) {
+		printk("bm_vpp_request_irqfailed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		return;
+	}
 
-  bmdi->vppdrvctx.bm_vpp_request_irq(bmdi);
-  return;
+	bmdi->vppdrvctx.bm_vpp_request_irq(bmdi);
+	return;
 }
 
 void bm_vpp_free_irq(struct bm_device_info *bmdi)
 {
-  if(NULL == bmdi->vppdrvctx.bm_vpp_free_irq) {
-    printk("bm_vpp_free_irq, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
-    return;
-  }
+	if(NULL == bmdi->vppdrvctx.bm_vpp_free_irq) {
+		printk("bm_vpp_free_irq, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		return;
+	}
 
-  bmdi->vppdrvctx.bm_vpp_free_irq(bmdi);
-  return;
+	bmdi->vppdrvctx.bm_vpp_free_irq(bmdi);
+	return;
 }
 
 static int check_vpp_core_busy(struct bm_device_info *bmdi, int coreIdx)
 {
 	int ret = 0;
 
-	if (atomic_read(&bmdi->vppdrvctx.s_vpp_usage_info.vpp_busy_status[coreIdx]) > 0)
+	if (atomic_read(&bmdi->vppdrvctx.vpss_dev.vpss_cores[coreIdx].state) == VIP_RUNNING)
 		ret = 1;
 
 	return ret;
+}
+
+static void timer_callback(struct timer_list *t)
+{
+	struct vpss_device *dev = container_of(t, struct vpss_device, vpss_timer);
+	bm_vpp_check_usage_info((struct bm_device_info *)dev->bmdi);
+	mod_timer(t, jiffies + msecs_to_jiffies(100));
 }
 
 int bm_vpp_check_usage_info(struct bm_device_info *bmdi)
@@ -100,6 +108,7 @@ int bm_vpp_check_usage_info(struct bm_device_info *bmdi)
 			vpp_core_usage += vpp_usage_info->vpp_status_array[i][j];
 
 		vpp_usage_info->vpp_core_usage[i] = vpp_core_usage;
+		bmdi->vppdrvctx.vpss_dev.vpss_cores[i].duty_ratio = vpp_core_usage;
 	}
 
 	return ret;
@@ -108,12 +117,18 @@ int bm_vpp_check_usage_info(struct bm_device_info *bmdi)
 void vpp_usage_info_init(struct bm_device_info *bmdi)
 {
 	vpp_statistic_info_t *vpp_usage_info = &bmdi->vppdrvctx.s_vpp_usage_info;
+	struct timer_list *t = &bmdi->vppdrvctx.vpss_dev.vpss_timer;
 
 	memset(vpp_usage_info, 0, sizeof(vpp_statistic_info_t));
+	vpp_usage_info->vpp_instant_interval = 100;
 
-	vpp_usage_info->vpp_instant_interval = 500;
+	timer_setup(t, timer_callback, 0);
+	mod_timer(t, jiffies + msecs_to_jiffies(100));
+	return;
+}
 
-	bm_vpp_check_usage_info(bmdi);
-
+void vpp_usage_info_exit(struct bm_device_info *bmdi)
+{
+	del_timer_sync(&bmdi->vppdrvctx.vpss_dev.vpss_timer);
 	return;
 }

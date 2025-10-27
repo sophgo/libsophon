@@ -99,10 +99,10 @@ u8 _gop_get_bpp(enum sclr_gop_format fmt)
 		(fmt == SCL_GOP_FMT_256LUT) ? 1 : 2;
 }
 
-int _sc_ext_set_rgn_cfg(const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
+int _sc_ext_set_rgn_cfg(struct scaler *scaler, const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
 	const struct sclr_size *size)
 {
-	struct sclr_gop_cfg *gop_cfg = sclr_gop_get_cfg(inst, layer);
+	struct sclr_gop_cfg *gop_cfg = sclr_gop_get_cfg(scaler, inst, layer);
 	struct sclr_gop_odec_cfg *odec_cfg = &gop_cfg->odec_cfg;
 	struct rgn_lut_cfg *rgn_lut_cfg = (struct rgn_lut_cfg *)&rgn_cfg->rgn_lut_cfg;
 	struct sclr_gop_ow_cfg *ow_cfg;
@@ -116,7 +116,7 @@ int _sc_ext_set_rgn_cfg(const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
 	gop_cfg->colorkey = rgn_cfg->colorkey;
 
 	if (rgn_lut_cfg->is_updated) {
-		sclr_gop_setup_256LUT(inst, layer, rgn_lut_cfg->lut_length, rgn_lut_cfg->lut_addr);
+		sclr_gop_setup_256LUT(scaler, inst, layer, rgn_lut_cfg->lut_length, rgn_lut_cfg->lut_addr);
 	}
 
 	if (rgn_cfg->odec.enable) { // odec enable
@@ -158,7 +158,7 @@ int _sc_ext_set_rgn_cfg(const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
 				rgn_cfg->odec.bso_sz);
 #endif
 
-		sclr_gop_ow_set_cfg(inst, layer, ow_idx, ow_cfg, true);
+		sclr_gop_ow_set_cfg(scaler, inst, layer, ow_idx, ow_cfg, true);
 	} else { //normal rgn w/o odec enabled
 		for (ow_idx = 0; ow_idx < rgn_cfg->num_of_rgn; ++ow_idx) {
 			ow_cfg = &gop_cfg->ow_cfg[ow_idx];
@@ -216,18 +216,18 @@ int _sc_ext_set_rgn_cfg(const u8 inst, u8 layer, const struct rgn_cfg *rgn_cfg,
 				ow_cfg->addr, ow_cfg->pitch);
 #endif
 
-			sclr_gop_ow_set_cfg(inst, layer, ow_idx, ow_cfg, true);
+			sclr_gop_ow_set_cfg(scaler, inst, layer, ow_idx, ow_cfg, true);
 		}
 
 		// set odec enable to false
 		odec_cfg->odec_ctrl.b.odec_en = false;
 	}
-	sclr_gop_set_cfg(inst, layer, gop_cfg, true);
+	sclr_gop_set_cfg(scaler, inst, layer, gop_cfg, true);
 
 	return 0;
 }
 
-static int _sc_ext_set_fbd(u8 dev_idx, const struct vpss_hal_grp_cfg *grp_cfg){
+static int _sc_ext_set_fbd(struct scaler *scaler, u8 dev_idx, const struct vpss_hal_grp_cfg *grp_cfg){
 	struct sclr_fbd_cfg fbd_cfg;
 	int height;
 	memset(&fbd_cfg, 0, sizeof(struct sclr_fbd_cfg));
@@ -253,14 +253,14 @@ static int _sc_ext_set_fbd(u8 dev_idx, const struct vpss_hal_grp_cfg *grp_cfg){
 		fbd_cfg.out_mode_c = 7;
 		fbd_cfg.endian = 0;
 	}
-	sclr_set_fbd(dev_idx, &fbd_cfg, true);
+	sclr_set_fbd(scaler, dev_idx, &fbd_cfg, true);
 
 	return 0;
 }
 
-static int _sc_ext_set_quant(u8 dev_idx, const struct sc_quant_param *param)
+static int _sc_ext_set_quant(struct scaler *scaler, u8 dev_idx, const struct sc_quant_param *param)
 {
-	struct sclr_odma_cfg *odma_cfg = sclr_odma_get_cfg(dev_idx);
+	struct sclr_odma_cfg *odma_cfg = sclr_odma_get_cfg(scaler, dev_idx);
 
 	if (!param->enable)
 		return 0;
@@ -273,11 +273,11 @@ static int _sc_ext_set_quant(u8 dev_idx, const struct sc_quant_param *param)
 	odma_cfg->csc_cfg.quant_round = (enum sclr_quant_rounding)param->rounding;
 	odma_cfg->csc_cfg.work_on_border = false;
 
-	sclr_ctrl_set_output(dev_idx, &odma_cfg->csc_cfg, odma_cfg->fmt);
+	sclr_ctrl_set_output(scaler, dev_idx, &odma_cfg->csc_cfg, odma_cfg->fmt);
 
 	// if fmt is yuv, try use img'csc to convert rgb to yuv.
 	if (IS_YUV_FMT(odma_cfg->fmt)) {
-		struct sclr_img_cfg *img_cfg = sclr_img_get_cfg(dev_idx);
+		struct sclr_img_cfg *img_cfg = sclr_img_get_cfg(scaler, dev_idx);
 
 		img_cfg->csc = (IS_YUV_FMT(img_cfg->fmt))
 			     ? SCL_CSC_NONE : SCL_CSC_601_LIMIT_RGB2YUV;
@@ -286,15 +286,15 @@ static int _sc_ext_set_quant(u8 dev_idx, const struct sc_quant_param *param)
 		//	TRACE_VPSS(DBG_ERR, "quant for yuv not work in online.\n");
 		//	return -EINVAL;
 		//}
-		sclr_img_set_cfg(dev_idx, img_cfg);
+		sclr_img_set_cfg(scaler, dev_idx, img_cfg);
 	}
 
 	return 0;
 }
 
-static int _sc_ext_set_convertto(u8 dev_idx, const struct convertto_param *param)
+static int _sc_ext_set_convertto(struct scaler *scaler, u8 dev_idx, const struct convertto_param *param)
 {
-	struct sclr_odma_cfg *odma_cfg = sclr_odma_get_cfg(dev_idx);
+	struct sclr_odma_cfg *odma_cfg = sclr_odma_get_cfg(scaler, dev_idx);
 
 	if (!param->enable)
 		return 0;
@@ -310,23 +310,23 @@ static int _sc_ext_set_convertto(u8 dev_idx, const struct convertto_param *param
 	odma_cfg->csc_cfg.mode = SCL_OUT_CONVERT_TO;
 	odma_cfg->csc_cfg.work_on_border = false;
 
-	sclr_ctrl_set_output(dev_idx, &odma_cfg->csc_cfg, odma_cfg->fmt);
+	sclr_ctrl_set_output(scaler, dev_idx, &odma_cfg->csc_cfg, odma_cfg->fmt);
 
 	return 0;
 }
 
-static void _sc_ext_set_border(u8 dev_idx, const struct sc_border_param *param)
+static void _sc_ext_set_border(struct scaler *scaler, u8 dev_idx, const struct sc_border_param *param)
 {
 	struct sclr_border_cfg cfg;
 	struct sclr_odma_cfg *odma_cfg;
 
 	if (param->enable) {
 		// full-size odma for border
-		odma_cfg = sclr_odma_get_cfg(dev_idx);
+		odma_cfg = sclr_odma_get_cfg(scaler, dev_idx);
 		odma_cfg->mem.start_x = odma_cfg->mem.start_y = 0;
 		odma_cfg->mem.width = odma_cfg->frame_size.w;
 		odma_cfg->mem.height = odma_cfg->frame_size.h;
-		sclr_odma_set_mem(dev_idx, &odma_cfg->mem);
+		sclr_odma_set_mem(scaler, dev_idx, &odma_cfg->mem);
 	}
 
 	cfg.cfg.b.enable = param->enable;
@@ -335,10 +335,10 @@ static void _sc_ext_set_border(u8 dev_idx, const struct sc_border_param *param)
 	cfg.cfg.b.bd_color_b = param->bg_color[2];
 	cfg.start.x = param->offset_x;
 	cfg.start.y = param->offset_y;
-	sclr_border_set_cfg(dev_idx, &cfg);
+	sclr_border_set_cfg(scaler, dev_idx, &cfg);
 }
 
-static void _sc_ext_set_border_vpp(u8 dev_idx, const struct sc_border_vpp_param *param)
+static void _sc_ext_set_border_vpp(struct scaler *scaler, u8 dev_idx, const struct sc_border_vpp_param *param)
 {
 	int i;
 	struct sclr_border_vpp_cfg border_cfg;
@@ -357,12 +357,12 @@ static void _sc_ext_set_border_vpp(u8 dev_idx, const struct sc_border_vpp_param 
 		border_cfg.outside_end.x = param[i].outside.end_x;
 		border_cfg.outside_end.y = param[i].outside.end_y;
 
-		sclr_border_vpp_set_cfg(dev_idx, i, &border_cfg, true);
+		sclr_border_vpp_set_cfg(scaler, dev_idx, i, &border_cfg, true);
 	}
 }
 
 
-static void _sc_ext_set_coverex(u8 dev_idx, const struct rgn_coverex_cfg *cfg)
+static void _sc_ext_set_coverex(struct scaler *scaler, u8 dev_idx, const struct rgn_coverex_cfg *cfg)
 {
 	int i;
 	struct sclr_cover_cfg sc_cover_cfg;
@@ -382,11 +382,11 @@ static void _sc_ext_set_coverex(u8 dev_idx, const struct rgn_coverex_cfg *cfg)
 		} else {
 			sc_cover_cfg.start.raw = 0;
 		}
-		sclr_cover_set_cfg(dev_idx, i, &sc_cover_cfg, true);
+		sclr_cover_set_cfg(scaler, dev_idx, i, &sc_cover_cfg, true);
 	}
 }
 
-static void _sc_ext_set_mask(u8 dev_idx, const struct rgn_mosaic_cfg *cfg)
+static void _sc_ext_set_mask(struct scaler *scaler, u8 dev_idx, const struct rgn_mosaic_cfg *cfg)
 {
 	struct sclr_privacy_cfg mask_cfg = {0};
 	//struct sclr_img_cfg *img_cfg;
@@ -418,10 +418,10 @@ static void _sc_ext_set_mask(u8 dev_idx, const struct rgn_mosaic_cfg *cfg)
 	} else {
 		mask_cfg.cfg.raw = 0;
 	}
-	sclr_pri_set_cfg(dev_idx, &mask_cfg);
+	sclr_pri_set_cfg(scaler, dev_idx, &mask_cfg);
 }
 
-static void _sc_ext_set_y_ratio(u8 dev_idx, u32 y_ratio, enum sclr_csc csc_type)
+static void _sc_ext_set_y_ratio(struct scaler *scaler, u8 dev_idx, u32 y_ratio, enum sclr_csc csc_type)
 {
 	int i;
 	struct sclr_csc_matrix csc_matrix;
@@ -431,15 +431,15 @@ static void _sc_ext_set_y_ratio(u8 dev_idx, u32 y_ratio, enum sclr_csc csc_type)
 	for (i = 0; i < 3; i++)
 		csc_matrix.coef[0][i] = (def_matrix->coef[0][i] * y_ratio) / YRATIO_SCALE;
 
-	sclr_set_csc(dev_idx, &csc_matrix);
+	sclr_set_csc(scaler, dev_idx, &csc_matrix);
 }
 
-bool img_left_tile_cfg(u8 dev_idx, u16 online_l_width)
+bool img_left_tile_cfg(struct scaler *scaler, u8 dev_idx, u16 online_l_width)
 {
-	struct sclr_img_cfg *cfg = sclr_img_get_cfg(dev_idx);
+	struct sclr_img_cfg *cfg = sclr_img_get_cfg(scaler, dev_idx);
 	struct sclr_mem mem = cfg->mem;
-	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(dev_idx);
-	struct sclr_core_cfg *sc = sclr_get_cfg(dev_idx);
+	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(scaler, dev_idx);
+	struct sclr_core_cfg *sc = sclr_get_cfg(scaler, dev_idx);
 
 	TRACE_VPSS(DBG_DEBUG, "img-%d: tile on left.\n", dev_idx);
 
@@ -448,7 +448,7 @@ bool img_left_tile_cfg(u8 dev_idx, u16 online_l_width)
 		mem.width = online_l_width;
 	else
 		mem.width = (sc->sc.tile.in_mem.w >> 1) + TILE_GUARD_PIXEL;
-	sclr_img_set_mem(dev_idx, &mem, true);
+	sclr_img_set_mem(scaler, dev_idx, &mem, true);
 	if(fbd_cfg.enable){
 		int fbd_height = ((sc->sc.tile.in_mem.h + 15) >> 4) << 2;
 		fbd_cfg.crop.x = mem.start_x;
@@ -459,19 +459,19 @@ bool img_left_tile_cfg(u8 dev_idx, u16 online_l_width)
 		fbd_cfg.offset_base_c += (((fbd_cfg.crop.x >> 9) * fbd_height) << 5) + ((fbd_cfg.crop.y >> 2) << 5);
 		fbd_cfg.comp_base_y += (fbd_cfg.crop.y >> 2) * fbd_cfg.stride_y;
 		fbd_cfg.comp_base_c += (fbd_cfg.crop.y >> 2) * ALIGN(ALIGN(((sc->sc.tile.in_mem.w + 1) >> 1), 16) << 2, 32);
-		sclr_set_fbd(dev_idx, &fbd_cfg, false);
+		sclr_set_fbd(scaler, dev_idx, &fbd_cfg, false);
 	}
 	TRACE_VPSS(DBG_DEBUG, "img-%d start_x(%d) width(%d).\n", dev_idx, mem.start_x, mem.width);
 #endif
-	return sclr_left_tile(dev_idx, mem.width);
+	return sclr_left_tile(scaler, dev_idx, mem.width);
 }
 
-bool img_right_tile_cfg(u8 dev_idx, u16 online_r_start, u16 online_r_end)
+bool img_right_tile_cfg(struct scaler *scaler, u8 dev_idx, u16 online_r_start, u16 online_r_end)
 {
-	struct sclr_img_cfg *cfg = sclr_img_get_cfg(dev_idx);
+	struct sclr_img_cfg *cfg = sclr_img_get_cfg(scaler, dev_idx);
 	struct sclr_mem mem = cfg->mem;
-	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(dev_idx);
-	struct sclr_core_cfg *sc_cfg = sclr_get_cfg(dev_idx);
+	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(scaler, dev_idx);
+	struct sclr_core_cfg *sc_cfg = sclr_get_cfg(scaler, dev_idx);
 	u32 sc_offset;
 	u16 src_width = sc_cfg->sc.tile.in_mem.w;
 
@@ -486,7 +486,7 @@ bool img_right_tile_cfg(u8 dev_idx, u16 online_r_start, u16 online_r_end)
 		mem.start_x += sc_offset;
 		mem.width = src_width - sc_offset;
 	}
-	sclr_img_set_mem(dev_idx, &mem, true);
+	sclr_img_set_mem(scaler, dev_idx, &mem, true);
 	if(fbd_cfg.enable){
 		int fbd_height = ((sc_cfg->sc.tile.in_mem.h + 15) >> 4) << 2;
 		fbd_cfg.crop.x = mem.start_x;
@@ -497,24 +497,24 @@ bool img_right_tile_cfg(u8 dev_idx, u16 online_r_start, u16 online_r_end)
 		fbd_cfg.offset_base_c += (((fbd_cfg.crop.x >> 9) * fbd_height) << 5) + ((fbd_cfg.crop.y >> 2) << 5);
 		fbd_cfg.comp_base_y += (fbd_cfg.crop.y >> 2) * fbd_cfg.stride_y;
 		fbd_cfg.comp_base_c += (fbd_cfg.crop.y >> 2) * ALIGN(ALIGN(((sc_cfg->sc.tile.in_mem.w + 1) >> 1), 16) << 2, 32);
-		sclr_set_fbd(dev_idx, &fbd_cfg, false);
+		sclr_set_fbd(scaler, dev_idx, &fbd_cfg, false);
 	}
 	TRACE_VPSS(DBG_DEBUG, "img-%d start_x(%d) width(%d).\n", dev_idx, mem.start_x, mem.width);
 #endif
-	return sclr_right_tile(dev_idx, sc_offset);
+	return sclr_right_tile(scaler, dev_idx, sc_offset);
 }
 
-bool img_top_tile_cfg(u8 dev_idx, u8 is_left)
+bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_left)
 {
-	struct sclr_img_cfg *cfg = sclr_img_get_cfg(dev_idx);
+	struct sclr_img_cfg *cfg = sclr_img_get_cfg(scaler, dev_idx);
 	struct sclr_mem mem = cfg->mem;
-	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(dev_idx);
-	struct sclr_core_cfg *sc = sclr_get_cfg(dev_idx);
+	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(scaler, dev_idx);
+	struct sclr_core_cfg *sc = sclr_get_cfg(scaler, dev_idx);
 	TRACE_VPSS(DBG_DEBUG, "img-%d: tile on top.\n", dev_idx);
 
 #ifdef TILE_ON_IMG
 	mem.height = (sc->sc.v_tile.in_mem.h >> 1) + TILE_GUARD_PIXEL;
-	sclr_img_set_mem(dev_idx, &mem, false);
+	sclr_img_set_mem(scaler, dev_idx, &mem, false);
 	if(fbd_cfg.enable){
 		int fbd_height = ((sc->sc.v_tile.in_mem.h + 15) >> 4) << 2;
 		fbd_cfg.crop.x = mem.start_x;
@@ -525,19 +525,19 @@ bool img_top_tile_cfg(u8 dev_idx, u8 is_left)
 		fbd_cfg.offset_base_c += (((fbd_cfg.crop.x >> 9) * fbd_height) << 5) + ((fbd_cfg.crop.y >> 2) << 5);
 		fbd_cfg.comp_base_y += (fbd_cfg.crop.y >> 2) * fbd_cfg.stride_y;
 		fbd_cfg.comp_base_c += (fbd_cfg.crop.y >> 2) * ALIGN(ALIGN(((sc->sc.v_tile.in_mem.w + 1) >> 1), 16) << 2, 32);
-		sclr_set_fbd(dev_idx, &fbd_cfg, false);
+		sclr_set_fbd(scaler, dev_idx, &fbd_cfg, false);
 	}
 	TRACE_VPSS(DBG_DEBUG, "img-%d start_y(%d) height(%d).\n", dev_idx, mem.start_y, mem.height);
 #endif
-	return sclr_top_tile(dev_idx, mem.height, is_left);
+	return sclr_top_tile(scaler, dev_idx, mem.height, is_left);
 }
 
-bool img_down_tile_cfg(u8 dev_idx, u8 is_right)
+bool img_down_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_right)
 {
-	struct sclr_img_cfg *cfg = sclr_img_get_cfg(dev_idx);
+	struct sclr_img_cfg *cfg = sclr_img_get_cfg(scaler, dev_idx);
 	struct sclr_mem mem = cfg->mem;
-	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(dev_idx);
-	struct sclr_core_cfg *sc = sclr_get_cfg(dev_idx);
+	struct sclr_fbd_cfg fbd_cfg = *sclr_fbd_get_cfg(scaler, dev_idx);
+	struct sclr_core_cfg *sc = sclr_get_cfg(scaler, dev_idx);
 	u32 sc_offset;
 
 	TRACE_VPSS(DBG_DEBUG, "img-%d: tile on down.\n", dev_idx);
@@ -546,7 +546,7 @@ bool img_down_tile_cfg(u8 dev_idx, u8 is_right)
 	sc_offset = (sc->sc.v_tile.in_mem.h >> 1) - TILE_GUARD_PIXEL;
 	mem.start_y += sc_offset;
 	mem.height = mem.height - sc_offset;
-	sclr_img_set_mem(dev_idx, &mem, false);
+	sclr_img_set_mem(scaler, dev_idx, &mem, false);
 	if(fbd_cfg.enable){
 		int fbd_height = ((sc->sc.v_tile.in_mem.h + 15) >> 4) << 2;
 		fbd_cfg.crop.x = mem.start_x;
@@ -557,11 +557,11 @@ bool img_down_tile_cfg(u8 dev_idx, u8 is_right)
 		fbd_cfg.offset_base_c += (((fbd_cfg.crop.x >> 9) * fbd_height) << 5) + ((fbd_cfg.crop.y >> 2) << 5);
 		fbd_cfg.comp_base_y += (fbd_cfg.crop.y >> 2) * fbd_cfg.stride_y;
 		fbd_cfg.comp_base_c += (fbd_cfg.crop.y >> 2) * ALIGN(ALIGN(((sc->sc.v_tile.in_mem.w + 1) >> 1), 16) << 2, 32);
-		sclr_set_fbd(dev_idx, &fbd_cfg, false);
+		sclr_set_fbd(scaler, dev_idx, &fbd_cfg, false);
 	}
 	TRACE_VPSS(DBG_DEBUG, "img-%d start_y(%d) height(%d).\n", dev_idx, mem.start_y, mem.height);
 #endif
-	return sclr_down_tile(dev_idx, sc_offset, is_right);
+	return sclr_down_tile(scaler, dev_idx, sc_offset, is_right);
 }
 
 enum sclr_csc get_img_csc(u32 pixelformat)
@@ -599,7 +599,7 @@ enum sclr_csc get_sc_csc(u32 pixelformat)
 	return csc_type;
 }
 
-void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
+void sc_update(struct scaler *scaler, u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 {
 	enum sclr_format fmt;
 	struct sclr_odma_cfg *odma_cfg;
@@ -625,8 +625,8 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		"pitch_c", chn_cfg->bytesperline[1]);
 
 	/*core config*/
-	core_cfg = sclr_get_cfg(dev_idx);
-	odma_cfg = sclr_odma_get_cfg(dev_idx);
+	core_cfg = sclr_get_cfg(scaler, dev_idx);
+	odma_cfg = sclr_odma_get_cfg(scaler, dev_idx);
 
 	core_cfg->sc.src.w = chn_cfg->src_size.width;
 	core_cfg->sc.src.h = chn_cfg->src_size.height;
@@ -639,8 +639,8 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 	core_cfg->sc.algorithm = (enum sclr_algorithm)chn_cfg->sc_coef;
 	core_cfg->sc.tile_enable = 0;
 	core_cfg->sc.mir_enable = 0;
-	sclr_core_set_cfg(dev_idx, core_cfg);
-	sclr_core_checksum_en(dev_idx, true);
+	sclr_core_set_cfg(scaler, dev_idx, core_cfg);
+	sclr_core_checksum_en(scaler, dev_idx, true);
 
 	/*odma config*/
 	fmt = user_fmt_to_hw(chn_cfg->pixelformat);
@@ -679,14 +679,14 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		odma_cfg->csc_cfg.mode = SCL_OUT_DISABLE;
 		odma_cfg->csc_cfg.csc_type = SCL_CSC_NONE;
 	}
-	sclr_odma_set_cfg(dev_idx, odma_cfg);
+	sclr_odma_set_cfg(scaler, dev_idx, odma_cfg);
 	//user csc
 	if (odma_cfg->csc_cfg.mode == SCL_OUT_CSC)
-		sclr_set_csc(dev_idx, (struct sclr_csc_matrix *)&chn_cfg->csc_cfg);
+		sclr_set_csc(scaler, dev_idx, (struct sclr_csc_matrix *)&chn_cfg->csc_cfg);
 
 	/*y rotio*/
 	if ((odma_cfg->csc_cfg.mode == SCL_OUT_CSC) && (chn_cfg->y_ratio != YRATIO_SCALE))
-		_sc_ext_set_y_ratio(dev_idx, chn_cfg->y_ratio, odma_cfg->csc_cfg.csc_type);
+		_sc_ext_set_y_ratio(scaler, dev_idx, chn_cfg->y_ratio, odma_cfg->csc_cfg.csc_type);
 
 	TRACE_VPSS(DBG_DEBUG, "%10s(%4d)%10s(%4d)%10s(%4d)\n", "fmt",
 		odma_cfg->fmt, "csc mode", odma_cfg->csc_cfg.mode,
@@ -726,10 +726,10 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		cir_cfg.color_g = chn_cfg->circle_cfg.cfg0.b.value_g;
 		cir_cfg.color_b = chn_cfg->circle_cfg.cfg0.b.value_b;
 	}
-	sclr_cir_set_cfg(dev_idx, &cir_cfg);
+	sclr_cir_set_cfg(scaler, dev_idx, &cir_cfg);
 
 	/*border*/
-	_sc_ext_set_border(dev_idx, &chn_cfg->border_cfg);
+	_sc_ext_set_border(scaler, dev_idx, &chn_cfg->border_cfg);
 	TRACE_VPSS(DBG_DEBUG, "%10s(%4d)%10s(%4d %4d)%10s(%4d %4d %4d)\n",
 		"border enable", chn_cfg->border_cfg.enable,
 		"offset", chn_cfg->border_cfg.offset_x, chn_cfg->border_cfg.offset_y,
@@ -737,10 +737,10 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		chn_cfg->border_cfg.bg_color[2]);
 
 	/*border vpp*/
-	_sc_ext_set_border_vpp(dev_idx, chn_cfg->border_vpp_cfg);
+	_sc_ext_set_border_vpp(scaler, dev_idx, chn_cfg->border_vpp_cfg);
 
 	/*convertto*/
-	_sc_ext_set_convertto(dev_idx, &chn_cfg->convert_to_cfg);
+	_sc_ext_set_convertto(scaler, dev_idx, &chn_cfg->convert_to_cfg);
 	TRACE_VPSS(DBG_DEBUG, "%15s(%4d)%10s(%4d %4d %4d)%10s(%4d %4d %4d)\n",
 		"convert enable", chn_cfg->convert_to_cfg.enable,
 		"a_frac", chn_cfg->convert_to_cfg.a_frac[0], chn_cfg->convert_to_cfg.a_frac[1],
@@ -749,7 +749,7 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		chn_cfg->convert_to_cfg.b_frac[2]);
 
 	/*quant*/
-	_sc_ext_set_quant(dev_idx, &chn_cfg->quant_cfg);
+	_sc_ext_set_quant(scaler, dev_idx, &chn_cfg->quant_cfg);
 	TRACE_VPSS(DBG_DEBUG, "%15s(%4d)%10s(%4d)%10s(%4d %4d %4d)%10s(%4d %4d %4d)%10s(%4d %4d %4d)\n",
 		"quant enable", chn_cfg->quant_cfg.enable,
 		"rounding", chn_cfg->quant_cfg.rounding,
@@ -759,14 +759,14 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		chn_cfg->quant_cfg.sub_frac[2]);
 
 	/*cover*/
-	_sc_ext_set_coverex(dev_idx, &chn_cfg->rgn_coverex_cfg);
+	_sc_ext_set_coverex(scaler, dev_idx, &chn_cfg->rgn_coverex_cfg);
 	/*mosaic*/
-	_sc_ext_set_mask(dev_idx, &chn_cfg->rgn_mosaic_cfg);
+	_sc_ext_set_mask(scaler, dev_idx, &chn_cfg->rgn_mosaic_cfg);
 
 	/*gop*/
 	for (i = 0; i < RGN_MAX_LAYER_VPSS; ++i) {
 		rgn_cfg = &chn_cfg->rgn_cfg[i];
-		_sc_ext_set_rgn_cfg(dev_idx, i, rgn_cfg, &sclr_get_cfg(dev_idx)->sc.dst);
+		_sc_ext_set_rgn_cfg(scaler, dev_idx, i, rgn_cfg, &sclr_get_cfg(scaler, dev_idx)->sc.dst);
 		TRACE_VPSS(DBG_DEBUG, "gop%d:%10s(%4d)%10s(%4d)%10s(%4d)%10s(%4d)%10s(0x%08x)\n", i,
 			"rgn number", rgn_cfg->num_of_rgn,
 			"hscale_x2", rgn_cfg->hscale_x2,
@@ -804,16 +804,16 @@ void sc_update(u8 dev_idx, const struct vpss_hal_chn_cfg *chn_cfg)
 		}
 	}
 
-	sclr_set_cfg(dev_idx, false, gop_bypass, cir_bypass, false);
+	sclr_set_cfg(scaler, dev_idx, false, gop_bypass, cir_bypass, false);
 }
 
-void img_update(u8 dev_idx, bool is_master, const struct vpss_hal_grp_cfg *grp_cfg)
+void img_update(struct scaler *scaler, u8 dev_idx, bool is_master, const struct vpss_hal_grp_cfg *grp_cfg)
 {
 	struct sclr_img_cfg *cfg;
 	enum sclr_format fmt;
 
 	fmt = user_fmt_to_hw(grp_cfg->pixelformat);
-	cfg = sclr_img_get_cfg(dev_idx);
+	cfg = sclr_img_get_cfg(scaler, dev_idx);
 
 	if (grp_cfg->online_from_isp) {
 		cfg->src = is_master ? SCL_INPUT_ISP : SCL_INPUT_SHARE;
@@ -866,7 +866,7 @@ void img_update(u8 dev_idx, bool is_master, const struct vpss_hal_grp_cfg *grp_c
 		cfg->mem.addr2 = 0;
 	}
 
-	_sc_ext_set_fbd(dev_idx, grp_cfg);
+	_sc_ext_set_fbd(scaler, dev_idx, grp_cfg);
 
 	TRACE_VPSS(DBG_DEBUG, "update img(%d) online_from_isp=%d, fmt=%d, csc=%d, fbd_enable=%d\n",
 		dev_idx, grp_cfg->online_from_isp, cfg->fmt, cfg->csc, grp_cfg->fbd_enable);
@@ -876,44 +876,44 @@ void img_update(u8 dev_idx, bool is_master, const struct vpss_hal_grp_cfg *grp_c
 		cfg->mem.width, cfg->mem.height, cfg->mem.start_x, cfg->mem.start_y, cfg->mem.pitch_y,
 		cfg->mem.pitch_c, cfg->mem.addr0, cfg->mem.addr1, cfg->mem.addr2, grp_cfg->addr[3]);
 
-	sclr_img_checksum_en(dev_idx, true);
-	sclr_img_set_cfg(dev_idx, cfg);
+	sclr_img_checksum_en(scaler, dev_idx, true);
+	sclr_img_set_cfg(scaler, dev_idx, cfg);
 	//user csc
 	if (cfg->csc != SCL_CSC_NONE)
-		sclr_img_set_csc(dev_idx, (struct sclr_csc_matrix *)&grp_cfg->csc_cfg);
+		sclr_img_set_csc(scaler, dev_idx, (struct sclr_csc_matrix *)&grp_cfg->csc_cfg);
 }
 
-void top_update(u8 dev_idx, bool is_share, bool fbd_enable)
+void top_update(struct scaler *scaler, u8 dev_idx, bool is_share, bool fbd_enable)
 {
-	sclr_top_set_src_share(dev_idx, is_share);
-	sclr_top_set_cfg(dev_idx, true, fbd_enable);
+	sclr_top_set_src_share(scaler, dev_idx, is_share);
+	sclr_top_set_cfg(scaler, dev_idx, true, fbd_enable);
 }
 
-void img_start(u8 dev_idx, u8 chn_num)
+void img_start(struct scaler *scaler, u8 dev_idx, u8 chn_num)
 {
 	int i;
 
 	for (i = dev_idx; i < (dev_idx + chn_num); i++)
-		sclr_slave_ready(i);
+		sclr_slave_ready(scaler, i);
 
-	sclr_img_start(dev_idx);
+	sclr_img_start(scaler, dev_idx);
 }
 
-void img_reset(u8 dev_idx)
+void img_reset(struct scaler *scaler, u8 dev_idx)
 {
-	sclr_vpss_sw_top_reset(dev_idx);
+	sclr_vpss_sw_top_reset(scaler, dev_idx);
 }
 
-void vpss_stauts(u8 dev_idx)
+void vpss_stauts(struct scaler *scaler, u8 dev_idx)
 {
-	sclr_dump_top_register(dev_idx);
-	sclr_dump_img_in_register(dev_idx);
-	sclr_dump_core_register(dev_idx);
-	sclr_dump_odma_register(dev_idx);
+	sclr_dump_top_register(scaler, dev_idx);
+	sclr_dump_img_in_register(scaler, dev_idx);
+	sclr_dump_core_register(scaler, dev_idx);
+	sclr_dump_odma_register(scaler, dev_idx);
 }
 
-void vpss_error_stauts(u8 dev_idx)
+void vpss_error_stauts(struct scaler *scaler, u8 dev_idx)
 {
-	sclr_dump_register(dev_idx);
+	sclr_dump_register(scaler, dev_idx);
 }
 

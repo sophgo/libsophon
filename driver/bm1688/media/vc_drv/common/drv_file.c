@@ -21,7 +21,6 @@ driver_file_t drv_fopen(const char *osal_file_tname, const char *mode)
         return NULL;
     }
 
-    // tmp_fp->old_fs = get_fs();
 
     return tmp_fp;
 }
@@ -68,7 +67,7 @@ int drv_fclose(driver_file_t fp)
 
     filep = tmp_fp->filep;
     filp_close(filep, 0);
-    // set_fs(tmp_fp->old_fs);
+
     vfree(tmp_fp);
 
     return 0;

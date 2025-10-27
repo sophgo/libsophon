@@ -66,7 +66,5 @@ u32 bm1688_dual_cdma_transfer(struct bm_device_info *bmdi, struct file *file,
 
 #ifdef SOC_MODE
 void bm1688_cdma_reset(struct bm_device_info *bmdi);
-void bm1688_cdma_clk_enable(struct bm_device_info *bmdi);
-void bm1688_cdma_clk_disable(struct bm_device_info *bmdi);
 #endif
 #endif

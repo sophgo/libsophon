@@ -279,7 +279,10 @@ int core_id) {
 			"invalid size = 0x%x!\n", size);
 		return BM_ERR_PARAM;
 	}
-	bm_profile_record_send_api(handle, api_id, api, core_id);
+
+	if (api_id != BM_API_ID_TPUSCALER_UNLOAD_LIB) {
+		bm_profile_record_send_api(handle, api_id, api, core_id);
+	}
 
 #ifdef USING_CMODEL
 	return handle->bm_dev->bm_device_send_api(api_id, api, size, core_id);
@@ -306,8 +309,7 @@ int core_id) {
 		ret = platform_ioctl(handle, BMDEV_SEND_API, &bm_api);
 	if (ret == 0) {
 		return BM_SUCCESS;
-	}
-	else{
+	} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
 					"bmdev send api failed, ioclt ret = %d %d\n", ret, __LINE__);
 		return BM_ERR_FAILURE;
@@ -457,6 +459,23 @@ bm_status_t bm_thread_sync_from_core(bm_handle_t handle, int core_id) {
 #endif
 	bm_profile_record_sync_end(handle, core_id);
 	return status;
+}
+
+bm_status_t bm_set_sync_timeout(bm_handle_t handle, int timeout) {
+    bm_status_t status = BM_SUCCESS;
+#ifndef USING_CMODEL
+    if (handle == nullptr) {
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                  "handle is nullptr %s: %s: %d\n",
+                  __FILE__, __func__, __LINE__);
+        status = BM_ERR_DEVNOTREADY;
+    } else if (0 == platform_ioctl(handle, BMDEV_SYNC_TIMEOUT_API, &timeout)) {
+        status = BM_SUCCESS;
+    } else {
+        status = BM_ERR_FAILURE;
+    }
+#endif
+    return status;
 }
 
 bm_status_t bm_thread_sync(bm_handle_t handle)
@@ -2724,6 +2743,28 @@ bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
 	}
 
 	ret = platform_ioctl(handle, BMDEV_PWR_CTRL, bm_api_cfg_pwr_ctrl);
+	if (ret == 0) {
+		return BM_SUCCESS;
+	} else {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+				"bmdev pwr ctrl failed, ioclt ret = %d %d\n", ret, __LINE__);
+		return BM_ERR_FAILURE;
+	}
+#endif
+}
+
+bm_status_t bm_get_fw_version(bm_handle_t handle) {
+#ifdef USING_CMODEL
+		UNUSED(handle);
+		return BM_SUCCESS;
+#else
+	int ret;
+	if (handle == nullptr) {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR, "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+		return BM_ERR_DEVNOTREADY;
+	}
+
+	ret = platform_ioctl(handle, BMDEV_GET_FW_VERSION, NULL);
 	if (ret == 0) {
 		return BM_SUCCESS;
 	} else {

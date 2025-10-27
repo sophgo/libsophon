@@ -85,6 +85,9 @@ struct bm_io_bar_vaddr {
 	void __iomem *pka_bar_vaddr;
 	void __iomem *efuse_bar_vaddr;
 	void __iomem *otp_bar_vaddr;
+	void __iomem *thermal_bar_vaddr;
+	void __iomem *rtc_bar_vaddr;
+	void __iomem *hwthermal_bar_vaddr;
 };
 
 struct bm_card_reg {
@@ -115,6 +118,9 @@ struct bm_card_reg {
 	u32 pka_base_addr;
 	u32 efuse_base_addr;
 	u32 otp_base_addr;
+	u32 thermal_base_addr;
+	u32 rtc_base_addr;
+	u32 hwthermal_base_addr;
 };
 
 #ifdef SOC_MODE
@@ -198,6 +204,9 @@ static const struct bm_card_reg bm_reg_1682 = {
 	.spacc_base_addr = 0x0,
 	.pka_base_addr = 0x0,
 	.efuse_base_addr = 0x0,
+	.thermal_base_addr = 0x0,
+	.rtc_base_addr = 0x0,
+	.hwthermal_base_addr = 0x0,
 };
 
 static const struct bm_card_reg bm_reg_1684 = {
@@ -226,6 +235,9 @@ static const struct bm_card_reg bm_reg_1684 = {
 	.spacc_base_addr = 0x58004000,
 	.pka_base_addr = 0x58008000,
 	.efuse_base_addr = 0x50028000,
+	.thermal_base_addr = 0x0,
+	.rtc_base_addr = 0x0,
+	.hwthermal_base_addr = 0x0,
 };
 
 static const struct bm_card_reg bm_reg_1684x = {
@@ -254,6 +266,9 @@ static const struct bm_card_reg bm_reg_1684x = {
         .spacc_base_addr = 0x12008000,
         .pka_base_addr = 0x12000000,
         .efuse_base_addr = 0x50028000,
+		.thermal_base_addr = 0x0,
+		.rtc_base_addr = 0x0,
+		.hwthermal_base_addr = 0x0,
 };
 
 static const struct bm_card_reg bm_reg_bm1688 = {
@@ -284,6 +299,9 @@ static const struct bm_card_reg bm_reg_bm1688 = {
 	.pka_base_addr = 0,
 	.efuse_base_addr = 0x27040000,
 	.otp_base_addr = 0x27100000,
+	.thermal_base_addr = 0x270d0000,
+	.rtc_base_addr = 0x05026000,
+	.hwthermal_base_addr = 0x05025000,
 };
 
 struct bm_device_info;
@@ -349,6 +367,12 @@ void gdma_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 gdma_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void gdma_reg_write_idx(struct bm_device_info *bmdi, u32 reg_offset, u32 val, int core_id);
 u32 gdma_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id);
+void thermal_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
+u32 thermal_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+void rtc_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
+u32 rtc_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
+void hwthermal_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
+u32 hwthermal_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void hau_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 hau_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 void spacc_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
