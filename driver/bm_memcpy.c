@@ -32,6 +32,7 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	if (ret < 0)
 		return ret;
 
+	pr_err("stagemem_s2d 1 vaddr:%p\n", memcpy_info->stagemem_s2d.v_addr);
 	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_d2s);
 	if (ret < 0) {
 		bmdrv_stagemem_release(bmdi, &bmdi->memcpy_info.stagemem_s2d);
@@ -316,13 +317,13 @@ void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
 	iommu_rgn->dir = dir;
 }
 
-int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t dst, void __user *src, u32 size,
+int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t dst, void __user *src, int size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode)
 {
-	u32 pass_idx = 0;
-	u32 cur_addr_inc = 0;
-	unsigned long size_step;
-	u32 realmem_size = CONFIG_HOST_REALMEM_SIZE / STAGEMEM_SLOT_NUM;
+	int pass_idx = 0;
+	int cur_addr_inc = 0;
+	int size_step;
+	int realmem_size = CONFIG_HOST_REALMEM_SIZE / STAGEMEM_SLOT_NUM;
 	void __user *src_cpy;
 	bm_cdma_arg cdma_arg;
 	int ret = 0;
@@ -330,6 +331,15 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 	void *v_addr = NULL;
 	u64 p_addr = 0;
 	int index = 0;
+	int chunk_size = 64 * 1024;
+	int bytes_copied = 0;
+	int copy_ret = 0;
+	int size_copy_step;
+
+	if (!access_ok(src, size)) {
+	    pr_err("bmdev_memcpy_s2d: user buffer(size:%d) is not accessible.\n", size);
+	    return -EFAULT;
+	}
 
 	PR_DEBUG("[%s] params:dst=%lld, src=%p, size=%d, inter=%d\n", __func__, dst, src, size, intr);
 
@@ -375,11 +385,22 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 			src_cpy = (u8 __user *)src + cur_addr_inc;
 
 			bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
-			if (copy_from_user(v_addr, src_cpy, size_step)) {
-				pr_err("bmdev_memcpy_s2d copy_from_user fail\n");
-				bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
-				return -EFAULT;
-			}
+			bytes_copied = 0;
+            while (bytes_copied < size_step) {
+		        size_copy_step = (size_step - bytes_copied) < chunk_size ?
+		                    (size_step - bytes_copied) : chunk_size;
+		        src_cpy = (u8 __user *)src + cur_addr_inc + bytes_copied;
+
+		        copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
+		        if (copy_ret) {
+		            pr_err("bmdev_memcpy_s2d: copy_from_user failed! pass_idx=%d, total_offset=%u, chunk_offset=%u, failed_bytes=%d\n",
+       pass_idx, cur_addr_inc + bytes_copied, bytes_copied, copy_ret);
+		            bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
+		            return -EFAULT;
+		        }
+		        bytes_copied += size_copy_step;
+		    }
+
 			bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
 			if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
