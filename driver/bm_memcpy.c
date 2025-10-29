@@ -3,6 +3,7 @@
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#include <linux/delay.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
 #include <asm/set_memory.h>
 #endif
@@ -331,10 +332,11 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 	void *v_addr = NULL;
 	u64 p_addr = 0;
 	int index = 0;
-	int chunk_size = 64 * 1024;
+	int chunk_size = 128 * 1024;
 	int bytes_copied = 0;
 	int copy_ret = 0;
 	int size_copy_step;
+	int retry = 3;
 
 	if (!access_ok(src, size)) {
 	    pr_err("bmdev_memcpy_s2d: user buffer(size:%d) is not accessible.\n", size);
@@ -386,20 +388,28 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 
 			bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
 			bytes_copied = 0;
-            while (bytes_copied < size_step) {
-		        size_copy_step = (size_step - bytes_copied) < chunk_size ?
+                        while (bytes_copied < size_step) {
+		            size_copy_step = (size_step - bytes_copied) < chunk_size ?
 		                    (size_step - bytes_copied) : chunk_size;
-		        src_cpy = (u8 __user *)src + cur_addr_inc + bytes_copied;
+		            src_cpy = (u8 __user *)src + cur_addr_inc + bytes_copied;
 
-		        copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
-		        if (copy_ret) {
-		            pr_err("bmdev_memcpy_s2d: copy_from_user failed! pass_idx=%d, total_offset=%u, chunk_offset=%u, failed_bytes=%d\n",
-       pass_idx, cur_addr_inc + bytes_copied, bytes_copied, copy_ret);
-		            bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
-		            return -EFAULT;
+		            copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
+			    retry = 3;
+			    do {
+                                copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
+                                if (copy_ret) {
+                                  retry--;
+                                  msleep(1);
+                                } 
+                            } while (copy_ret && retry > 0);
+		            if (copy_ret) {
+		              pr_err("bmdev_memcpy_s2d: copy_from_user failed! pass_idx=%d, total_offset=%u, chunk_offset=%u, failed_bytes=%d\n",
+                                 pass_idx, cur_addr_inc + bytes_copied, bytes_copied, copy_ret);
+		              bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
+		              return -EFAULT;
+		            }
+		            bytes_copied += size_copy_step;
 		        }
-		        bytes_copied += size_copy_step;
-		    }
 
 			bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
