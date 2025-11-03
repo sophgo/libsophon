@@ -13,13 +13,11 @@
 #include "bmodel.hpp"
 #include "bmruntime.h"
 #include "bmlib_runtime.h"
-#ifndef LITE_BUILD
 #include "kernel_module.h"
-#endif
 #include <fcntl.h>
 
 #define SP(D, T) (std::shared_ptr<T>((D), std::default_delete<T []>()))
-#define CV184X_SYSTEM_KERNEL_PATH "/system/lib/libtpu_kernel_module.so"
+
 
 // typedef struct bm_module
 // {
@@ -2306,27 +2304,28 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
     BMRT_LOG(INFO, "force loading firmare in runtime because BMRUNTIME_USING_INNER_FIRMWARE env is set");
   }
   size_t firmware_size = 0;
-  #if defined(__linux__) && !defined(LITE_BUILD)
-  if (bmrt_arch_info::get_bmtpu_arch() == BM1684X){
-    firmware_data = kernel_module_data_1684x;
-    firmware_size = sizeof(kernel_module_data_1684x);
-  } else if (bmrt_arch_info::get_bmtpu_arch() == BM1688){
-    firmware_data = kernel_module_data_tpulv60;
-    firmware_size = sizeof(kernel_module_data_tpulv60);
-  }
-  else if (bmrt_arch_info::get_bmtpu_arch() == CV184X) {
-    firmware_data = kernel_module_data_cv184x;
-    firmware_size = sizeof(kernel_module_data_cv184x);
-  }
+
+  #if defined(__linux__)
+    #if defined(LITE_BUILD)
+      if (bmrt_arch_info::get_bmtpu_arch() == CV184X) {
+          BMRT_LOG(INFO, "bmtpu_arch=%d", bmrt_arch_info::get_bmtpu_arch());
+          firmware_data = kernel_module_data_cv184x;
+          firmware_size = sizeof(kernel_module_data_cv184x);
+        }
+    #else
+      if (bmrt_arch_info::get_bmtpu_arch() == BM1684X){
+        firmware_data = kernel_module_data_1684x;
+        firmware_size = sizeof(kernel_module_data_1684x);
+      } else if (bmrt_arch_info::get_bmtpu_arch() == BM1688){
+        firmware_data = kernel_module_data_tpulv60;
+        firmware_size = sizeof(kernel_module_data_tpulv60);
+      }
+    #endif
   #endif
 
   vector<unsigned char> external_firmware;
   auto kernel_path_env = getenv("BMRUNTIME_USING_FIRMWARE");
-#if defined(LITE_BUILD)
-  const char* kernel_path = kernel_path_env ? kernel_path_env : CV184X_SYSTEM_KERNEL_PATH;
-#else
   const char* kernel_path = kernel_path_env;
-#endif
   if(!using_inner_firmware && kernel_path){
     BMRT_LOG(INFO, "loading firmare from ENV BMRUNTIME_USING_FIRMWARE=%s", kernel_path);
     string real_kernel_path = kernel_path;
@@ -2347,16 +2346,18 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
     }
   }
 
-  // load from bmodel, all cores should use the same firmware
-  auto _kernel_module = model_ctx->model()->kernel_module();
-  if (!using_inner_firmware && _kernel_module && external_firmware.empty()) {
-    auto module_binary = _kernel_module->binary();
-    if (module_binary->size()) {
-      external_firmware.resize(module_binary->size());
-      model_ctx->read_binary(module_binary, (uint8_t*)external_firmware.data());
-      BMRT_LOG(INFO, "loading firmare in bmodel");
+  #if !defined(LITE_BUILD)
+    // load from bmodel, all cores should use the same firmware
+    auto _kernel_module = model_ctx->model()->kernel_module();
+    if (!using_inner_firmware && _kernel_module && external_firmware.empty()) {
+      auto module_binary = _kernel_module->binary();
+      if (module_binary->size()) {
+        external_firmware.resize(module_binary->size());
+        model_ctx->read_binary(module_binary, (uint8_t*)external_firmware.data());
+        BMRT_LOG(INFO, "loading firmare in bmodel");
+      }
     }
-  }
+  #endif
 
   if(!external_firmware.empty()) {
     firmware_data = external_firmware.data();

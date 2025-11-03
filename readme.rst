@@ -367,3 +367,7 @@ libsophon目录下已经提供了编译好的bmlib接口文档《BMLIB开发参�
 ..     call build.bat release MT pack
 
 .. 最后在 libsophon/release 下可获取 libsophon_win_x.x.x_arch.zip 形式的压缩包文件。
+
+**许可证：**
+
+本项目基于 [Apache License 2.0 License](license.rst) 许可证开源。

@@ -743,10 +743,20 @@ uint64_t coeff_combine(
     if (is_same) {
       continue;
     }
-    addr_update_t addr_update;
+    addr_update_t addr_update = {0};
     addr_update.addr = location->offset();
     addr_update.size = location->size();
     addr_update.offset = buffer_offset - location->offset();
+    // There may be have multiple same locations, but only one addr_update.
+    // So we need to check if the addr_update already exists.
+    auto iter = std::find_if(addr_update_v->begin(), addr_update_v->end(),
+                             [&addr_update](const addr_update_t &update) {
+                               return (update.addr == addr_update.addr &&
+                                       update.size == addr_update.size);
+                             });
+    if (iter != addr_update_v->end()) {
+      continue;
+    }
     addr_update_v->push_back(addr_update);
     location_t loc;
     loc.name = location->name()->str();

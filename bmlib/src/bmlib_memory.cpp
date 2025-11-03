@@ -19,7 +19,9 @@
 #include <unistd.h>
 #include "bmlib_mmpool.h"
 #include "ion.h"
+
 #define BMLIB_MEMORY_LOG_TAG "bmlib_memory"
+#define BMLIB_ION_MEMORY_NAME "bmlib_device_memory"
 #define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
 #define KERNEL_MODULE_PATH "/lib/firmware/libbm1688_kernel_module.so"
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -498,6 +500,7 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
   memset(&alloc_data, 0, sizeof(alloc_data));
   alloc_data.len = pmem->size;
   alloc_data.flags = 0;
+  memcpy(alloc_data.name, BMLIB_ION_MEMORY_NAME, sizeof(BMLIB_ION_MEMORY_NAME));
   bm_profile_record_mem_begin(ctx);
   if (ctx->ion_fd) {
     // try all heaps as heap_id_mask set
@@ -555,6 +558,7 @@ static int sg_alloc_gmem(bm_handle_t ctx, sg_device_mem_t *pmem, int heap_id_mas
   memset(&alloc_data, 0, sizeof(alloc_data));
   alloc_data.len = pmem->size;
   alloc_data.flags = 0;
+  memcpy(alloc_data.name, BMLIB_ION_MEMORY_NAME, sizeof(BMLIB_ION_MEMORY_NAME));
   bm_profile_record_mem_begin(ctx);
 
   if (ctx->ion_fd) {
@@ -607,6 +611,7 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
   memset(&alloc_data, 0, sizeof(alloc_data));
   alloc_data.len = pmem->size;
   alloc_data.flags = 0;
+  memcpy(alloc_data.name, BMLIB_ION_MEMORY_NAME, sizeof(BMLIB_ION_MEMORY_NAME));
   bm_profile_record_mem_begin(ctx);
 
   if (ctx->ion_fd) {
@@ -1290,7 +1295,7 @@ void sg_set_device_mem(sg_device_mem_t *pmem, unsigned long long size, u64 addr 
   pmem->size = size;
   std::unique_lock<std::mutex> lock(ht_rw_mutex);
   for (const auto& [key, range] : ht_addr_fd) {
-    if (addr >= range.first && addr + size < range.second) {
+    if (addr >= range.first && addr + size <= range.second) {
       pmem->u.device.dmabuf_fd = key;
       return;
     }
@@ -1307,7 +1312,7 @@ void bm_set_device_mem_u64(bm_device_mem_u64_t *pmem, unsigned long long size, u
   pmem->size = size;
   std::unique_lock<std::mutex> lock(ht_rw_mutex);
   for (const auto& [key, range] : ht_addr_fd) {
-    if (addr >= range.first && addr + size < range.second) {
+    if (addr >= range.first && addr + size <= range.second) {
       pmem->u.device.dmabuf_fd = key;
       return;
     }
