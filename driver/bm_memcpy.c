@@ -384,16 +384,14 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 				size_step = realmem_size;
 			else
 				size_step = size - pass_idx * realmem_size;
-			src_cpy = (u8 __user *)src + cur_addr_inc;
 
 			bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
 			bytes_copied = 0;
-                        while (bytes_copied < size_step) {
-		            size_copy_step = (size_step - bytes_copied) < chunk_size ?
-		                    (size_step - bytes_copied) : chunk_size;
-		            src_cpy = (u8 __user *)src + cur_addr_inc + bytes_copied;
+            while (bytes_copied < size_step) {
+	            size_copy_step = (size_step - bytes_copied) < chunk_size ?
+	                    (size_step - bytes_copied) : chunk_size;
+	            src_cpy = (u8 __user *)src + cur_addr_inc + bytes_copied;
 
-		            copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
 			    retry = 3;
 			    do {
                                 copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
