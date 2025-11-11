@@ -332,7 +332,8 @@ void bm1688_start_c906(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, ctrl_word);
 	udelay(100);
 
-	pr_info("C906 firmware start\n");
+	pr_info("C906 firmware start s0:0x%llx s1:0x%llx size:%llu M\n",
+		c906_park_0, c906_park_1, (c906_park_1 - c906_park_0)/(0x100000));
 }
 
 void bm1688_resume_tpu(struct bm_device_info *bmdi, u32 c906_park_0_l,
