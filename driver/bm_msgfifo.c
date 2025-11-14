@@ -10,6 +10,10 @@
 #include "bm_thread.h"
 #include "bm1684/bm1684_clkrst.h"
 #include <linux/version.h>
+#include <linux/fs.h>
+#include <linux/file.h>
+#include <linux/time.h>
+
 
 void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 {
@@ -601,14 +605,36 @@ static const char *api_desc(int api_id) {
 	}
 }
 
-DEFINE_SPINLOCK(msg_lock);
+static DEFINE_MUTEX(msg_lock);
 
 void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	u32 wp, rp, new_rp;
 	u32 header_size;
+	struct file *filep;
+    loff_t pos = 0;
+    mm_segment_t old_fs;
+    ssize_t write_ret;
+    u32 message_value; 
+	char filename[64];
+	struct timespec64 ts;
 
-	spin_lock(&msg_lock);
+	mutex_lock(&msg_lock);
+
+	ktime_get_ts64(&ts);
+	snprintf(filename, sizeof(filename), "/data/tpu_msg_core%d_%lld_%09lu.bin",
+             core_id, (long long)ts.tv_sec, ts.tv_nsec);
+	filep = filp_open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (IS_ERR(filep)) {
+        pr_err("Failed to open /data/dump.bin for binary dumping.\n");
+        mutex_unlock(&msg_lock);
+        return;
+    }
+
+	old_fs = get_fs();
+    set_fs(KERNEL_DS);
+
+	pr_err("dump tpu core[%d] fifo msg...\n", core_id);
 
 	if (GP_REG_MESSAGE_WP_CHANNEL_XPU == channel) {
 		header_size = sizeof(bm_kapi_header_t) / sizeof(u32);
@@ -622,11 +648,15 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 		new_rp = rp;
 
 		if (wp == rp) {
-			PR_TRACE("the fifo is empty.\n");
+			pr_err("the fifo is empty.\n");
 		} else {
 			while (new_rp != wp) {
-				pr_err("bm-sophon%d message in xpu fifo : 0x%x\n", bmdi->dev_index,
-				shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0));
+				message_value = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0);
+				write_ret = kernel_write(filep, (char *)&message_value, sizeof(message_value), &pos);
+				if (write_ret != sizeof(message_value)) {
+                    pr_err("Binary write to file failed, ret = %zd\n", write_ret);
+                }
+				pos += sizeof(message_value);
 				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
 			}
 		}
@@ -642,17 +672,24 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 		new_rp = rp;
 
 		if (wp == rp)
-			PR_TRACE("the fifo is empty.\n");
+			pr_err("the fifo is empty.\n");
 		else {
 			while (new_rp != wp) {
-				pr_err("bm-sophon%d message in cpu fifo : %d\n", bmdi->dev_index,
-				shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_CPU, 0));
-				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
+				message_value = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_CPU, 0);
+				write_ret = kernel_write(filep, (char *)&message_value, sizeof(message_value), &pos);
+                if (write_ret != sizeof(message_value)) {
+                    pr_err("Binary write to file failed, ret = %zd\n", write_ret);
+                }
+                pos += sizeof(message_value);
+                new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
 			}
 		}
 	}
 #endif
-	spin_unlock(&msg_lock);
+	set_fs(old_fs);
+	filp_close(filep, NULL);
+
+	mutex_unlock(&msg_lock);
 }
 
 int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32 channel, int core_id)

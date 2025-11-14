@@ -240,7 +240,7 @@ int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 		return 0;
 	} else if (current_status == 0x102) {
 		pr_err("bm-sophon%d: TPU%d SYS hang. TPU%d C906 current status: polling engine done\n", bmdi->dev_index, core_id, core_id);
-		reg_proc_show(bmdi);
+		//reg_proc_show(bmdi);
 		return 1;
 	} else {
 		pr_err("bm-sophon%d: TPU%d C906 hang. TPU%d C906 current status: 0x%x\n",
