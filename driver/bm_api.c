@@ -65,6 +65,8 @@ cfg_pwr_ctrl_t g_cfg_pwr_param_default[2] = {
 	}
 };
 
+
+
 int pwr_ctrl_set(struct bm_device_info *bmdi, cfg_pwr_ctrl_t *cfg_pwr_ctrl_p)
 {
 	void __iomem *tpu0_cfg_pwr_ctrl_add_v;
@@ -168,35 +170,6 @@ int pwr_ctrl_ioctl(struct bm_device_info *bmdi, void *arg)
 	return 0;
 }
 
-static void reg_proc_show(struct bm_device_info *bmdi)
-{
-	int addr = 0;
-	int value = 0;
-	int core_num = 0;
-	int core_offset = 0x10000;
-	int tiu_reg_base_addr = 0x26000000;
-	int gdma_reg_base_addr = 0x26020000;
-	int read_count = 128;
-	int i, j;
-
-	core_num = base_get_core_num(bmdi);
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + tiu_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			pr_err("tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-	for (i = 0; i < core_num; i++) {
-		for (j = 0; j < read_count; j++) {
-			addr = (i * core_offset) + (j * 4) + gdma_reg_base_addr;
-			value = bm_read32(bmdi, addr);
-			pr_err("gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
-		}
-	}
-
-}
 
 int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 {

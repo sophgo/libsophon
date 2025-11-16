@@ -307,6 +307,7 @@ struct bm_device_info {
 	struct bm_memcpy_info memcpy_info;
 
 	struct mutex clk_reset_mutex;
+	struct mutex fifo_msg_mutex[BM_MAX_CORE_NUM];
 
 	struct bm_trace_info trace_info;
 

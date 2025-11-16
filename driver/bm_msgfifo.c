@@ -13,6 +13,12 @@
 #include <linux/fs.h>
 #include <linux/file.h>
 #include <linux/time.h>
+#include <linux/fs.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+
+
+extern uint32_t tpu_dump_msg;
 
 
 void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
@@ -258,18 +264,23 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 	if (channel == BM_MSGFIFO_CHANNEL_XPU)
 		core_id = bm_api_p->core_id;
 
+	mutex_lock(&bmdi->fifo_msg_mutex[core_id]);
 	if (BM_MSGFIFO_CHANNEL_XPU == channel)
 		cur_wp = gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, core_id);
 	else if (BM_MSGFIFO_CHANNEL_CPU == channel)
 		cur_wp = gp_reg_read_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU);
 	else {
+		mutex_unlock(&bmdi->fifo_msg_mutex[core_id]);
 		pr_err("invalid channel: %d\n", channel);
 		return 0;
 	}
 
 	shmem_reg_write_enh(bmdi, cur_wp, api_header_p->api_id, channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, api_size) / sizeof(u32));
-	shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_size, channel, core_id);
+	if (api_header_p->api_id == BM_API_QUIT) {
+		shmem_reg_write_enh(bmdi, next_wp, 0, channel, core_id);
+	}else
+		shmem_reg_write_enh(bmdi, next_wp, api_header_p->api_size, channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, offsetof(bm_kapi_header_t, api_handle) / sizeof(u32));
 	shmem_reg_write_enh(bmdi, next_wp, (u32)(api_header_p->api_handle), channel, core_id);
 	next_wp = bmdev_msgfifo_add_pointer(bmdi, next_wp, 1);
@@ -299,8 +310,10 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 	}
 	word_size = api_header_p->api_size + header_size / sizeof(u32);
 
-	if (api_header_p->api_id == BM_API_QUIT)
+	if (api_header_p->api_id == BM_API_QUIT) {
+		mutex_unlock(&bmdi->fifo_msg_mutex[core_id]);
 		return 0;
+	}
 
 	for (idx = 0; idx < api_header_p->api_size; idx++) {
 		next_wp = bmdev_msgfifo_add_pointer(bmdi, cur_wp, header_size / sizeof(u32) + idx);
@@ -320,6 +333,10 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 	else
 		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU, next_wp);
 
+	mutex_unlock(&bmdi->fifo_msg_mutex[core_id]);
+	if(tpu_dump_msg)
+		save_msgfifo_alternate_files_simple(bmdi, api_header_p, bm_api_p, 
+                                          api_opt_header_p, api_from_userspace);
 	return 0;
 }
 
@@ -614,10 +631,10 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 	struct file *filep;
     loff_t pos = 0;
     mm_segment_t old_fs;
-    ssize_t write_ret;
     u32 message_value; 
 	char filename[64];
 	struct timespec64 ts;
+	ssize_t write_ret;
 
 	mutex_lock(&msg_lock);
 
@@ -651,13 +668,18 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 			pr_err("the fifo is empty.\n");
 		} else {
 			while (new_rp != wp) {
-				message_value = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0);
-				write_ret = kernel_write(filep, (char *)&message_value, sizeof(message_value), &pos);
-				if (write_ret != sizeof(message_value)) {
-                    pr_err("Binary write to file failed, ret = %zd\n", write_ret);
-                }
-				pos += sizeof(message_value);
-				new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
+			    message_value = shmem_reg_read_enh(bmdi, new_rp, BM_MSGFIFO_CHANNEL_XPU, 0);
+			    
+			    do {
+			        write_ret = kernel_write(filep, (char *)&message_value, sizeof(message_value), &pos);
+			    } while (write_ret == -EINTR); 
+
+			    if (write_ret != sizeof(message_value)) {
+			        pr_err("Write failed or incomplete, ret = %zd\n", write_ret);
+			        break;
+			    }
+			    pos += write_ret;
+			    new_rp = bmdev_msgfifo_add_pointer(bmdi, new_rp, 1);
 			}
 		}
 	}
