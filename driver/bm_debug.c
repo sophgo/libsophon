@@ -183,8 +183,25 @@ static int bmdi_proc_show(struct seq_file *m, void *v)
 	struct bm_device_info *bmdi = m->private;
 
 	seq_printf(m, "libsophon git version:%s\n", GIT_VER_STRING);
-	seq_printf(m, "status:%d\n", bmdi->status);
-	seq_printf(m, "timeout:%d\n", bmdi->cinfo.delay_ms);
+
+	seq_printf(m, "bmdi info:%d\n", bmdi->status);
+	seq_printf(m, "bmdi.core_id:%d\n", bmdi->core_id);
+	seq_printf(m, "############### bmd.cinfo beg#################\n");
+	seq_printf(m, "bmdi.cinfo.share_mem_size:%d\n", bmdi->cinfo.share_mem_size);
+	seq_printf(m, "bmdi.cinfo.delay_ms:%u\n", bmdi->cinfo.delay_ms);
+	seq_printf(m, "bmdi.cinfo.chip_id:0x%x\n", bmdi->cinfo.chip_id);
+	seq_printf(m, "bmdi.cinfo.tpu_core_num:0x%x\n", bmdi->cinfo.tpu_core_num);
+	seq_printf(m, "bmdi.cinfo.mode:0x%x\n", bmdi->cinfo.mode);
+
+	seq_printf(m, "############### bmd.cinfo end#################\n");
+	seq_printf(m, "bmdi.enable_dyn_freq:%d\n", bmdi->enable_dyn_freq);
+	seq_printf(m, "bmdi.dump_reg_type:%d\n", bmdi->dump_reg_type);
+	seq_printf(m, "bmdi.fixed_fan_speed:%d\n", bmdi->fixed_fan_speed);
+	seq_printf(m, "bmdi.status:%d\n", bmdi->status);
+	seq_printf(m, "bmdi.status_pcie:%d\n", bmdi->status_pcie);
+	seq_printf(m, "bmdi.status_over_temp:%d\n", bmdi->status_over_temp);
+	seq_printf(m, "bmdi.status_sync_api:%d\n", bmdi->status_sync_api);
+	seq_printf(m, "bmdi.dev_refcount:%llu\n", bmdi->dev_refcount);
 
 	return 0;
 }
