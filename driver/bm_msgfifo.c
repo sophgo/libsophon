@@ -726,7 +726,7 @@ int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32
 	}
 	if (ret_wait)
 		return 0;
-	bmdev_dump_msgfifo(bmdi, channel, core_id);
+	//bmdev_dump_msgfifo(bmdi, channel, core_id);
 	PR_TRACE("bmdev : wait msg fifo empty slot %d timeout!\n", slot_number);
 	return -EBUSY;
 }
