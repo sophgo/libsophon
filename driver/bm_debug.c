@@ -20,6 +20,10 @@
 #include <bm_card.h>
 #include "bm1684/bm1684_flash.h"
 #endif
+#include <linux/fs.h>
+#include <linux/slab.h>
+#include <linux/uaccess.h>
+#include <linux/string.h>
 
 //static struct proc_dir_entry *bmsophon_total_node;
 static struct proc_dir_entry *bmsophon_proc_dir;
@@ -29,6 +33,378 @@ static char debug_node_name[] = "bmsophon";
 extern struct bm_ctrl_info *bmci;
 extern int dev_count;
 extern char release_date[];
+struct proc_dir_entry *bmdi_folder;
+
+
+
+
+#define MAX_MSG_COUNT 40
+#define MAX_CORE_SUPPORT 16
+
+struct core_file_state {
+    int current_file;     
+    int msg_count;       
+    char filename[2][64];
+};
+
+static struct core_file_state file_states[MAX_CORE_SUPPORT];
+
+static void init_filenames(int core_id, struct core_file_state *state)
+{
+    snprintf(state->filename[0], sizeof(state->filename[0]), 
+            "/tmp/msgfifo_core%d_a.raw", core_id);
+    snprintf(state->filename[1], sizeof(state->filename[1]), 
+            "/tmp/msgfifo_core%d_b.raw", core_id);
+    state->current_file = 0;
+    state->msg_count = 0;
+}
+
+static struct core_file_state* get_file_state(int core_id)
+{
+    if (core_id >= 0 && core_id < MAX_CORE_SUPPORT) {
+        return &file_states[core_id];
+    } else {
+        return &file_states[0];
+    }
+}
+
+static int switch_to_alternate_file(struct core_file_state *state)
+{
+    int new_file_index = 1 - state->current_file;
+    struct file *filep;
+    
+    filep = filp_open(state->filename[new_file_index], O_WRONLY | O_TRUNC | O_CREAT, 0644);
+    if (IS_ERR(filep)) {
+        return PTR_ERR(filep);
+    }
+    filp_close(filep, NULL);
+    
+    state->current_file = new_file_index;
+    state->msg_count = 0;
+    
+    return 0;
+}
+
+static int save_to_current_file(struct core_file_state *state, void *data, size_t data_size)
+{
+    struct file *filep;
+    loff_t pos = 0;
+    ssize_t write_ret;
+    int ret = 0;
+    
+    filep = filp_open(state->filename[state->current_file], O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (IS_ERR(filep)) {
+        return PTR_ERR(filep);
+    }
+    
+    write_ret = kernel_write(filep, data, data_size, &pos);
+    if (write_ret == data_size) {
+        state->msg_count++;
+        ret = 0;
+    } else {
+        ret = -EIO;
+    }
+    
+    vfs_fsync(filep, 0);
+    filp_close(filep, NULL);
+    
+    return ret;
+}
+
+int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
+                                             bm_kapi_header_t *api_header_p,
+                                             bm_api_t *bm_api_p,
+                                             bm_kapi_opt_header_t *api_opt_header_p,
+                                             bool api_from_userspace)
+{
+    struct core_file_state *state;
+    char *data_buf = NULL;
+    size_t total_size = 0, data_offset = 0;
+    int ret = 0;
+    u32 idx, msg_buf;
+    int core_id;
+    
+    core_id = bm_api_p->core_id;
+    
+    state = get_file_state(core_id);
+    if (state->msg_count == 0 && state->filename[0][0] == '\0') {
+        init_filenames(core_id, state);
+    }
+    
+    if (state->msg_count >= MAX_MSG_COUNT) {
+        ret = switch_to_alternate_file(state);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+    
+    total_size = sizeof(bm_kapi_header_t) + 
+                (api_opt_header_p ? sizeof(bm_kapi_opt_header_t) : 0) +
+                (api_header_p->api_size * sizeof(u32));
+    
+    data_buf = kmalloc(total_size, GFP_KERNEL);
+    if (!data_buf) {
+        return -ENOMEM;
+    }
+    
+    memcpy(data_buf + data_offset, api_header_p, sizeof(bm_kapi_header_t));
+    data_offset += sizeof(bm_kapi_header_t);
+    
+    if (api_opt_header_p != NULL) {
+        memcpy(data_buf + data_offset, api_opt_header_p, sizeof(bm_kapi_opt_header_t));
+        data_offset += sizeof(bm_kapi_opt_header_t);
+    }
+    
+    for (idx = 0; idx < api_header_p->api_size; idx++) {
+        char *data_ptr = data_buf + data_offset + (idx * sizeof(u32));
+        
+        if (api_from_userspace) {
+            ret = get_user(msg_buf, (u32 __user *)(bm_api_p->api_addr) + idx);
+            if (ret) {
+                kfree(data_buf);
+                return ret;
+            }
+        } else {
+            msg_buf = *((u32 *)(bm_api_p->api_addr) + idx);
+        }
+        memcpy(data_ptr, &msg_buf, sizeof(u32));
+    }
+    
+    ret = save_to_current_file(state, data_buf, total_size);
+    
+    kfree(data_buf);
+    return ret;
+}
+
+
+
+static int bmdi_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+
+	seq_printf(m, "libsophon git version:%s\n", GIT_VER_STRING);
+	seq_printf(m, "status:%d\n", bmdi->status);
+	seq_printf(m, "timeout:%d\n", bmdi->cinfo.delay_ms);
+
+	return 0;
+}
+
+static int seq_bmdi_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, bmdi_proc_show, PDE_DATA(inode));
+}
+
+static const struct proc_ops bmdi_proc_ops = {
+	.proc_open = seq_bmdi_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+
+static int lib_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	struct bmcpu_lib *lib_node;
+	struct bmcpu_lib *lib_temp, *lib_next;
+	struct bmcpu_lib *lib_info = bmdi->lib_dyn_info;
+	char hex_str[33];
+	int i = 0;
+
+	seq_puts(m, "lib_name                      md5                                refcount    core_id\n");
+
+	mutex_lock(&lib_info->bmcpu_lib_mutex);
+	list_for_each_entry_safe(lib_temp, lib_next, &lib_info->lib_list, lib_list) {
+		lib_node = lib_temp;
+		for (i = 0; i < 16; i++) {
+			sprintf(hex_str + (i * 2), "%02x", lib_node->md5[i]);
+		}
+		hex_str[32] = '\0';
+		seq_printf(m, "%-30s%-35s%-12d%-7d\n", lib_node->lib_name, hex_str,
+					lib_node->refcount, lib_node->core_id);
+	}
+	mutex_unlock(&lib_info->bmcpu_lib_mutex);
+
+	return 0;
+}
+
+static int seq_lib_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, lib_proc_show, PDE_DATA(inode));
+}
+
+static const struct proc_ops lib_proc_ops = {
+	.proc_open = seq_lib_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+
+extern int base_get_core_num(struct bm_device_info *bmdi);
+static int api_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	struct api_fifo_entry api_entry;
+	struct bm_api_info *api_info;
+	int count = 0;
+	int core_num = 0;
+	int api_num = 0;
+	int i = 0;
+	u64 glob_api_num = 0;
+	u64 sync_api_num = 0;
+
+	core_num = base_get_core_num(bmdi);
+	for (i = 0; i < core_num; i++) {
+		if (i == 0) {
+			sync_api_num = bmdi->bm_sync_api_seq;
+			glob_api_num = bmdi->bm_send_api_seq;
+		} else if (i == 1) {
+			sync_api_num = bmdi->bm_sync_api_seq1;
+			glob_api_num = bmdi->bm_send_api_seq1;
+		}
+		api_info = &bmdi->api_info[i][GP_REG_MESSAGE_WP_CHANNEL_XPU];
+		api_num = kfifo_len(&api_info->api_fifo) / API_ENTRY_SIZE;
+		seq_printf(m, "there is %d apis in core_%d fifo\n", api_num, i);
+		seq_printf(m, "%lld apis has send, %lld has sync\n", glob_api_num, sync_api_num);
+		if (api_num > 0) {
+			count = kfifo_out(&api_info->api_fifo, &api_entry, API_ENTRY_SIZE);
+			if (count < API_ENTRY_SIZE) {
+				pr_err("core_id %d: The dequeue entry size %d is not correct!\n", i, count);
+				break;
+			}
+			seq_printf(m, "first api info:\n    api_id:%d\n", api_entry.api_id);
+			seq_printf(m, "    global_api_seq:%lld\n", api_entry.global_api_seq);
+		}
+		seq_printf(m, " dump current file :%d\n", file_states[core_num].current_file);
+		seq_puts(m, "\n");
+	}
+
+	return 0;
+}
+
+static int seq_api_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, api_proc_show, PDE_DATA(inode));
+}
+
+static const struct proc_ops api_proc_ops = {
+	.proc_open = seq_api_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+
+static int tiu_gdma_proc_show(struct seq_file *m, void *v)
+{
+	struct bm_device_info *bmdi = m->private;
+	int addr = 0;
+	int value = 0;
+	int core_num = 0;
+	int core_offset = BD_ENGINE_TPU1_OFFSET;
+	void *tiu_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.tpu_bar_vaddr;
+	void *gdma_reg_base_addr = bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr;
+	int read_count = 128;
+	int i, j;
+
+	core_num = base_get_core_num(bmdi);
+	for (i = 0; i < core_num; i++) {
+		for (j = 0; j < read_count; j++) {
+			addr = (i * core_offset) + (j * 4) + *(u32 *)tiu_reg_base_addr;
+			value = bm_read32(bmdi, addr);
+			seq_printf(m, "tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
+		}
+	}
+
+	for (i = 0; i < core_num; i++) {
+		for (j = 0; j < read_count; j++) {
+			addr = (i * core_offset) + (j * 4) + *(u32 *)gdma_reg_base_addr;
+			value = bm_read32(bmdi, addr);
+			seq_printf(m, "gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
+		}
+	}
+
+	return 0;
+}
+
+
+static void reg_proc_show(struct bm_device_info *bmdi)
+{
+	int addr = 0;
+	int value = 0;
+	int core_num = 0;
+	int core_offset = 0x10000;
+	int tiu_reg_base_addr = 0x26000000;
+	int gdma_reg_base_addr = 0x26020000;
+	int read_count = 128;
+	int i, j;
+
+	core_num = base_get_core_num(bmdi);
+	for (i = 0; i < core_num; i++) {
+		for (j = 0; j < read_count; j++) {
+			addr = (i * core_offset) + (j * 4) + tiu_reg_base_addr;
+			value = bm_read32(bmdi, addr);
+			pr_err("tiu core=%d addr=0x%x, value=0x%x\n", i, addr, value);
+		}
+	}
+
+	for (i = 0; i < core_num; i++) {
+		for (j = 0; j < read_count; j++) {
+			addr = (i * core_offset) + (j * 4) + gdma_reg_base_addr;
+			value = bm_read32(bmdi, addr);
+			pr_err("gdma core=%d addr=0x%x, value=0x%x\n", i, addr, value);
+		}
+	}
+
+}
+
+
+static int seq_reg_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, tiu_gdma_proc_show, PDE_DATA(inode));
+}
+
+static const struct proc_ops reg_proc_ops = {
+	.proc_open = seq_reg_open,
+	.proc_read = seq_read,
+	.proc_release = single_release,
+};
+
+
+void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi)
+{
+	struct proc_dir_entry *proc_bmdi;
+	struct proc_dir_entry *proc_lib;
+	struct proc_dir_entry *proc_api;
+	struct proc_dir_entry *proc_reg;
+	const char *name;
+
+	name = pdev->dev.of_node->full_name;
+	bmdi_folder = proc_mkdir(name, NULL);
+	if (!bmdi_folder)
+		dev_err(&pdev->dev, "Error creating bmdi proc folder entry\n");
+
+	proc_bmdi = proc_create_data("bmdi_base_info", 0664, bmdi_folder, &bmdi_proc_ops, bmdi);
+	if (!proc_bmdi)
+		dev_err(&pdev->dev, "Create bmdi base info proc failed!\n");
+
+	proc_lib = proc_create_data("bmdi_lib_info", 0664, bmdi_folder, &lib_proc_ops, bmdi);
+	if (!proc_lib)
+		dev_err(&pdev->dev, "Create bmdi lib info proc failed!\n");
+
+	proc_api = proc_create_data("bmdi_api_info", 0664, bmdi_folder, &api_proc_ops, bmdi);
+	if (!proc_api)
+		dev_err(&pdev->dev, "Create bmdi api info proc failed!\n");
+
+	proc_reg = proc_create_data("tpu_reg_info", 0664, bmdi_folder, &reg_proc_ops, bmdi);
+	if (!proc_reg)
+		dev_err(&pdev->dev, "Create bmdi reg info proc failed!\n");
+}
+
+void remove_tpu_proc(void)
+{
+	remove_proc_entry("bmdi_base_info", bmdi_folder);
+	remove_proc_entry("bmdi_lib_info", bmdi_folder);
+	remove_proc_entry("bmdi_api_info", bmdi_folder);
+	remove_proc_entry("tpu_reg_info", bmdi_folder);
+	remove_proc_entry("bmtpu", NULL);
+}
+
 
 static int bmdrv_card_nums_proc_show(struct seq_file *m, void *v)
 {

@@ -226,6 +226,8 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 		bmdi->gmem_info.bm_gmem_init(bmdi))
 		return -EFAULT;
 	for (core = 0; core < core_num; core++) {
+		
+		mutex_init(&bmdi->fifo_msg_mutex[core]);
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
 			if (bmdi->api_info[core][channel].bm_api_init &&
 				bmdi->api_info[core][channel].bm_api_init(bmdi, core, channel))

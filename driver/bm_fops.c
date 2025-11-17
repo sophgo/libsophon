@@ -35,8 +35,12 @@
 #endif
 
 uint32_t tpu_log_lv = 0;
+uint32_t tpu_dump_msg = 0;
 
 module_param(tpu_log_lv, int, 0644);
+
+module_param(tpu_dump_msg, int, 0644);
+
 
 extern dev_t bm_devno_base;
 extern dev_t bm_ctl_devno_base;
