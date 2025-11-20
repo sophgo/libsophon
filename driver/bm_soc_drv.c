@@ -41,10 +41,12 @@ extern int dev_count;
 extern struct bm_ctrl_info *bmci;
 u32 c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h;
 u32 gp_reg1[32] = {0};
+extern void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi);
 
 static struct kobj_type bmdrv_ktype = {
 	NULL
 };
+
 
 static int platform_init_bar_address(struct platform_device *pdev, struct chip_info *cinfo)
 {

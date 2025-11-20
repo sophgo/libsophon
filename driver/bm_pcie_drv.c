@@ -1218,12 +1218,13 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_ctrl_add_dev;
 	}
 
+#if 0
 	rc = bm_monitor_thread_init(bmdi);
 	if (rc) {
 		dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
 		goto err_monitor_thread_init;
 	}
-
+#endif
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
 		dev_err(&pdev->dev, "bmdrv_card_init failed!\n");
@@ -1253,9 +1254,8 @@ err_card_init:
 	bmdrv_proc_file_deinit(bmdi);
 err_proc_file_init:
 	bm_monitor_thread_deinit(bmdi);
-err_monitor_thread_init:
-	bmdrv_ctrl_del_dev(bmci, bmdi);
 err_ctrl_add_dev:
+	bmdrv_ctrl_del_dev(bmci, bmdi);
 	if (dev_count == 0)
 		bmdrv_remove_bmci();
 err_chip_specific:

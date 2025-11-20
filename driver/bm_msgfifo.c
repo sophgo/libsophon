@@ -19,7 +19,11 @@
 
 
 extern uint32_t tpu_dump_msg;
-
+int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
+                                             bm_kapi_header_t *api_header_p,
+                                             bm_api_t *bm_api_p,
+                                             bm_kapi_opt_header_t *api_opt_header_p,
+                                             bool api_from_userspace);
 
 void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 {

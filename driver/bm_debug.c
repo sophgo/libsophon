@@ -1,4 +1,5 @@
 #include <linux/uaccess.h>
+#include <linux/platform_device.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include "bm_ctl.h"
