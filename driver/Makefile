@@ -201,7 +201,7 @@ ifeq ($(SOC_MODE), 1)
 	$(BM_MODULE_NAME)-y += bm_soc_drv.o
 else
 	$(BM_MODULE_NAME)-y += bm_pcie_drv.o spi.o vpu/vpu.o bm_wdt.o \
-	bm_boot_info.o xmodem.o console.o bm_napi.o bm_pt.o sg_comm.o efuse.o
+	bm_boot_info.o xmodem.o console.o bm_napi.o bm_pt.o sg_comm.o efuse.o bm_thermal.o
 endif
 $(BM_MODULE_NAME)-y += bm_drv.o bm_fops.o bm_irq.o i2c.o pwm.o  \
 	bm_memcpy.o bm_ctl.o bm_fw.o bm_cdma.o \

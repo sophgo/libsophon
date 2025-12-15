@@ -11,6 +11,7 @@
 #include "bm_drv.h"
 #include "bm_thread.h"
 #include "bm_debug.h"
+#include "bm_thermal.h"
 #include <linux/version.h>
 
 /* be carefull with global variables, keep multi-card support in mind */
@@ -251,6 +252,11 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 
 	bmdi->enable_dyn_freq = 1;
 
+	// init thermal
+#ifndef SOC_MODE
+	bm_thermal_init(bmdi);
+#endif
+
 	return ret;
 }
 
@@ -276,6 +282,10 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 
 	if (bmdi->trace_info.bm_trace_deinit)
 		bmdi->trace_info.bm_trace_deinit(bmdi);
+
+#ifndef SOC_MODE
+	bm_thermal_uninit(bmdi);
+#endif
 }
 
 struct class bmdev_class = {

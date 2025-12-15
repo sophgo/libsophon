@@ -462,7 +462,7 @@ int bmdrv_set_bm1688_default_boot_info(struct bm_device_info *bmdi)
 	bmdi->boot_info.tpu_min_clk = 25;
 	bmdi->boot_info.tpu_max_clk = 1000;
 	bmdi->boot_info.max_board_power = 75;
-	bmdi->boot_info.temp_sensor_exist = 0;
+	bmdi->boot_info.temp_sensor_exist = 1;
 	bmdi->boot_info.tpu_power_sensor_exist = 0;
 	bmdi->boot_info.deadbeef = 0xdeadbeef;
 	return 0;

@@ -434,7 +434,7 @@ static void bm_smi_cnum_to_str(int dev_id, char *s) {
 static void bm_smi_sn_to_str(int dev_id, char *s) {
     g_attr[dev_id].sn[17] = '\0';
      if(!strncmp(g_attr[dev_id].sn,"N/A",3)){
-        strncpy(g_attr[dev_id].sn,"    N/A         ",17);
+        strncpy(g_attr[dev_id].sn,"       N/A      ",17);
     }
     snprintf(s, 18, "%s", g_attr[dev_id].sn);
 }

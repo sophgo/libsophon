@@ -1,7 +1,7 @@
-#include "bmfunc/bmfunc.h"
 #include <iostream>
 #include "bmlib_runtime.h"
 #include "bmruntime.h"
+#include "bmfunc/bmdnn_func.h"
 
 namespace bmruntime {
 
@@ -16,12 +16,15 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
   u32 api_buffer_size =
       sizeof(int) + (input_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // input
       sizeof(int) + (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
-      sizeof(u64) * 2 + sizeof(int) + (cmd_info.size() * (sizeof(int) * 2 + sizeof(u32) * 2)) + // cmds loc and size
-      sizeof(u32) + (gdma_reloc_entries.size() * (2 * sizeof(u64)));   // reloc entries in IO_RELOC mode    
+      sizeof(u64) * 2 + sizeof(int) + (cmd_info.size() * (sizeof(int) * 2 + sizeof(u32) * 2)); // cmds loc and size
+  u32 num_reloc = gdma_reloc_entries.size();
   if (net_info.do_allreduce) {
-    api_buffer_size += sizeof(u32);
-    api_buffer_size += sizeof(tpu_kernel_allreduce_1684x_t);
+    api_buffer_size += sizeof(u32) + sizeof(tpu_kernel_allreduce_1684x_t);
+  } else {
+    api_buffer_size += sizeof(u32); // 0 allreduce
   }
+  api_buffer_size += sizeof(u32) + (num_reloc * (2 * sizeof(u64)));
+
   api_info.api_data.resize(1);
   api_info.api_data[0].assign(api_buffer_size, 0);
   api_info.input_addr_offset.assign(input_info.size(), 0);
@@ -79,24 +82,35 @@ void bmdnn_func_1684x::fill_api_info(const tpu_net_info_t &net_info,
     p_api = (u32 *)p_api + 1;
   }
 
-  // gdma relocation info
-  *(u32 *)p_api = gdma_reloc_entries.size();
-  p_api = (u32 *)p_api + 1;
-  for (size_t i = 0; i < gdma_reloc_entries.size(); i++) {
-    const auto& reloc_entry = gdma_reloc_entries[i];
-    const auto& reloc_addr_info = reloc_entry.reloc_addr_info;
-    *(u64 *)p_api = reloc_entry.cmd_offset;
-    p_api = (u64 *)p_api + 1;
-    *(u64 *)p_api = reloc_base_addrs[reloc_addr_info.base_addr_id] +
-                    reloc_addr_info.addr_offset;
-    p_api = (u64 *)p_api + 1;
-  }
-
+  // ====================  extention function ====================
+  // if new function is added, please follow the order below
+  // =============================================================
+  // 1. check if do all reduce
   if (net_info.do_allreduce == 1) {
     *(u32 *)p_api = net_info.do_allreduce;
     p_api = (u32 *)p_api + 1;
     *(tpu_kernel_allreduce_1684x_t *)p_api = net_info.allreduce_param;
     p_api = (tpu_kernel_allreduce_1684x_t *)p_api + 1;
+  } else {
+    *(u32 *)p_api = 0;
+    p_api = (u32 *)p_api + 1;
+  }
+  // 2. check if do reloc gdma addr
+  if (num_reloc > 0) {
+    *(u32 *)p_api = num_reloc;
+    p_api = (u32 *)p_api + 1;
+    for (size_t i = 0; i < num_reloc; i++) {
+      const auto& reloc_entry = gdma_reloc_entries[i];
+      const auto& reloc_addr_info = reloc_entry.reloc_addr_info;
+      *(u64 *)p_api = reloc_entry.cmd_offset;
+      p_api = (u64 *)p_api + 1;
+      *(u64 *)p_api = reloc_base_addrs[reloc_addr_info.base_addr_id] +
+                      reloc_addr_info.addr_offset;
+      p_api = (u64 *)p_api + 1;
+    }
+  } else {
+    *(u32 *)p_api = 0;
+    p_api = (u32 *)p_api + 1;
   }
 
   BMRT_LOG_RUN(DEBUG, {

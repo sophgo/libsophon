@@ -1218,7 +1218,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			c_attr = &bmdi->c_attr;
 			stat.mem_total = (int)(bmdrv_gmem_total_size(bmdi)/1024/1024);
 			stat.mem_used = stat.mem_total - (int)(bmdrv_gmem_avail_size(bmdi)/1024/1024);
-			stat.tpu_util = c_attr->bm_get_npu_util(bmdi);
+			stat.tpu_util = (c_attr->bm_get_npu_util(bmdi) + c_attr->bm_get_npu_util1(bmdi)) / 2;
 			bmdrv_heap_mem_used(bmdi, &stat);
 			ret = copy_to_user((unsigned long __user *)arg, &stat, sizeof(bm_dev_stat_t));
 			break;

@@ -126,6 +126,11 @@ class TestBM1690(TestBase):
         super(TestBM1690, self).__init__(case_names, loop_num)
         self.set_arch_name("bm1690")
 
+class TestBM1690E(TestBase):
+    def __init__(self, case_names, loop_num):
+        super(TestBM1690E, self).__init__(case_names, loop_num)
+        self.set_arch_name("bm1690e")
+
 class BmodelInfo:
     def __init__(self):
         self.model_name = None

@@ -62,7 +62,7 @@ static const struct bm_bar_info bm1688_pcie2_bar_layout[] = {
 		.bar1_part_info[20] = {0x76E000, 0x080000, 0x2580C000},
 		.bar1_part_info[21] = {0x7EE000, 0x002000, 0x20BE8000},
 		.bar1_part_info[22] = {0x7F0000, 0x001000, 0xFFFFE000},
-		.bar1_part_info[23] = {0x7F1000, 0x001000, 0x05026000},
+		.bar1_part_info[23] = {0x7F1000, 0x002000, 0x05025000},
 
 		.bar2_len = 0x400000,
 		.bar2_dev_start = 0,
@@ -128,7 +128,7 @@ static const struct bm_bar_info bm1688_pcie4_bar_layout[] = {
 		.bar1_part_info[20] = {0x76E000, 0x080000, 0x2580C000},
 		.bar1_part_info[21] = {0x7EE000, 0x002000, 0x20BE8000},
 		.bar1_part_info[22] = {0x7F0000, 0x001000, 0xFFFFF000},
-		.bar1_part_info[23] = {0x7F1000, 0x001000, 0x05026000},
+		.bar1_part_info[23] = {0x7F1000, 0x002000, 0x05025000},
 
 		.bar2_len = 0x400000,
 		.bar2_dev_start = 0,

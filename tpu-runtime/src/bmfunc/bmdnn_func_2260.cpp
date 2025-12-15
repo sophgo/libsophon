@@ -1,4 +1,5 @@
-#include "bmfunc/bmfunc.h"
+#include "bmruntime_common.h"
+#include "bmfunc/bmdnn_func.h"
 #include <iostream>
 
 namespace bmruntime {
@@ -109,9 +110,10 @@ void bmdnn_func_2260::fill_api_info(const tpu_net_info_t &net_info,
     p_api = ((u64 *)p_api) + 1;
     *((int *)p_api) = base_message_id;
     p_api = ((u32 *)p_api) + 1;
-
-    *((u64 *)p_api) = net_info.core_commands[core_idx].hau_cmd_addr;
-    p_api = ((u64 *)p_api) + 1;
+    if(arch_ == "BM1690" || arch_ == "BM1690E"){
+      *((u64 *)p_api) = net_info.core_commands[core_idx].hau_cmd_addr;
+      p_api = ((u64 *)p_api) + 1;
+    }
     *((u64 *)p_api) = net_info.core_commands[core_idx].sdma_cmd_addr;
     p_api = ((u64 *)p_api) + 1;
   }

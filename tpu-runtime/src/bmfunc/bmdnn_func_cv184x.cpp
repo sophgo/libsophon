@@ -1,4 +1,5 @@
-#include "bmfunc/bmfunc.h"
+#include "bmruntime_common.h"
+#include "bmfunc/bmdnn_func.h"
 #include <iostream>
 
 namespace bmruntime {
@@ -9,7 +10,7 @@ extern "C" bm_status_t bm_send_api_to_core(
   u32          size,
   int          core_id);
 
-void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
+void bmdnn_func_cv184x::fill_api_info(const tpu_net_info_t &net_info,
                                     api_info_t &api_info) {
   BMRT_ASSERT_INFO(net_info.neuron_start_addr.size() == 1,
                    "only support one neuron addr");
@@ -48,7 +49,7 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
           (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
       *(u64 *)p_api = info.user_global_addr;
       p_api = (u64 *)p_api + 1;
-      if (core_idx > 0) {
+      if (core_idx > 0 && ((info.compiled_global_addr >> 40) & 0x7) == 0) {
         /// If the bmodel use multi core, we only move the user's input data to
         /// compiled ddr once.
         *(u64 *)p_api = info.user_global_addr;
@@ -70,7 +71,7 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
           (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
       *(u64 *)p_api = info.user_global_addr;
       p_api = (u64 *)p_api + 1;
-      if (core_idx > 0) {
+      if (core_idx > 0 && ((info.compiled_global_addr >> 40) & 0x7) == 0) {
         /// If the bmodel use multi core, we only move the user's input data to
         /// compiled ddr once.
         *(u64 *)p_api = info.user_global_addr;
@@ -111,7 +112,7 @@ void bmdnn_func_mars3::fill_api_info(const tpu_net_info_t &net_info,
   }
 }
 bm_status_t
-bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
+bmdnn_func_cv184x::_bmdnn_multi_fullnet_(bm_handle_t handle,
                                         const tpu_net_info_t &net_info)
 {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
@@ -129,7 +130,7 @@ bmdnn_func_mars3::_bmdnn_multi_fullnet_(bm_handle_t handle,
   return status;
 }
 
-bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
+bm_status_t bmdnn_func_cv184x::_bmdnn_dynamic_fullnet_(
         bm_handle_t handle,
         unsigned long long compiled_ir_global_addr,
         unsigned int compiled_ir_length, //unit dword
@@ -263,7 +264,7 @@ bm_status_t bmdnn_func_mars3::_bmdnn_dynamic_fullnet_(
      return status;
 }
 
-bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable_bits){
+bm_status_t  bmdnn_func_cv184x::_bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable_bits){
      BMRT_ASSERT_INFO(handle,"handle shouldn't be NULL\n");
      u32 api_buffer_size = sizeof(u32);
      u32 profile_enable = enable_bits;
@@ -273,7 +274,7 @@ bm_status_t  bmdnn_func_mars3::_bmdnn_set_profile_enable_(bm_handle_t handle, in
      }
      return status;
 }
-bm_status_t bmdnn_func_mars3::_bmdnn_get_profile_data_(
+bm_status_t bmdnn_func_cv184x::_bmdnn_get_profile_data_(
         bm_handle_t handle,
         int core,
         tpu_kernel_function_t func_id,
@@ -321,7 +322,7 @@ typedef struct {
 } bm_api_engine_profile_param_t;
 #pragma pack()
 
-bm_status_t bmdnn_func_mars3::_bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size){
+bm_status_t bmdnn_func_cv184x::_bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size){
   bm_api_engine_profile_param_t param;
   param.engine = engine_type;
   param.addr = addr;

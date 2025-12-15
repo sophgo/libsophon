@@ -1,4 +1,5 @@
-#include "bmfunc/bmfunc.h"
+#include "bmruntime_common.h"
+#include "bmfunc/bmdnn_func.h"
 #include <iostream>
 
 #define BM_MAX_DIMS_NUM 8

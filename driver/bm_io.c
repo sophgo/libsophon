@@ -467,6 +467,36 @@ u32 gdma_reg_read_idx(struct bm_device_info *bmdi, u32 reg_offset, int core_id)
 	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.gdma_bar_vaddr + reg_offset + core_id * GDMA_ENGINE_TPU1_OFFSET);
 }
 
+void thermal_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr + reg_offset);
+}
+
+u32 thermal_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr + reg_offset);
+}
+
+void rtc_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.rtc_bar_vaddr + reg_offset);
+}
+
+u32 rtc_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.rtc_bar_vaddr + reg_offset);
+}
+
+void hwthermal_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
+{
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.hwthermal_bar_vaddr + reg_offset);
+}
+
+u32 hwthermal_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
+{
+	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.hwthermal_bar_vaddr + reg_offset);
+}
+
 void hau_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
 {
 	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.hau_bar_vaddr + reg_offset);
@@ -535,12 +565,15 @@ void io_init(struct bm_device_info *bmdi)
 	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pka_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pka_bar_vaddr);
 	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->efuse_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->otp_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.otp_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->thermal_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr);
 #ifndef SOC_MODE
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->dev_info_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.dev_info_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->i2c_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.i2c_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->ddr_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.ddr_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->spi_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.spi_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->mcu_info_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.mcu_info_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->rtc_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.rtc_bar_vaddr);
+	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->hwthermal_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.hwthermal_bar_vaddr);
 #endif
 }
 

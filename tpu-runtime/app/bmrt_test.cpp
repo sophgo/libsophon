@@ -1136,6 +1136,17 @@ void bmrt_test()
             for (auto &core_id_ : core_list) { core_list_str += std::to_string(core_id_) + ","; }
             BMRT_LOG(FATAL, "net:%s pre_alloc_neuron failed, stage_idx:%d, core_list:%s", net_info->name, stage_idx, core_list_str.c_str());
           }
+          BMRT_LOG_RUN(DEBUG, {
+            std::string core_list_str = "";
+            for (auto &core_id_ : core_list) { core_list_str += std::to_string(core_id_) + ","; }
+            BMRT_LOG(DEBUG, "net:%s, core_list[%d]:%s", net_info->name, group_idx, core_list_str.c_str());
+            auto neuron_num = bmrt_get_neuron_number(p_bmrt, net_info->name);
+            for(int neuron_index = 0; neuron_index<neuron_num; neuron_index++){
+              auto neuron_mem = bmrt_get_neuron_memory(p_bmrt, net_info->name, neuron_index, core_list.data(), core_list.size());
+              BMRT_LOG(DEBUG, "  neuron[%d]: addr=0x%0llX, size=%d", neuron_index,
+                      bm_mem_get_device_addr(neuron_mem), bm_mem_get_device_size(neuron_mem));
+            }
+          });
         }
 
         bmrt_gettime(t3);
@@ -1429,13 +1440,6 @@ vector<string> test_case_v = {
     "bmcpp_load_bmodel_data",
     "bmcpp_reshape",
     "bmcpp_multi_thread",
-    // bmtap2 c interface
-    "bmtap2_register_bmodel",
-    "bmtap2_register_data",
-    "bmtap2_multi_thread",
-    // bmtap2 c++ interface
-    "bmtap2cpp_load_bmodel",
-    "bmtap2cpp_multi_thread",
     // bmruntime multi-core interface
     "bmmc_multi_mession",
 };

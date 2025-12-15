@@ -1206,11 +1206,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_ctrl_add_dev;
 	}
 
-	// rc = bm_monitor_thread_init(bmdi);
-	// if (rc) {
-	// 	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
-	// 	goto err_monitor_thread_init;
-	// }
+	//rc = bm_monitor_thread_init(bmdi);
+	//if (rc) {
+	//	dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
+	//	goto err_monitor_thread_init;
+	//}
 
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
@@ -1271,7 +1271,7 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	cinfo = &bmdi->cinfo;
 	dev_info(cinfo->device, "remove\n");
 	// i2c2_deinit(bmdi);
-	// bm_monitor_thread_deinit(bmdi);
+	//bm_monitor_thread_deinit(bmdi);
 #ifdef PCIE_MODE_ENABLE_CPU
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686) {
 		if ((bmdi->misc_info.a53_enable == 1)

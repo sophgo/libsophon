@@ -13,12 +13,11 @@
 #include "bmodel.hpp"
 #include "bmruntime.h"
 #include "bmlib_runtime.h"
-#ifndef LITE_BUILD
 #include "kernel_module.h"
-#endif
 #include <fcntl.h>
 
 #define SP(D, T) (std::shared_ptr<T>((D), std::default_delete<T []>()))
+
 
 // typedef struct bm_module
 // {
@@ -41,25 +40,33 @@ static void fill_tensor_attr(
     u64 ctx_start,
     const std::vector<u64> &ctx_borders,
     const std::vector<u64> &ctx_offset,
-    uint32_t flags)
+    uint32_t flags,
+    addr_t addr_traits,
+    addr_mode_t io_mode)
 {
   attr->shape.num_dims = tensor->shape()->Get(0)->dim()->size();
   for (int i = 0; i < attr->shape.num_dims; i++) {
     attr->shape.dims[i] = tensor->shape()->Get(0)->dim()->Get(i);
   }
   u64 addr = tensor->device_addr();
-  if (flags & BM_RUNTIME_SHARE_MEM) {
+  if (io_mode == ADDR_MODE_IO_ALONE) {
     addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
-    addr &= bmrt_arch_info::addr_mask();
-    attr->dev_mem = bm_mem_from_device(addr, tensor->size());
+  } else if (flags & BM_RUNTIME_SHARE_MEM) {
+      // TODO: refator
+      if (io_mode != ADDR_MODE_IO_TAG_FUSE && io_mode != ADDR_MODE_IO_TAG) {
+        addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
+        addr &= addr_traits.offset.mask;
+      }
+      // attr->dev_mem = bm_mem_from_device(addr, tensor->size());
   } else {
     /*
       multi-core in load bmodel stage, use fake device_addr to record tensor_addr in bmodel
       and assign real device_addr in launch tensor stage
     */
-    attr->dev_mem.u.device.device_addr = addr;
-    attr->dev_mem.size = tensor->size();
+    // attr->dev_mem.u.device.device_addr = addr;
+    // attr->dev_mem.size = tensor->size();
   }
+  attr->dev_mem = bm_mem_from_device(addr, tensor->size());
   attr->st_mode = (bm_store_mode_t)tensor->gmem_stmode();
   attr->pad_h   = tensor->pad_h();
 }
@@ -70,7 +77,9 @@ static void fill_tensor_attr(
     u64 ctx_start,
     const std::vector<u64> &ctx_borders,
     const std::vector<u64> &ctx_offset,
-    uint32_t flags)
+    uint32_t flags,
+    addr_t addr_traits,
+    addr_mode_t io_mode)
 {
   for (u32 i = 0; i < tensors->size(); i++) {
     auto tensor = tensors->Get(i);
@@ -78,88 +87,7 @@ static void fill_tensor_attr(
       continue;
     }
     tensor_attr_t attr;
-    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags);
-    tensor_v.push_back(attr);
-  }
-}
-
-static void fill_io_attr(const bmodel::Tensor *tensor, tensor_attr_t *attr,
-                         u64 io_offset) {
-  attr->shape.num_dims = tensor->shape()->Get(0)->dim()->size();
-  for (int i = 0; i < attr->shape.num_dims; i++) {
-    attr->shape.dims[i] = tensor->shape()->Get(0)->dim()->Get(i);
-  }
-  u64 addr = tensor->device_addr() + io_offset;
-  addr &= bmrt_arch_info::addr_mask();
-  attr->dev_mem = bm_mem_from_device(addr, tensor->size());
-  attr->st_mode = (bm_store_mode_t)tensor->gmem_stmode();
-  attr->pad_h = tensor->pad_h();
-}
-
-static void fill_io_attr(const Vector<Offset<bmodel::Tensor>> *tensors,
-                             vector<tensor_attr_t> &tensor_v, u64 io_offset) {
-  for (u32 i = 0; i < tensors->size(); i++) {
-    auto tensor = tensors->Get(i);
-    if (tensor->shape() == NULL || tensor->shape()->size() == 0) {
-      continue;
-    }
-    tensor_attr_t attr;
-    fill_io_attr(tensor, &attr, io_offset);
-    tensor_v.push_back(attr);
-  }
-}
-
-static void fill_io_tag_attr(const bmodel::Tensor *tensor, tensor_attr_t *attr) {
-  attr->shape.num_dims = tensor->shape()->Get(0)->dim()->size();
-  for (int i = 0; i < attr->shape.num_dims; i++) {
-    attr->shape.dims[i] = tensor->shape()->Get(0)->dim()->Get(i);
-  }
-  u64 addr = tensor->device_addr();
-  u64 tag = ((addr >> 36) & 0x7);
-  addr &= bmrt_arch_info::addr_mask();
-  addr += tag << 36;
-  attr->dev_mem = bm_mem_from_device(addr, tensor->size());
-  attr->st_mode = (bm_store_mode_t)tensor->gmem_stmode();
-  attr->pad_h = tensor->pad_h();
-}
-
-
-static void fill_io_tag_attr(
-    const Vector<Offset<bmodel::Tensor>> *tensors,
-    vector<tensor_attr_t> &tensor_v,
-    u64 ctx_start,
-    const std::vector<u64> &ctx_borders,
-    const std::vector<u64> &ctx_offset,
-    uint32_t flags)
-{
-  for (u32 i = 0; i < tensors->size(); i++) {
-    auto tensor = tensors->Get(i);
-    if (tensor->shape() == NULL || tensor->shape()->size() == 0) {
-      continue;
-    }
-    u64 addr = tensor->device_addr();
-    u64 tag = ((addr >> 36) & 0x7);
-    tensor_attr_t attr;
-    if (tag >= 3){
-      fill_io_tag_attr(tensor, &attr);
-    }
-    else{
-      fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags);
-    }
-    tensor_v.push_back(attr);
-  }
-}
-
-static void fill_io_tag_fuse_attr(
-    const Vector<Offset<bmodel::Tensor>> *tensors,
-    vector<tensor_attr_t> &tensor_v) {
-  for (u32 i = 0; i < tensors->size(); i++) {
-    auto tensor = tensors->Get(i);
-    if (tensor->shape() == NULL || tensor->shape()->size() == 0) {
-      continue;
-    }
-    tensor_attr_t attr;
-    fill_io_tag_attr(tensor, &attr);
+    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, io_mode);
     tensor_v.push_back(attr);
   }
 }
@@ -249,84 +177,6 @@ static void update_coeff_data(ModelCtx *model_ctx,
   }
 }
 
-static uint32_t get_bdc_cmd_len(const u8 *bdc_buffer, u64 start_offset,
-                                bool last_cmd) {
-  uint32_t len = 0;
-  switch (bmrt_arch_info::get_bmtpu_arch()) {
-  case BM1682:
-  case BM1684:
-    len = 1 << BDC_ENGINE_CMD_ALIGNED_BIT;
-    break;
-  case BM1880:
-    len = 112;
-    break;
-  case SG2380:
-  case BM1690:
-  case BM1688:
-  case MARS3:
-  case SGTPUV8:
-  case BM1684X: {
-    u32 cmd_buf[2];
-    memcpy(cmd_buf, bdc_buffer + start_offset, sizeof(cmd_buf));
-    u32 tsk_type = (cmd_buf[1] >> 9) & 0xf;
-    int eu_type = (cmd_buf[1] >> 13) & 0x1f;
-    bool is_short = cmd_buf[0] & 0x1;
-    if (tsk_type == 15 || tsk_type == 12) {
-      len = 16;
-    } else if (!is_short) {
-      len = 128;
-    } else if (tsk_type == 0 || tsk_type == 1) {
-      len = 64;
-    } else if (tsk_type == 6 || tsk_type == 13 || tsk_type == 14) {
-      len = 48;
-    } else if (tsk_type == 4 || tsk_type == 5 || tsk_type == 9 ||
-               tsk_type == 10) {
-      len = 32;
-    } else if (tsk_type == 2) {
-      len = eu_type > 3 ? 32 : 48;
-    } else if (tsk_type == 3) {
-      len = (eu_type == 24 || eu_type == 25) ? 16 : 64;
-    } else {
-      BMRT_ASSERT(0);
-    }
-    if (last_cmd) {
-      return (ALIGN(start_offset + len, 128) - start_offset);
-    }
-    break;
-  }
-  default:
-    BMRT_ASSERT(0);
-  }
-
-  return len;
-}
-
-static uint32_t get_gdma_cmd_len(const u8 *gdma_buffer, u64 start_offset,
-                                 bool last_cmd) {
-  uint32_t len = 96; // default: common gdma instrution size
-
-  bmtpu_arch_t arch = bmrt_arch_info::get_bmtpu_arch();
-  if (BM1688 == arch || BM1690 == arch || MARS3 == arch || SGTPUV8 == arch || SG2380 == arch) {
-    u32 cmd_head[2] = {0};
-    memcpy(cmd_head, gdma_buffer + start_offset, sizeof(cmd_head));
-    u32 tsk_type = cmd_head[1] & 0xf;
-    if (tsk_type == 0x6) { // DMA_sys
-      len = 16;
-    }
-    // sys end
-    if (last_cmd) {
-      len = ALIGN(start_offset + 16, 128) - start_offset;
-    }
-  } else if (BM1684X == arch) {
-    // sys end
-    if (last_cmd) {
-      len = ALIGN(start_offset + 16, 128) - start_offset;
-    }
-  } else {
-    len = 1 << GDMA_ENGINE_CMD_ALIGNED_BIT;
-  }
-  return len;
-}
 
 /* Read BDC/GDMA cmd context from file, alloc device memory,
  * S2D download to DDR, save CMD_TENSOR in dev_mem_info_v.
@@ -345,6 +195,124 @@ static void push_back_fbvector_to_vector(const T* fb_values, std::vector<decltyp
   visit_fbvector(fb_values, func);
 }
 
+template <typename BinaryFunc, typename NumFunc, typename ConversionFunc>
+void Bmruntime::cmd_convert_and_load(
+    ModelCtx *model_ctx, u32 cmd_word_num, u32 devid, net_stage_t *stage,
+    std::vector<const bmodel::CmdGroup *> &cmd_groups, u32 core_idx,
+    ENGINE_ID engine, std::string descriptor, BinaryFunc get_binary,
+    NumFunc get_num, ConversionFunc convert, BmMemory *memory) {
+  if (cmd_word_num == 0) {
+    return;
+  }
+  bm_device_mem_t pmem;
+  u64 cmd_buf_addr =
+      alloc_device_mem(devid, pmem, cmd_word_num, descriptor + "_cmd_mem", 4);
+  std::vector<u32> cmd_buf;
+  u32 *p_cmd_buf = NULL;
+  if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+    bm_mem_mmap_device_mem(m_handles[devid], &pmem,
+                           (unsigned long long *)&p_cmd_buf);
+  } else {
+    cmd_buf.resize(cmd_word_num);
+    p_cmd_buf = cmd_buf.data();
+  }
+  uint64_t cmd_offset = 0;
+  for (auto cmd_group : cmd_groups) {
+    u64 offset = 0;
+    if (0 == get_num(cmd_group)) {
+      continue;
+    }
+    u8 *buffer = NULL;
+    bm_device_mem_t pmem_cur_cmd_group;
+    u64 cmd_buf_cur_cmd_group_addr = 0;
+    const auto binary = get_binary(cmd_group);
+    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+      cmd_buf_cur_cmd_group_addr = alloc_device_mem(
+          devid, pmem_cur_cmd_group, binary->size(), "SOC_CMDBUF_MEM", 1);
+      bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
+                             (unsigned long long *)&buffer);
+    } else {
+      buffer = new u8[binary->size()];
+    }
+    model_ctx->read_binary(binary, buffer);
+    ConversionParams params = {.dst_cmd = (u8*)p_cmd_buf + cmd_offset,
+                               .src_cmd = buffer,
+                               .num_cmd = get_num(cmd_group),
+                               .cmd_addr = cmd_buf_addr,
+                               .cmd_size = binary->size(),
+                               .stage = stage};
+    convert(params);
+
+    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+      bm_mem_unmap_device_mem(m_handles[devid], buffer, binary->size());
+    } else {
+      delete[] buffer;
+    }
+    // the commond start address should be aligned to 128 bytes
+    cmd_offset += ALIGN(binary->size(), 128);
+  }
+  m_profile->record_cmd_data(core_idx, engine, p_cmd_buf, cmd_word_num * 4,
+                             cmd_buf_addr);
+  memory->Init(descriptor, m_handles[devid], pmem, p_cmd_buf,
+               m_flags & BM_RUNTIME_CHECK_MEM,
+               m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+}
+
+bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
+  auto it = m_bdc_mem_map.find(key);
+  if (it != m_bdc_mem_map.end()) {
+    mem = it->second;
+    return true;
+  }
+  return false;
+}
+
+void Bmruntime::convert_bdc(ModelCtx *model_ctx,
+                            u32 cmd_word_num,
+                            u32 devid,
+                            net_stage_t *stage,
+                            std::vector<const bmodel::CmdGroup *> &cmd_groups,
+                            u32 core_idx) {
+  if (cmd_word_num == 0) {
+    return;
+  }
+  vector<u64> bdc_start;
+  for (auto cmd_group : cmd_groups) {
+    if (0 == cmd_group->bdc_num()) {
+      continue;
+    }
+    bdc_start.push_back(cmd_group->binary_bdc()->start());
+  }
+  bm_device_mem_t pmem;
+  bool is_exist = get_bdc_mem(bdc_start, pmem);
+  if (is_exist) {
+    // use the existing bdc memory
+    stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
+    return;
+  }
+
+  u32 offset = 0;
+  u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
+  for (auto cmd_group : cmd_groups) {
+    if (0 == cmd_group->bdc_num()) {
+      continue;
+    }
+    u64 start = cmd_group->binary_bdc()->start();
+    u32 bytes = cmd_group->binary_bdc()->size();
+    u8 *bdc_buffer = new u8[bytes];
+    model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
+    bm_memcpy_s2d_partial_offset(m_handles[devid], pmem,
+                                 (void *)bdc_buffer, bytes, offset);
+    if (bytes % 128 == 0) {
+      BMRT_LOG(WARNING, "bdc is not 128 bytes aligned");
+    }
+    offset += bytes;
+    delete[] bdc_buffer;
+  }
+  m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
+  stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
+}
+
 bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
                                   const bmodel::NetParameter* param,
                                   net_stage_t* stage, uint32_t devid)
@@ -358,16 +326,16 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
   for (uint32_t core_idx = 0; core_idx < core_num; core_idx++) {
       u32 bdc_total_id = 0, gdma_total_id = 0;
       u32 bdc_total_cmd_byte = 0, gdma_total_cmd_byte = 0;
-      std::vector<decltype(param->cmd_group()->Get(0))> cmd_groups;
-      auto func = std::function<void(decltype(param->sub_net()->Get(0)) subnet)>(
-        [&cmd_groups, core_idx](decltype(param->sub_net()->Get(0)) subnet){
+      std::vector<const bmodel::CmdGroup *> cmd_groups;
+      auto func = std::function<void(const bmodel::SubNet* subnet)>(
+        [&cmd_groups, core_idx](const bmodel::SubNet* subnet){
           auto core_commands = subnet->core_commands();
           if (!core_commands) return;
           push_back_fbvector_to_vector(core_commands->Get(core_idx)->gdma_tiu_commands(), cmd_groups);
         });
       visit_fbvector(param->sub_net(), func);
 
-      if(cmd_groups.size() == 0){
+      if(cmd_groups.size() == 0) {
         push_back_fbvector_to_vector(param->cmd_group(), cmd_groups);
       }
 
@@ -387,126 +355,36 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
       if (bdc_total_cmd_byte > 0) {
         cmd_word_num = bdc_total_cmd_byte / sizeof(u32);
       } else {
-        cmd_word_num = bdc_total_id * BD_ENGINE_COMMAND_NUM_aligned;
+        cmd_word_num = bdc_total_id * backend_->aligned_cmd_words(ENGINE_BD);
       }
-      if (cmd_word_num != 0) {
-        u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
-        std::vector<u32> cmd_buf;
-        u32 *p_cmd_buf = NULL;
-        u32 *p_origin_cmd_buf = NULL;
-        if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-          bm_status_t status = bm_mem_mmap_device_mem(
-              m_handles[devid], &pmem, (unsigned long long *)&p_cmd_buf);
-        } else {
-          cmd_buf.resize(cmd_word_num);
-          p_cmd_buf = cmd_buf.data();
-        }
-        p_origin_cmd_buf = p_cmd_buf;
-        for(auto cmd_group: cmd_groups){
-          u64 bdc_offset = 0;
-          if (0 == cmd_group->bdc_num()) continue;
-          u8 *bdc_buffer = NULL;
-          bm_device_mem_t pmem_cur_cmd_group;
-          u64 cmd_buf_cur_cmd_group_addr = 0;
-          if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-            cmd_buf_cur_cmd_group_addr = alloc_device_mem(
-                devid, pmem_cur_cmd_group, cmd_group->binary_bdc()->size(),
-                "SOC_CMDBUF_MEM", 1);
-            bm_status_t status =
-                bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
-                                       (unsigned long long *)&bdc_buffer);
-          } else {
-            bdc_buffer = new u8[cmd_group->binary_bdc()->size()];
-          }
-          model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
-          for (u32 cmd_idx = 0; cmd_idx < cmd_group->bdc_num(); cmd_idx++) {
-            uint32_t read_size =
-                get_bdc_cmd_len(bdc_buffer, bdc_offset,
-                                (cmd_idx == cmd_group->bdc_num() - 1));
-            memcpy(p_cmd_buf, bdc_buffer + bdc_offset, read_size);
-            convert_cmd(p_cmd_buf, ENGINE_BD,
-                        cmd_idx == (cmd_group->bdc_num() - 1),
-                        cmd_buf_addr + GLOBAL_MEM_CMD_START_OFFSET, stage);
-            p_cmd_buf += read_size / sizeof(uint32_t);
-            bdc_offset += read_size;
-          }
-          if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-            bm_mem_unmap_device_mem(m_handles[devid], bdc_buffer,
-                                    cmd_group->binary_bdc()->size());
-          } else {
-            delete[] bdc_buffer;
-          }
-        }
-        m_profile->record_cmd_data(core_idx, ENGINE_BD, p_origin_cmd_buf, cmd_word_num * 4, cmd_buf_addr);
-        stage->core_commands[core_idx].bdc_mem.Init(
-            "bdc", m_handles[devid], pmem, p_origin_cmd_buf,
-            m_flags & BM_RUNTIME_CHECK_MEM,
-            m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+      bool use_bdc_new = (m_bdc_fixed) && !(m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) && (!m_profile->is_enabled());
+
+      if (use_bdc_new) {
+        // in fact, bdc no need to convert, just copy to mem for 1684x/1688/...
+        convert_bdc(model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx);
+      } else {
+        cmd_convert_and_load(
+            model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx,
+            ENGINE_BD, "bd",
+            [](const bmodel::CmdGroup *cmd_group) { return cmd_group->binary_bdc(); },
+            [](const bmodel::CmdGroup *cmd_group) { return cmd_group->bdc_num(); },
+            [&](ConversionParams &params) { return backend_->convert_bdc(params); },
+            &stage->core_commands[core_idx].bdc_mem);
       }
 
       // ENGINE_GDMA
       if (gdma_total_cmd_byte > 0) {
         cmd_word_num = gdma_total_cmd_byte / sizeof(u32);
       } else {
-        cmd_word_num = gdma_total_id * GDMA_ENGINE_COMMAND_NUM_aligned;
+        cmd_word_num = gdma_total_id * backend_->aligned_cmd_words(ENGINE_GDMA);
       }
-      if (cmd_word_num != 0) {
-        u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "gdma_cmd_mem", 4);
-        std::vector<u32> cmd_buf;
-        u32 *p_cmd_buf = NULL;
-        u32 *p_origin_cmd_buf = NULL;
-        if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-          bm_status_t status = bm_mem_mmap_device_mem(
-              m_handles[devid], &pmem, (unsigned long long *)&p_cmd_buf);
-        } else {
-          cmd_buf.resize(cmd_word_num);
-          p_cmd_buf = cmd_buf.data();
-        }
-        p_origin_cmd_buf = p_cmd_buf;
-        for (auto cmd_group: cmd_groups) {
-          u64 gdma_offset = 0;
-          if (0 == cmd_group->gdma_num()) {
-            continue;
-          }
-          u8 *gdma_buffer = NULL;
-          bm_device_mem_t pmem_cur_cmd_group;
-          u64 cmd_buf_cur_cmd_group_addr = 0;
-          if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-            cmd_buf_cur_cmd_group_addr = alloc_device_mem(
-                devid, pmem_cur_cmd_group, cmd_group->binary_gdma()->size(),
-                "SOC_CMDBUF_MEM", 1);
-            bm_status_t status =
-                bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
-                                       (unsigned long long *)&gdma_buffer);
-          } else {
-            gdma_buffer = new u8[cmd_group->binary_gdma()->size()];
-          }
-          model_ctx->read_binary(cmd_group->binary_gdma(), gdma_buffer);
-          for (u32 cmd_idx = 0; cmd_idx < cmd_group->gdma_num(); cmd_idx++) {
-            u32 gdma_size =
-                get_gdma_cmd_len(gdma_buffer, gdma_offset,
-                                 (cmd_idx == cmd_group->gdma_num() - 1));
-            memcpy(p_cmd_buf, gdma_buffer + gdma_offset, gdma_size);
-            convert_cmd(p_cmd_buf, ENGINE_GDMA,
-                        cmd_idx == cmd_group->gdma_num() - 1,
-                        cmd_buf_addr + GLOBAL_MEM_CMD_START_OFFSET, stage);
-            p_cmd_buf += gdma_size / sizeof(u32);
-            gdma_offset += gdma_size;
-          }
-          if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-            bm_mem_unmap_device_mem(m_handles[devid], gdma_buffer,
-                                    cmd_group->binary_gdma()->size());
-          } else {
-            delete[] gdma_buffer;
-          }
-        }
-        m_profile->record_cmd_data(core_idx, ENGINE_GDMA, p_origin_cmd_buf,
-                                   cmd_word_num * 4, cmd_buf_addr);
-        stage->core_commands[core_idx].gdma_mem.Init(
-            "gdma", m_handles[devid], pmem, p_origin_cmd_buf,
-            m_flags & BM_RUNTIME_CHECK_MEM,
-            m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
-      }
+      cmd_convert_and_load(
+          model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx,
+          ENGINE_GDMA, "gdma",
+          [](const bmodel::CmdGroup *cmd_group) { return cmd_group->binary_gdma(); },
+          [](const bmodel::CmdGroup *cmd_group) { return cmd_group->gdma_num(); },
+          [&](ConversionParams &params) { return backend_->convert_gdma(params); },
+          &stage->core_commands[core_idx].gdma_mem);
   }
 
   for (uint32_t core_idx = 0; core_idx < core_num; core_idx++) {
@@ -609,7 +487,7 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
     memset(&bm_tensor_ext, 0 , sizeof(bm_tensor_ext));
     bm_tensor_ext.mem_type = MEM_TYPE_INVALID;
     bm_tensor_ext.host_mem.type = HOST_MEM_INVALID;
-
+    bm_tensor_ext.do_reloc = false;
     /* tensor could be from net input/output/immediate/relocated */
     auto iter = std::find(net_ctx->input_name_v.begin(),
                           net_ctx->input_name_v.end(), tensor_name);
@@ -628,12 +506,17 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
       } else if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC && tensor->relentry() != nullptr) {
         /* for imm tensor which are relocated to user space */
         bm_tensor_ext.io_type = TENSOR_TYPE_IMM_RELOC;
-        bm_tensor_ext.reloc_info[0] = tensor->relentry()->base_addr_id();
-        bm_tensor_ext.reloc_info[1] = tensor->relentry()->addr_offset();
       } else {
         /* tensor is not net input/output */
         bm_tensor_ext.io_type  = TENSOR_TYPE_IMM_IO;
       }
+    }
+
+    // fill reloc info for io reloc mode.
+    if (net_ctx->addr_mode == ADDR_MODE_IO_RELOC && tensor->relentry() != nullptr) {
+      bm_tensor_ext.do_reloc = true;
+      bm_tensor_ext.reloc_info[0] = tensor->relentry()->base_addr_id();
+      bm_tensor_ext.reloc_info[1] = tensor->relentry()->addr_offset();
     }
 
     bm_tensor_ext.tensor_info.dtype   = (bm_data_type_t)tensor->data_type();
@@ -662,13 +545,13 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
         if (tensor->device_addr() < net_stage->ctx_start) {
           // subnet input may share mem with coeff mem
           dev_mem = bm_mem_from_device(
-              (tensor->device_addr() & bmrt_arch_info::addr_mask()) + net_stage->coeff_offset, tensor->size());
+              (tensor->device_addr() & backend_->addr_layout().offset.mask) + net_stage->coeff_offset, tensor->size());
         } else {
           // rellocate
           u64 addr = tensor->device_addr();
           u32 idx = get_mem_index(net_stage->ctx_borders, net_stage->ctx_start, addr);
           addr += net_stage->ctx_offset[idx];
-          addr &= bmrt_arch_info::addr_mask();
+          addr &= backend_->addr_layout().offset.mask;
           dev_mem = bm_mem_from_device(addr, tensor->size());
         }
       } else {
@@ -906,18 +789,18 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
             if (bdc_cmd_byte > 0) {
               subnet_bdc_offset[core_idx] += bdc_cmd_byte;
             } else {
-              subnet_bdc_offset[core_idx] += group_bdc_num * (1 << BDC_ENGINE_CMD_ALIGNED_BIT);
+              subnet_bdc_offset[core_idx] += group_bdc_num * backend_->aligned_cmd_words(ENGINE_BD) * 4;
             }
             if (gdma_cmd_byte > 0) {
               subnet_gdma_offset[core_idx] += gdma_cmd_byte;
             } else {
-              subnet_gdma_offset[core_idx] += group_gdma_num * (1 << GDMA_ENGINE_CMD_ALIGNED_BIT);
-            } 
-            // parse cmd-addr-reloc info 
+              subnet_gdma_offset[core_idx] += group_gdma_num * backend_->aligned_cmd_words(ENGINE_GDMA) * 4;
+            }
+            // parse cmd-addr-reloc info
             if (cmd_group->reloc_entries() != nullptr) {
               for (u32 reloc_idx = 0; reloc_idx < cmd_group->reloc_entries()->size(); reloc_idx++) {
                 auto reloc_entry = cmd_group->reloc_entries()->Get(reloc_idx);
-                reloc_table.push_back({{reloc_entry->base_addr_id(), reloc_entry->addr_offset()}, 
+                reloc_table.push_back({{reloc_entry->base_addr_id(), reloc_entry->addr_offset()},
                                        reloc_entry->cmd_offset() + gdma_cmd_offset});
               }
             }
@@ -990,12 +873,28 @@ void Bmruntime::set_profile_enabled(bool enable)
     m_profile->set_enable(enable);
 }
 
+u64 Bmruntime::get_coeff_in_device(ModelCtx *model_ctx, const CoeffMem *coeff_mem)
+{
+  if (coeff_mem == NULL || model_ctx == NULL) {
+    return 0;
+  }
+  u64 coeff_start = coeff_mem->address();
+  coeff_start &= backend_->addr_layout().offset.mask;
+  u64 coeff_addr = m_bmodel_dev_addr + model_ctx->header().header_size +
+                    model_ctx->header().flatbuffers_size + coeff_mem->binary_coeff()->start();
+  if (coeff_addr % 4096 != 0) {
+    throw std::runtime_error("coeff_addr is not aligned to 4096");
+  }
+  return coeff_addr - coeff_start;
+}
+
 bool Bmruntime::fill_net_ctx(
     ModelCtx* model_ctx,
     net_ctx_t* net_ctx,
     const Vector<Offset<NetParameter>>* params,
     std::vector<std::vector<u64>> &stage_ctx_sizes,
-    net_stage_t *stages)
+    net_stage_t *stages,
+    bool in_device)
 {
   auto devid = net_ctx->device_id;
   if (params == NULL || params->size() == 0) {
@@ -1064,7 +963,10 @@ bool Bmruntime::fill_net_ctx(
     if (subnet != NULL && subnet->size() > 1) {
       multi_subnet = true;
     }
-    if (alloc_mem == false) {
+    if (in_device) {
+      // as bmodel in device, no need to upload coeffs
+      stages[stage_idx].coeff_offset = get_coeff_in_device(model_ctx, stage->coeff_mem());
+    } else if (alloc_mem == false) {
       auto iter = find(dmem_info.begin(), dmem_info.end(), "coeff_mem");
       if (iter != dmem_info.end()) {
         auto coeff_addr = iter->addr + iter->offset;
@@ -1072,13 +974,14 @@ bool Bmruntime::fill_net_ctx(
           iter->offset += param->coeff_mem()->binary_coeff()->size();
         }
         BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
-        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), coeff_addr);
+        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), (void*)this, backend_->addr_layout());
       } else {
         BMRT_LOG(WRONG, "Error: device memory: coeff_mem don't alloc");
       }
     } else {
-      stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem());
+      stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem(), (void*)this, backend_->addr_layout());
     }
+
     stages[stage_idx].dynamic_coeff_offset = stages[stage_idx].coeff_offset;
     if (param->dynamic_combined_coeff_offset()) {
         stages[stage_idx].dynamic_coeff_offset += param->dynamic_combined_coeff_offset() - param->dynamic_coeff_offset();
@@ -1090,9 +993,24 @@ bool Bmruntime::fill_net_ctx(
     stage_ctx_sizes.push_back(std::move(stage_sizes));
     stages[stage_idx].io_start = stage->io_addr();
     stages[stage_idx].io_size = stage->io_size();
+    // fill coeff info
+    if (stage->coeff_mem() != NULL && stage->coeff_mem()->location() != NULL) {
+      u64 coeff_start = stage->coeff_mem()->address();
+      coeff_start &= backend_->addr_layout().offset.mask;
+      auto location = stage->coeff_mem()->location();
+      for (u32 i = 0; i < location->size(); i++) {
+        auto loc = location->Get(i);
+        bm_coeff_info_t coeff_info = {};
+        strncpy(coeff_info.path, loc->name()->c_str(), sizeof(coeff_info.path) - 1);
+        coeff_info.path[sizeof(coeff_info.path) - 1] = '\0';
+        uint64_t loc_addr = stages[stage_idx].coeff_offset + coeff_start + loc->offset();
+        coeff_info.device_mem = bm_mem_from_device(loc_addr, loc->size());
+        stages[stage_idx].coeff_info_v.push_back(coeff_info);
+      }
+    }
   }
 
-  if (BM1682 == bmrt_arch_info::get_bmtpu_arch() &&
+  if ("BM1682" == backend_->name() &&
       max_ctx_sizes.size() != 1)
   {
     BMRT_LOG(INFO, "BM1682 does not support multi-bulk memory feature");
@@ -1523,7 +1441,7 @@ bool Bmruntime::cascade_net_init(const Net* net, int net_idx, net_ctx_t* net_ctx
   return true;
 }
 
-bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net_ctx)
+bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net_ctx, bool in_device)
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
   net_ctx->addr_mode = net->addr_mode();
@@ -1534,7 +1452,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
   auto net_params = net->parameter();
   std::vector<std::vector<u64>> stage_ctx_sizes;
   auto stages = new net_stage_t[net_params->size()];
-  if (false == fill_net_ctx(model_ctx, net_ctx, net_params, stage_ctx_sizes, stages)) {
+  if (false == fill_net_ctx(model_ctx, net_ctx, net_params, stage_ctx_sizes, stages, in_device)) {
       BMRT_LOG(WRONG, "fill net[%s] context failed", net_ctx->net_name.c_str());
     return false;
   }
@@ -1550,8 +1468,8 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     net_stage->dynamic_ctx_start = param->dynamic_ctx_addr() ? param->dynamic_ctx_addr() : param->ctx_addr();
 
     // Use relative address since 1688.
-    auto ctx_start = net_stage->ctx_start & bmrt_arch_info::addr_mask();
-    auto dynamic_ctx_start = net_stage->dynamic_ctx_start & bmrt_arch_info::addr_mask();
+    auto ctx_start = net_stage->ctx_start & backend_->addr_layout().offset.mask;
+    auto dynamic_ctx_start = net_stage->dynamic_ctx_start & backend_->addr_layout().offset.mask;
     auto &ctx_sizes = stage_ctx_sizes[stage_idx];
     if (!ctx_sizes.empty())
     {
@@ -1601,29 +1519,20 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     m_profile->record_alloc_device_mem(mem_pair, "coeff");
 
     // setup input and output tensor info
+    auto ctx_offset = net_stage->ctx_offset;
+    auto ctx_borders = net_stage->ctx_borders;
+    ctx_start = net_stage->ctx_start;
     if (net_ctx->addr_mode == ADDR_MODE_IO_ALONE) {
-      fill_io_attr(param->input_tensor(), net_stage->input_v,
-                   net_stage->io_offset);
-      fill_io_attr(param->output_tensor(), net_stage->output_v,
-                   net_stage->io_offset);
-    } else if (net_ctx->addr_mode == ADDR_MODE_IO_TAG) {
-      fill_io_tag_attr(param->input_tensor(), net_stage->input_v,
-                       net_stage->ctx_start, net_stage->ctx_borders,
-                       net_stage->ctx_offset, m_flags);
-      fill_io_tag_attr(param->output_tensor(), net_stage->output_v,
-                       net_stage->ctx_start, net_stage->ctx_borders,
-                       net_stage->ctx_offset, m_flags);
-    } else if (net_ctx->addr_mode == ADDR_MODE_IO_TAG_FUSE) {
-      fill_io_tag_fuse_attr(param->input_tensor(), net_stage->input_v);
-      fill_io_tag_fuse_attr(param->output_tensor(), net_stage->output_v);
-    } else {
-      fill_tensor_attr(param->input_tensor(), net_stage->input_v,
-                       net_stage->ctx_start, net_stage->ctx_borders,
-                       net_stage->ctx_offset, m_flags);
-      fill_tensor_attr(param->output_tensor(), net_stage->output_v,
-                       net_stage->ctx_start, net_stage->ctx_borders,
-                       net_stage->ctx_offset, m_flags);
+      ctx_borders.clear();
+      ctx_start = 0;
+      ctx_offset = {net_stage->io_offset};
     }
+    fill_tensor_attr(param->input_tensor(), net_stage->input_v, ctx_start,
+                     ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
+                     (addr_mode_t)net_ctx->addr_mode);
+    fill_tensor_attr(param->output_tensor(), net_stage->output_v, ctx_start,
+                     ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
+                     (addr_mode_t)net_ctx->addr_mode);
 
     // setup subnet
     const auto core_num = param->core_num() != 0 ? param->core_num() : 1;
@@ -1657,7 +1566,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
   return true;
 }
 
-bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx)
+bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, bool in_device)
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
   for (auto each_net : m_net_ctx_v) {
@@ -1670,7 +1579,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx)
   net_ctx->net_name = net->name()->str();
 
   // fill each stage info
-  if (false == load_bmodel_net(model_ctx, net_idx, net_ctx)) {
+  if (false == load_bmodel_net(model_ctx, net_idx, net_ctx, in_device)) {
       BMRT_LOG(WRONG, "Error: load net[%s] failed", net_ctx->net_name.c_str());
     return false;
   }
@@ -1682,12 +1591,12 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx)
 }
 
 static void fill_middlebuff_size(const vector<tensor_attr_t>& attr_v,
-                                 vector<u64>& size_v, bool is_dynamic)
+                                 vector<u64>& size_v, bool is_dynamic,
+                                 const std::string& arch)
 {
-  auto arch = bmrt_arch_info::get_bmtpu_arch();
   for (uint32_t i = 0; i < size_v.size(); ++i) {
     if (attr_v[i].st_mode == BM_STORE_1N ||
-        arch != BM1684 ||
+        arch != "BM1684" ||
         is_dynamic != true) {
       continue;
     }
@@ -1713,8 +1622,8 @@ void Bmruntime::update_max_middlebuf_size(net_ctx_t* net_ctx) {
   vector<u64> input_size_v(input_num, 0);
   vector<u64> output_size_v(output_num, 0);
   for (auto& stage : net_ctx->stage_v) {
-    fill_middlebuff_size(stage->input_v, input_size_v, net_ctx->is_dynamic);
-    fill_middlebuff_size(stage->output_v, output_size_v, net_ctx->is_dynamic);
+    fill_middlebuff_size(stage->input_v, input_size_v, net_ctx->is_dynamic, backend_->name());
+    fill_middlebuff_size(stage->output_v, output_size_v, net_ctx->is_dynamic, backend_->name());
   }
   u64 total_middelbuf_size = 0;
   for (auto size : input_size_v) {
@@ -1737,8 +1646,8 @@ void Bmruntime::update_net_middlebuf(net_ctx_t* net_ctx)
   vector<u64> input_size_v(input_num, 0);
   vector<u64> output_size_v(output_num, 0);
   for (auto& stage : net_ctx->stage_v) {
-    fill_middlebuff_size(stage->input_v, input_size_v, net_ctx->is_dynamic);
-    fill_middlebuff_size(stage->output_v, output_size_v, net_ctx->is_dynamic);
+    fill_middlebuff_size(stage->input_v, input_size_v, net_ctx->is_dynamic, backend_->name());
+    fill_middlebuff_size(stage->output_v, output_size_v, net_ctx->is_dynamic, backend_->name());
   }
   u64 addr = bm_mem_get_device_addr(max_middle_buffer[devid]);
   for (u32 i = 0; i < input_num; i++) {
@@ -1785,7 +1694,7 @@ void Bmruntime::update_max_neuron_mem(uint32_t devid, const std::vector<u64> &si
 size_t Bmruntime::size_4N_align(const bm_shape_t& shape, const bm_data_type_t& dtype)
 {
   bool consider_4N =
-      (dtype == BM_INT8 || dtype == BM_UINT8) && (bmrt_arch_info::get_bmtpu_arch() == BM1684);
+      (dtype == BM_INT8 || dtype == BM_UINT8) && (backend_->name() == "BM1684");
   if (consider_4N) {
     bm_shape_t shape_fixed = shape;
     shape_fixed.dims[0] = ceiling_func(shape.dims[0], 4) * 4;
@@ -1851,6 +1760,8 @@ void Bmruntime::fill_net_info(net_ctx_t* net_ctx)
         net_info.max_output_bytes[j] = temp_size;
       }
     }
+    net_info.stages[i].coeff_num = net_ctx->stage_v[i]->coeff_info_v.size();
+    net_info.stages[i].coeffs = net_ctx->stage_v[i]->coeff_info_v.data();
   }
 }
 
@@ -1951,25 +1862,14 @@ void Bmruntime::cascade_free_net_info(net_cascade_t * net_cascade) {
   free(net_info.stages);
 }
 
-bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
+bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device)
 {
   bool ret = true;
   string model_chip = model_ctx->model()->chip()->str();
-  if (model_chip != bmrt_arch_info::get_bmtpu_name()) {
-      // BM1684X was firstly named BM1686, then Athena2 took it's name as BM1688.
-      // So there are bmodels claim to be BM1686 but are actually BM1684X.
-      // And we happily allow this unspeakable abomination.
-      if(model_chip == "BM1686" && bmrt_arch_info::get_bmtpu_name() == "BM1684X") {
-      } else if(model_chip == "CV186X" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
-      } else if(model_chip == "MARS3"){
-      } else if(model_chip == "SGTPUV8"){
-      } else if(model_chip == "BM1686" && bmrt_arch_info::get_bmtpu_name() == "BM1688") {
-      } else if(model_chip == "SG2380" && bmrt_arch_info::get_bmtpu_name() == "SG2380") {
-      } else {
-        BMRT_LOG(WRONG, "Error: runtime arch[%s] is not the same with bmodel arch[%s]",
-             bmrt_arch_info::get_bmtpu_name().c_str(), model_chip.c_str());
-        return false;
-      }
+  if (!backend_->name_verify(model_chip)) {
+    BMRT_LOG(WRONG, "Error: runtime arch[%s] is not the same with bmodel arch[%s]",
+             backend_->name().c_str(), model_chip.c_str());
+    return false;
   }
   auto version = model_ctx->model()->version()->c_str();
   const char *bmrt_version = _bmrt_version();
@@ -1991,11 +1891,12 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx)
 
   u32 cur_net_idx = m_net_ctx_v.size();
   for (u32 net_idx = 0; net_idx < load_net_num; net_idx++) {
-    ret = load_bmodel_net(model_ctx, net_idx);
+    ret = load_bmodel_net(model_ctx, net_idx, in_device);
     if (!ret) {
       break;
     }
   }
+  m_bdc_mem_map.clear(); // only net only in one bmodel can share bdc
   cascade_update_all_info();
   /* Although ret may be false, but we need to set middle buffer and neuron_mem
    * for the net that had beed loaded successfully.
@@ -2192,13 +2093,13 @@ bool Bmruntime::empty_bmodel_weight_with_decrypt(
 
 void Bmruntime::build_tpu_module(const unsigned char* firmware_data, size_t firmware_size) {
   for (int i = 0; i < m_device_num; i++) {
-    if (bmrt_arch_info::get_bmtpu_arch() == MARS3) {
+    if (backend_->name() == "CV184X") {
       kernel_modules[i] = std::make_shared<KernelModuleLite>(m_handles[i]);
     } else {
       kernel_modules[i] = std::make_shared<KernelModule>(m_handles[i]);
     }
-    for (size_t core_id = 0; core_id < m_core_num; core_id++) {
-      kernel_modules[i]->add_core_module(core_id, firmware_data, firmware_size);
+    for (size_t core_id = 0; core_id < backend_->core_num(); core_id++) {
+      kernel_modules[i]->add_core_module(core_id, firmware_data, firmware_size, backend_->name());
     }
   }
 }
@@ -2208,7 +2109,9 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
   // kernel in kernel_module.h should be update manually:
   // 1: replace lib/libbm1684x_kernel_module_*.so by the latest.
   // 2: remake tpu_runtime
-  if (bmrt_arch_info::get_bmtpu_arch() != BM1684X && bmrt_arch_info::get_bmtpu_arch() != BM1688 && bmrt_arch_info::get_bmtpu_arch() != MARS3 && bmrt_arch_info::get_bmtpu_arch() != SGTPUV8) {
+
+  // TODO:refactor tpu_module loader
+  if (!backend_->support_dynamic_loading()) {
     for (int i = 0; i < MAX_DEVICE_NUM; i++) {
       kernel_modules[i] = nullptr;
     }
@@ -2221,22 +2124,28 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
     BMRT_LOG(INFO, "force loading firmare in runtime because BMRUNTIME_USING_INNER_FIRMWARE env is set");
   }
   size_t firmware_size = 0;
-  #if defined(__linux__) && !defined(LITE_BUILD)
-  if (bmrt_arch_info::get_bmtpu_arch() == BM1684X){
-    firmware_data = kernel_module_data_1684x;
-    firmware_size = sizeof(kernel_module_data_1684x);
-  } else if (bmrt_arch_info::get_bmtpu_arch() == BM1688){
-    firmware_data = kernel_module_data_tpulv60;
-    firmware_size = sizeof(kernel_module_data_tpulv60);
-  }
-  else if (bmrt_arch_info::get_bmtpu_arch() == MARS3) {
-    firmware_data = kernel_module_data_mars3;
-    firmware_size = sizeof(kernel_module_data_mars3);
-  }
+
+  #if defined(__linux__)
+    #if defined(LITE_BUILD)
+      if (backend_->name() == "CV184X") {
+          BMRT_LOG(INFO, "bmtpu_arch=%s", "CV184X");
+          firmware_data = kernel_module_data_cv184x;
+          firmware_size = sizeof(kernel_module_data_cv184x);
+        }
+    #else
+      if (backend_->name() == "BM1684X"){
+        firmware_data = kernel_module_data_1684x;
+        firmware_size = sizeof(kernel_module_data_1684x);
+      } else if (backend_->name() == "BM1688"){
+        firmware_data = kernel_module_data_tpulv60;
+        firmware_size = sizeof(kernel_module_data_tpulv60);
+      }
+    #endif
   #endif
 
   vector<unsigned char> external_firmware;
-  const char* kernel_path = getenv("BMRUNTIME_USING_FIRMWARE");
+  auto kernel_path_env = getenv("BMRUNTIME_USING_FIRMWARE");
+  const char* kernel_path = kernel_path_env;
   if(!using_inner_firmware && kernel_path){
     BMRT_LOG(INFO, "loading firmare from ENV BMRUNTIME_USING_FIRMWARE=%s", kernel_path);
     string real_kernel_path = kernel_path;
@@ -2257,16 +2166,18 @@ void Bmruntime::load_tpu_module(ModelCtx* model_ctx) {
     }
   }
 
-  // load from bmodel, all cores should use the same firmware
-  auto _kernel_module = model_ctx->model()->kernel_module();
-  if (!using_inner_firmware && _kernel_module && external_firmware.empty()) {
-    auto module_binary = _kernel_module->binary();
-    if (module_binary->size()) {
-      external_firmware.resize(module_binary->size());
-      model_ctx->read_binary(module_binary, (uint8_t*)external_firmware.data());
-      BMRT_LOG(INFO, "loading firmare in bmodel");
+  #if !defined(LITE_BUILD)
+    // load from bmodel, all cores should use the same firmware
+    auto _kernel_module = model_ctx->model()->kernel_module();
+    if (!using_inner_firmware && _kernel_module && external_firmware.empty()) {
+      auto module_binary = _kernel_module->binary();
+      if (module_binary->size()) {
+        external_firmware.resize(module_binary->size());
+        model_ctx->read_binary(module_binary, (uint8_t*)external_firmware.data());
+        BMRT_LOG(INFO, "loading firmare in bmodel");
+      }
     }
-  }
+  #endif
 
   if(!external_firmware.empty()) {
     firmware_data = external_firmware.data();
@@ -2432,6 +2343,27 @@ bool Bmruntime::load_bmodel_with_mem(const void* bmodel_data, size_t size, mem_i
   return load_bmodel(&model_ctx);
 }
 
+bool Bmruntime::load_bmodel_in_device(void *p_bmodel, uint64_t dev_addr, size_t size)
+{
+// #ifndef SOC_MODE
+//   BMRT_LOG(WRONG, "load_bmodel_in_device is only supported in SOC mode.");
+//   return false;
+// #endif
+  ModelCtx model_ctx(p_bmodel, size);
+  if (!model_ctx) {
+      BMRT_LOG(WRONG, "Load model failed.");
+      return false;
+  }
+  uint64_t coeff_offset = dev_addr + model_ctx.header().header_size + model_ctx.header().flatbuffers_size;
+  if (coeff_offset % 0x1000 != 0) {
+      BMRT_LOG(WRONG, "coeff_offset 0x%llx is not aligned to 4KB.", coeff_offset);
+      return false;
+  }
+  std::lock_guard<std::mutex> guard(m_load_mutex);
+  m_bmodel_dev_addr = dev_addr;
+  return load_bmodel(&model_ctx, true);
+}
+
 /* Load encrypted bmodel file, which is pre-compiled by bmcompiler */
 bool Bmruntime::load_bmodel_with_decrypt(const string& filepath, const std::string &decrypt_lib)
 {
@@ -2590,8 +2522,8 @@ BmCoeff::~BmCoeff()
     bm_dev_free(m_handle);
 }
 
-u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem) {
-  return Register(model_ctx, coeff_mem, -1);
+u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, void* bmrt_ptr, addr_t addr_traits) {
+  return Register(model_ctx, coeff_mem, -1, bmrt_ptr, addr_traits);
 }
 
 int64_t BmCoeff::GetCoeffAddr(const CoeffMem* coeff_mem) {
@@ -2610,32 +2542,32 @@ int64_t BmCoeff::GetCoeffAddr(const CoeffMem* coeff_mem) {
   return -1;
 }
 
-u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr) // return coeff offset for cmd
+u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr, void* bmrt_ptr, addr_t addr_traits)
 {
   if (coeff_mem == NULL || model_ctx == NULL) {
     return 0;
   }
   u64 coeff_start = coeff_mem->address();
-  // Use relative address since 1688.
-  coeff_start &= bmrt_arch_info::addr_mask();
+  coeff_start &= addr_traits.offset.mask;
   u64 coeff_size = coeff_mem->encrypt_mode() == 0
                        ? coeff_mem->binary_coeff()->size()
                        : coeff_mem->decrypt_size();
   u8* coeff_size_ptr = (u8*)&coeff_size;
 
-  // check whether the same
   vector<u8> check_code = {coeff_mem->check_code()->begin(), coeff_mem->check_code()->end()};
   check_code.insert(check_code.end(), coeff_size_ptr, coeff_size_ptr + sizeof(u64));
+  register_coeff_user(check_code, bmrt_ptr);
+
   std::lock_guard<std::mutex> guard(m_coeff_mutex);
   auto iter = m_coeff_map.find(check_code);
+
   if (iter != m_coeff_map.end()) {
-    BMRT_LOG(DEBUG, "the coeff already exists");
+    BMRT_LOG(DEBUG, "coeff already exists");
     return bm_mem_get_device_addr_u64(iter->second) - coeff_start;
   }
 
   bm_device_mem_u64_t pmem;
   if (addr == -1) {
-    // allocate device memory for coeff
     if (BM_SUCCESS != bm_malloc_device_byte_heap_mask_u64(m_handle, &pmem, 7, coeff_size)) {
       BMRT_LOG(FATAL, "coeff alloc failed, size[0x%llx]", coeff_size);
     }
@@ -2643,19 +2575,24 @@ u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t ad
   } else {
     bm_set_device_mem_u64(&pmem, coeff_size, addr);
   }
+
   BMRT_LOG_RUN(DEBUG, {
     u64 mem_addr = bm_mem_get_device_addr_u64(pmem);
     u64 mem_size = bm_mem_get_device_size_u64(pmem);
     if (addr != -1) {
-      BMRT_LOG(DEBUG, "using prealloc coeff mem: [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
+      BMRT_LOG(DEBUG, "using prealloc coeff mem: [0x%llx, 0x%llx), size=%lld[0x%x]",
+               mem_addr, mem_addr+mem_size, mem_size, mem_size);
     } else {
-      BMRT_LOG(DEBUG, "alloc mem : [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
+      BMRT_LOG(DEBUG, "alloc mem : [0x%llx, 0x%llx), size=%lld[0x%x]",
+               mem_addr, mem_addr+mem_size, mem_size, mem_size);
     }
   });
 
   m_latest_device_mem = pmem;
   upload_coeff_data(model_ctx, coeff_mem, m_handle, pmem);
-  m_coeff_map.insert(std::pair<vector<u8>, bm_device_mem_u64_t>(check_code, pmem));
+
+  m_coeff_map.insert({check_code, pmem});
+
   return bm_mem_get_device_addr_u64(pmem) - coeff_start;
 }
 
@@ -2714,6 +2651,53 @@ int BmCoeff::Check()
   return err_count;
 }
 
+void BmCoeff::register_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr)
+{
+  std::lock_guard<std::mutex> guard(m_coeff_mutex);
+
+  if (m_check_code_user_list.find(check_code) == m_check_code_user_list.end()) {
+    m_check_code_user_list[check_code] = std::set<void*>();
+  }
+
+  m_check_code_user_list[check_code].insert(bmruntime_ptr);
+}
+
+std::vector<std::vector<u8>> BmCoeff::get_all_check_codes() {
+  std::lock_guard<std::mutex> guard(m_coeff_mutex);
+
+  std::vector<std::vector<u8>> codes;
+  for (const auto& entry : m_check_code_user_list) {
+    codes.push_back(entry.first);
+  }
+  return codes;
+}
+
+void BmCoeff::unregister_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr, bool free_unused_mem)
+{
+  std::lock_guard<std::mutex> guard(m_coeff_mutex);
+
+  auto iter = m_check_code_user_list.find(check_code);
+  if (iter != m_check_code_user_list.end()) {
+    iter->second.erase(bmruntime_ptr);
+
+    if (free_unused_mem && iter->second.empty()) {
+      m_check_code_user_list.erase(iter);
+      auto coeff_iter = m_coeff_map.find(check_code);
+      if (coeff_iter != m_coeff_map.end()) {
+        bm_device_mem_u64_t mem = coeff_iter->second;
+        u64 mem_addr = bm_mem_get_device_addr_u64(mem);
+        u64 mem_size = bm_mem_get_device_size_u64(mem);
+
+        BMRT_LOG(DEBUG, "[BmCoeff] Device %d: Freeing coeff memory addr[0x%llx], size[0x%llx]",
+                  m_devid, mem_addr, mem_size);
+
+        bm_free_device_u64(m_handle, mem);
+        m_coeff_map.erase(coeff_iter);
+      }
+    }
+  }
+}
+
 void BmMemory::Init(const string &description, bm_handle_t handle,
                     bm_device_mem_t &mem, void *buffer, bool do_check_,
                     bool is_soc_save_mem_mode) {
@@ -2736,10 +2720,20 @@ void BmMemory::Init(const string &description, bm_handle_t handle,
   CHECK_status(status);
 }
 
-void BmMemory::Update(const bm_device_mem_t &mem, void *buffer) {
+void BmMemory::Init(const string &description, bm_handle_t handle, bm_device_mem_t &mem) {
+  desc = description;
+  bm_handle = handle;
+  device_mem = mem;
   addr = bm_mem_get_device_addr(mem);
   bytes = bm_mem_get_device_size(mem);
   dword_len = (bytes + 3) / 4;
+  do_check = false;
+}
+
+void BmMemory::Update(const bm_device_mem_t &mem, void *buffer) {
+  addr = bm_mem_get_device_addr(mem);
+  bytes = bm_mem_get_device_size(mem);
+  dword_len = (bytes + 3) / 4; 
   if (do_check) {
     bmodel::CalcSha256((uint8_t *)buffer, bytes, check_code);
   }
@@ -2784,15 +2778,15 @@ int BmMemory::GetData(void* buffer) {
   return err_count;
 }
 
-void KernelModule::add_core_module(int core_id, const char* filename) {
+void KernelModule::add_core_module(int core_id, const char* filename, const std::string &backend) {
   BMRT_ASSERT_INFO(_kernel_modules.count(core_id)==0, "the core module has been already added, core_id=%d", core_id);
   _kernel_modules[core_id] = tpu_kernel_load_module_file(m_handle, filename);
-  this->preload_funcs(core_id);
+  this->preload_funcs(core_id, backend);
 }
-void KernelModule::add_core_module(int core_id, const unsigned char* binary, size_t size) {
+void KernelModule::add_core_module(int core_id, const unsigned char* binary, size_t size, const std::string &backend) {
   BMRT_ASSERT_INFO(_kernel_modules.count(core_id)==0, "the core module has been already added, core_id=%d", core_id);
   _kernel_modules[core_id] = tpu_kernel_load_module_to_core(m_handle, (char*)binary, size, core_id);
-  this->preload_funcs(core_id);
+  this->preload_funcs(core_id, backend);
 }
 
 KernelModule::~KernelModule() {
@@ -2803,7 +2797,7 @@ KernelModule::~KernelModule() {
     BMRT_ASSERT_INFO(status == BM_SUCCESS, "kernel_module unload failed!! core_id=%d\n", core_id);
   }
 }
-void KernelModule::preload_funcs(int core_id) {
+void KernelModule::preload_funcs(int core_id, const std::string &backend) {
   BMRT_ASSERT(_kernel_modules[core_id]);
 
   auto _kernel_module = _kernel_modules[core_id];
@@ -2815,7 +2809,7 @@ void KernelModule::preload_funcs(int core_id) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-  if(bmrt_arch_info::get_bmtpu_arch() == BM1688 || bmrt_arch_info::get_bmtpu_arch() == SG2380){
+  if(backend == "BM1688" || backend == "SG2380"){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }
@@ -2857,7 +2851,7 @@ vector<tpu_kernel_function_t> KernelModule::get_global_move_1684x_func_id(const 
   return __get_vector_funcs(core_list, _global_move_1684x_func_id, "global_move_1684x");
 }
 
-void KernelModuleLite::preload_funcs(int core_id) {
+void KernelModuleLite::preload_funcs(int core_id, const std::string &backend) {
   BMRT_ASSERT(_kernel_modules[core_id]);
 
   auto _kernel_module = _kernel_modules[core_id];

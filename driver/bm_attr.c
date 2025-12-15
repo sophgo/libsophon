@@ -13,6 +13,7 @@
 #include "pwm.h"
 #include "bm_attr.h"
 #include "bm_ctl.h"
+#include "bm_thermal.h"
 #include "bm_msgfifo.h"
 #include "bm1684/bm1684_clkrst.h"
 #include "bm1688/bm1688_clkrst.h"
@@ -250,6 +251,31 @@ void bmdrv_thermal_init(struct bm_device_info *bmdi)
 #ifndef SOC_MODE
 	bm1684_get_clk_temperature(bmdi);
 #endif
+}
+
+static int tempsen_get(struct bm_device_info *bmdi, u32 reg, u32 mask, u32 offset)
+{
+	return (thermal_reg_read(bmdi, reg) & mask) >> offset;
+}
+static int bmdrv_thermal_get_temp(struct bm_device_info *bmdi, int *temperature)
+{
+	int			     result, r1, r2, r3;
+
+	/* read temperature */
+	r1 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch0_result,
+							tempsen_top_sta_tempsen_ch0_result_MASK,
+							tempsen_top_sta_tempsen_ch0_result_OFFSET);
+	r2 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch1_result,
+							tempsen_top_sta_tempsen_ch1_result_MASK,
+							tempsen_top_sta_tempsen_ch1_result_OFFSET);
+	r3 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch2_result,
+							tempsen_top_sta_tempsen_ch2_result_MASK,
+							tempsen_top_sta_tempsen_ch2_result_OFFSET);
+	result = MAX_OF_THREE(r1, r2, r3);
+	*temperature = (result * 4074 - 3046900) / 10000;
+	PR_DEBUG("temp = %d mC(0x%x)\n", (result * 4074 - 3046900) / 10, result);
+
+	return 0;
 }
 
 static void calculate_board_status(struct bm_device_info *bmdi)
@@ -660,7 +686,7 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 		c_attr->fan_control = bmdi->boot_info.fan_exist;
 		bmdrv_thermal_init(bmdi);
 
-		c_attr->bm_get_chip_temp = NULL;
+		c_attr->bm_get_chip_temp = bm_read_temp;
 		c_attr->bm_get_board_temp = NULL;
 #else
 		c_attr->bm_get_tpu_power = NULL;
@@ -668,7 +694,7 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 		c_attr->bm_get_vddphy_power = NULL;
 		c_attr->bm_get_board_power = NULL;
 		c_attr->fan_control = false;
-		c_attr->bm_get_chip_temp = NULL;
+		c_attr->bm_get_chip_temp = bmdrv_thermal_get_temp;
 		c_attr->bm_get_board_temp = NULL;
 #endif
 		break;
@@ -2145,7 +2171,7 @@ int bm_get_sn(struct bm_device_info *bmdi, char *sn)
 		return 0;
 	}
 	if (bmdi->cinfo.chip_id == 0x1686a200) {
-		strncpy(sn, "NA\n", 3);
+		strncpy(sn, "N/A", 3);
 		return 0;
 	}
 
@@ -2431,12 +2457,12 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 		mutex_unlock(&c_attr->attr_mutex);
 #ifndef SOC_MODE
 		mutex_lock(&c_attr->attr_mutex);
-		if(c_attr->bm_get_board_temp != NULL){
+		if (c_attr->bm_get_board_temp != NULL) {
 			c_attr->bm_get_board_temp(bmdi, &c_attr->board_temp);
 			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.board_temp_reg, c_attr->board_temp, sizeof(u8));//bm_smbus_update_dev_info
 		}
 
-		if(c_attr->bm_get_tpu_power != NULL){
+		if (c_attr->bm_get_tpu_power != NULL) {
 			bm_read_vdd_tpu_voltage(bmdi, &c_attr->vdd_tpu_volt);
 			if ((c_attr->vdd_tpu_volt > 0) && (c_attr->vdd_tpu_volt < 0xffff))
 				c_attr->last_valid_tpu_volt = c_attr->vdd_tpu_volt;
@@ -2459,7 +2485,7 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			}
 		}
 
-		if(c_attr->bm_get_vddc_power != NULL){
+		if (c_attr->bm_get_vddc_power != NULL) {
 			bm_read_vddc_power(bmdi, &c_attr->vddc_power);
 			if ((c_attr->vddc_power > 0) && (c_attr->vddc_power < 0xffff))
 				c_attr->last_valid_vddc_power = c_attr->vddc_power;
@@ -2468,7 +2494,7 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			}
 		}
 
-		if(c_attr->bm_get_vddphy_power != NULL){
+		if (c_attr->bm_get_vddphy_power != NULL) {
 			bm_read_vddphy_power(bmdi, &c_attr->vddphy_power);
 			if ((c_attr->vddphy_power > 0) && (c_attr->vddphy_power < 0xffff))
 				c_attr->last_valid_vddphy_power = c_attr->vddphy_power;
@@ -2477,7 +2503,7 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			}
 		}
 
-		if(bmdi->boot_info.fan_exist && c_attr->bm_get_fan_speed != NULL){
+		if (bmdi->boot_info.fan_exist && c_attr->bm_get_fan_speed != NULL) {
 			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.fan_speed_reg, c_attr->fan_speed, sizeof(u8));//bm_smbus_update_dev_info
 		}
 
@@ -2486,15 +2512,17 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			goto err_fetch;
 		}
 		/* get chip temperature */
-		if(c_attr->bm_get_chip_temp != NULL)
+		if (c_attr->bm_get_chip_temp != NULL)
 			rc = c_attr->bm_get_chip_temp(bmdi, &c_attr->chip_temp);
+
 		if (rc) {
 			dev_err(cinfo->device, "device chip temperature fetch failed %d\n", rc);
 			mutex_unlock(&c_attr->attr_mutex);
 			goto err_fetch;
-		}
-		else
+		} else {
 			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.chip_temp_reg, c_attr->chip_temp, sizeof(u8));//bm_smbus_update_dev_info
+		}
+
 		mutex_unlock(&c_attr->attr_mutex);
 
 		if (c_attr->fan_control && is_setspeed == 1)

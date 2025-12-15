@@ -573,7 +573,7 @@ static uint32_t get_gdma_cmd_len(const uint8_t *gdma_buffer, uint64_t start_offs
                                  bool last_cmd, std::string arch) {
   uint32_t len = 96; // default: common gdma instrution size
 
-  if ("BM1688" == arch || "BM1690" == arch || "MARS3" == arch || "SG2380" == arch) {
+  if ("BM1688" == arch || "BM1690" == arch || "BM1690E" == arch || "MARS3" == arch || "SG2380" == arch) {
     uint32_t cmd_head[2] = {0};
     memcpy(cmd_head, gdma_buffer + start_offset, sizeof(cmd_head));
     uint32_t tsk_type = cmd_head[1] & 0xf;
@@ -743,10 +743,20 @@ uint64_t coeff_combine(
     if (is_same) {
       continue;
     }
-    addr_update_t addr_update;
+    addr_update_t addr_update = {0};
     addr_update.addr = location->offset();
     addr_update.size = location->size();
     addr_update.offset = buffer_offset - location->offset();
+    // There may be have multiple same locations, but only one addr_update.
+    // So we need to check if the addr_update already exists.
+    auto iter = std::find_if(addr_update_v->begin(), addr_update_v->end(),
+                             [&addr_update](const addr_update_t &update) {
+                               return (update.addr == addr_update.addr &&
+                                       update.size == addr_update.size);
+                             });
+    if (iter != addr_update_v->end()) {
+      continue;
+    }
     addr_update_v->push_back(addr_update);
     location_t loc;
     loc.name = location->name()->str();

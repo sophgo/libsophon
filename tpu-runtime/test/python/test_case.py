@@ -30,12 +30,7 @@ def test_api_func(bmodels : defaultdict, runtime_arch : str, loop_num : int):
                     "bmcpp_load_bmodel",
                     "bmcpp_load_bmodel_data",
                     "bmcpp_reshape",
-                    "bmcpp_multi_thread",
-                    "bmtap2_register_bmodel",
-                    "bmtap2_register_data",
-                    "bmtap2_multi_thread",
-                    "bmtap2cpp_load_bmodel",
-                    "bmtap2cpp_multi_thread"]
+                    "bmcpp_multi_thread"]
     case = TestBase(common_cases, loop_num)
     case.set_arch_name(runtime_arch)
     bmodel_list= []
@@ -49,7 +44,6 @@ def test_api_func(bmodels : defaultdict, runtime_arch : str, loop_num : int):
         case.set_case_names(test_cases)
         case.run_single_mession()
 
-    if runtime_arch == "bm1688":
         case.set_case_names(["bmmc_multi_mession"])
         case.run_multi_mession()
 
