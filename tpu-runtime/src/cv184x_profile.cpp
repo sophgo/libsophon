@@ -36,6 +36,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
                     ((!!enable_arm)<<PROFILE_ENGINE_MCU);
     auto set_func_ids = net_ctx->kernel_module_->get_set_engine_profile_param_func_id(core_list);
     auto enable_func_ids = net_ctx->kernel_module_->get_enable_profile_func_id(core_list);
+    auto &launcher = profile->get_bmrt()->backend()->launcher();
     for(size_t i=0; i<core_list.size(); i++){
         if(enable_bdc){
             BMRT_LOG(INFO, "enable tiu profiling!");
@@ -45,7 +46,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             if (ret != BM_SUCCESS) {
                 BMRT_LOG(FATAL, "init device buffer data failed, ret = %d\n", ret);
             }
-            bmfunc::bmdnn_cv184x()->_bmdnn_set_engine_profile_param_(
+            dynamic_cast<bmdnn_func_cv184x*>(launcher.get())->_bmdnn_set_engine_profile_param_(
                 handle, core_list[i], set_func_ids[i],
                 PROFILE_ENGINE_TIU,
                 bm_mem_get_device_addr(tiu_buffer.mem),
@@ -59,7 +60,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             if (ret != BM_SUCCESS) {
                 BMRT_LOG(FATAL, "init device buffer data failed, ret = %d\n", ret);
             }
-            bmfunc::bmdnn_cv184x()->_bmdnn_set_engine_profile_param_(
+            dynamic_cast<bmdnn_func_cv184x*>(launcher.get())->_bmdnn_set_engine_profile_param_(
                 handle, core_list[i], set_func_ids[i],
                 PROFILE_ENGINE_GDMA,
                 bm_mem_get_device_addr(gdma_buffer.mem),
@@ -67,7 +68,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             );
         }
         // enable dynamic profile
-        ret = bmfunc::bmdnn_cv184x()->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], enable_bits);
+        ret = dynamic_cast<bmdnn_func_cv184x*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], enable_bits);
         CHECK_status(ret);
     }
     return true;
@@ -78,6 +79,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
     auto handle = profile->get_handle();
     int ret = BM_SUCCESS;
     auto& core_list = profile->get_core_list();
+    auto &launcher = profile->get_bmrt()->backend()->launcher();
     for(size_t i=0; i<core_list.size(); i++){
         if (enable_bdc){
             auto& tiu_buffer = buffers[i].tiu;
@@ -105,7 +107,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
         }
         auto get_func_ids = net_ctx->kernel_module_->get_get_profile_func_id(core_list);
         auto enable_func_ids = net_ctx->kernel_module_->get_enable_profile_func_id(core_list);
-        bm_status_t status = bmfunc::bmdnn_cv184x()->_bmdnn_set_profile_enable_(handle, core_list[0], enable_func_ids[0], 0);
+        bm_status_t status = dynamic_cast<bmdnn_func_cv184x*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[0], enable_func_ids[0], 0);
     }
     return true;
 }

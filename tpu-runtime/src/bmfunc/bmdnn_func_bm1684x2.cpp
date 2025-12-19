@@ -1,4 +1,3 @@
-#include "bmfunc/bmfunc.h"
 #include <iostream>
 #include "bmlib_runtime.h"
 #include "bmruntime.h"

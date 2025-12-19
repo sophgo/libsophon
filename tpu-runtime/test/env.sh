@@ -19,6 +19,9 @@ function bmrt_update_libcmodel() {
   if [ ${arch_name} == "bm1690" ]; then
     backened_name="sg2260"
   fi
+  if [ ${arch_name} == "bm1690e" ]; then
+    backened_name="sg2260e"
+  fi
   source scripts/envsetup.sh ${backened_name}
   rebuild_firmware_cmodel
   cp ./build/firmware_core/libcmodel_firmware.so ${libpath}/libcmodel_${arch_name}.so

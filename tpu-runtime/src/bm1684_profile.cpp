@@ -124,7 +124,8 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 
     // enable dynamic profile
     if(enable_arm){
-        ret = bmfunc::bmdnn_1684()->_bmdnn_set_profile_enable_(handle, true);
+        const auto &launcher = profile->get_bmrt()->backend()->launcher();
+        ret = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, true);
         CHECK_status(ret);
     }
     return true;
@@ -160,13 +161,14 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
         profile->write_block(BLOCK_MONITOR_GDMA, valid_len, gdma_buffer.ptr);
     }
     if (enable_arm) {
+        auto &launcher = profile->get_bmrt()->backend()->launcher();
         for(int i=0; i<2; i++){
             vector<u8> data;
             size_t offset = 0;
             size_t total_len = 0;
             u32 block_type = (i == 0) ? BLOCK_DYN_DATA : BLOCK_DYN_EXTRA;
             while(1){
-                bm_status_t status = bmfunc::bmdnn_1684()->_bmdnn_get_profile_data_(
+                bm_status_t status = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_get_profile_data_(
                             handle,
                             bm_mem_get_device_addr(dyn_buffer.mem),
                             bm_mem_get_device_size(dyn_buffer.mem),
@@ -186,7 +188,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             }
             profile->write_block(block_type, data.size(), data.data());
         }
-        bm_status_t status = bmfunc::bmdnn_1684()->_bmdnn_set_profile_enable_(handle, false);
+        bm_status_t status = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, false);
         CHECK_status(status);
     }
     return true;

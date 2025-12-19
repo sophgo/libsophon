@@ -15,7 +15,13 @@ find_package(bmlib REQUIRED)
 find_package(bmodel REQUIRED)
 find_package(Threads REQUIRED)
 
-file(GLOB_RECURSE srcs src/*.cpp src/*.c)
+set(CMAKE_CXX_STANDARD 17)
+file(GLOB srcs CONFIGURE_DEPENDS
+          src/*.cpp
+          src/*.c
+          src/backend/*.cpp
+          src/cpp/*.cpp
+          src/bmfunc/*.cpp)
 
 add_library(bmrt SHARED ${srcs})
 add_library(bmrt_static STATIC ${srcs})
@@ -56,16 +62,11 @@ target_link_libraries(bmrt PUBLIC
 
 target_include_directories(bmrt PUBLIC
     ${common_dir}/base/
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/bmfunc
     ${CMAKE_BINARY_DIR})
 
-if(${PLATFORM} STREQUAL "cmodel")
-    target_link_libraries(bmrt_static PUBLIC
-        bmodel::bmodel bmlib::bmlib
-        ${CMAKE_DL_LIBS}
-        Threads::Threads -lrt)
-else()
+if(LITE_BUILD)
     target_link_libraries(bmrt_static PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/../build/lib/libbmlib.a
         ${CMAKE_CURRENT_SOURCE_DIR}/../build/tpu-bmodel/libbmodel.a
@@ -73,11 +74,15 @@ else()
         Threads::Threads
         rt
     )
+else()
+    target_link_libraries(bmrt_static PUBLIC
+        bmodel::bmodel bmlib::bmlib
+        ${CMAKE_DL_LIBS}
+        Threads::Threads -lrt)
 endif()
 
 target_include_directories(bmrt_static PUBLIC
     ${common_dir}/base/
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../bmlib/include
@@ -103,7 +108,8 @@ set_target_properties(bmrt PROPERTIES SOVERSION "1.0")
 set_target_properties(bmrt_static PROPERTIES SOVERSION "1.0")
 set(app_srcs
     app/bmrt_test.cpp
-    app/bmrt_test_case.cpp)
+    app/bmrt_test_case.cpp
+    )
 add_executable(bmrt_test ${app_srcs})
 target_link_libraries(bmrt_test  bmrt_static -lrt)
 target_compile_definitions(bmrt_test PRIVATE

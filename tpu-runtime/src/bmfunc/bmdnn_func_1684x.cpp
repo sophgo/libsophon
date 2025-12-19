@@ -1,7 +1,7 @@
-#include "bmfunc/bmfunc.h"
 #include <iostream>
 #include "bmlib_runtime.h"
 #include "bmruntime.h"
+#include "bmfunc/bmdnn_func.h"
 
 namespace bmruntime {
 

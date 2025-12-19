@@ -1440,13 +1440,6 @@ vector<string> test_case_v = {
     "bmcpp_load_bmodel_data",
     "bmcpp_reshape",
     "bmcpp_multi_thread",
-    // bmtap2 c interface
-    "bmtap2_register_bmodel",
-    "bmtap2_register_data",
-    "bmtap2_multi_thread",
-    // bmtap2 c++ interface
-    "bmtap2cpp_load_bmodel",
-    "bmtap2cpp_multi_thread",
     // bmruntime multi-core interface
     "bmmc_multi_mession",
 };

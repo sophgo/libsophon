@@ -18,9 +18,6 @@ typedef struct {
   vector<bm_shape_t> output_shape_v;
   vector<bm_data_type_t> output_type_v;
   int bmodel_idx;                  // for bmtap2
-  vector<shape_t> input_shape2_v;  // for bmtap2
-  vector<fmt_t> input_type2_v;     // for bmtap2
-  vector<string> output_name_v;    // for bmtap2
 } launch_unit_t;
 vector<launch_unit_t> g_launch_unit_v;
 
@@ -54,12 +51,9 @@ static void result_cmp(int8_t *output_data[], launch_unit_t &launch_unit)
 
 /* --------------------------------------------------------------------------*/
 /* prepare for input data and output reference data */
-extern shape_t bmnet_shape_convert(bm_shape_t bm_shape);            // for bmtap2
-extern uint32_t bmnet_data_type_convert(bm_data_type_t data_type);  // for bmtap2
 static void prepare_ref_data(
     const flatbuffers::Vector<flatbuffers::Offset<bmodel::Tensor>> *tensors, FILE *file,
     vector<void *> &data_v, vector<bm_shape_t> &shape_v, vector<bm_data_type_t> &type_v,
-    vector<shape_t> *shape2_v = NULL, vector<fmt_t> *type2_v = NULL, vector<string> *name2_v = NULL,
     bool is_merge = false)
 {
   size_t total_size = 0;
@@ -70,19 +64,9 @@ static void prepare_ref_data(
                               tensor->shape()->Get(0)->dim()->end()};
     bmrt_shape(&tensor_shape, shape_data.data(), shape_data.size());
     shape_v.push_back(tensor_shape);
-    if (shape2_v != NULL) {
-      shape2_v->push_back(bmnet_shape_convert(tensor_shape));
-    }
 
     bm_data_type_t type = (bm_data_type_t)tensor->data_type();
     type_v.push_back(type);
-    if (type2_v != NULL) {
-      type2_v->push_back(bmnet_data_type_convert(type));
-    }
-
-    if (name2_v != NULL) {
-      name2_v->push_back(tensor->name()->str());
-    }
 
     size_t size = bmrt_shape_count(&tensor_shape) * bmrt_data_type_size(type);
     total_size += size;
@@ -134,11 +118,9 @@ static void prepare_test_data(bool is_bmtap2 = false)
         launch_unit.net_name = net->name()->str();
         launch_unit.stage_idx = stage_idx;
         prepare_ref_data(input_tensors, f_input, launch_unit.ref_input_v, launch_unit.input_shape_v,
-                         launch_unit.input_type_v, &launch_unit.input_shape2_v,
-                         &launch_unit.input_type2_v, NULL, is_bmtap2);
+                         launch_unit.input_type_v, is_bmtap2);
         prepare_ref_data(output_tensors, f_output, launch_unit.ref_output_v,
-                         launch_unit.output_shape_v, launch_unit.output_type_v, NULL, NULL,
-                         &launch_unit.output_name_v);
+                         launch_unit.output_shape_v, launch_unit.output_type_v);
         g_launch_unit_v.push_back(launch_unit);
       }
     }
@@ -719,254 +701,6 @@ static void bmcpp_api_test_case()
   free_test_data();
 }
 
-/* --------------------------------------------------------------------------*/
-/* test bmtap2 c api */
-static vector<bmnet_t> g_bmnet_v;
-static bmctx_t g_ctx;
-static void thread_entry_bmtap2_load(int idx)
-{
-  bmerr_t ret = BM_SUCCESS;
-  if (CONTEXT_DIR_V[idx].empty()) {
-    return;
-  }
-
-  if (TEST_CASE == "bmtap2_register_data") {
-    // load bmodel by data
-    string bmodel_path = CONTEXT_DIR_V[idx] + "/compilation.bmodel";
-    FILE *f_bmodel = fopen(bmodel_path.c_str(), "rb");
-    if (f_bmodel == NULL) {
-      BMRT_LOG(FATAL, "Open bmodel[%s] failed", bmodel_path.c_str());
-    }
-    fseek(f_bmodel, 0, SEEK_END);
-    size_t length = ftell(f_bmodel);
-    rewind(f_bmodel);
-    uint8_t *buffer = new uint8_t[length];
-    if (1 != fread(buffer, length, 1, f_bmodel)) {
-      BMRT_LOG(FATAL, "Failed to fread bmodel data [%s]", bmodel_path.c_str());
-    }
-    ret = bmnet_register_bmodel_data(g_ctx, buffer, length, &g_bmnet_v[idx]);
-    delete[] buffer;
-    if (ret != BM_SUCCESS) {
-      BMRT_LOG(FATAL, "Load bmodel data[%s] failed", bmodel_path.c_str());
-    }
-    fclose(f_bmodel);
-  } else {
-    // load bmodel by file
-    string bmodel_path = CONTEXT_DIR_V[idx] + "/compilation.bmodel";
-    ret = bmnet_register_bmodel(g_ctx, bmodel_path.c_str(), &g_bmnet_v[idx]);
-    if (ret != BM_SUCCESS) {
-      BMRT_LOG(FATAL, "Load bmodel[%s] failed", bmodel_path.c_str());
-    }
-  }
-}
-
-// multi thread load bmodel
-static void test_bmtap2_load_bmodel()
-{
-  int num = CONTEXT_DIR_V.size();
-  g_bmnet_v.clear();
-  g_bmnet_v.assign(num, NULL);
-  if (TEST_CASE == "bmtap2_multi_thread") {
-    #ifdef __linux__
-    thread thread_v[num];
-    #else
-    std::shared_ptr<thread> thread_v_(new thread[num], std::default_delete<thread[]>());
-    thread* thread_v = thread_v_.get();
-    #endif
-    for (int i = 0; i < num; i++) {
-      thread_v[i] = thread(thread_entry_bmtap2_load, i);
-    }
-    for (int i = 0; i < num; i++) {
-      thread_v[i].join();
-    }
-  } else {
-    for (int i = 0; i < num; i++) {
-      thread_entry_bmtap2_load(i);
-    }
-  }
-}
-
-static void thread_entry_bmtap2_run(int thread_id, int idx)
-{
-  bmerr_t ret = BM_SUCCESS;
-  bmnet_output_info_t output_info;
-
-  for (auto &launch_unit : g_launch_unit_v) {
-    if (launch_unit.bmodel_idx != idx) {
-      continue;
-    }
-    for (int loop = 0; loop < LOOP_NUM; loop++) {
-      BMRT_LOG(INFO, "===> launch net[%s] stage[%d] thread[%d] loop[%d] ....",
-              launch_unit.net_name.c_str(), launch_unit.stage_idx, thread_id, loop);
-      int input_num = launch_unit.input_shape_v.size();
-      int output_num = launch_unit.ref_output_v.size();
-      ret = bmnet_set_input_shape2(g_bmnet_v[idx], launch_unit.input_shape2_v.data(), input_num);
-      if (ret != BM_SUCCESS) {
-        BMRT_LOG(FATAL, "bmnet_set_input_shape2 failed");
-      }
-      ret = bmnet_get_output_info(g_bmnet_v[idx], &output_info);
-      if (ret != BM_SUCCESS) {
-        BMRT_LOG(FATAL, "bmnet_get_output_info failed");
-      }
-      uint8_t *output = new uint8_t[output_info.output_size];
-      memset(output, 0, output_info.output_size);
-      ret = bmnet_inference(g_bmnet_v[idx], (uint8_t *)launch_unit.ref_input_v[0], output);
-      if (ret != BM_SUCCESS) {
-        BMRT_LOG(FATAL, "bmnet_inference failed");
-      }
-      #ifdef __linux__
-      void *output_datas[output_num];
-      #else
-      std::shared_ptr<void*> output_datas_(new void*[output_num], std::default_delete<void*[]>());
-      void** output_datas = output_datas_.get();
-      #endif
-      uint8_t *p_out = output;
-      for (int i = 0; i < output_num; i++) {
-        output_datas[i] = p_out;
-        p_out += output_info.size_array[i];
-      }
-
-      result_cmp((int8_t **)output_datas, launch_unit);
-
-      delete[] output;
-    }
-  }
-}
-
-static void test_bmtap2_run()
-{
-  int num = CONTEXT_DIR_V.size();
-  if (TEST_CASE == "bmtap2_multi_thread") {  // multi-thread
-    int total_num = num * THREAD_NUM;
-    #ifdef __linux__
-    thread thread_v[total_num];
-    #else
-    std::shared_ptr<thread> thread_v_(new thread[total_num], std::default_delete<thread[]>());
-    thread* thread_v = thread_v_.get();
-    #endif
-    int index = 0;
-    for (int i = 0; i < num; i++) {
-      for (int j = 0; j < THREAD_NUM; j++) {
-        thread_v[index] = thread(thread_entry_bmtap2_run, j, i);
-        index ++;
-      }
-    }
-    for (int i = 0; i < num; i++) {
-      thread_v[i].join();
-    }
-  } else {  // single-thread
-    for (int i = 0; i < num; i++) {
-      thread_entry_bmtap2_run(0, i);
-    }
-  }
-}
-
-static void test_bmtap2_cleanup()
-{
-  for (auto &net : g_bmnet_v) {
-    if (net != NULL) {
-      bmnet_cleanup(net);
-    }
-  }
-}
-
-static void bmtap2_api_test_case()
-{
-  bmerr_t ret = BM_SUCCESS;
-  prepare_test_data(true);
-
-  ret = bm_init(0, &g_ctx);
-  if (ret != BM_SUCCESS) {
-    BMRT_LOG(FATAL, "bm_init failed");
-  }
-
-  test_bmtap2_load_bmodel();
-  test_bmtap2_run();
-  test_bmtap2_cleanup();
-
-  bm_exit(g_ctx);
-  free_test_data();
-}
-
-/* --------------------------------------------------------------------------*/
-/* test bmtap2 c++ api */
-static void thread_entry_bmtap2cpp_run(int thread_id, int idx)
-{
-  if (CONTEXT_DIR_V[idx].empty()) {
-    return;
-  }
-  string path = CONTEXT_DIR_V[idx] + "/compilation.bmodel";
-  bmruntime::Net net(path);
-
-  for (auto &launch_unit : g_launch_unit_v) {
-    if (launch_unit.bmodel_idx != idx) {
-      continue;
-    }
-    for (int loop = 0; loop < LOOP_NUM; loop++) {
-      BMRT_LOG(INFO, "===> launch net[%s] stage[%d] thread[%d] loop[%d] ....", launch_unit.net_name.c_str(),
-             launch_unit.stage_idx, thread_id, loop);
-      int input_num = launch_unit.input_shape_v.size();
-      int output_num = launch_unit.ref_output_v.size();
-      vector<bmruntime::Blob> input_blobs;
-      for (int i = 0; i < input_num; i++) {
-        input_blobs.push_back(bmruntime::Blob(launch_unit.ref_input_v[i],
-                                              launch_unit.input_shape2_v[i],
-                                              launch_unit.input_type2_v[i]));
-      }
-      net.forward(input_blobs);
-      #ifdef __linux__
-      void *output_datas[output_num];
-      #else
-      std::shared_ptr<void*> output_datas_(new void*[output_num], std::default_delete<void*[]>());
-      void** output_datas = output_datas_.get();
-      #endif
-      for (int i = 0; i < output_num; i++) {
-        output_datas[i] = net.output(launch_unit.output_name_v[i])->data();
-      }
-
-      result_cmp((int8_t **)output_datas, launch_unit);
-    }
-  }
-}
-
-static void test_bmtap2cpp_run()
-{
-  int launch_num = CONTEXT_DIR_V.size();
-  if (TEST_CASE == "bmtap2cpp_multi_thread") {  // multi-thread
-    int total_num = THREAD_NUM * launch_num;
-    #ifdef __linux__
-    thread thread_v[total_num];
-    #else
-    std::shared_ptr<thread> thread_v_(new thread[total_num], std::default_delete<thread[]>());
-    thread* thread_v = thread_v_.get();
-    #endif
-    int index = 0;
-    for (int i = 0; i < launch_num; i++) {
-      for (int j = 0; j < THREAD_NUM; j++) {
-        thread_v[index] = thread(thread_entry_bmtap2cpp_run, j, i);
-        index++;
-      }
-    }
-
-    for (int i = 0; i < total_num; i++) {
-      thread_v[i].join();
-    }
-  } else {  // single-thread
-    for (int i = 0; i < launch_num; i++) {
-      thread_entry_bmtap2cpp_run(0, i);
-    }
-  }
-}
-
-static void bmtap2cpp_api_test_case()
-{
-  prepare_test_data(true);
-
-  test_bmtap2cpp_run();
-
-  free_test_data();
-}
-
 static void thread_entry_bmrtmcore_launch(
   const char *net_name,
   const bm_tensor_t *input_tensors, int input_num,
@@ -1165,8 +899,6 @@ typedef struct {
 
 test_pair_t test_pair[] = {{"bmrt", bmrt_api_test_case},
                            {"bmcpp", bmcpp_api_test_case},
-                           {"bmtap2", bmtap2_api_test_case},
-                           {"bmtap2cpp", bmtap2cpp_api_test_case},
                            {"bmmc", bmmc_multi_mession_test_case}};
 
 void bmrt_test_case()

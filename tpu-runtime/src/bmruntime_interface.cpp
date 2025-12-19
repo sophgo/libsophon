@@ -4,7 +4,6 @@
 #include "bmruntime_common.h"
 #include "string.h"
 
-using bmruntime::bmfunc;
 using bmruntime::Bmruntime;
 
 /* get data type byte size */
@@ -157,32 +156,6 @@ void bmrt_print_network_info(const bm_net_info_t* net_info)
   }
 }
 
-static std::string chip_name_by_id(unsigned int chipid) {
-  std::string chip_name = "";
-  if (chipid == 0x1684) {
-    chip_name = "BM1684";
-  } else if (chipid == 0x1686) {
-    chip_name = "BM1684X";
-  } else if (chipid == 0x1686a200 || chipid == 0x1688) {
-    chip_name = "BM1688";
-  } else if (chipid == 0x1682) {
-    chip_name = "BM1682";
-  } else if (chipid == 0x1880) {
-    chip_name = "BM1880";
-  } else if (chipid == 0x2260) {
-    chip_name = "BM1690";
-  } else if (chipid == 0x2380) {
-    chip_name = "SG2380";
-  } else if (chipid == 0x184) {
-    chip_name = "CV184X";
-  } else if (chipid == 0x8000) {
-    chip_name = "SGTPUV8";
-  } else if (chipid == 0x16862) {
-    chip_name = "BM1684X2";
-  }
-  return chip_name;
-}
-
 void* bmrt_create(bm_handle_t bm_handle)
 {
   unsigned int chipid = 0;
@@ -190,13 +163,9 @@ void* bmrt_create(bm_handle_t bm_handle)
     BMRT_LOG(WRONG, "Error: cannot get chipid:%x",chipid);
     return nullptr;
   }
-  std::string chip_name = chip_name_by_id(chipid);
-  if (chip_name.empty()) {
-    BMRT_LOG(WRONG, "Error: unknown chipid %x", chipid);
-    return nullptr;
-  }
+
   try {
-    Bmruntime* p_bmrt = new Bmruntime(&bm_handle, true, chip_name);
+    Bmruntime* p_bmrt = new Bmruntime(&bm_handle, true, chipid);
     return (void*)p_bmrt;
   } catch (const std::runtime_error &e) {
     return nullptr;
@@ -222,13 +191,8 @@ void *bmrt_create_ex(bm_handle_t *bm_handles, int num_handles) {
       return nullptr;
     }
   }
-  std::string chip_name = chip_name_by_id(chipid);
-  if (chip_name.empty()) {
-    BMRT_LOG(WRONG, "Error: unknown chipid %x", chipid);
-    return nullptr;
-  }
   try {
-    Bmruntime* p_bmrt = new Bmruntime(bm_handles, num_handles, true, chip_name);
+    Bmruntime* p_bmrt = new Bmruntime(bm_handles, num_handles, true, chipid);
     return (void*)p_bmrt;
   } catch (const std::runtime_error &e) {
     return nullptr;
@@ -300,9 +264,23 @@ bool bmrt_load_bmodel_with_mem(void* p_bmrt, const char* bmodel_path, mem_info_t
   }
   const std::string bmodel_dir = bmodel_path;
   try {
-  return ((Bmruntime*)p_bmrt)->load_bmodel_with_mem(bmodel_dir, mem_info);
+    return ((Bmruntime*)p_bmrt)->load_bmodel_with_mem(bmodel_dir, mem_info);
   } catch (const std::runtime_error &e) {
-      return false;
+    return false;
+  }
+}
+
+bool bmrt_load_bmodel_in_device(void *p_bmrt, void *p_bmodel, uint64_t dev_addr, size_t size)
+{
+  if (p_bmrt == NULL || size == 0) {
+    BMRT_LOG(WRONG, "bmrt handle is NULL or size=0 is wrong.");
+    return false;
+  }
+  try {
+    return ((Bmruntime *)p_bmrt)->load_bmodel_in_device(p_bmodel, dev_addr, size);
+  }
+  catch (const std::runtime_error &e) {
+    return false;
   }
 }
 

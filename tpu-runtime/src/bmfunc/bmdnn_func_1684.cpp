@@ -1,4 +1,5 @@
-#include "bmfunc/bmfunc.h"
+#include "bmruntime_common.h"
+#include "bmfunc/bmdnn_func.h"
 #include <iostream>
 #include "string.h"
 

@@ -415,7 +415,7 @@ class bmdnn_func_1688 : public bmdnn_func {
 class bmdnn_func_2260 : public bmdnn_func {
   public:
 
-    bmdnn_func_2260() {
+    bmdnn_func_2260(std::string arch) : arch_(arch) {
         BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
         BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
         BM_API_ID_SET_PROFILE_ENABLE  = 986;
@@ -458,6 +458,7 @@ class bmdnn_func_2260 : public bmdnn_func {
                                          unsigned int data_category //0: profile time records, 1: extra data
                                          );
   private:
+    std::string arch_;
     u32 BM_API_ID_MULTI_FULLNET;
     u32 BM_API_ID_DYNAMIC_FULLNET;
     u32 BM_API_ID_SET_PROFILE_ENABLE;
