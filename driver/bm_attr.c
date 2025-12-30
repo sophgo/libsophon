@@ -713,6 +713,9 @@ void bm_npu_utilization_stat(struct bm_device_info *bmdi)
 	struct bm_chip_attr *c_attr = &bmdi->c_attr;
 	int i = 0;
 	int npu_status_stat = 0;
+	int util = 0;
+	static int count = 0;
+	static int sum = 0;
 
 	if (!bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_XPU, 0)) {
 		c_attr->npu_status[c_attr->npu_status_idx] = 1;
@@ -726,7 +729,18 @@ void bm_npu_utilization_stat(struct bm_device_info *bmdi)
 
 	for (i = 0; i < NPU_STAT_WINDOW_WIDTH; i++)
 		npu_status_stat += c_attr->npu_status[i];
-	atomic_set(&c_attr->npu_utilization, npu_status_stat<<1);
+	util = npu_status_stat<<1;
+	if (bmdi->util_time != -1 && bmdi->util_time != 0) {
+		count++;
+		sum += util;
+		if (count >= bmdi->util_time * 50) {
+			atomic_set(&c_attr->npu_utilization, sum / count);
+			pr_info("update npu util! util: %d s, util: %d\n", bmdi->util_time, sum / count);
+			count = 0;
+			sum = 0;
+		}
+	} else
+		atomic_set(&c_attr->npu_utilization, util);
 }
 
 void bm_npu_utilization_stat1(struct bm_device_info *bmdi)
@@ -1067,7 +1081,7 @@ int bm_read_npu_util(struct bm_device_info *bmdi)
 
 	timer_on = atomic_read(&bmdi->c_attr.timer_on);
 	if (timer_on)
-		return atomic_read(&c_attr->npu_utilization);
+		return atomic_read(&c_attr->npu_utilization);//here
 	else
 		return ATTR_NOTSUPPORTED_VALUE;
 }

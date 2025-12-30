@@ -263,11 +263,6 @@ struct dyn_neuron_stage_t {
   float* cpu_addr;
 };
 
-struct neuron_mem_block {
-  uint64_t key;
-  bool used;
-};
-
 struct net_ctx_t {
   string net_name;
   vector<string> input_name_v;
@@ -280,7 +275,6 @@ struct net_ctx_t {
   vector<int> output_zero_point_v;
   vector<net_stage_t *> stage_v;              // each net has multi stages
   std::unordered_map<uint64_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
-  vector<neuron_mem_block> mem_block;
 
   // Bulk neuron memories.
   vector<bm_device_mem_u64_t> neuron_mem;
@@ -423,6 +417,7 @@ class Bmruntime {
   void pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const std::vector<int> &core_list);
   void pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info);
   void pre_alloc_neuron(int net_idx);
+  void free_pre_alloc_neuron(int net_idx);
   int get_inner_neuron_number(const char* net_name);
   bm_device_mem_t get_inner_neuron_memory(const char* net_name, int mem_index, const int* core_list, int core_num);
   bool memcpy_s2d_parallel(bm_tensor_t tensors[], void * datas[],

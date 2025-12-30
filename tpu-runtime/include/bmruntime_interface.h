@@ -766,6 +766,10 @@ DECL_EXPORT bool bmrt_pre_alloc_mem(
     void *p_bmrt,
     const char* net_name);
 
+DECL_EXPORT bool bmrt_free_pre_alloc_mem(
+    void *bmrt,
+    const char *net_name);
+
 /**
  * @name    bmrt_pre_alloc_mem_multi_thread
  * @brief   To pre-allocate the neuron network compute memory during multi-cores arch inference for thread.

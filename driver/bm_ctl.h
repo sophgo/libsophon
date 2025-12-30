@@ -22,6 +22,7 @@ struct bm_ctrl_info {
 
 struct chip_info;
 int bmctl_ioctl_get_attr(struct bm_ctrl_info *bmci, unsigned long arg);
+int bmctl_ioctl_set_tpu_util_time(struct bm_ctrl_info *bmci, int util_time);
 int bmctl_ioctl_get_proc_gmem(struct bm_ctrl_info *bmci, unsigned long arg);
 int bmdrv_init_bmci(struct chip_info *cinfo);
 int bmdrv_remove_bmci(void);

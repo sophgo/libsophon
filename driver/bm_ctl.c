@@ -403,6 +403,20 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	return 0;
 }
 
+int bmctl_ioctl_set_tpu_util_time(struct bm_ctrl_info *bmci, int util_time)
+{
+	struct bm_device_info *bmdi;
+
+	pr_info("util_time: %d\n", util_time);
+
+	bmdi = bmctl_get_bmdi(bmci, 0);
+	if (!bmdi)
+		return -1;
+
+	bmdi->util_time = util_time;
+	return 0;
+}
+
 int bmctl_ioctl_get_attr(struct bm_ctrl_info *bmci, unsigned long arg)
 {
 	int ret = 0;

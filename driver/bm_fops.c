@@ -1573,6 +1573,15 @@ static long bmdev_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		break;
 	}
 
+	case BMCTL_SET_UTIL_TIME:
+	{
+		int util_time;
+
+		ret = copy_from_user(&util_time, (int __user *)arg,
+			sizeof(int));
+		bmctl_ioctl_set_tpu_util_time(bmci, util_time);
+		break;
+	}
 	default:
 		pr_err("*************Invalid ioctl parameter************\n");
 		return -EINVAL;

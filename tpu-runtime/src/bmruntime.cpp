@@ -18,6 +18,7 @@
 #include <numeric>
 #include "bmlib_runtime.h"
 #include "bmruntime_common.h"
+#include "bmruntime_context.hpp"
 
 void* bmrt_load_lib(const char* libname, int flags) {
   void* handle=nullptr;
@@ -1381,24 +1382,39 @@ std::shared_ptr<dyn_neuron_stage_t> Bmruntime::net_ctx_get_dyn_neuron(net_ctx_t*
 
 void Bmruntime::__net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask) {
   std::unique_lock<std::mutex> neuron_stage_lock(net_ctx->neuron_mutex);
+  dyn_neuron_stage_t *dyn_neuron_info = nullptr;
   if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) != net_ctx->dyn_neuron_stage_dict.end()) {
-    neuron_stage_lock.unlock();
-    return;
+    dyn_neuron_info = net_ctx->dyn_neuron_stage_dict[dyn_core_mask];
+  } else {
+    dyn_neuron_info = new dyn_neuron_stage_t();
+    net_ctx->dyn_neuron_stage_dict.emplace(dyn_core_mask, dyn_neuron_info);
+    u64 neuron_num = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem.size() : net_ctx->neuron_size.size();
+    BMRT_ASSERT(neuron_num == 1);
+    dyn_neuron_info->neuron_mem.resize(neuron_num);
   }
 
+  // we need update runtime memory before each launcher
+  // runtime memory can be updated if any model is released by user. see API `bmrt_free_pre_alloc_mem`
   auto devid = net_ctx->device_id;
-  auto dyn_neuron_info = new dyn_neuron_stage_t();
-  u64 neuron_num = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem.size() : net_ctx->neuron_size.size();
-  dyn_neuron_info->neuron_mem.resize(neuron_num);
-  std::string suffix = "_" + std::to_string(thread_id);
-  for (size_t i = 0; i < neuron_num; ++i) {
-    auto &mem = dyn_neuron_info->neuron_mem[i];
-    u64 neuron_size = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem[i].size : net_ctx->neuron_size[i];
-    alloc_device_mem_u64(devid, mem, neuron_size, "neuron_mem" + suffix, 1, !alloc_mem);
+  uint64_t mem_size = (m_flags & BM_RUNTIME_SHARE_MEM) ? net_ctx->neuron_mem[0].size : net_ctx->neuron_size[0];
+  if (alloc_mem) {
+    // net_name + runtime-handle to avoid name conflicts
+    std::string net_name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
+    auto context = ContextManager::Instance()->GetContext(
+        m_handles[net_ctx->device_id],
+        net_name,
+        mem_size,
+        dyn_core_mask);
+    dyn_neuron_info->neuron_mem[0] = context->Mem();
+  } else {
+    if (net_ctx->dyn_neuron_stage_dict.find(dyn_core_mask) != net_ctx->dyn_neuron_stage_dict.end()) {
+      // neuron mem has been setted
+      return;
+    }
+    // neuron mem has been allocated by users: `load_bmodel_with_mem` or `pre_alloc_neuron_multi_thread`
+    std::string suffix = "_" + std::to_string(thread_id);
+    alloc_device_mem_u64(devid, dyn_neuron_info->neuron_mem[0], mem_size, "neuron_mem" + suffix, 1, true);
   }
-
-  net_ctx->dyn_neuron_stage_dict.emplace(dyn_core_mask, dyn_neuron_info);
-  neuron_stage_lock.unlock();
 }
 
 void Bmruntime::update_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
@@ -1471,6 +1487,7 @@ void Bmruntime::update_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask
 
 void Bmruntime::net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
     const net_stage_t *common_stage_info, bool use_multi_subnet) {
+  // TODO: refactor neuron memory management
   __net_ctx_alloc_dyn_neuron(net_ctx, dyn_core_mask, dyn_core_mask);
   if(common_stage_info){
       update_dyn_neuron(net_ctx, dyn_core_mask, common_stage_info);
@@ -1593,24 +1610,29 @@ void Bmruntime::pre_alloc_neuron_multi_cores(int net_idx, int stage_idx, const s
 }
 
 void Bmruntime::pre_alloc_neuron(int net_idx) {
-  if (using_map) {
-    using_map = false;
-  }
-  // if (mem_block.size() >= m_core_num) {
-  //   return;
-  // }
-  neuron_mem_block mem_b;
-  mem_b.key = m_net_ctx_v[net_idx]->mem_block.size();
-  mem_b.used = false;
-  m_net_ctx_v[net_idx]->mem_block.push_back(mem_b);
-  net_ctx_alloc_dyn_neuron(m_net_ctx_v[net_idx], mem_b.key, nullptr, false);
+  // TODO: refactor
+  auto net_ctx = m_net_ctx_v[net_idx];
+  // core 0 is used as default
+  uint32_t core_mask = (1 << 0);
+  net_ctx_alloc_dyn_neuron(net_ctx, core_mask, nullptr, false);
+}
+void Bmruntime::free_pre_alloc_neuron(int net_idx) {
+  auto net_ctx = m_net_ctx_v[net_idx];
+  ContextManager::Instance()->DestroyContext(
+      m_handles[net_ctx->device_id],
+      net_ctx->net_name + "_" + std::to_string((uint64_t)this),
+      net_ctx->dyn_neuron_stage_dict.begin()->second->neuron_mem[0].size);
+  // free_dyn_neuron(m_net_ctx_v[net_idx]);
 }
 
 void Bmruntime::pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_info_t* mem_info) {
   if (m_flags & BM_RUNTIME_SHARE_MEM) {
     return;
   }
-  std::string suffix = "_" + std::to_string(thread_idx);
+  // thread_idx is same with core_idx, use core-mask
+  // keep same the usage in `launch_multi_cores`
+  uint32_t core_mask = (1 << thread_idx);
+  std::string suffix = "_" + std::to_string(core_mask);
   for (int i = 0; i < m_net_ctx_v.size(); ++i) {
     clear_device_mem("neuron_mem" + suffix);
     clear_device_mem("middle_buffer" + suffix);
@@ -1633,7 +1655,7 @@ void Bmruntime::pre_alloc_neuron_multi_thread(uint64_t thread_idx, const mem_inf
     fill_dmem_info(base_addr + offset, middle_buffer_size, "middle_buffer" + suffix);
     fill_dmem_info(mem_info->io_mem.addr, mem_info->io_mem.size, "io_mem" + suffix);
 
-    net_ctx_alloc_dyn_neuron(m_net_ctx_v[i], thread_idx, nullptr, false);
+    net_ctx_alloc_dyn_neuron(m_net_ctx_v[i], core_mask, nullptr, false);
   }
 }
 
@@ -1677,23 +1699,9 @@ bool Bmruntime::launch_multi_cores(int net_idx,
                           (stage->subnet_num == 1 && stage->subnet_v[0]->subnet_mode == SUBNET_MODE_CPU);
 
   uint64_t core_mask = get_dyn_core_mask(stage_idx, final_core_list);
-  int block_idx;
-  if (!using_map && !using_thread) {
-    for (block_idx = 0; block_idx < net_ctx->mem_block.size(); ++block_idx) {
-      if (!net_ctx->mem_block[block_idx].used) {
-        core_mask = net_ctx->mem_block[block_idx].key;
-        net_ctx->mem_block[block_idx].used = true;
-        break;
-      }
-    }
-    if (block_idx == net_ctx->mem_block.size()) {
-      pre_alloc_neuron(net_idx);
-      core_mask = net_ctx->mem_block[block_idx].key;
-      net_ctx->mem_block[block_idx].used = true;
-    }
-  }
-  core_mask = using_thread ? thread_idx : core_mask;
+  // core_mask = using_thread ? thread_idx : core_mask;
   if (!(m_flags & BM_RUNTIME_SHARE_MEM)) {
+    // TODO: refactor context management for bmruntime
     net_ctx_alloc_dyn_neuron(net_ctx, core_mask, stage, use_multi_subnet);
   }
 
@@ -1721,9 +1729,6 @@ bool Bmruntime::launch_multi_cores(int net_idx,
           }
       }
       m_profile->end_subnet(net_ctx);
-  }
-  if (!using_map && !using_thread) {
-    net_ctx->mem_block[block_idx].used = false;
   }
 
   m_profile->deinit();

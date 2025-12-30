@@ -265,6 +265,7 @@ typedef struct{
 	int param_num;
 } tpu_launch_async_param_t;
 
+
 struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
@@ -291,6 +292,7 @@ struct bm_device_info {
 	int status_over_temp;
 	int status_sync_api;
 	u64 dev_refcount;
+	int util_time;
 
 	struct bmcpu_lib *lib_info;
 

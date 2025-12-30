@@ -14,6 +14,7 @@ DEFINE_string(opmode, "", "choose opmode to use bm-smi.");
 DEFINE_string(opval, "", "get value for ecc or led.");
 DEFINE_string(file, "", "target file to save smi log.");
 DEFINE_int32(lms, 500, "sample interval in loop mode.");
+DEFINE_int32(util_time, -1, "time for statistics on TPU utilization.");
 DEFINE_bool(loop, true, "true is for loop mode, false is for only once mode.");
 DEFINE_bool(core_util, false, "show every tpu core util.");
 DEFINE_bool(mem_info, false, "show memory information.");
@@ -71,22 +72,24 @@ gflags::SetUsageMessage("command line brew\n"
 	"other flags have same usage, Both usage can be used!\n");
 
 #else
-gflags::SetUsageMessage("command line brew\n"
-	"usage: bm-smi [--opmode=display] [--file=/xx/yy.txt]"
-	" [--lms=500] [-core_util] [-loop]\n"
-	"opmode:\n"
-	"  SOC mode just only use display.\n"
-	"file:\n"
-	"  the target file to save smi log, default is empty.\n"
-	"lms:\n"
-	"  how many ms of the sample interval, default is 500.\n"
-	"core_util:\n"
-	"   to monitor every tpu core on chip\n"
-	"mem_info:\n"
-	"   to show memory information\n"
-	"loop:\n"
-	"  if -loop (default): smi sample device every lms ms.\n"
-	"  if -noloop: smi sample device only once.\n");
+  gflags::SetUsageMessage("command line prompt\n"
+      "usage: bm-smi [--opmode=display] [--file=/xx/yy.txt]"
+      " [--lms=500] [--loop] [--util_time=5]\n"
+      "opmode:\n"
+      "  SOC mode just only use display.\n"
+      "file:\n"
+      "  the target file to save smi log, default is empty.\n"
+      "lms:\n"
+      "  how many ms of the sample interval, default is 500.\n"
+      "core_util:\n"
+      "   to monitor every tpu core on chip\n"
+      "mem_info:\n"
+      "   to show memory information\n"
+      "loop:\n"
+      "  if --loop (default): smi sample device every lms ms.\n"
+      "  if --noloop: smi sample device only once.\n"
+      "util_time:\n"
+      "  time for statistics on TPU utilization, default is 1.\n");
 #endif
 
 
@@ -112,13 +115,14 @@ gflags::SetUsageMessage("command line brew\n"
 	m_text_format = FLAGS_text_format;
 	m_led = FLAGS_led;
 #endif
-	m_loop = FLAGS_loop;
-	m_file = FLAGS_file;
-	m_lms = FLAGS_lms;
-	m_op = FLAGS_opmode;
-	m_core_util = FLAGS_core_util;
-	m_mem_info = FLAGS_mem_info;
-	m_value = FLAGS_opval;
+  m_loop = FLAGS_loop;
+  m_file = FLAGS_file;
+  m_lms = FLAGS_lms;
+  m_op = FLAGS_opmode;
+  m_core_util = FLAGS_core_util;
+  m_mem_info = FLAGS_mem_info;
+  m_util_time = FLAGS_util_time;
+  m_value = FLAGS_opval;
 
 }
 

@@ -132,6 +132,7 @@
 #define BMCTL_GET_DRIVER_VERSION      _IOR('q', 0x06, unsigned long)
 #define BMCTL_GET_CARD_INFO           _IOR('q', 0x07, unsigned long)
 #define BMCTL_GET_CARD_NUM            _IOR('q', 0x08, unsigned long)
+#define BMCTL_SET_UTIL_TIME           _IOWR('q', 0x0a, unsigned long)
 
 #ifdef SOC_MODE
 struct ce_base {

@@ -13,6 +13,7 @@ static int                     proc_y;
 static bool                    proc_show;
 static char                    bm_smi_version[10] = PROJECT_VER;
 static char                    board_name[25] = "";
+static int                     util_time;
 static std::ofstream           target_file;
 static struct bm_smi_attr      g_attr[64];
 static struct bm_smi_proc_gmem proc_gmem[64];
@@ -1336,6 +1337,14 @@ int bm_smi_display::validate_input_para() {
     }
 #endif
 
+        char *sg_env;
+
+        sg_env = getenv("SOPHONVM");
+        if (sg_env != NULL && strlen(sg_env) != 8 && !strncmp(sg_env, "SOPHONVM", 8)) {
+            start_dev = atoi(sg_env + 8) * 3;
+            dev_cnt = 3;
+        }
+        util_time = g_cmdline.m_util_time;
     /* check lms value */
     if (g_cmdline.m_lms < 300) {
         printf("invalid lsm = %d, it is less than 300\n", g_cmdline.m_lms);
@@ -1415,6 +1424,7 @@ int bm_smi_display::run_opmode() {
     }
 #endif
     // init screen here; or need handle exception
+    ioctl(fd, BMCTL_SET_UTIL_TIME, &util_time);
     bm_smi_init_scr();
 
 #ifdef SOC_MODE

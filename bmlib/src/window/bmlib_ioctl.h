@@ -197,6 +197,8 @@
     CTL_CODE(FILE_DEVICE_BEEP, 0x07, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define BMCTL_GET_CARD_NUM                                                    \
     CTL_CODE(FILE_DEVICE_BEEP, 0x08, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define BMCTL_SET_UTIL_TIME                                                    \
+    CTL_CODE(FILE_DEVICE_BEEP, 0x0a, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 #ifdef SOC_MODE
 struct ce_base {

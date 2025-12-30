@@ -14,6 +14,7 @@
 #include "bmruntime.h"
 #include "bmlib_runtime.h"
 #include "kernel_module.h"
+#include "bmruntime_context.hpp"
 #include <fcntl.h>
 
 #define SP(D, T) (std::shared_ptr<T>((D), std::default_delete<T []>()))
@@ -1783,18 +1784,22 @@ void Bmruntime::free_net_info(net_ctx_t* net_ctx)
   free(net_info.stages);
 }
 
-void Bmruntime::free_dyn_neuron(net_ctx_t* net_ctx) {
+void Bmruntime::free_dyn_neuron(net_ctx_t *net_ctx) {
   if (!alloc_mem) {
     return;
   }
   BMRT_DEBUG("im free_dyn_neuron\n");
-  auto dev_id = net_ctx->device_id;
+
+  if (net_ctx->dyn_neuron_stage_dict.empty()) {
+    return;
+  }
+
+  ContextManager::Instance()->DestroyContext(
+      m_handles[net_ctx->device_id],
+      net_ctx->net_name + "_" + std::to_string((uint64_t)this),
+      net_ctx->dyn_neuron_stage_dict.begin()->second->neuron_mem[0].size);
+
   for (auto &dyn_mem_pair : net_ctx->dyn_neuron_stage_dict) {
-    auto dyn_neuron_stage = dyn_mem_pair.second;
-    for (size_t i = 0; i < dyn_neuron_stage->neuron_mem.size(); ++i) {
-      BMRT_DEBUG("Free device memory, byte size %d\n", bm_mem_get_device_size_u64(dyn_neuron_stage->neuron_mem[i]));
-      free_device_mem_u64(dev_id, dyn_neuron_stage->neuron_mem[i]);
-    }
     delete dyn_mem_pair.second;
   }
 }
