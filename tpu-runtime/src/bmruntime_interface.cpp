@@ -785,6 +785,19 @@ const bm_net_info_t* bmrt_get_network_info(void* p_bmrt, const char* net_name)
   return ret;
 }
 
+const bm_coeff_info_t* bmrt_get_coeff_info(void* p_bmrt, const char* net_name, int stage, int *coeff_num) {
+  if (p_bmrt == NULL || net_name == NULL || coeff_num == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return NULL;
+  }
+  auto ret =  ((Bmruntime*)p_bmrt)->get_coeff_info(net_name, stage, coeff_num);
+  if (ret == NULL) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return NULL;
+  }
+  return ret;
+}
+
 void bmrt_trace(void* p_bmrt)
 {
   if (p_bmrt == NULL) {

@@ -304,7 +304,7 @@ void Bmruntime::convert_bdc(ModelCtx *model_ctx,
     model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
     bm_memcpy_s2d_partial_offset(m_handles[devid], pmem,
                                  (void *)bdc_buffer, bytes, offset);
-    if (bytes % 128 == 0) {
+    if (bytes % 128 != 0) {
       BMRT_LOG(WARNING, "bdc is not 128 bytes aligned");
     }
     offset += bytes;
@@ -461,8 +461,7 @@ bool Bmruntime::setup_ir_context(ModelCtx* model_ctx, const bmodel::Binary* bina
   auto ir_buffer_sp = SP(ir_buffer, u32);
   model_ctx->read_binary(binary_ir, 0, (u8*)ir_buffer, ir_len * sizeof(u32));
   auto pmem = alloc_device_mem(devid, ALIGN(ir_len, 64), "dynamic_ir", 4);
-  // TODO: support multi core ir
-  // only use commands 0 to run ir
+  // all cores share the same ir
   stage->core_commands[0].ir_mem.Init("ir", m_handles[devid], pmem, ir_buffer);
   return true;
 }
@@ -752,12 +751,15 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
       subnet->tpu_info.is_dynamic = sub_net->is_dynamic();
 
       if (subnet->tpu_info.is_dynamic) {
-        // TODO: support multi core for dynamic
+        // multi core share the same ir
         subnet->tpu_info.core_commands.resize(1);
         subnet->tpu_info.core_commands[0].ir_offset = sub_net->ir_offset();
         subnet->tpu_info.core_commands[0].ir_len = sub_net->ir_len();
+        // compatible: for old bmodel, run_core is 0, run as 1 core
+        subnet->tpu_info.run_core = std::max(sub_net->run_core(), 1u);
       } else {
         auto core_num = sub_net->core_commands() ? sub_net->core_commands()->size() : 1;
+        subnet->tpu_info.run_core = core_num;
         subnet->tpu_info.core_commands.resize(core_num);
         for (uint32_t core_idx = 0; core_idx < core_num; core_idx++) {
           auto cmd_groups = sub_net->core_commands()
@@ -905,7 +907,6 @@ bool Bmruntime::fill_net_ctx(
   u64 model_neuron_size = model_ctx->model()->neuron_size();
   // fill net_ctx info by first NetParameter
   auto param = params->Get(0);
-  net_ctx->core_num = param->core_num() != 0 ? param->core_num() : 1;
   net_ctx->is_dynamic = param->is_dynamic();
   if (net_ctx->is_dynamic) {
     net_ctx->n_can_change = param->n_dynamic();
@@ -975,7 +976,7 @@ bool Bmruntime::fill_net_ctx(
           iter->offset += param->coeff_mem()->binary_coeff()->size();
         }
         BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
-        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), (void*)this, backend_->addr_layout());
+        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), coeff_addr, (void*)this, backend_->addr_layout());
       } else {
         BMRT_LOG(WRONG, "Error: device memory: coeff_mem don't alloc");
       }
@@ -994,6 +995,7 @@ bool Bmruntime::fill_net_ctx(
     stage_ctx_sizes.push_back(std::move(stage_sizes));
     stages[stage_idx].io_start = stage->io_addr();
     stages[stage_idx].io_size = stage->io_size();
+    stages[stage_idx].core_num = std::max(stage->core_num(), 1u);
     // fill coeff info
     if (stage->coeff_mem() != NULL && stage->coeff_mem()->location() != NULL) {
       u64 coeff_start = stage->coeff_mem()->address();
@@ -1536,7 +1538,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
                      (addr_mode_t)net_ctx->addr_mode);
 
     // setup subnet
-    const auto core_num = param->core_num() != 0 ? param->core_num() : 1;
+    u32 core_num = std::max(param->core_num(), 1u);
     net_stage->core_commands.resize(core_num);
     fill_sub_net(model_ctx, param->sub_net(), net_ctx, net_stage);
 
@@ -1708,7 +1710,7 @@ void Bmruntime::fill_net_info(net_ctx_t* net_ctx)
 {
   auto& net_info = net_ctx->net_info;
   net_info.name = net_ctx->net_name.c_str();
-  net_info.core_num = net_ctx->core_num;
+  net_info.core_num = net_ctx->stage_v[0]->core_num;
   net_info.is_dynamic = net_ctx->is_dynamic;
   net_info.addr_mode = net_ctx->addr_mode;
   net_info.input_num = net_ctx->input_name_v.size();
@@ -1761,8 +1763,6 @@ void Bmruntime::fill_net_info(net_ctx_t* net_ctx)
         net_info.max_output_bytes[j] = temp_size;
       }
     }
-    net_info.stages[i].coeff_num = net_ctx->stage_v[i]->coeff_info_v.size();
-    net_info.stages[i].coeffs = net_ctx->stage_v[i]->coeff_info_v.data();
   }
 }
 
@@ -2738,7 +2738,7 @@ void BmMemory::Init(const string &description, bm_handle_t handle, bm_device_mem
 void BmMemory::Update(const bm_device_mem_t &mem, void *buffer) {
   addr = bm_mem_get_device_addr(mem);
   bytes = bm_mem_get_device_size(mem);
-  dword_len = (bytes + 3) / 4; 
+  dword_len = (bytes + 3) / 4;
   if (do_check) {
     bmodel::CalcSha256((uint8_t *)buffer, bytes, check_code);
   }

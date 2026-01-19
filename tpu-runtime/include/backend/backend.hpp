@@ -1,6 +1,6 @@
 #pragma once
 #include "bmruntime_common.h"
-#include "bmfunc/bmdnn_func.h"
+#include "backend/launcher.hpp"
 
 #include <memory>
 #include <stdint.h>
@@ -83,23 +83,28 @@ public:
 
   virtual bool support_dynamic_loading() const { return false; }
 
-  virtual uint32_t core_num() const { return 1; }
+  virtual uint32_t core_num() const { return core_num_; }
+  // bm1688/cv1686 need get core num by bm_handle
+  virtual void set_core_num(uint32_t num) { core_num_ = num; }
 
-  virtual const std::unique_ptr<bmdnn_func> &launcher() {
+  virtual const std::unique_ptr<Launcher> &launcher() {
     BMRT_ASSERT(launcher_);
     return launcher_;
   }
 
+  // STORE_MODE_1N, STORE_MODE_2N, STORE_MODE_4N
+  virtual bool support_stmode() const { return false; }
+
 protected:
   uint64_t update_gdma_cmd_addr(const net_stage_t *stage, uint64_t origin_addr, bool is_src) const;
   virtual uint32_t gdma_cmd_size(const uint32_t *cmd, uint64_t offset, bool last_cmd) const;
-
-  std::unique_ptr<bmdnn_func> launcher_;
+  uint32_t core_num_ = 1;
+  std::unique_ptr<Launcher> launcher_;
 };
 
 class Backend_BM1682 : public Backend {
 public:
-  Backend_BM1682() { launcher_ = std::make_unique<bmdnn_func_1682>(); }
+  Backend_BM1682() { launcher_ = std::make_unique<Launcher_BM1682>(); }
   virtual ~Backend_BM1682() = default;
 
   virtual uint64_t ctx_start_addr() const override {
@@ -136,7 +141,7 @@ private:
 
 class Backend_BM1684 : public Backend {
 public:
-  Backend_BM1684() { launcher_ = std::make_unique<bmdnn_func_1684>(); }
+  Backend_BM1684() { launcher_ = std::make_unique<Launcher_BM1684>(); }
   virtual ~Backend_BM1684() = default;
 
   virtual uint64_t ctx_start_addr() const override {
@@ -159,6 +164,8 @@ public:
     return cmd_words;
   }
 
+  virtual bool support_stmode() const override { return true; }
+
 private:
   const CmdInfo bdc_cmd_info = CmdInfo(7);
   const CmdInfo gdma_cmd_info = CmdInfo(7);
@@ -166,7 +173,7 @@ private:
 
 class Backend_BM1684X : public Backend {
 public:
-  Backend_BM1684X() { launcher_ = std::make_unique<bmdnn_func_1684x>(); }
+  Backend_BM1684X() { launcher_ = std::make_unique<Launcher_BM1684X>(); }
   virtual ~Backend_BM1684X() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x100000000ul; }
@@ -182,7 +189,7 @@ public:
 
 class Backend_BM1688 : public Backend {
 public:
-  Backend_BM1688() { launcher_ = std::make_unique<bmdnn_func_1688>(); }
+  Backend_BM1688() { launcher_ = std::make_unique<Launcher_BM1688>(); core_num_ = 2; }
   virtual ~Backend_BM1688() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x100000000ul; }
@@ -201,12 +208,10 @@ public:
   virtual bool convert_gdma(ConversionParams &params) const override;
 
   virtual bool support_dynamic_loading() const override { return true; }
-
-  virtual uint32_t core_num() const { return 2; }
 };
 class Backend_BM1690 : public Backend {
 public:
-  Backend_BM1690() { launcher_ = std::make_unique<bmdnn_func_2260>("BM1690"); }
+  Backend_BM1690() { launcher_ = std::make_unique<Launcher_BM1690>("BM1690"); core_num_ = 8;}
   virtual ~Backend_BM1690() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0; }
@@ -216,12 +221,10 @@ public:
         .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
   }
   virtual std::string name() const override { return "BM1690"; }
-
-  virtual uint32_t core_num() const { return 8; }
 };
 class Backend_BM1690E : public Backend {
 public:
-  Backend_BM1690E() { launcher_ = std::make_unique<bmdnn_func_2260>("BM1690E"); }
+  Backend_BM1690E() { launcher_ = std::make_unique<Launcher_BM1690>("BM1690E"); core_num_ = 4;}
   virtual ~Backend_BM1690E() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0; }
@@ -232,8 +235,6 @@ public:
   }
 
   virtual std::string name() const override { return "BM1690E"; }
-
-  virtual uint32_t core_num() const { return 4; }
 };
 class Backend_SG2380 : public Backend {
 public:
@@ -253,7 +254,7 @@ public:
 };
 class Backend_CV184X : public Backend {
 public:
-  Backend_CV184X() { launcher_ = std::make_unique<bmdnn_func_cv184x>(); }
+  Backend_CV184X() { launcher_ = std::make_unique<Launcher_CV184X>(); }
   virtual ~Backend_CV184X() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x80000000ul; }
@@ -272,7 +273,7 @@ public:
 };
 class Backend_BM1684X2 : public Backend {
 public:
-  Backend_BM1684X2() { launcher_ = std::make_unique<bmdnn_func_bm1684x2>(); }
+  Backend_BM1684X2() { launcher_ = std::make_unique<Launcher_BM1684X2>(); core_num_ = 4;}
   virtual ~Backend_BM1684X2() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x1000000000ul; }
@@ -283,13 +284,11 @@ public:
   }
 
   virtual std::string name() const override { return "BM1684X2"; }
-
-  virtual uint32_t core_num() const { return 4; }
 };
 
 class Backend_SGTPUV8 : public Backend {
 public:
-  Backend_SGTPUV8() { launcher_ = std::make_unique<bmdnn_func_sgtpuv8>(); }
+  Backend_SGTPUV8() { launcher_ = std::make_unique<Launcher_SGTPUV8>(); }
   virtual ~Backend_SGTPUV8() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x80000000ul; }

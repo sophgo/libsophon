@@ -49,7 +49,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             if (ret != BM_SUCCESS) {
                 BMRT_LOG(FATAL, "init device buffer data failed, ret = %d\n", ret);
             }
-            dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_set_engine_profile_param_(
+            dynamic_cast<Launcher_BM1688*>(launcher.get())->_bmdnn_set_engine_profile_param_(
                 handle, core_list[i], set_func_ids[i],
                 PROFILE_ENGINE_TIU,
                 bm_mem_get_device_addr(tiu_buffer.mem),
@@ -63,7 +63,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             if (ret != BM_SUCCESS) {
                 BMRT_LOG(FATAL, "init device buffer data failed, ret = %d\n", ret);
             }
-            dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_set_engine_profile_param_(
+            dynamic_cast<Launcher_BM1688*>(launcher.get())->_bmdnn_set_engine_profile_param_(
                 handle, core_list[i], set_func_ids[i],
                 PROFILE_ENGINE_GDMA,
                 bm_mem_get_device_addr(gdma_buffer.mem),
@@ -71,7 +71,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             );
         }
         // enable dynamic profile
-        ret = dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], enable_bits);
+        ret = dynamic_cast<Launcher_BM1688*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], enable_bits);
         CHECK_status(ret);
     }
     return true;
@@ -118,7 +118,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
                 size_t total_len = 0;
                 u32 block_type = (j == 0) ? BLOCK_DYN_DATA : BLOCK_DYN_EXTRA;
                 while(1){
-                    bm_status_t status = dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_get_profile_data_(
+                    bm_status_t status = dynamic_cast<Launcher_BM1688*>(launcher.get())->_bmdnn_get_profile_data_(
                                 handle,
                                 core_list[i],
                                 get_func_ids[i],
@@ -140,7 +140,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
                 }
                 profile->write_block(block_type, data.size(), data.data());
             }
-            bm_status_t status = dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], 0);
+            bm_status_t status = dynamic_cast<Launcher_BM1688*>(launcher.get())->_bmdnn_set_profile_enable_(handle, core_list[i], enable_func_ids[i], 0);
             CHECK_status(status);
         }
     }

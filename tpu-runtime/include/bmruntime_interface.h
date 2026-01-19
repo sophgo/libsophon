@@ -413,6 +413,20 @@ DECL_EXPORT const char *bmrt_get_network_name(void* p_bmrt, int index);
 DECL_EXPORT const bm_net_info_t* bmrt_get_network_info(void* p_bmrt, const char* net_name);
 
 /**
+ * @name    bmrt_get_coeff_info
+ * @brief   To get network info by net name
+ * @ingroup bmruntime
+ *
+ * @param [in]     p_bmrt         Bmruntime that had been created
+ * @param [in]     net_name       Network name
+ * @param [in]     stage          stage index
+ * @param [out]    coeff_num      Pointer to coeff num
+ *
+ * @retval  bm_coeff_info_t*        Pointer to net info, needn't free by user; if net name not found, will return NULL.
+ */
+DECL_EXPORT const bm_coeff_info_t* bmrt_get_coeff_info(void* p_bmrt, const char* net_name, int stage, int *coeff_num);
+
+/**
  * @name    bmrt_get_stage_index
  * @brief   To get network stage index by input tensor
  * @ingroup bmruntime

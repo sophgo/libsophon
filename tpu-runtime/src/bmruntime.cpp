@@ -294,6 +294,11 @@ void Bmruntime::init()
   m_net_ctx_v.reserve(1024);
   m_net_cascade_v.reserve(1024);
   using_map = true;
+  if (backend_->name_verify("BM1688")) {
+    uint32_t core_num = 1;
+    bm_get_tpu_core_num(m_handles[0], &core_num);
+    backend_->set_core_num(core_num);
+  }
 
   bmcpu_setup();
   bmtpu_setup();
@@ -726,6 +731,79 @@ void Bmruntime::sync_cores(bm_handle_t handle, const std::vector<int32_t>& core_
     }
 }
 
+void Bmruntime::fill_dynamic_tensor_info(
+    vector<tpu_dynamic_tensor_t> &tensor_info,
+    const bm_tensor_t *user_tensors,
+    const std::vector<tensor_attr_t> *compiled_tensors,
+    const std::map<std::string, tensor_ext_t> *subnet_tensors,
+    const std::vector<std::string> &tensor_names,
+    const std::vector<bm_device_mem_t> &buffer_mems, // what is this?
+    const int* elem_num,
+    int num,
+    tensor_io_type_t io_type,
+    bool is_input) {
+  tensor_info.resize(num);
+  for (int idx = 0; idx < num; idx++) {
+    size_t size = bmrt_tensor_bytesize(&user_tensors[idx]);
+    BMRT_ASSERT_INFO(
+        ALIGN(user_tensors[idx].device_mem.size, 4096) >= size,
+        "the size of device memory is not enough, required %zu, got %zu", size,
+        user_tensors[idx].device_mem.size);
+
+    auto &info = tensor_info[idx];
+    memset(&info, 0, sizeof(info));
+    info.addr = bm_mem_get_device_addr(user_tensors[idx].device_mem);
+    memcpy(info.shape, user_tensors[idx].shape.dims, sizeof(info.shape));
+    info.dim = user_tensors[idx].shape.num_dims;
+    info.dtype = user_tensors[idx].dtype;
+    if (backend_->name() == "BM1682" || backend_->name() == "BM1684") {
+      if (user_tensors[idx].dtype == BM_FLOAT32) {
+        info.dtype = 0; // DSIZE_FP32
+      } else if (user_tensors[idx].dtype == BM_INT32) {
+        info.dtype = 3; // DSIZE_INT32
+      } else if (user_tensors[idx].dtype == BM_INT8 ||
+                 user_tensors[idx].dtype == BM_UINT8) {
+        info.dtype = 2; // DSIZE_8
+      } else if (user_tensors[idx].dtype == BM_INT16 ||
+                 user_tensors[idx].dtype == BM_UINT16) {
+        info.dtype = 1; // DSIZE_16
+      }
+    }
+
+    if (backend_->support_stmode()) {
+      // process storage conversion
+      int io_idx = idx;
+      if (subnet_tensors) {
+        auto &sub_tensor = subnet_tensors->find(tensor_names[idx])->second;
+        io_idx = sub_tensor.io_index;
+        if (!(sub_tensor.io_type & io_type)) {
+          BMRT_DEBUG("subnet tensor %s doesn't need buffer",
+                     tensor_names[idx].c_str());
+          info.buffer_addr = 0;
+          continue;
+        }
+      }
+
+      uint64_t buffer_addr = 0;
+      if (buffer_mems.size() > io_idx) {
+        buffer_addr = bm_mem_get_device_addr(buffer_mems[io_idx]);
+      }
+      bm_store_mode_t user_stmode = user_tensors[idx].st_mode;
+      bm_store_mode_t compiled_stmode = compiled_tensors->at(io_idx).st_mode;
+      if (buffer_addr == 0 || user_stmode == compiled_stmode) {
+        info.buffer_addr = 0;
+        info.stmode_conveter = ST_NO_CHANGE;
+        continue;
+      }
+
+      info.stmode_conveter =
+          get_stmode_flag(compiled_stmode, user_stmode, is_input);
+      info.buffer_addr = buffer_addr;
+      info.buffer_used = true;
+    }
+  }
+}
+
 bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
                           const bm_tensor_t* input_tensors, int input_num,
                           bm_tensor_t* output_tensors, int output_num,
@@ -733,99 +811,6 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
 {
   bm_status_t status;
   auto devid = net_ctx->device_id;
-  #ifdef __linux__
-  int *user_input_shapes[input_num];
-  u64 user_input_global_addrs[input_num];
-  u64 user_output_global_addrs[output_num];
-  int input_dims[input_num];
-  #else
-  std::shared_ptr<int*> user_input_shapes_(new int*[input_num], std::default_delete<int*[]>());
-  int** user_input_shapes = user_input_shapes_.get();
-  std::shared_ptr<u64> user_input_global_addrs_(new u64[input_num], std::default_delete<u64[]>());
-  u64* user_input_global_addrs = user_input_global_addrs_.get();
-  std::shared_ptr<u64> user_output_global_addrs_(new u64[output_num], std::default_delete<u64[]>());
-  u64* user_output_global_addrs = user_output_global_addrs_.get();
-  std::shared_ptr<int> input_dims_(new int[input_num], std::default_delete<int[]>());
-  int* input_dims = input_dims_.get();
-  #endif
-  // prepare inputs info
-  for (int idx = 0; idx < input_num; idx++) {
-    user_input_global_addrs[idx] = bm_mem_get_device_addr(input_tensors[idx].device_mem);
-    user_input_shapes[idx] = (int*)input_tensors[idx].shape.dims;
-    input_dims[idx] = input_tensors[idx].shape.num_dims;
-    int input_dtype = input_tensors[idx].dtype;
-    if (backend_->name() == "BM1682" || backend_->name() == "BM1684") {
-      if (input_tensors[idx].dtype == BM_FLOAT32) {
-        input_dtype = 0; //DSIZE_FP32
-      } else if (input_tensors[idx].dtype == BM_INT32) {
-        input_dtype = 3; //DSIZE_INT32
-      } else if(input_tensors[idx].dtype == BM_INT8 || input_tensors[idx].dtype == BM_UINT8){
-          input_dtype = 2; //DSIZE_8
-      } else if(input_tensors[idx].dtype == BM_INT16 || input_tensors[idx].dtype == BM_UINT16){
-          input_dtype = 1; //DSIZE_16
-      } else {
-          BMRT_ASSERT_INFO(0 && "not supported input_dtype","not supported input_dtype,input_tensors[%d].dtype is %d",idx,input_tensors[idx].dtype);
-      }
-    }
-    input_dims[idx] |= (input_dtype<<16);
-  }
-
-  for (int idx = 0; idx < output_num; idx++) {
-    user_output_global_addrs[idx] = bm_mem_get_device_addr(output_tensors[idx].device_mem);
-  }
-
-  /* input and output store mode change need middle buffer in device memory */
-  bool need_middle_buff_flag = false;
-  #ifdef __linux__
-  u64 user_input_global_addr_middle[input_num];
-  u64 user_output_global_addr_middle[output_num];
-  u32 output_need_middle_buff_flag[output_num];
-  #else
-  std::shared_ptr<u64> user_input_global_addr_middle_(new u64[input_num], std::default_delete<u64[]>());
-  u64* user_input_global_addr_middle = user_input_global_addr_middle_.get();
-  std::shared_ptr<u64> user_output_global_addr_middle_(new u64[output_num], std::default_delete<u64[]>());
-  u64* user_output_global_addr_middle = user_output_global_addr_middle_.get();
-  std::shared_ptr<u32> output_need_middle_buff_flag_(new u32[output_num], std::default_delete<u32[]>());
-  u32* output_need_middle_buff_flag = output_need_middle_buff_flag_.get();
-  #endif
-  if (backend_->name() == "BM1684") {
-    // input, only 1N will switch to 4N
-    int stmode_flag = 0;
-    for (int idx = 0; idx < input_num; idx++) {
-      bm_store_mode_t stmode = stage->input_v[idx].st_mode;
-      bm_store_mode_t user_stmode = input_tensors[idx].st_mode;
-      u64 middle_addr = bm_mem_get_device_addr(net_ctx->middlebuff_input[idx]);
-      if (middle_addr == 0 || stmode == user_stmode) {
-        user_input_global_addr_middle[idx] = 0;
-        stmode_flag = ST_NO_CHANGE;
-        input_dims[idx] |= (stmode_flag << 24);
-        continue;
-      }
-
-      stmode_flag = get_stmode_flag(stmode, user_stmode, true);
-      input_dims[idx] |= (stmode_flag << 24);
-
-      user_input_global_addr_middle[idx] = middle_addr;
-      need_middle_buff_flag = true;
-      BMRT_ASSERT_INFO(stmode != user_stmode,"stmode:%d shouldn't equal to user_stmode:%d",stmode,user_stmode);
-      BMRT_ASSERT_INFO(stage->input_v[idx].pad_h == 0, "stage->input_v[%d].pad_h:%d should be 0"\
-        ,idx,stage->input_v[idx].pad_h);
-    }
-    // output
-    for (int idx = 0; idx < output_num; idx++) {
-      bm_store_mode_t stmode = stage->output_v[idx].st_mode;
-      bm_store_mode_t user_stmode = output_tensors[idx].st_mode;
-      u64 middle_addr = bm_mem_get_device_addr(net_ctx->middlebuff_output[idx]);
-      if (stmode == user_stmode || middle_addr == 0) {
-        user_output_global_addr_middle[idx] = 0;
-        output_need_middle_buff_flag[idx] = ST_NO_CHANGE;
-        continue;
-      }
-
-      user_output_global_addr_middle[idx] = middle_addr;
-      output_need_middle_buff_flag[idx] = get_stmode_flag(stmode, user_stmode, false);
-    }
-  }
 
   // for multi-stage ir
   bm_device_mem_t output_shape_mem;
@@ -844,119 +829,45 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
   // if (core_list.size() > 1) {
   //   core_list.resize(1);
   // }
-  std::vector<int> core_list;
-  // ir only use one core to run
-  core_list.push_back(real_core_list[0]);
-  // TODO: refactor this code
-  auto &launcher = backend_->launcher();
-  if (backend_->name() == "BM1682") {
-    status = dynamic_cast<bmdnn_func_1682*>(launcher.get())->_bmdnn_dynamic_fullnet_v2_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num, user_output_global_addrs,
-        stage->ctx_start,
-        // There is an assertion in bmruntime_bmodel.cpp to ensure ctx_offset
-        // has one or none elements. So don't panic.
-        stage->ctx_offset.empty() ? 0 : stage->ctx_offset[0],
-        stage->coeff_offset, true, output_shape_global_addr,
-        0  // no arm reserved buffer used
-    );
-  } else if (backend_->name() == "BM1684") {
-    status = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_dynamic_fullnet_v2_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_global_addr_middle, user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, user_output_global_addr_middle, stage->ctx_start,
-        stage->ctx_borders, stage->ctx_offset,
-        stage->coeff_offset, need_middle_buff_flag, output_need_middle_buff_flag, true,
-        output_shape_global_addr,
-        0  // no arm reserved buffer used
-    );
-  } else if (backend_->name() == "BM1684X") {
-    auto func_id = net_ctx->kernel_module_->get_dynamic_fullnet_func_id(core_list);
-    status = dynamic_cast<bmdnn_func_1684x*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], func_id[0], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, stage->dynamic_ctx_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        net_ctx->do_allreduce == 1 ? &(net_ctx->allreduce_param) : NULL);
-  } else if (backend_->name() == "BM1688") {
-    std::vector<u64> dyn_offset;
-    if (m_flags & BM_RUNTIME_SHARE_MEM) {
-      dyn_offset = stage->dynamic_ctx_offset;
-    } else {
-      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
-      dyn_offset = dyn_neuron->dynamic_ctx_offset;
-    }
-    auto func_id = net_ctx->kernel_module_->get_dynamic_fullnet_func_id(core_list);
-    status = dynamic_cast<bmdnn_func_1688*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], func_id, stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, dyn_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        core_list);
-  } else if (backend_->name() == "BM1690" || backend_->name() == "BM1690E") {
-    std::vector<u64> dyn_offset;
-    if (m_flags & BM_RUNTIME_SHARE_MEM) {
-      dyn_offset = stage->dynamic_ctx_offset;
-    } else {
-      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
-      dyn_offset = dyn_neuron->dynamic_ctx_offset;
-    }
-    status = dynamic_cast<bmdnn_func_2260*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, dyn_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        core_list);
-  } else if (backend_->name() == "CV184X") {
-    status = dynamic_cast<bmdnn_func_cv184x*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, stage->dynamic_ctx_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        core_list);
-  } else if (backend_->name() == "SG2380") {
-    std::vector<u64> dyn_offset;
-    if (m_flags & BM_RUNTIME_SHARE_MEM) {
-      dyn_offset = stage->dynamic_ctx_offset;
-    } else {
-      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
-      dyn_offset = dyn_neuron->dynamic_ctx_offset;
-    }
-    status = dynamic_cast<bmdnn_func_2380*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, dyn_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        core_list);
-  } else if (backend_->name() == "BM1684X2") {
-    std::vector<u64> dyn_offset;
-    if (m_flags & BM_RUNTIME_SHARE_MEM) {
-      dyn_offset = stage->dynamic_ctx_offset;
-    } else {
-      auto dyn_neuron = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask);
-      dyn_offset = dyn_neuron->dynamic_ctx_offset;
-    }
-    status = dynamic_cast<bmdnn_func_bm1684x2*>(launcher.get())->_bmdnn_dynamic_fullnet_(
-        m_handles[devid], stage->core_commands[0].ir_mem.addr, stage->core_commands[0].ir_mem.dword_len, input_num, user_input_global_addrs,
-        user_input_shapes, input_elem_num, input_dims, output_num,
-        user_output_global_addrs, stage->dynamic_ctx_start,
-        stage->ctx_borders, dyn_offset,
-        stage->dynamic_coeff_offset, stage->io_start, stage->io_offset, true,
-        output_shape_global_addr,
-        core_list);
-  } else {
-    BMRT_LOG(FATAL, "Unknown BM TPU");
+
+  std::vector<int> core_list = real_core_list;
+  if (stage->core_num < real_core_list.size()) {
+    core_list.resize(stage->core_num);
   }
+
+  std::vector<tpu_dynamic_tensor_t> inputs;
+  std::vector<tpu_dynamic_tensor_t> outputs;
+  fill_dynamic_tensor_info(inputs, input_tensors, &stage->input_v, nullptr,
+      {}, net_ctx->middlebuff_input,
+      input_elem_num, input_num, TENSOR_TYPE_NET_INPUT, true);
+  fill_dynamic_tensor_info(outputs, output_tensors, &stage->output_v, nullptr,
+      {}, net_ctx->middlebuff_output,
+      input_elem_num, output_num, TENSOR_TYPE_NET_OUTPUT, false);
+
+  tpu_dynamic_net_info_t net_info = {0};
+  net_info.inputs = std::move(inputs);
+  net_info.outputs = std::move(outputs);
+  net_info.ir_addr = stage->core_commands[0].ir_mem.addr;
+  net_info.ir_word_num = stage->core_commands[0].ir_mem.dword_len;
+  net_info.output_shape_addr = output_shape_global_addr;
+  net_info.coeff_offset_addr = stage->dynamic_coeff_offset;
+  net_info.io_start_addr = stage->io_start;
+  net_info.io_mem_offset = stage->io_offset;
+  net_info.ctx_start_addr = stage->dynamic_ctx_start;
+  net_info.ctx_mem_borders = {stage->ctx_borders.begin(), stage->ctx_borders.end()};
+  if (m_flags & BM_RUNTIME_SHARE_MEM) {
+    net_info.ctx_mem_offsets = {stage->dynamic_ctx_offset.begin(), stage->dynamic_ctx_offset.end()};
+  } else {
+    const auto& ctx_offset = net_ctx_get_dyn_neuron(net_ctx, dyn_core_mask)->dynamic_ctx_offset;
+    net_info.ctx_mem_offsets = {ctx_offset.begin(), ctx_offset.end()};
+  }
+  if (backend_->support_dynamic_loading()) {
+    net_info.kernel_func_ids = net_ctx->kernel_module_->get_dynamic_fullnet_func_id(core_list);
+  }
+  net_info.core_ids = core_list;
+  net_info.all_reduce_param = net_ctx->do_allreduce ? &(net_ctx->allreduce_param) : nullptr;
+
+  status = backend_->launcher()->dynamic_subnet(m_handles[devid], net_info);
 
   if (status == BM_SUCCESS) {
     sync_cores(m_handles[devid], core_list);
@@ -997,8 +908,8 @@ Bmruntime::get_api_info(int net_idx, const bm_tensor_t *input_tensors,
   }
   auto &stage = net_ctx->stage_v[stage_idx];
 
-  // multi core info
-  auto core_num = stage->core_commands.size();
+  // multi core info, compatible with old bmodel
+  auto core_num = stage->core_num;
   std::vector<int32_t> core_list;
   for (size_t idx = 0; idx < core_num; ++idx) {
     core_list.emplace_back(core_ids[idx]);
@@ -1122,7 +1033,7 @@ bool Bmruntime::launch_static(net_ctx_t* net_ctx, net_stage_t* stage,
 
     }
   }
-  bm_status_t status = backend_->launcher()->_bmdnn_multi_fullnet_(m_handles[devid], net_info);
+  bm_status_t status = backend_->launcher()->static_subnet(m_handles[devid], net_info);
   if (BM_SUCCESS != status) {
     BMRT_LOG(WRONG, "launch failed, status:%d", status);
     trace();
@@ -1280,7 +1191,7 @@ bool Bmruntime::launch(int net_idx, const bm_tensor_t *input_tensors,
   }
   auto &stage = net_ctx->stage_v[stage_idx];
   // multi core info
-  auto core_num = stage->core_commands.size();
+  auto core_num = stage->core_num;
   std::vector<int32_t> core_list(core_num);
   std::iota(core_list.begin(), core_list.end(), 0);
 
@@ -1304,7 +1215,7 @@ Bmruntime::refine_core_list(const net_stage_t *stage,
   // use  core_num to generate core_list
   std::vector<int32_t> full_core_list(backend_->core_num());
   std::iota(full_core_list.begin(), full_core_list.end(), 0);
-  auto bmodel_core_num = stage->core_commands.size();
+  auto bmodel_core_num = stage->core_num;
   if (bmodel_core_num > full_core_list.size()) {
     BMRT_LOG(FATAL,
             "(%d) the bmodel is not compatible with the current target.\n",
@@ -2812,6 +2723,20 @@ const bm_net_info_t*  Bmruntime::get_net_info(const string& net_name)
   for (auto v:m_net_ctx_v) {
     if (v->net_name == net_name) {
       return &v->net_info;
+    }
+  }
+  return NULL;
+}
+
+const bm_coeff_info_t *Bmruntime::get_coeff_info(const string &net_name, int stage, int *coeff_num) {
+  for (auto v : m_net_ctx_v) {
+    if (v->net_name == net_name) {
+      if (stage < 0 || stage >= (int)v->stage_v.size()) {
+        BMRT_LOG(WRONG, "stage %d is invalid for net %s", stage, net_name.c_str());
+        return NULL;
+      }
+      *coeff_num = v->stage_v[stage]->coeff_info_v.size();
+      return v->stage_v[stage]->coeff_info_v.data();
     }
   }
   return NULL;

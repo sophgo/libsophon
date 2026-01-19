@@ -19,7 +19,7 @@
 #include "bmodel.hpp"
 #include "bmlib_runtime.h"
 #include <atomic>
-#include <backend.hpp>
+#include <backend/backend.hpp>
 
 using bmodel::CoeffMem;
 using bmodel::ModelCtx;
@@ -99,6 +99,7 @@ typedef struct subnet_tpu_info {
   }
   int is_dynamic;
   std::vector<single_core_command_t> core_commands;
+  uint32_t run_core;
 } SUBNET_TPU_INFO_T;
 
 /* TODO: reuse cpu_layer_param_t */
@@ -232,6 +233,8 @@ struct net_stage_t {
   u64 io_offset;
   bm_device_mem_t io_mem;
 
+  u32 core_num; // core_num this stage needs
+
   // have multi subnet
   int subnet_num;                  /* subnet num per net */
   vector<SUBNET_INFO_T*> subnet_v; /* subnet per net */
@@ -283,7 +286,6 @@ struct net_ctx_t {
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
   bool is_dynamic = 0;
-  int core_num = 1;
   int n_can_change = 0;                           // for dynamic
   int h_w_can_change = 0;                         // for dynamic
   vector<bm_device_mem_t> middlebuff_input;   // for dynamic, one net share one middlebuf
@@ -511,6 +513,7 @@ class Bmruntime {
   int get_stage_size(const string& net_name);
   const bm_net_info_t* get_net_info(int net_idx);
   const bm_net_info_t* get_net_info(const string& net_name);
+  const bm_coeff_info_t* get_coeff_info(const string& net_name, int stage, int* coeff_num);
 
   const vector<bm_device_mem_u64_t> &get_neuron_mem(int net_idx);
   void trace();
@@ -576,9 +579,6 @@ protected:
 
 protected:
   // functions for load bmodel
-  u64 fix_gdma_addr(const net_stage_t* stage, u64 origin_addr, bool is_src);
-  void convert_cmd(u32* cmd, int engine_id, bool last_cmd, u64 start_address,
-                   const net_stage_t* stage);
   bool setup_cmd_context(ModelCtx* model_ctx, const bmodel::NetParameter *param,
                          net_stage_t* stage, uint32_t device_id);
   bool setup_ir_context(ModelCtx* model_ctx, const bmodel::Binary* binary_ir,
@@ -655,6 +655,19 @@ protected:
   void fill_tpu_tensor_info(vector<tpu_tensor_info_t> &tensor_info,
     const vector<tensor_attr_t> &tensor_v, const bm_tensor_t *user_tensors,
     bool is_input);
+
+  void fill_dynamic_tensor_info(
+    vector<tpu_dynamic_tensor_t> &tensor_info,
+    const bm_tensor_t *user_tensors,
+    const std::vector<tensor_attr_t> *compiled_tensors,
+    const std::map<std::string, tensor_ext_t> *subnet_tensors,
+    const std::vector<std::string> &tensor_names,
+    const std::vector<bm_device_mem_t> &buffer_mems, // what is this?
+    const int* elem_num,
+    int num,
+    tensor_io_type_t io_type,
+    bool is_input);
+
   // functions for cascade
   void cascade_fill_net_info(net_cascade_t *net_cascade);
   void cascade_free_net_info(net_cascade_t *net_cascade);
