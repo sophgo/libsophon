@@ -652,6 +652,7 @@ static int bmdrv_probe(struct platform_device *pdev)
 
 	bm_monitor_thread_init(bmdi);
 
+	mutex_init(&bmdi->pm_thread_info.pm_mutex);
 	//bm_pm_thread_init(bmdi);
 
 	rc = bmdrv_ctrl_add_dev(bmci, bmdi);

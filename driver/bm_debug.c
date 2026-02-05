@@ -2436,7 +2436,6 @@ void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int count)
 	int core_id=0;
 
 	start = jiffies;
-	bm_npu_utilization_stat(bmdi);
 	if(count % 3 == 0) {
 		for (core_id=0; core_id<2; core_id++) {
 			if (!bm_arm9fw_log_buffer_empty(bmdi, core_id)) {
