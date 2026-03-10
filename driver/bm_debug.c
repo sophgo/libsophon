@@ -2712,7 +2712,7 @@ int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id)
 	bmdi->monitor_thread_info.log_mem[core_id].host_size = ARM9FW_LOG_HOST_BUFFER_SIZE;
 	ret = bmdrv_stagemem_alloc(bmdi, bmdi->monitor_thread_info.log_mem[core_id].host_size,
 			&bmdi->monitor_thread_info.log_mem[core_id].host_paddr,
-			&bmdi->monitor_thread_info.log_mem[core_id].host_vaddr);
+			&bmdi->monitor_thread_info.log_mem[core_id].host_vaddr, false);
 	if (ret) {
 		pr_err("bm-sophon%d alloc arm9fw log buffer failed\n", bmdi->dev_index);
 		return ret;

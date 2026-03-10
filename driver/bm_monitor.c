@@ -95,8 +95,8 @@ int bm_monitor_thread_deinit(struct bm_device_info *bmdi)
 	struct bm_arm9fw_log_mem *log_mem1 = &bmdi->monitor_thread_info.log_mem[CORE_ID1];
 
 	if (bmdi->monitor_thread_info.monitor_task != NULL) {
-		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size);
-		bmdrv_stagemem_free(bmdi, log_mem1->host_paddr, log_mem1->host_vaddr, log_mem1->host_size);
+		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size, false);
+		bmdrv_stagemem_free(bmdi, log_mem1->host_paddr, log_mem1->host_vaddr, log_mem1->host_size, false);
 		kthread_stop(bmdi->monitor_thread_info.monitor_task);
 		pr_info("monitor thread bm_monitor-%d deinit done\n", bmdi->dev_index);
 		bmdi->monitor_thread_info.monitor_task = NULL;

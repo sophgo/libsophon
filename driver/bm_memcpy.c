@@ -9,6 +9,7 @@
 #endif
 #include <linux/uaccess.h>
 #include <linux/dma-mapping.h>
+#include <linux/ktime.h>
 #include "bm_common.h"
 #include "bm_memcpy.h"
 #include "bm_cdma.h"
@@ -29,12 +30,12 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	mutex_init(&memcpy_info->cdma_mutex1);
 	mutex_init(&memcpy_info->p2p_mutex);
 
-	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_s2d);
+	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_s2d, true);
 	if (ret < 0)
 		return ret;
 
 	pr_err("stagemem_s2d 1 vaddr:%p\n", memcpy_info->stagemem_s2d.v_addr);
-	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_d2s);
+	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_d2s, true);
 	if (ret < 0) {
 		bmdrv_stagemem_release(bmdi, &bmdi->memcpy_info.stagemem_s2d);
 		return ret;
@@ -68,35 +69,59 @@ void bmdrv_memcpy_deinit(struct bm_device_info *bmdi)
 	bmdrv_stagemem_release(bmdi, &bmdi->memcpy_info.stagemem_d2s);
 }
 
-int bmdrv_stagemem_init(struct bm_device_info *bmdi, struct bm_stagemem *stagemem)
+int bmdrv_stagemem_init(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
+		bool cached)
 {
 	int ret = 0;
 
 	mutex_init(&stagemem->stage_mutex);
 	init_completion(&stagemem->stagemem_done);
 	ret = bmdrv_stagemem_alloc(bmdi, CONFIG_HOST_REALMEM_SIZE, &stagemem->p_addr,
-			&stagemem->v_addr);
+			&stagemem->v_addr, cached);
 	if (ret)
 		return ret;
 	stagemem->size = CONFIG_HOST_REALMEM_SIZE;
+	stagemem->cached = cached;
 	return ret;
 }
 
 int bmdrv_stagemem_release(struct bm_device_info *bmdi, struct bm_stagemem *stagemem)
 {
-	return bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr, stagemem->size);
+	return bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr,
+				   stagemem->size, stagemem->cached);
 }
 
-int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size)
+int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr,
+			u64 size, bool cached)
 {
 #ifdef USE_DMA_COHERENT
-	dma_free_coherent(bmdi->cinfo.device, size, vaddr, paddr);
+	if (cached) {
+		dma_unmap_single(bmdi->cinfo.device, paddr, size,
+				 DMA_BIDIRECTIONAL);
+		free_pages((unsigned long)vaddr, get_order(size));
+	} else {
+		dma_free_coherent(bmdi->cinfo.device, size, vaddr, paddr);
+	}
 #else
-	set_memory_wb((unsigned long)vaddr, size / PAGE_SIZE);
+	if (!cached)
+		set_memory_wb((unsigned long)vaddr, size / PAGE_SIZE);
 	free_pages((unsigned long)vaddr, get_order(size));
 #endif
 	return 0;
 }
+
+static void bmdrv_memory_flush(struct bm_device_info *bmdi, u64 paddr, u32 size)
+{
+	dma_sync_single_for_device(bmdi->cinfo.device,
+				   paddr & 0xffffffffff, size, DMA_TO_DEVICE);
+}
+
+static void bmdrv_memory_invalidate(struct bm_device_info *bmdi, u64 paddr, u32 size)
+{
+	dma_sync_single_for_cpu(bmdi->cinfo.device,
+				 paddr & 0xffffffffff, size, DMA_FROM_DEVICE);
+}
+
 /*bit_n == 0, slot n is free, bit_n == 1, slot n is used*/
 static int caculate_stage_index(int *bitmap, int *index)
 {
@@ -175,7 +200,7 @@ retry:
 }
 
 int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppaddr,
-		void **pvaddr)
+		void **pvaddr, bool cached)
 {
 	u32 arg32l;
 	void *vaddr;
@@ -184,20 +209,32 @@ int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppad
 	arg32l = (u32)size;
 
 #ifdef USE_DMA_COHERENT
-	vaddr = dma_alloc_coherent(bmdi->cinfo.device, arg32l, &paddr, GFP_USER);
+	if (cached) {
+		vaddr = (void *)__get_free_pages(GFP_KERNEL, get_order(size));
+		if (!vaddr) {
+			dev_err(bmdi->dev, "cached stagemem alloc failed\n");
+			return -ENOMEM;
+		}
+		memset(vaddr, 0, size);
+		paddr = dma_map_single(bmdi->cinfo.device, vaddr, size,
+				       DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(bmdi->cinfo.device, paddr)) {
+			free_pages((unsigned long)vaddr, get_order(size));
+			dev_err(bmdi->dev, "dma_map_single failed\n");
+			return -ENOMEM;
+		}
+	} else {
+		vaddr = dma_alloc_coherent(bmdi->cinfo.device, arg32l,
+					   &paddr, GFP_USER);
+	}
 #else
-	/*
-	 * use GFP_USER only would likely get paddr larger than 4GB,
-	 * GFP_DMA can ensure paddr within 32bit. dma_alloc_coherent
-	 * would likely do the same thing, check intel_alloc_coherent.
-	 */
 	vaddr = (void *)__get_free_pages(GFP_DMA | GFP_USER, get_order(size));
-	memset(vaddr, 0, size);
-	paddr = virt_to_phys(vaddr);
-	/*
-	 * use uncached-minus type of memory explicitly.
-	 */
-	set_memory_uc((unsigned long)vaddr, size / PAGE_SIZE);
+	if (vaddr) {
+		memset(vaddr, 0, size);
+		paddr = virt_to_phys(vaddr);
+		if (!cached)
+			set_memory_uc((unsigned long)vaddr, size / PAGE_SIZE);
+	}
 #endif
 	if (!vaddr) {
 		dev_err(bmdi->dev, "buffer allocation failed\n");
@@ -354,7 +391,6 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 			mutex_lock(&memcpy_info->cdma_mutex);
 			memset(&iommu_rgn_src, 0, sizeof(struct iommu_region));
 			memset(&iommu_rgn_dst, 0, sizeof(struct iommu_region));
-
 			bmdev_construct_smmu_arg(&iommu_rgn_src, (u64)src + cur_addr_inc, size - cur_addr_inc, 0, DMA_H2D);
 			bmdev_construct_smmu_arg(&iommu_rgn_dst, (u64)dst + cur_addr_inc, size - cur_addr_inc, 1, DMA_H2D);
 			if ((memcpy_info->bm_enable_smmu_transfer(memcpy_info, &iommu_rgn_src, &iommu_rgn_dst, &bo_src) != 0)) {
@@ -363,22 +399,25 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 				mutex_unlock(&memcpy_info->cdma_mutex);
 				break;
 			}
+
 			bmdev_construct_cdma_arg(&cdma_arg,
 				(iommu_rgn_src.user_start - iommu_rgn_src.start_aligned) + iommu_rgn_src.entry_start * PAGE_SIZE,
 				(iommu_rgn_dst.user_start - iommu_rgn_dst.start_aligned) + iommu_rgn_dst.entry_start * PAGE_SIZE,
 				iommu_rgn_src.real_size,
 				HOST2CHIP, intr, true);
 			memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, false);
+
 			cur_addr_inc += iommu_rgn_src.real_size;
+
 			if ((memcpy_info->bm_disable_smmu_transfer(memcpy_info, &iommu_rgn_src, &iommu_rgn_dst, &bo_src) != 0)) {
 				dev_err(bmdi->dev, "s2d disable smmu_trnasfer error\n");
-				mutex_unlock(&memcpy_info->cdma_mutex);
 				ret = -ENOMEM;
+				mutex_unlock(&memcpy_info->cdma_mutex);
 				break;
 			}
 			mutex_unlock(&memcpy_info->cdma_mutex);
-		};
-	} else { // treat prealloc mode as not use iommu
+		}
+	} else {
 		for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
 			if ((pass_idx + 1) * realmem_size < size)
 				size_step = realmem_size;
@@ -394,20 +433,22 @@ int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file, uint64_t ds
 
 			    retry = 3;
 			    do {
-                                copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
-                                if (copy_ret) {
-                                  retry--;
-                                  msleep(1);
-                                } 
-                            } while (copy_ret && retry > 0);
-		            if (copy_ret) {
-		              pr_err("bmdev_memcpy_s2d: copy_from_user failed! pass_idx=%d, total_offset=%u, chunk_offset=%u, failed_bytes=%d\n",
-                                 pass_idx, cur_addr_inc + bytes_copied, bytes_copied, copy_ret);
-		              bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
-		              return -EFAULT;
-		            }
-		            bytes_copied += size_copy_step;
+                    copy_ret = copy_from_user(v_addr + bytes_copied, src_cpy, size_copy_step);
+                    if (copy_ret) {
+                      retry--;
+                      msleep(1);
+                    } 
+                } while (copy_ret && retry > 0);
+	            if (copy_ret) {
+	              pr_err("bmdev_memcpy_s2d: copy_from_user failed! pass_idx=%d, total_offset=%u, chunk_offset=%u, failed_bytes=%d\n",
+                             pass_idx, cur_addr_inc + bytes_copied, bytes_copied, copy_ret);
+	              bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
+	              return -EFAULT;
+	            }
+	            bytes_copied += size_copy_step;
 		        }
+
+			bmdrv_memory_flush(bmdi, p_addr, size_step);
 
 			bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
@@ -438,6 +479,7 @@ int bmdev_memcpy_2d_s2d(struct bm_device_info *bmdi, struct file *file, struct b
 		bmdrv_free_stagemem(bmdi, HOST2CHIP, index);
 		return -EFAULT;
 	}
+	bmdrv_memory_flush(bmdi, p_addr, size);
 	bmdev_construct_2d_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 		 memcpy_param->device_addr, memcpy_param, false);
 	if (memcpy_info->bm_dual_cdma_transfer(bmdi, file, &cdma_arg, true)) {
@@ -474,6 +516,7 @@ int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *
 		src_cpy = (u8 *)src + cur_addr_inc;
 		bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, HOST2CHIP, &index);
 		memcpy(v_addr, src_cpy, size_step);
+		bmdrv_memory_flush(bmdi, p_addr, size_step);
 		bmdev_construct_cdma_arg(&cdma_arg, p_addr & 0xffffffffff,
 				dst + cur_addr_inc, size_step, HOST2CHIP, intr, false);
 		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
@@ -517,6 +560,7 @@ int bmdev_memcpy_d2s_internal(struct bm_device_info *bmdi, void *dst, u64 src, u
 			return -EBUSY;
 		}
 
+		bmdrv_memory_invalidate(bmdi, p_addr, size_step);
 		memcpy(dst_cpy, v_addr, size_step);
 		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 		cur_addr_inc += size_step;
@@ -554,7 +598,7 @@ int bmdrv_compare_fw_stage(struct bm_device_info *bmdi, u64 src, u32 size, const
 			return -EBUSY;
 		}
 
-		// memcpy(dst_cpy, v_addr, size_step);
+		bmdrv_memory_invalidate(bmdi, p_addr, size_step);
 		p = (unsigned int *)v_addr;
 		for (i = 0; i < size_step/sizeof(u32); i++) {
 			if (p[i] != firmware[cur_addr_inc/sizeof(u32) + i]) {
@@ -593,9 +637,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 
 			mutex_lock(&memcpy_info->cdma_mutex);
 			memset(&iommu_rgn_src, 0, sizeof(struct iommu_region));
-			memset(&iommu_rgn_src, 0, sizeof(struct iommu_region));
 			memset(&iommu_rgn_dst, 0, sizeof(struct iommu_region));
-
 			bmdev_construct_smmu_arg(&iommu_rgn_src, (u64)src + cur_addr_inc, size - cur_addr_inc, 0, DMA_D2H);
 			bmdev_construct_smmu_arg(&iommu_rgn_dst, (u64)dst + cur_addr_inc, size - cur_addr_inc, 1, DMA_D2H);
 			if ((memcpy_info->bm_enable_smmu_transfer(memcpy_info, &iommu_rgn_src, &iommu_rgn_dst, &bo_dst) != 0)) {
@@ -604,11 +646,13 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 				ret = -ENOMEM;
 				break;
 			}
+
 			bmdev_construct_cdma_arg(&cdma_arg,
 				(iommu_rgn_src.user_start - iommu_rgn_src.start_aligned) + iommu_rgn_src.entry_start * PAGE_SIZE,
 				(iommu_rgn_dst.user_start - iommu_rgn_dst.start_aligned) + iommu_rgn_dst.entry_start * PAGE_SIZE,
 				iommu_rgn_src.real_size, CHIP2HOST, intr, true);
 			memcpy_info->bm_cdma_transfer(bmdi, file, &cdma_arg, false);
+
 			cur_addr_inc += iommu_rgn_src.real_size;
 
 			if ((memcpy_info->bm_disable_smmu_transfer(memcpy_info, &iommu_rgn_src, &iommu_rgn_dst, &bo_dst) != 0)) {
@@ -618,7 +662,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 				break;
 			}
 			mutex_unlock(&memcpy_info->cdma_mutex);
-		};
+		}
 	} else {
 		for (pass_idx = 0, cur_addr_inc = 0; pass_idx < (size + realmem_size - 1) / realmem_size; pass_idx++) {
 			if ((pass_idx + 1) * realmem_size < size)
@@ -626,6 +670,7 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 			else
 				size_step = size - pass_idx * realmem_size;
 			dst_cpy = (u8 __user *)dst + cur_addr_inc;
+
 			bmdrv_get_stagemem(bmdi, &p_addr,&v_addr, CHIP2HOST, &index);
 			bmdev_construct_cdma_arg(&cdma_arg, src + cur_addr_inc,
 				p_addr & 0xffffffffff,
@@ -634,11 +679,14 @@ int bmdev_memcpy_d2s(struct bm_device_info *bmdi, struct file *file, void __user
 				bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 				return -EBUSY;
 			}
+
+			bmdrv_memory_invalidate(bmdi, p_addr, size_step);
 			if (copy_to_user(dst_cpy, v_addr, size_step)) {
 				bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 				pr_err("bmdev_memcpy_d2s copy_to_user fail\n");
 				return -EFAULT;
 			}
+
 			bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 			cur_addr_inc += size_step;
 		}
@@ -663,6 +711,7 @@ int bmdev_memcpy_2d_d2s(struct bm_device_info *bmdi, struct file *file, struct b
 		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 		return -EBUSY;
 	}
+	bmdrv_memory_invalidate(bmdi, p_addr, size);
 	if (copy_to_user(memcpy_param->host_addr, v_addr, size)) {
 		bmdrv_free_stagemem(bmdi, CHIP2HOST, index);
 		pr_err("bmdev_memcpy_d2s copy_to_user fail\n");
@@ -753,12 +802,13 @@ static int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_sta
 			size = memcpy_param->format == 2 ? (size * 2) : size;
 		}
 		pr_info("dual_cdma_transfer_prepare: size=%llx\n", size);
-		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr, false);
 		if (ret) {
 			pr_err("bm-sophon%d dual_cdma_transfer_prepare fail\n", bmdi->dev_index);
 			return -1;
 		}
 		stagemem->size = size;
+		stagemem->cached = false;
 		ret = copy_from_user(stagemem->v_addr, (void __user *)memcpy_param->host_addr, size);
 		if (ret) {
 			pr_err("bm-sophon%d copy_from_user fail\n", bmdi->dev_index);
@@ -774,12 +824,13 @@ static int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_sta
 			size = memcpy_param->format == 2 ? (size * 2) : size;
 		}
 		pr_info("dual_cdma_transfer_prepare: size=%llx\n", size);
-		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr);
+		ret = bmdrv_stagemem_alloc(bmdi, size, &stagemem->p_addr, &stagemem->v_addr, false);
 		if (ret) {
 			pr_err("bm-sophon%d dual_cdma_transfer_prepare fail\n", bmdi->dev_index);
 			return -1;
 		}
 		stagemem->size = size;
+		stagemem->cached = false;
 		bmdev_construct_2d_cdma_arg(cdma_arg, memcpy_param->device_addr,
 				stagemem->p_addr, memcpy_param, false);
 	} else if (memcpy_param->dir == CHIP2CHIP) {
@@ -794,14 +845,16 @@ static void dual_cdma_post_transfer(struct bm_device_info *bmdi, struct bm_stage
 {
 	int ret = 0;
 	if (memcpy_param->dir == HOST2CHIP) {
-		bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr, stagemem->size);
+		bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr,
+				    stagemem->size, stagemem->cached);
 	} else if (memcpy_param->dir == CHIP2HOST) {
 		ret = copy_to_user(memcpy_param->host_addr, stagemem->v_addr, stagemem->size);
 		if (ret) {
 			pr_err("bm-sophon%d copy_to_user fail\n", bmdi->dev_index);
 			return;
 		}
-		bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr, stagemem->size);
+		bmdrv_stagemem_free(bmdi, stagemem->p_addr, stagemem->v_addr,
+				    stagemem->size, stagemem->cached);
 	} else if (memcpy_param->dir == CHIP2CHIP) {
 		//TBD donothing
 	}
