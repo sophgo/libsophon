@@ -1057,8 +1057,9 @@ void create_irq_poll_thread(void)
 	irq_task = kthread_run(polling_interrupt_work, NULL, "IrqPoll");
 	if (IS_ERR(irq_task))
 		DPRINTK(KERN_ERR "[VPUDRV] : %s failed!\n", __func__);
-	else
+	else {
 		DPRINTK("[VPUDRV] : %s sucess!\n", __func__);
+	}
 }
 
 void destory_irq_poll_thread(void)
@@ -2226,8 +2227,11 @@ static int bm_vpu_map_to_register(struct file *filp, struct vm_area_struct *vm, 
 {
 	unsigned long pfn;
 	struct bm_device_info *bmdi = (struct bm_device_info *)filp->private_data;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	vm_flags_set(vm, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
+#else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#endif
 	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 	pfn = bmdi->vpudrvctx.s_vpu_register[core_idx].phys_addr >> PAGE_SHIFT;
 
@@ -2236,7 +2240,11 @@ static int bm_vpu_map_to_register(struct file *filp, struct vm_area_struct *vm, 
 
 static int bm_vpu_map_to_physical_memory(struct file *filp, struct vm_area_struct *vm)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	vm_flags_set(vm, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
+#else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
+#endif
 	vm->vm_page_prot = pgprot_noncached(vm->vm_page_prot);
 
 	return remap_pfn_range(vm, vm->vm_start, vm->vm_pgoff, vm->vm_end-vm->vm_start, vm->vm_page_prot) ? -EAGAIN : 0;
@@ -2251,7 +2259,11 @@ static int bm_vpu_map_to_instance_pool_memory(struct file *fp, struct vm_area_st
 	char *vmalloc_area_ptr = (char *)bmdi->vpudrvctx.instance_pool[core_idx].base;
 	unsigned long pfn;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	vm_flags_set(vm, VM_DONTEXPAND | VM_DONTDUMP);
+#else
 	vm->vm_flags |= VM_RESERVED;
+#endif
 
 	/* loop over all pages, map it page individually */
 	while (length > 0) {
@@ -2274,7 +2286,11 @@ static int vpu_map_vmalloc(struct file *fp, struct vm_area_struct *vm, char *vma
 	unsigned long start = vm->vm_start;
 	unsigned long pfn;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+	vm_flags_set(vm, VM_DONTEXPAND | VM_DONTDUMP);
+#else
 	vm->vm_flags |= VM_RESERVED;
+#endif
 	/* loop over all pages, map it page individually */
 	while (length > 0) {
 		pfn = vmalloc_to_pfn(vmalloc_area_ptr);
@@ -2487,8 +2503,9 @@ static int bm_vpu_reset_core(struct bm_device_info *bmdi, int core_idx, int rese
 			value &= ~(0x1 << bm_vpu_rst[core_idx].bit_n);
 		else if (reset == 1)
 			value |= (0x1 << bm_vpu_rst[core_idx].bit_n);
-		else
+		else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst[core_idx].reg);
 	}
@@ -2498,8 +2515,9 @@ static int bm_vpu_reset_core(struct bm_device_info *bmdi, int core_idx, int rese
 			value &= ~(0x1 << bm_vpu_rst_1686[core_idx].bit_n);
 		else if (reset == 1)
 			value |= (0x1 << bm_vpu_rst_1686[core_idx].bit_n);
-		else
+		else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst_1686[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst_1686[core_idx].reg);
 	}

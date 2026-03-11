@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8)
 
 project(bmrt LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 message(STATUS "third party: " $ENV{THIRDPARTY_DIR})
 find_package(Threads REQUIRED)
@@ -16,7 +16,6 @@ target_link_libraries(bmrt PUBLIC bmodel bmlib ${CMAKE_DL_LIBS} Threads::Threads
 target_include_directories(bmrt PUBLIC
     $ENV{THIRDPARTY_DIR}
     $ENV{THIRDPARTY_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}
     )

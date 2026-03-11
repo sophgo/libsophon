@@ -67,33 +67,33 @@ static u8 calc_ddr_para_id(u32 freq)
 	return (id - 1);
 }
 
-void bm1682_disable_ddr_interleave(struct bm_device_info *bmdi)
+static void bm1682_disable_ddr_interleave(struct bm_device_info *bmdi)
 {
  	u32 data = top_reg_read(bmdi, 0x1c0);
 	top_reg_write(bmdi, 0x1c0, (data & (~(1<<4))) | 0x2);
 }
 
-void bm1682_enable_ddr_interleave(struct bm_device_info *bmdi)
+static void bm1682_enable_ddr_interleave(struct bm_device_info *bmdi)
 {
 	u32 data = top_reg_read(bmdi, 0x1c0);
 	top_reg_write(bmdi, 0x1c0, (data | (1<<4)) | 0x2);
 }
 
-void disable_local_mem_early_resp(struct bm_device_info *bmdi)
+static void disable_local_mem_early_resp(struct bm_device_info *bmdi)
 {
    //Disable the early write for easier simulation
 	u32 data = top_reg_read(bmdi, 0x8);
 	top_reg_write(bmdi, 0x8, data | (1<<9));
 }
 
-void enable_local_mem_early_resp(struct bm_device_info *bmdi)
+static void enable_local_mem_early_resp(struct bm_device_info *bmdi)
 {
    //enable the early write for perfomance
 	u32 data = top_reg_read(bmdi, 0x8);
 	top_reg_write(bmdi, 0x8, data & (~(1<<9)));
 }
 
-void set_ddr_interleave_size(struct bm_device_info *bmdi, u32 size)
+static void set_ddr_interleave_size(struct bm_device_info *bmdi, u32 size)
 {
   /*
   int i;
@@ -325,7 +325,7 @@ static void ddr4_init(struct bm_device_info *bmdi, u32 ddr_ctl)
 	}
 }
 
-int ddr_init_palladium(struct bm_device_info *bmdi, u32 ddr_freq)
+static int ddr_init_palladium(struct bm_device_info *bmdi, u32 ddr_freq)
 {
 	ddr4_init(bmdi, 0);
 	ddr4_init(bmdi, 1);
@@ -756,7 +756,7 @@ static void calc_freq_div(u32 freq, u32 *ref_div, u32 *fb_div)
 }
 
 //configure ddr freq for each channel after ddr initialization
-void ddr_freq_configure(struct bm_device_info *bmdi, u32 ddr_ctl, u32 freq)
+static void ddr_freq_configure(struct bm_device_info *bmdi, u32 ddr_ctl, u32 freq)
 {
 	u32 ref_div = 0, fb_div = 0;
 	u32 data;
@@ -820,7 +820,7 @@ static void ddr_soft_reset(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, 0x14, (data | 0x00001c00));
 }
 
-int ddr_init(struct bm_device_info *bmdi, u32 freq)
+static int ddr_init(struct bm_device_info *bmdi, u32 freq)
 {
 	int ret;
 	u8 id;

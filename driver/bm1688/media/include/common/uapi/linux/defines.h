@@ -102,7 +102,7 @@ enum ENUM_CHIP_ID {
 /* For VENC */
 #define VC_MAX_CHN_NUM               32
 #define VENC_MAX_NAME_LEN            16
-#define VENC_MAX_CHN_NUM             512
+#define VENC_MAX_CHN_NUM             256
 #define VEDU_IP_NUM                  1
 #define H264E_MAX_WIDTH              4096
 #define H264E_MAX_HEIGHT             4096
@@ -145,9 +145,9 @@ enum ENUM_CHIP_ID {
 #define MIN_BITRATE         2
 #define MAX_BITRATE         (100*1024)
 
-#define JPEG_MAX_CHN_NUM        512
+#define JPEG_MAX_CHN_NUM        256
 /* For VDEC */
-#define VDEC_MAX_CHN_NUM        512
+#define VDEC_MAX_CHN_NUM        256
 #define VDH_MAX_CHN_NUM         0
 #define VEDU_CHN_START          VDH_MAX_CHN_NUM
 #define VEDU_H264D_ERRRATE      10

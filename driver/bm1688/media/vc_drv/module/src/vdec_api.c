@@ -3,7 +3,6 @@
  *
  * Created Time: July, 2020
  */
-#ifdef ENABLE_DEC
 #include <linux/vmalloc.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -35,8 +34,8 @@
 #define MAX_DPB_NUM 31
 #define USERDATA_SIZE 1024
 #define MAX_WIDTH_AXI 4608
-#define MAX_VDEC_HANDLE 64
-extern wait_queue_head_t tVdecWaitQueue[];
+#define MAX_VDEC_HANDLE 64 * MAX_NUM_SOPHON_SOC
+extern wait_queue_head_t *tVdecWaitQueue;
 
 typedef struct _src_info {
     PhysicalAddress stream_addr;
@@ -108,6 +107,7 @@ typedef struct decoder_handle{
     int wait_decoded_finish;
     unsigned char async_getframe;
     struct completion semGetFrameCmd;
+    int soc_idx;
 }DECODER_HANDLE;
 
 typedef struct _handle_pool{
@@ -117,17 +117,20 @@ typedef struct _handle_pool{
 }handle_pool;
 
 handle_pool vdec_handle_pool[MAX_NUM_VPU_CORE] = {0};
-void* thread_handle[MAX_NUM_VPU_CORE];
-static int core_idx[MAX_NUM_VPU_CORE] = {0,1,2};
+void* thread_handle[MAX_NUM_VPU_CORE] = {0};
+static int core_idx[MAX_NUM_VPU_CORE] = {0};
 static int stop_thread[MAX_NUM_VPU_CORE] = {0};
 static int thread_decode(void *param);
 
-int vdec_init_handle_pool(void)
+int vdec_init_handle_pool(int soc_idx)
 {
     int i;
+    int start_idx = soc_idx * MAX_NUM_VPU_CORE_CHIP + 1;
+    int end_idx = (soc_idx + 1) * MAX_NUM_VPU_CORE_CHIP;
     char thread_name[32] = {0};
 
-    for (i=1; i<MAX_NUM_VPU_CORE; i++) {
+    for (i=start_idx; i<end_idx; i++) {
+        core_idx[i] = i;
         mutex_init(&vdec_handle_pool[i].handle_mutex);
 
         stop_thread[i] = 0;
@@ -143,8 +146,10 @@ int vdec_deinit_handle_pool(void)
     int i;
 
     for (i=1; i<MAX_NUM_VPU_CORE; i++) {
-        stop_thread[i] = 1;
-        kthread_stop(thread_handle[i]);
+        if (thread_handle[i]) {
+            stop_thread[i] = 1;
+            kthread_stop(thread_handle[i]);
+        }
     }
 
     return 0;
@@ -306,15 +311,15 @@ static int alloc_framebuffer(void *pHandle)
     for(i=0; i<pst_handle->numOfDecFbc; i++) {
         if(pst_handle->frameBufFlag == 0) {
             if (pst_handle->vb_info.vb_mode == VB_SOURCE_USER) {
-                blk = vb_get_block_with_id(pst_handle->vb_info.frame_buffer_vb_pool, frameBufferSize, ID_VDEC);
+                blk = platform_vb_get_block_with_id(pst_handle->soc_idx, pst_handle->vb_info.frame_buffer_vb_pool, frameBufferSize, ID_VDEC);
                 if (blk == VB_INVALID_HANDLE)
-                    blk = vb_get_block_with_id(VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
+                    blk = platform_vb_get_block_with_id(pst_handle->soc_idx, VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
             } else {
-                blk = vb_get_block_with_id(VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
+                blk = platform_vb_get_block_with_id(pst_handle->soc_idx, VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
             }
         }
         else {
-            blk = vb_create_block(pst_handle->pst_frame_buffer[i].bufY, NULL, VB_STATIC_POOLID, 1);
+            blk = platform_vb_create_block(pst_handle->soc_idx, pst_handle->pst_frame_buffer[i].bufY, NULL, VB_EXTERNAL_POOLID, 1);
         }
 
         if (blk == VB_INVALID_HANDLE)
@@ -362,16 +367,16 @@ static int alloc_framebuffer(void *pHandle)
         for(i=pst_handle->numOfDecFbc; i<pst_handle->numOfDecFbc+pst_handle->numOfDecwtl; i++) {
             if(pst_handle->frameBufFlag == 0) {
                 if (pst_handle->vb_info.vb_mode == VB_SOURCE_USER) {
-                    blk = vb_get_block_with_id(pst_handle->vb_info.frame_buffer_vb_pool, frameBufferSize, ID_VDEC);
+                    blk = platform_vb_get_block_with_id(pst_handle->soc_idx, pst_handle->vb_info.frame_buffer_vb_pool, frameBufferSize, ID_VDEC);
                     if (blk == VB_INVALID_HANDLE) {
-                        blk = vb_get_block_with_id(VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
+                        blk = platform_vb_get_block_with_id(pst_handle->soc_idx, VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
                     }
                 } else {
-                    blk = vb_get_block_with_id(VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
+                    blk = platform_vb_get_block_with_id(pst_handle->soc_idx, VB_STATIC_POOLID, frameBufferSize, ID_VDEC);
                 }
             }
             else {
-                blk = vb_create_block(pst_handle->pst_frame_buffer[i].bufY, NULL, VB_STATIC_POOLID, 1);
+                blk = platform_vb_create_block(pst_handle->soc_idx, pst_handle->pst_frame_buffer[i].bufY, NULL, VB_EXTERNAL_POOLID, 1);
             }
 
             if (blk == VB_INVALID_HANDLE)
@@ -720,8 +725,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
             sec_axi_info.u.wave.useBitEnable   = TRUE;
         }
         VPU_DecGiveCommand(pst_handle->handle, SET_SEC_AXI, &sec_axi_info);
-
-
+        vdi_update_resolution(pst_handle->core_idx, pst_handle->channel_index, pst_handle->seq_info->picWidth, pst_handle->seq_info->picHeight);
         if(pst_handle->frameBufFlag == 1)
         {
             if(height_from_user != 0 && width_from_user != 0 && (height_from_user != pst_handle->seq_info->picHeight || width_from_user != pst_handle->seq_info->picWidth)){
@@ -765,8 +769,11 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
         pst_handle->seq_status = SEQ_DECODE_START;
     } else if (ret & (1<<INT_WAVE5_DEC_PIC)) {
         ret = VPU_DecGetOutputInfo(pst_handle->handle, pst_handle->output_info);
-        if (ret != RETCODE_SUCCESS)
+        if (ret != RETCODE_SUCCESS) {
+            vdi_update_channel_frames(pst_handle->core_idx, pst_handle->channel_index, ENCODE_FAIL, 1);
             return ret;
+        }
+
 
         if (pst_handle->output_info->sequenceChanged)
             pst_handle->seq_status = SEQ_CHANGE;
@@ -892,7 +899,7 @@ static int thread_decode(void *param)
 
     while(!stop_thread[core_idx]) {
         if (vdec_get_handle_count(core_idx) == 0) {
-            msleep(1);
+            msleep_interruptible(1);
             continue;
         }
 
@@ -925,7 +932,7 @@ int vdec_open(InitDecConfig *pInitDecCfg, void **pHandle)
     CodecInst*          pCodecInst;
     DecInfo*            pDecInfo;
 
-    core_idx = VPU_DecRequestCore();
+    core_idx = VPU_DecRequestCore(pInitDecCfg->socIdx);
 
     pus_bitCode = (Uint16*)bit_code;
     fw_size = sizeof(bit_code) / sizeof(bit_code[0]);
@@ -992,6 +999,7 @@ reinit:
     else
         pst_handle->cmd_queue_depth = COMMAND_QUEUE_DEPTH;
     set_default_dec_param(pst_handle->open_param);
+    pst_handle->soc_idx = pInitDecCfg->socIdx;
     pst_handle->timestamp_pool = NULL;
     pst_handle->timestamp_decode = Queue_Create_With_Lock(32, sizeof(TIMESTAMP_INFO));
     pst_handle->timestamp_display = Queue_Create_With_Lock(32, sizeof(TIMESTAMP_INFO));
@@ -1119,6 +1127,7 @@ reinit:
 fail:
 
     VPU_DecReleaseCore(core_idx);
+    VPU_DeInit(core_idx);
 
     if (pst_handle == NULL)
         return ret;
@@ -1289,7 +1298,7 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
 
         if (pdopc->bsLen > 0 && pst_handle->loop_flag) {
             pst_handle->loop_flag = 0;
-            pst_handle->seq_status = SEQ_INIT_START;
+            pst_handle->seq_status = SEQ_DECODE_START;
         } else if (pdopc->bsLen == 0) {
             if(pst_handle->seq_status == SEQ_INIT_NON)
                 return RETCODE_QUEUEING_FAILURE;
@@ -1359,7 +1368,7 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
             }
         }
     }
-
+    vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, IN_FRAME, 1);
     if (pst_handle->is_bind_mode)
         fill_vbbuffer(pst_handle);
 
@@ -1369,7 +1378,7 @@ int vdec_decode_frame(void *pHandle, DecOnePicCfg *pdopc, int timeout_ms)
 int get_user_pic(void *pHandle, DispFrameCfg *pdfc)
 {
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
-
+    vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, OUT_FRAME, 1);
     memcpy(pdfc, &pst_handle->usr_pic, sizeof(DispFrameCfg));
 
     return 0;
@@ -1380,6 +1389,7 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
     FRAME_INFO *frame_info;
     DECODER_HANDLE *pst_handle = (DECODER_HANDLE *)pHandle;
     TIMESTAMP_INFO *timestamp_info;
+    DecOutputInfo info;
     int index_frame;
 
     frame_info = (FRAME_INFO *)Queue_Dequeue(pst_handle->display_frame);
@@ -1390,6 +1400,8 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
     pdfc->width = pst_handle->seq_info->picCropRect.right;
     pdfc->height = pst_handle->seq_info->picCropRect.bottom;
     index_frame = pdfc->indexFrameDisplay = frame_info->frame_idx;
+    info.indexFrameDisplay = index_frame;
+    VPU_DecGiveCommand(pst_handle->handle, DEC_GET_DISPLAY_OUTPUT_INFO, &info);
     if (pst_handle->open_param->wtlEnable) {//yuv
         index_frame += pst_handle->numOfDecFbc;
         pdfc->cbcrInterleave = pst_handle->pst_frame_buffer[index_frame].cbcrInterleave;
@@ -1444,11 +1456,11 @@ int get_codec_pic(void *pHandle, DispFrameCfg *pdfc)
     }
 
     pdfc->endian = HOST_ENDIAN;
-    pdfc->picType = frame_info->pic_type;
+    pdfc->picType = info.picType;
     pdfc->seqenceNo = frame_info->seqenceno;
     pdfc->interlacedFrame = frame_info->interlaced_frame;
     pdfc->decHwTime = frame_info->decode_hwtime;
-
+    vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, OUT_FRAME, 1);
     return 0;
 }
 
@@ -1684,5 +1696,3 @@ int set_display_mode(void *pHandle, int display_mode)
     pst_handle->display_mode = display_mode;
     return 0;
 }
-
-#endif

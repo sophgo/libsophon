@@ -82,15 +82,6 @@ typedef struct _vdec_chn_context {
     vdec_chn_attr_s ChnAttr;
     vdec_chn_param_s ChnParam;
     vdec_chn_status_s stStatus;
-    video_frame_info_s *VideoFrameArray;
-    unsigned int VideoFrameArrayNum;
-    unsigned char display_queue[DISPLAY_QUEUE_SIZE];
-    unsigned int w_idx;
-    unsigned int r_idx;
-    unsigned int seqNum;
-    struct mutex display_queue_lock;
-    struct mutex status_lock;
-    struct mutex chnShmMutex;
     void *pHandle;
     unsigned char bHasVbPool;
     vdec_chn_pool_s vbPool;

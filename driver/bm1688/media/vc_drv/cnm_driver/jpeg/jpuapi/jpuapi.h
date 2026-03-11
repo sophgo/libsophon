@@ -1418,7 +1418,7 @@ etc.).
         void * parameter);
 
 JpgRet JPU_SetJpgPendingInstEx(JpgDecHandle handle, void *data);
-int JPU_RequestCore(int timeout);
+int JPU_RequestCore(int soc_idx, int timeout);
 int JPU_ReleaseCore(int core_idx);
 JpgRet JPU_DecSetParam(JpgDecHandle pHandle, JpgDecOpenParam * pop);
 

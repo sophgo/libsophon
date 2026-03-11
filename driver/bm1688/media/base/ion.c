@@ -28,16 +28,28 @@ struct mem_mapping {
 	pid_t fd_pid;
 	struct hlist_node node;
 	void *ion_handle;
+	int soc_idx;
 };
 
 static int ion_debug_alloc_free;
 module_param(ion_debug_alloc_free, int, 0644);
 
 static DEFINE_SPINLOCK(ion_lock);
-static DEFINE_HASHTABLE(ion_hash, 8);
+static struct hlist_head ion_hash[8][256];
 
-extern uint64_t pcie_ion_alloc(uint32_t len, void** ion_handle);
+extern uint64_t pcie_ion_alloc(int soc_idx, uint32_t len, void** ion_handle);
 extern unsigned int pcie_ion_free(void* ion_handle);
+
+int32_t ion_hash_init(void)
+{
+	int i = 0;
+
+	for (i=0; i<8; i++) {
+		hash_init(ion_hash[i]);
+	}
+
+	return 0;
+}
 
 int32_t mem_put(struct mem_mapping *mem_info)
 {
@@ -51,7 +63,7 @@ int32_t mem_put(struct mem_mapping *mem_info)
 	memcpy(p, mem_info, sizeof(*p));
 
 	spin_lock(&ion_lock);
-	hash_add(ion_hash, &p->node, p->phy_addr);
+	hash_add(ion_hash[mem_info->soc_idx], &p->node, p->phy_addr);
 	spin_unlock(&ion_lock);
 
 	return 0;
@@ -65,7 +77,7 @@ int32_t mem_get(struct mem_mapping *mem_info)
 	uint64_t key = mem_info->phy_addr;
 
 	spin_lock(&ion_lock);
-	hash_for_each_possible_safe(ion_hash, obj, tmp, node, key) {
+	hash_for_each_possible_safe(ion_hash[mem_info->soc_idx], obj, tmp, node, key) {
 		if (obj->phy_addr == key) {
 			memcpy(mem_info, obj, sizeof(*mem_info));
 			hash_del(&obj->node);
@@ -85,7 +97,7 @@ static int32_t mem_dump(void)
 	struct mem_mapping *obj;
 
 	spin_lock(&ion_lock);
-	hash_for_each(ion_hash, bkt, obj, node) {
+	hash_for_each(ion_hash[0], bkt, obj, node) {
 		TRACE_BASE(DBG_INFO, "ion addr=0x%llx, dmabuf_fd=%d\n",
 			obj->phy_addr, obj->dmabuf_fd);
 		cnt++;
@@ -96,7 +108,7 @@ static int32_t mem_dump(void)
 	return cnt;
 }
 
-static int32_t _base_ion_alloc(uint64_t *addr_p, void **addr_v, uint32_t len,
+static int32_t _base_ion_alloc(int soc_idx, uint64_t *addr_p, void **addr_v, uint32_t len,
 	uint32_t is_cached, uint8_t *name)
 {
 	int32_t ret = 0;
@@ -107,9 +119,10 @@ static int32_t _base_ion_alloc(uint64_t *addr_p, void **addr_v, uint32_t len,
 	mem_info.dmabuf = NULL;
 	mem_info.dmabuf_fd = 0;
 	mem_info.vir_addr = NULL;
-	mem_info.phy_addr = pcie_ion_alloc(len, &mem_info.ion_handle);
+	mem_info.phy_addr = pcie_ion_alloc(soc_idx, len, &mem_info.ion_handle);
 	mem_info.size = len;
 	mem_info.fd_pid = current->pid;
+	mem_info.soc_idx = soc_idx;
 	if (mem_put(&mem_info)) {
 		TRACE_BASE(DBG_ERR, "allocate mm put failed\n");
 		return -ENOMEM;
@@ -126,13 +139,14 @@ static int32_t _base_ion_alloc(uint64_t *addr_p, void **addr_v, uint32_t len,
 	return ret;
 }
 
-static int32_t _base_ion_free(uint64_t addr_p, int32_t *size)
+static int32_t _base_ion_free(int soc_idx, uint64_t addr_p, int32_t *size)
 {
 	struct mem_mapping mem_info;
 
 	//get from memory manager
 	memset(&mem_info, 0, sizeof(struct mem_mapping));
 	mem_info.phy_addr = addr_p;
+	mem_info.soc_idx = soc_idx;
 	if (mem_get(&mem_info)) {
 		TRACE_BASE(DBG_ERR, "dmabuf_fd get failed, addr:0x%llx\n", addr_p);
 		return -ENOMEM;
@@ -153,18 +167,18 @@ static int32_t _base_ion_free(uint64_t addr_p, int32_t *size)
 
 int32_t base_ion_free2(uint64_t phy_addr, int32_t *size)
 {
-	return _base_ion_free(phy_addr, size);
+	return _base_ion_free(0, phy_addr, size);
 }
 
-int32_t base_ion_free(uint64_t phy_addr)
+int32_t base_ion_free(int soc_idx, uint64_t phy_addr)
 {
-	return _base_ion_free(phy_addr, NULL);
+	return _base_ion_free(soc_idx, phy_addr, NULL);
 }
 EXPORT_SYMBOL_GPL(base_ion_free);
 
-int32_t base_ion_alloc(uint64_t *p_paddr, void **pp_vaddr, uint8_t *buf_name, uint32_t buf_len, bool is_cached)
+int32_t base_ion_alloc(int soc_idx, uint64_t *p_paddr, void **pp_vaddr, uint8_t *buf_name, uint32_t buf_len, bool is_cached)
 {
-	return _base_ion_alloc(p_paddr, pp_vaddr, buf_len, is_cached, buf_name);
+	return _base_ion_alloc(soc_idx, p_paddr, pp_vaddr, buf_len, is_cached, buf_name);
 }
 EXPORT_SYMBOL_GPL(base_ion_alloc);
 

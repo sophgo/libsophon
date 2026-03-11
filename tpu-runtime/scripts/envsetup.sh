@@ -68,6 +68,8 @@ function cmodel_run_bmodel() {
     chip="bm1686"
   elif [ $chip = 'bm1690' ]; then
     chip="sg2260"
+  elif [ $chip = 'bm1690e' ]; then
+    chip="sg2260e"
   fi
   TPUKERNEL_FIRMWARE_PATH=$THIRDPARTY_DIR/lib/libcmodel_${chip}.so $EXTRA_EXEC $RUNTIME_DIR/build/bmrt_test $bmodel_args $*
 }

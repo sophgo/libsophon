@@ -140,34 +140,103 @@ void bm_thermal_uninit(struct bm_device_info *bmdi)
 						regval);
 }
 
-static int calc_temp(int result)
+static int find_mid(int a, int b, int c)
+{
+
+	if ((a >= b && a <= c) || (a >= c && a <= b))
+		return a;
+	else if ((b >= a && b <= c) || (b >= c && b <= a))
+		return b;
+	else
+		return c;
+
+}
+
+static int calc_temp(int ts1, int ts2, int ts3)
 {
 	/* return (((uint64_t)result * 1000 * 654643) / 1801439 - 271280); */
 
 	/* Original calculation formula */
 	// y = 0.3634x - 271.28
 
-	return (result * 4074 - 3046900) / 10000;
+	// return (result * 4074 - 3046900) / 10000;
 	// y = 0.4074x - 304.69
+
+	int temp1, temp2, temp3;
+
+	// TS1: y=0.3757x-278.79
+	temp1 = (ts1 * 3757 - 2787900) / 10;
+
+	// TS2: y=0.3563x-259.37
+	temp2 = (ts2 * 3563 - 2593700) / 10;
+
+	// TS3: y=0.3729x-278.11
+	temp3 = (ts3 * 3729 - 2781100) / 10;
+
+	pr_debug("avg temp: (ts1, ts2, ts3) = (%d, %d, %d)\n", temp1, temp2, temp3);
+	return find_mid(temp1, temp2, temp3);
+}
+
+static void array_sort(int *arr, size_t num)
+{
+	size_t i, j;
+	int temp;
+
+	if (!arr || num <= 1)
+		return;
+
+	for (i = 0; i < num - 1; i++) {
+		for (j = 0; j < num - i - 1; j++) {
+			if (arr[j] > arr[j + 1]) {
+				temp = arr[j];
+				arr[j] = arr[j + 1];
+				arr[j + 1] = temp;
+			}
+		}
+	}
+}
+
+static int calc_average(int array[])
+{
+	int sum, buffer_array[20];
+
+	memcpy(buffer_array, array, 20 * sizeof(int));
+
+	array_sort(buffer_array, 20);
+	sum = buffer_array[8] + buffer_array[9] + buffer_array[10] + buffer_array[11];
+	// pr_debug("%d %d %d %d", buffer_array[8], buffer_array[9], buffer_array[10], buffer_array[11]);
+	return sum / 4;
 }
 
 int bm_read_temp(struct bm_device_info *bmdi, int *temperature)
 {
-	int			     result, r1, r2, r3;
+	static int index, read_cnt, r1[20], r2[20], r3[20];
+	int average_r1, average_r2, average_r3;
 
 	/* read temperature */
-	r1 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch0_result,
+	r1[index] = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch0_result,
 							tempsen_top_sta_tempsen_ch0_result_MASK,
 							tempsen_top_sta_tempsen_ch0_result_OFFSET);
-	r2 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch1_result,
+	r2[index] = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch1_result,
 							tempsen_top_sta_tempsen_ch1_result_MASK,
 							tempsen_top_sta_tempsen_ch1_result_OFFSET);
-	r3 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch2_result,
+	r3[index] = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch2_result,
 							tempsen_top_sta_tempsen_ch2_result_MASK,
 							tempsen_top_sta_tempsen_ch2_result_OFFSET);
-	result = MAX_OF_THREE(r1, r2, r3);
-	*temperature = calc_temp(result);
-	PR_DEBUG("temp = %d mC(0x%x)\n", calc_temp(result), result);
+	if (likely(read_cnt == 19)) {
+		average_r1 = calc_average(r1);
+		average_r2 = calc_average(r2);
+		average_r3 = calc_average(r3);
+	} else {
+		average_r1 = r1[index];
+		average_r2 = r2[index];
+		average_r3 = r3[index];
+		read_cnt++;
+	}
+	index = (index + 1) % 20;
+
+	*temperature = calc_temp(average_r1, average_r2, average_r3);
+	PR_DEBUG("temp = %d mC\n", *temperature);
 
 	return 0;
 }

@@ -41,10 +41,12 @@ extern int dev_count;
 extern struct bm_ctrl_info *bmci;
 u32 c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h;
 u32 gp_reg1[32] = {0};
+extern void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi);
 
 static struct kobj_type bmdrv_ktype = {
 	NULL
 };
+
 
 static int platform_init_bar_address(struct platform_device *pdev, struct chip_info *cinfo)
 {
@@ -540,6 +542,7 @@ err_platform_init:
 	return rc;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 static int bmdrv_remove(struct platform_device *pdev)
 {
 	struct bm_device_info *bmdi = platform_get_drvdata(pdev);
@@ -571,6 +574,40 @@ static int bmdrv_remove(struct platform_device *pdev)
 
 	return 0;
 }
+#else
+static void bmdrv_remove(struct platform_device *pdev)
+{
+   struct bm_device_info *bmdi = platform_get_drvdata(pdev);
+
+        if (bmdi == NULL)
+                return;
+        dev_info(bmdi->cinfo.device, "remove\n");
+
+        bmdrv_free_boot_loader_version(bmdi);
+        bmdev_unregister_device(bmdi);
+        //bm_pm_thread_deinit(bmdi);
+        bm_monitor_thread_deinit(bmdi);
+        bmdrv_ctrl_del_dev(bmci, bmdi);
+        bmdrv_disable_attr(bmdi);
+
+        bmdrv_free_irq(pdev);
+        bmdrv_fw_unload(bmdi);
+        bmdrv_hardware_deinit(bmdi);
+        bmdrv_software_deinit(bmdi);
+        bmdrv_platform_deinit(bmdi, pdev);
+
+        kobject_del(&bmdi->kobj);
+
+        if (dev_count == 0) {
+                bmdrv_remove_bmci();
+                bmdrv_class_destroy();
+        }
+
+
+        return;
+
+}
+#endif
 
 static const struct of_device_id bmdrv_match_table[] = {
 	{.compatible = "bitmain,tpu-1682"},
@@ -679,3 +716,6 @@ MODULE_DESCRIPTION("Sophon Series Deep Learning Accelerator Driver");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("xiao.wang@sophgo.com");
 MODULE_VERSION(PROJECT_VER);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+MODULE_IMPORT_NS(DMA_BUF);
+#endif

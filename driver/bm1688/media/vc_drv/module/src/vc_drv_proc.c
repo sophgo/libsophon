@@ -5,10 +5,12 @@
 #include <linux/platform_device.h>
 #include <linux/version.h>
 #include <generated/compile.h>
-
+#include <linux/fs.h>
 #include <base_ctx.h>
 #include <linux/comm_venc.h>
 #include <linux/comm_vdec.h>
+#include <linux/utsname.h>
+#include <generated/utsrelease.h>
 
 #include "drv_venc.h"
 #include "drv_vdec.h"
@@ -20,9 +22,14 @@
 
 extern venc_context *handle;
 extern uint32_t MaxVencChnNum;
-#ifdef ENABLE_DEC
 extern vdec_context *vdec_handle;
 extern uint32_t MaxVdecChnNum;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+#include <linux/proc_fs.h>
+#define VC_PDE_DATA(inode) pde_data(inode)
+#else
+#define VC_PDE_DATA(inode) PDE_DATA(inode)
 #endif
 
 proc_debug_config_t tVencDebugConfig = { .u32DbgMask = 0x1, .u32EndFrmIdx = UINT_MAX };
@@ -256,7 +263,12 @@ static void get_framerate(venc_chn_attr_s *pstChnAttr, unsigned int *pu32SrcFram
 
 static int venc_proc_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "Module: [VENC] System Build Time [%s]\n", UTS_VERSION);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+    seq_printf(m, "Module: [VENC] System Build Time [%s %s]\n",
+               init_utsname()->release, init_utsname()->version);
+#else
+    seq_printf(m, "Module: [VENC] System Build Time [%s]\n", UTS_RELEASE);
+#endif
 
     if (handle != NULL) {
         int idx = 0;
@@ -480,7 +492,7 @@ static int venc_proc_show(struct seq_file *m, void *v)
 
 static int venc_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, venc_proc_show, PDE_DATA(inode));
+    return single_open(file, venc_proc_show, VC_PDE_DATA(inode));
 }
 
 static ssize_t
@@ -641,7 +653,7 @@ static int h265e_proc_show(struct seq_file *m, void *v)
     int idx = 0;
     drv_venc_param_mod_s *pVencModParam;
 
-    seq_printf(m, "Module: [H265E] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [H265E] System Build Time [%s]\n", UTS_RELEASE);
 
     if (handle == NULL)
         return 0;
@@ -722,7 +734,7 @@ static int h265e_proc_show(struct seq_file *m, void *v)
 
 static int h265e_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, h265e_proc_show, PDE_DATA(inode));
+    return single_open(file, h265e_proc_show, VC_PDE_DATA(inode));
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
@@ -749,7 +761,7 @@ static int codecinst_proc_show(struct seq_file *m, void *v)
     venc_enc_ctx *pEncCtx;
     payload_type_e enType;
 
-    seq_printf(m, "Module: [CodecInst] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [CodecInst] System Build Time [%s]\n", UTS_RELEASE);
 
     if (handle == NULL)
         return 0;
@@ -774,7 +786,7 @@ static int codecinst_proc_show(struct seq_file *m, void *v)
 
 static int codecinst_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, codecinst_proc_show, PDE_DATA(inode));
+    return single_open(file, codecinst_proc_show, VC_PDE_DATA(inode));
 }
 
 
@@ -842,7 +854,7 @@ static int h264e_proc_show(struct seq_file *m, void *v)
     drv_venc_param_mod_s *pVencModParam;
     unsigned int u32Profile;
 
-    seq_printf(m, "Module: [H264E] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [H264E] System Build Time [%s]\n", UTS_RELEASE);
 
     if (handle == NULL)
         return 0;
@@ -925,7 +937,7 @@ static int h264e_proc_show(struct seq_file *m, void *v)
 
 static int h264e_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, h264e_proc_show, PDE_DATA(inode));
+    return single_open(file, h264e_proc_show, VC_PDE_DATA(inode));
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
@@ -968,7 +980,7 @@ static int jpege_proc_show(struct seq_file *m, void *v)
     int idx = 0;
     drv_venc_param_mod_s *pVencModParam;
 
-    seq_printf(m, "Module: [JPEGE] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [JPEGE] System Build Time [%s]\n", UTS_RELEASE);
 
     if (handle == NULL)
         return 0;
@@ -1070,7 +1082,7 @@ static int jpege_proc_show(struct seq_file *m, void *v)
 
 static int jpege_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, jpege_proc_show, PDE_DATA(inode));
+    return single_open(file, jpege_proc_show, VC_PDE_DATA(inode));
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
@@ -1112,7 +1124,7 @@ static int rc_proc_show(struct seq_file *m, void *v)
 {
     int idx = 0;
 
-    seq_printf(m, "Module: [RC] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [RC] System Build Time [%s]\n", UTS_RELEASE);
 
     if (handle == NULL)
         return 0;
@@ -1724,7 +1736,7 @@ static int rc_proc_show(struct seq_file *m, void *v)
 
 static int rc_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, rc_proc_show, PDE_DATA(inode));
+    return single_open(file, rc_proc_show, VC_PDE_DATA(inode));
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
@@ -1760,10 +1772,10 @@ int rc_proc_deinit(void)
     remove_proc_entry(RC_PROC_NAME, NULL);
     return 0;
 }
-#ifdef ENABLE_DEC
+
 static int vdec_proc_show(struct seq_file *m, void *v)
 {
-    seq_printf(m, "Module: [VDEC] System Build Time [%s]\n", UTS_VERSION);
+    seq_printf(m, "Module: [VDEC] System Build Time [%s]\n", UTS_RELEASE);
 
     if (vdec_handle != NULL) {
         int idx;
@@ -1993,7 +2005,7 @@ static int vdec_proc_show(struct seq_file *m, void *v)
 
 static int vdec_proc_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, vdec_proc_show, PDE_DATA(inode));
+    return single_open(file, vdec_proc_show, VC_PDE_DATA(inode));
 }
 
 static ssize_t vdec_proc_write(struct file *file, const char __user *user_buf,
@@ -2066,4 +2078,3 @@ int vdec_proc_deinit(void)
     remove_proc_entry(VDEC_PROC_NAME, NULL);
     return 0;
 }
-#endif

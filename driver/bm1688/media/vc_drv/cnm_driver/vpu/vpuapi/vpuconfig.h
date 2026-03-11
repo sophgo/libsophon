@@ -13,7 +13,7 @@
 #ifndef _VPU_CONFIG_H_
 #define _VPU_CONFIG_H_
 #include "../config.h"
-
+#include "platform.h"
 
 #define ENC_STREAM_BUF_COUNT 5
 #define ENC_STREAM_BUF_SIZE  (15*1024*1024)         //0xF00000
@@ -51,7 +51,6 @@
 #define MAX_INST_HANDLE_SIZE            48              /* DO NOT CHANGE THIS VALUE */
 #define MAX_NUM_INSTANCE                32
 
-#define MAX_NUM_SOPHON_SOC             	1
 #define MAX_NUM_VPU_CORE_CHIP           3		    // cv186x has 3 cores: 1 encoder and 2 decoder
 #define MAX_NUM_VPU_CORE                (MAX_NUM_VPU_CORE_CHIP*MAX_NUM_SOPHON_SOC)
 #define MAX_NUM_VCORE                   1

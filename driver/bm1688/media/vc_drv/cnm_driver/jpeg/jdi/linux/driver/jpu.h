@@ -40,6 +40,7 @@ typedef struct jpudrv_buffer_t {
     unsigned long base;                     /* kernel logical address in use kernel */
     unsigned long virt_addr;                /* virtual user space address */
     unsigned int  is_cached;
+    int soc_idx;
 } jpudrv_buffer_t;
 
 typedef struct jpudrv_inst_info_t {

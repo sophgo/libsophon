@@ -2873,7 +2873,8 @@ RetCode VPU_EncStartOneFrame(
         return RETCODE_FAILURE;
     }
 
-    pEncInfo->ptsMap[param->srcIdx] = (pEncInfo->openParam.enablePTS == TRUE) ? GetTimestamp(handle) : param->pts;
+    if (param->srcIdx >= 0 && param->srcIdx < 32)
+        pEncInfo->ptsMap[param->srcIdx] = (pEncInfo->openParam.enablePTS == TRUE) ? GetTimestamp(handle) : param->pts;
 
     if (GetPendingInst(pCodecInst->coreIdx)) {
         LeaveLock(pCodecInst->coreIdx);
@@ -3590,23 +3591,23 @@ PhysicalAddress VPU_MapToAddr40Bit(int coreIdx, unsigned int Addr)
     return RealAddr;
 }
 
-int VPU_DecRequestCore(void)
+static int instance_count [MAX_NUM_VPU_CORE] = {0};
+int VPU_DecRequestCore(int soc_idx)
 {
     int i;
     int core_idx;
     int min_instance = MAX_NUM_INSTANCE;
-    int instance_count [MAX_NUM_VPU_CORE];
+    int start_core_idx = soc_idx * MAX_NUM_VPU_CORE_CHIP + 1;
+    int end_core_idx = (soc_idx + 1) * MAX_NUM_VPU_CORE_CHIP;
 
     mutex_lock(&__vdi_init_mutex);
-    for (i=1; i<MAX_NUM_VPU_CORE; i++) {
-        instance_count[i] = vdi_get_instance_count(i);
+    for (i=start_core_idx; i<end_core_idx; i++) {
         if (instance_count[i] <= min_instance) {
             min_instance = instance_count[i];
             core_idx = i;
         }
     }
-
-    vdi_request_instance(core_idx);
+    instance_count[core_idx]++;
     mutex_unlock(&__vdi_init_mutex);
 
     return core_idx;
@@ -3615,9 +3616,9 @@ int VPU_DecRequestCore(void)
 int VPU_DecReleaseCore(unsigned int core_idx)
 {
     mutex_lock(&__vdi_init_mutex);
-    vdi_release_instance(core_idx);
+    if (instance_count[core_idx] > 0)
+        instance_count[core_idx]--;
     mutex_unlock(&__vdi_init_mutex);
 
     return 0;
 }
-

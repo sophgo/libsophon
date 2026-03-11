@@ -17,11 +17,7 @@
 
 VpuAttr g_VpuCoreAttributes[MAX_NUM_VPU_CORE];
 
-static Int32 s_ProductIds[MAX_NUM_VPU_CORE] = {
-    PRODUCT_ID_NONE,
-    PRODUCT_ID_NONE,
-    PRODUCT_ID_NONE,
-};
+static Int32 s_ProductIds[MAX_NUM_VPU_CORE] = { 0 };
 
 typedef struct FrameBufInfoStruct {
     Uint32 unitSizeHorLuma;

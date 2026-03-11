@@ -12,7 +12,6 @@
 
 typedef struct {
     struct file *filep;
-    mm_segment_t old_fs;
 }drv_file_t;
 
 typedef void * driver_file_t;

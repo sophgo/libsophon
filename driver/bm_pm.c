@@ -6,7 +6,7 @@
 #include "bm1688_card.h"
 
 
-int bm_pm_thread(void *date)
+static int bm_pm_thread(void *date)
 {
 	struct bm_device_info *bmdi = (struct bm_device_info *)date;
 	bool msg0_empty, msg1_empty;

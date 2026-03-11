@@ -19,6 +19,9 @@ void print_trace(void);
 
 #ifndef USING_CMODEL
         #ifdef __arm__
+#if defined(ANDROID)
+#include <setjmp.h>
+#endif
                 extern jmp_buf error_stat;
                 void fw_log(int level, char *fmt, ...);
                 #define hang(_ret)               \

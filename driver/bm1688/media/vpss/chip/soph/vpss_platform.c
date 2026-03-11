@@ -504,7 +504,7 @@ bool img_right_tile_cfg(struct scaler *scaler, u8 dev_idx, u16 online_r_start, u
 	return sclr_right_tile(scaler, dev_idx, sc_offset);
 }
 
-bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_left)
+bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_right)
 {
 	struct sclr_img_cfg *cfg = sclr_img_get_cfg(scaler, dev_idx);
 	struct sclr_mem mem = cfg->mem;
@@ -529,7 +529,7 @@ bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_left)
 	}
 	TRACE_VPSS(DBG_DEBUG, "img-%d start_y(%d) height(%d).\n", dev_idx, mem.start_y, mem.height);
 #endif
-	return sclr_top_tile(scaler, dev_idx, mem.height, is_left);
+	return sclr_top_tile(scaler, dev_idx, mem.height, is_right);
 }
 
 bool img_down_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_right)

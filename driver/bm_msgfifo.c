@@ -1,9 +1,12 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>
+#include <linux/fs.h>
+#include <linux/uaccess.h>
 #include <linux/delay.h>
 #include <linux/completion.h>
 #include "bm_common.h"
+#include "bm_debug.h"
 #include "bm_irq.h"
 #include "bm_msgfifo.h"
 #include "bm_drv.h"
@@ -18,10 +21,7 @@
 #include <linux/uaccess.h>
 
 
-extern uint32_t tpu_dump_msg;
-
-
-void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
+static void bmdrv_msg_irq_handler(struct bm_device_info *bmdi, int core_id)
 {
 	struct api_fifo_entry api_entry;
 	struct list_head *handle_list = NULL;
@@ -334,9 +334,12 @@ int bmdev_copy_to_msgfifo(struct bm_device_info *bmdi, bm_kapi_header_t *api_hea
 		gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_CPU, next_wp);
 
 	mutex_unlock(&bmdi->fifo_msg_mutex[core_id]);
+#ifdef SOC_MODE
 	if(tpu_dump_msg)
 		save_msgfifo_alternate_files_simple(bmdi, api_header_p, bm_api_p, 
                                           api_opt_header_p, api_from_userspace);
+#endif
+
 	return 0;
 }
 
@@ -622,6 +625,7 @@ static const char *api_desc(int api_id) {
 	}
 }
 
+#ifdef SOC_MODE
 static DEFINE_MUTEX(msg_lock);
 
 void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
@@ -629,8 +633,10 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 	u32 wp, rp, new_rp;
 	u32 header_size;
 	struct file *filep;
-    loff_t pos = 0;
+        loff_t pos = 0;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
     mm_segment_t old_fs;
+#endif
     u32 message_value; 
 	char filename[64];
 	struct timespec64 ts;
@@ -648,9 +654,10 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
         return;
     }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	old_fs = get_fs();
     set_fs(KERNEL_DS);
-
+#endif
 	pr_err("dump tpu core[%d] fifo msg...\n", core_id);
 
 	if (GP_REG_MESSAGE_WP_CHANNEL_XPU == channel) {
@@ -708,11 +715,14 @@ void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 		}
 	}
 #endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	set_fs(old_fs);
+#endif
 	filp_close(filep, NULL);
 
 	mutex_unlock(&msg_lock);
 }
+#endif
 
 int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32 channel, int core_id)
 {
@@ -732,7 +742,7 @@ int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32
 }
 
 #ifdef SOC_MODE
-int bmdev_get_api_num_in_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
+static int bmdev_get_api_num_in_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
 	int num = 0;
 	struct bm_api_info *api_info;

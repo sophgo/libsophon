@@ -120,7 +120,7 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 #endif
         g_attr[dev_id].chip_id = ATTR_FAULT_VALUE;
         g_attr[dev_id].status  = ATTR_FAULT_VALUE;
-        g_attr[dev_id].chip_mode = ATTR_FAULT_VALUE;  // 0---pcie, 1---soc
+        g_attr[dev_id].chip_mode = ATTR_FAULT_VALUE;  // 0---pciei, 1---soc
         g_attr[dev_id].domain_bdf        = ATTR_FAULT_VALUE;
         g_attr[dev_id].mem_used          = 0;
         g_attr[dev_id].mem_total         = 0;

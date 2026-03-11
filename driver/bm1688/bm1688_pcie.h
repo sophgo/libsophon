@@ -32,6 +32,9 @@
 #define BAR1_PART8_OFFSET	0x395000
 #define BAR1_PART9_OFFSET   0x3a5000
 
+#define BM1688_PCIE_STATUS_OFFSET	0xb0
+#define BM1688_PCIE_DDR_INITIALIZED	(0x1 << 17)
+
 void bm1688_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev);
 void bm1688_unmap_bar(struct bm_bar_info *bari);
 int bm1688_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);

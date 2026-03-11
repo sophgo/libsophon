@@ -525,6 +525,7 @@ typedef struct _venc_attr_s {
 	mirror_type_e enMirrorDirextion; ///< representing the mirroring direction, (0 ~ 3)
 	unsigned int u32CmdQueueDepth;   ///< venc command queue depth (1 ~ 4)(for h264/h265)
 	venc_encode_mode enEncMode; ///< venc encode mode (1 ~ 3)
+	unsigned char u8SocIdx;
 	union {
 		venc_attr_h264_s stAttrH264e;	///< TODO VENC
 		venc_attr_h265_s stAttrH265e;	///< TODO VENC

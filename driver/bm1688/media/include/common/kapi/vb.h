@@ -11,6 +11,7 @@ extern "C" {
 #include "linux/comm_vb.h"
 #include <linux/comm_sys.h>
 #include <linux/base_uapi.h>
+#include <linux/time64.h>
 #include "base_ctx.h"
 
 /*
@@ -68,6 +69,7 @@ struct vb_s {
 	atomic64_t mod_ids;
 	uint8_t external;
 	struct hlist_node node;
+	int soc_idx;
 };
 
 FIFO_HEAD(vbq, vb_s*);
@@ -118,14 +120,14 @@ int32_t vb_get_config(struct vb_cfg *vb_config);
 int32_t vb_create_pool(struct vb_pool_cfg *config);
 int32_t vb_destroy_pool(uint32_t pool_id);
 
-vb_blk vb_phys_addr2handle(uint64_t phy_addr);
+vb_blk vb_phys_addr2handle(int soc_idx, uint64_t phy_addr);
 uint64_t vb_handle2phys_addr(vb_blk blk);
 void *vb_handle2virt_addr(vb_blk blk);
 vb_pool vb_handle2pool_id(vb_blk blk);
 int32_t vb_inquire_user_cnt(vb_blk blk, uint32_t *cnt);
 
-vb_blk vb_get_block_with_id(vb_pool pool_id, uint32_t blk_size, mod_id_e mod_id);
-vb_blk vb_create_block(uint64_t phy_addr, void *vir_addr, vb_pool pool_id, bool is_external);
+vb_blk vb_get_block_with_id(int soc_idx, vb_pool pool_id, uint32_t blk_size, mod_id_e mod_id);
+vb_blk vb_create_block(int soc_idx, uint64_t phy_addr, void *vir_addr, vb_pool pool_id, bool is_external);
 int32_t vb_release_block(vb_blk blk);
 vb_pool find_vb_pool(uint32_t blk_size);
 void vb_acquire_block(vb_acquire_fp fp, mmf_chn_s chn, vb_pool pool_id, void *data);

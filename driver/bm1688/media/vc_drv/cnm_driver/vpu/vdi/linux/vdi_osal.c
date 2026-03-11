@@ -45,7 +45,6 @@ static osal_mutex_t s_log_mutex;
 
 struct vdi_osal_file {
     struct file *filep;
-    mm_segment_t old_fs;
 };
 
 int InitLog()
@@ -216,6 +215,7 @@ int osal_feof(osal_file_t fp)
     return 0;
 }
 
+#ifdef SOC_MODE
 osal_file_t osal_fopen(const char * file_name, const char * mode)
 {
     struct vdi_osal_file *vdi_fp = (struct vdi_osal_file *)vmalloc(sizeof(struct vdi_osal_file));
@@ -284,6 +284,41 @@ int osal_fclose(osal_file_t fp)
     vfree(vdi_fp);
     return 0;
 }
+
+#else
+
+osal_file_t osal_fopen(const char * file_name, const char * mode)
+{
+   return 0;
+}
+
+size_t osal_fwrite(const void * p, int size, int count, osal_file_t fp)
+{
+   return 0;
+}
+
+size_t osal_fread(void *p, int size, int count, osal_file_t fp)
+{
+   return 0;
+}
+
+long osal_ftell(osal_file_t fp)
+{
+   return 0;
+}
+
+int osal_fseek(osal_file_t fp, long offset, int origin)
+{
+   return 0;
+}
+
+int osal_fclose(osal_file_t fp)
+{
+   return 0;
+}
+
+
+#endif
 
 char osal_fgetc(osal_file_t fp)
 {

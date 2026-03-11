@@ -53,8 +53,9 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
 
     // enable dynamic profile
     if(enable_arm){
+        auto &launcher = profile->get_bmrt()->backend()->launcher();
         auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id({0});
-        ret = bmfunc::bmdnn_1684x()->_bmdnn_set_profile_enable_(handle, enable_func_id[0], true);
+        ret = dynamic_cast<Launcher_BM1684X*>(launcher.get())->_bmdnn_set_profile_enable_(handle, enable_func_id[0], true);
         CHECK_status(ret);
     }
     return true;
@@ -94,6 +95,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
         profile->write_block(BLOCK_MONITOR_GDMA, valid_len * sizeof(GDMA_PROFILE_FORMAT_CONTENT), valid_data.data());
     }
     if (enable_arm) {
+        auto &launcher = profile->get_bmrt()->backend()->launcher();
         for(int i=0; i<2; i++){
             vector<u8> data;
             size_t offset = 0;
@@ -101,7 +103,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             u32 block_type = (i == 0) ? BLOCK_DYN_DATA : BLOCK_DYN_EXTRA;
             while(1){
                 auto get_func_id = net_ctx->kernel_module_->get_get_profile_func_id({0})[0];
-                bm_status_t status = bmfunc::bmdnn_1684x()->_bmdnn_get_profile_data_(
+                bm_status_t status = dynamic_cast<Launcher_BM1684X*>(launcher.get())->_bmdnn_get_profile_data_(
                             handle,
                             get_func_id,
                             bm_mem_get_device_addr(dyn_buffer.mem),
@@ -123,7 +125,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             profile->write_block(block_type, data.size(), data.data());
         }
         auto enable_func_id = net_ctx->kernel_module_->get_enable_profile_func_id({0})[0];
-        bm_status_t status = bmfunc::bmdnn_1684x()->_bmdnn_set_profile_enable_(handle, enable_func_id, false);
+        bm_status_t status = dynamic_cast<Launcher_BM1684X*>(launcher.get())->_bmdnn_set_profile_enable_(handle, enable_func_id, false);
         CHECK_status(status);
     }
     return true;

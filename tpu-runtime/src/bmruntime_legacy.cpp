@@ -6,7 +6,6 @@
 #include "bmruntime_cpp.h"
 #include "string.h"
 
-using bmruntime::bmfunc;
 using bmruntime::Bmruntime;
 using bmruntime::api_info_t;
 
@@ -26,22 +25,24 @@ static void chip_check(const std::string& chip_name, unsigned int chipid)
 }
 
 void* create_bmrt_helper(void* pbm_handle, const char* chip_type, int devid) {
-
   Bmruntime* p_bmrt = NULL;
   const std::string chip_name = chip_type;
+  uint32_t chipid = 0;
+  if (chip_name.find("BM1682") != std::string::npos) {
+    chipid = 0x1682;
+  } else if (chip_name.find("BM1684") != std::string::npos) {
+    chipid = 0x1684;
+  } else {
+    BMRT_LOG(FATAL, "Error: chipname %s is not supported", chip_type);
+    return NULL;
+  }
+
   try {
   if (pbm_handle)
-    p_bmrt = new Bmruntime((bm_handle_t*)pbm_handle, true, chip_name);
+    p_bmrt = new Bmruntime((bm_handle_t*)pbm_handle, true, chipid);
   else
-    p_bmrt = new Bmruntime(chip_name, devid);
+    p_bmrt = new Bmruntime(chipid, devid);
 
-  //chipid
-  unsigned int chipid = 0;
-  bm_handle_t handle = (bm_handle_t)bmrt_get_bm_handle(p_bmrt);
-  if (0 != bm_get_chipid(handle, &chipid)) {
-    BMRT_LOG(FATAL, "Cannot get chipid");
-  }
-  chip_check(chip_name, chipid);
   } catch (const std::runtime_error &e) {
       if (p_bmrt)
           delete p_bmrt;

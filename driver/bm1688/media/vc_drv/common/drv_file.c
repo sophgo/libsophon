@@ -1,5 +1,6 @@
 #include "drv_file.h"
 
+#ifdef SOC_MODE
 
 driver_file_t drv_fopen(const char *osal_file_tname, const char *mode)
 {
@@ -9,7 +10,6 @@ driver_file_t drv_fopen(const char *osal_file_tname, const char *mode)
 
     if (!tmp_fp)
         return NULL;
-
     if (!strncmp(mode, "rb", 2)) {
         tmp_fp->filep = filp_open(osal_file_tname, O_RDONLY/*|O_NONBLOCK*/, 0644);
     } else if (!strncmp(mode, "wb", 2)) {
@@ -72,4 +72,39 @@ int drv_fclose(driver_file_t fp)
 
     return 0;
 }
+#else
 
+
+driver_file_t drv_fopen(const char *osal_file_tname, const char *mode)
+{
+    return NULL;
+}
+
+size_t drv_fwrite(const void *p, int size, int count, driver_file_t fp)
+{
+
+    return 0;
+}
+
+size_t drv_fread(void *p, int size, int count, driver_file_t fp)
+{
+    return 0;
+}
+
+long drv_ftell(driver_file_t fp)
+{
+
+    return 0;
+}
+
+int drv_fseek(driver_file_t fp, long offset, int origin)
+{
+    return 0;
+}
+
+int drv_fclose(driver_file_t fp)
+{
+    return 0;
+}
+
+#endif

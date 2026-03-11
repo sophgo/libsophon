@@ -39,8 +39,8 @@ extern int jpu_free_memory(jpudrv_buffer_t *arg);
 extern int jpu_alloc_memory(jpudrv_buffer_t *arg);
 extern int jpu_invalidate_cache(jpudrv_buffer_t *arg);
 extern int jpu_flush_cache(jpudrv_buffer_t *arg);
-extern int jpu_core_release_resource(int id);
-extern int jpu_core_request_resource(int timeout);
+extern int jpu_core_release_resource(int soc_idx, int id);
+extern int jpu_core_request_resource(int soc_idx, int timeout);
 extern int jpu_open_device(void);
 extern int jpu_get_instancepool(jpudrv_buffer_t* arg);
 extern int jpu_open_instance(jpudrv_inst_info_t *instInfo);
@@ -82,7 +82,7 @@ typedef struct  {
     Int32                   jpu_buffer_pool_count;
 } jdi_info_t;
 
-static jdi_info_t s_jdi_info;
+static jdi_info_t *s_jdi_info;
 
 static Int32 swap_endian(BYTE* data, size_t len, Uint32 endian);
 
@@ -110,7 +110,7 @@ int jdi_get_task_num(void)
     jdi_info_t *jdi;
     int task_num;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if (jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00) {
         return 0;
@@ -131,7 +131,9 @@ int jdi_init(void)
     jdi_info_t *jdi;
     int i;
 
-    jdi = &s_jdi_info;
+    if (s_jdi_info == NULL)
+        s_jdi_info = vzalloc(sizeof(jdi_info_t));
+    jdi = s_jdi_info;
 
     if (jdi->jpu_fd != -1 && jdi->jpu_fd != 0x00)
     {
@@ -184,7 +186,7 @@ int jdi_release(void)
     jdi_info_t *jdi;
     int i;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if (!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00) {
         return 0;
@@ -200,11 +202,11 @@ int jdi_release(void)
         return 0;
     }
 
-    memset(jdi, 0x00, sizeof(jdi_info_t));
-
     for (i=0; i<MAX_NUM_JPU_CORE; i++)
         jdi_set_clock_gate(i, 0);
 
+    vfree(s_jdi_info);
+    s_jdi_info = NULL;
     return 0;
 }
 
@@ -213,7 +215,7 @@ jpu_instance_pool_t *jdi_get_instance_pool(void)
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb = {0};
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00 )
         return NULL;
@@ -240,7 +242,7 @@ int jdi_open_instance(unsigned long inst_idx)
     jdi_info_t *jdi;
     jpudrv_inst_info_t inst_info;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -257,7 +259,7 @@ int jdi_close_instance(unsigned long inst_idx)
     jdi_info_t *jdi;
     jpudrv_inst_info_t inst_info;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -271,7 +273,7 @@ int jdi_close_instance(unsigned long inst_idx)
 int jdi_get_instance_num(void)
 {
     jdi_info_t *jdi;
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -282,7 +284,7 @@ int jdi_get_instance_num(void)
 int jdi_hw_reset(int core_idx)
 {
     jdi_info_t *jdi;
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -303,26 +305,28 @@ void jdi_unlock(void)
 
 void jdi_write_register(int core_idx, unsigned long addr, unsigned int data)
 {
-    jdi_info_t *jdi = &s_jdi_info;
+    jdi_info_t *jdi = s_jdi_info;
+    int soc_idx = core_idx / MAX_NUM_JPU_CORE_CHIP;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return;
 
     //JLOG(INFO, "jdi_write_register core[%d] reg_addr:%x data:%x\n", core_idx, addr, data);
-    platform_write_register(addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr), data);
+    platform_write_register(soc_idx, addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr), data);
 }
 
 unsigned long jdi_read_register(int core_idx, unsigned long addr)
 {
     jdi_info_t *jdi;
+    int soc_idx = core_idx / MAX_NUM_JPU_CORE_CHIP;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd == -1 || jdi->jpu_fd == 0x00)
         return (unsigned int)-1;
 
     // JLOG(INFO, "jdi_read_register core[%d] reg_addr:0x%x\n", core_idx, addr);
-    return platform_read_register(addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr));
+    return platform_read_register(soc_idx, addr + jdi->jdb_register[core_idx].phys_addr, (unsigned int *)(addr + jdi->jdb_register[core_idx].virt_addr));
 }
 
 size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int endian)
@@ -334,7 +338,7 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
     unsigned long offset;
 #endif
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return 0;
@@ -372,7 +376,7 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
     offset = addr - (unsigned long)jdb.phys_addr;
     memcpy((void *)((unsigned long)jdb.virt_addr+offset), data, len);
 #else
-    pcie_memcpy_s2d(addr, (void *)data, len);
+    pcie_memcpy_s2d(jdb.soc_idx, addr, (void *)data, len);
 #endif
     if(jdb.is_cached)
     {
@@ -394,7 +398,7 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
     unsigned long offset;
 #endif
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -431,7 +435,7 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
     offset = addr - (unsigned long)jdb.phys_addr;
     memcpy(data, (const void *)((unsigned long)jdb.virt_addr+offset), len);
 #else
-    pcie_memcpy_d2s((void *)data, addr, len);
+    pcie_memcpy_d2s(jdb.soc_idx, (void *)data, addr, len);
 #endif
     swap_endian(data, len,  endian);
 
@@ -444,7 +448,7 @@ int jdi_insert_external_memory(jpu_buffer_t *vb)
     int i;
     jpudrv_buffer_t jdb;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -482,7 +486,7 @@ void jdi_remove_external_memory(jpu_buffer_t *vb)
     jpudrv_buffer_t jdb;
 
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!vb || !jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return;
@@ -519,7 +523,7 @@ int jdi_allocate_dma_memory(jpu_buffer_t *vb)
     int i;
     jpudrv_buffer_t jdb;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -528,6 +532,7 @@ int jdi_allocate_dma_memory(jpu_buffer_t *vb)
 
     jdb.size = vb->size;
     jdb.is_cached = vb->is_cached;
+    jdb.soc_idx = vb->soc_idx;
     if(jpu_alloc_memory(&jdb)) {
         JLOG(ERR, "alloc memory fail, size:%ld\n", jdb.size);
         return -1;
@@ -566,7 +571,7 @@ void jdi_free_dma_memory(jpu_buffer_t *vb)
     jpudrv_buffer_t jdb;
 
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!vb || !jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return;
@@ -640,7 +645,7 @@ int jdi_set_clock_gate(int core_idx, int enable)
     jdi_info_t *jdi = NULL;
     int ret;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return -1;
 
@@ -654,7 +659,7 @@ int jdi_get_clock_gate(int core_idx)
     jdi_info_t *jdi;
     int ret;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
         return -1;
@@ -712,7 +717,7 @@ int jdi_wait_interrupt(int core_idx, int timeout, unsigned long instIdx)
     int ret;
     jpudrv_intr_info_t intr_info;
 
-    jdi = &s_jdi_info;
+    jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd <= 0)
         return -1;
@@ -865,15 +870,16 @@ Int32 swap_endian(BYTE* data, size_t len, Uint32 endian)
     return changes == 0 ? 0 : 1;
 }
 
-void jdi_release_core(int coreidx)
+void jdi_release_core(int core_idx)
 {
-    jpu_core_release_resource(coreidx);
+    int soc_idx = core_idx / MAX_NUM_JPU_CORE_CHIP;
+    jpu_core_release_resource(soc_idx, core_idx);
 
     return;
 }
 
-int jdi_request_core(int timeout)
+int jdi_request_core(int soc_idx, int timeout)
 {
-    return jpu_core_request_resource(timeout);
+    return jpu_core_request_resource(soc_idx, timeout);
 }
 

@@ -40,6 +40,7 @@
 #include <linux/uaccess.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
+#include <linux/proc_fs.h>
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5,4,0)
 #include <linux/sched/signal.h>
@@ -51,6 +52,7 @@
 #include "jpulog.h"
 #include "ion.h"
 #include "platform.h"
+#include "vc_drv_proc.h"
 
 //#define ENABLE_DEBUG_MSG
 #ifdef ENABLE_DEBUG_MSG
@@ -113,6 +115,43 @@ typedef struct jpudrv_instance_pool_t {
     unsigned char codecInstPool[MAX_JPEG_NUM_INSTANCE][MAX_JPEG_INST_HANDLE_SIZE];
 } jpudrv_instance_pool_t;
 
+/* Structure representing JPU instance statistics */
+typedef struct jpu_instance_stats {
+    int core_id;             // Core identifier
+    int instance_id;         // Instance identifier
+
+    enum { DEC = 1, ENC } state;// Current state (1: decoding, 2: encoding)
+    int width;               // Frame width
+    int height;              // Frame height
+
+    unsigned long long dec_nr;          // Total decoded frames
+    unsigned long long dec_err_nr;      // Total decoding errors
+    unsigned long long enc_nr;          // Total encoded frames
+    unsigned long long enc_err_nr;      // Total encoding errors
+    int last_dec_err;                  // Last enc error code
+    int last_enc_err;                  // Last enc error code
+
+    int fps;                 // Calculated frames per second
+    u64 last_fps_ts;
+    int fps_counter;
+    u64 last_frame_ts;
+} jpu_inst_info_t;
+
+jpu_inst_info_t jpu_inst_info[MAX_NUM_JPU_CORE] = {0};
+
+#define MAX_JPU_STAT_WIN_SIZE  100
+typedef struct {
+    uint64_t jpu_working_time_in_ms[MAX_NUM_JPU_CORE];
+    uint64_t jpu_total_time_in_ms[MAX_NUM_JPU_CORE];
+    atomic_t jpu_busy_status[MAX_NUM_JPU_CORE];
+    char jpu_status_array[MAX_NUM_JPU_CORE][MAX_JPU_STAT_WIN_SIZE];
+    int jpu_status_index[MAX_NUM_JPU_CORE];
+    int jpu_core_usage[MAX_NUM_JPU_CORE];
+    int jpu_instant_interval;
+} jpu_statistic_info_t;
+static jpu_statistic_info_t s_jpu_usage_info = {0};
+static struct proc_dir_entry *jpuinfo_entry = NULL;
+
 static int jpu_hw_reset(int idx);
 #ifdef VC_SUPPORT_CLOCK_CONTROL
 struct clk *jpu_clk_get(struct device *dev);
@@ -123,7 +162,9 @@ void jpu_clk_enable(int core_idx);
 
 static jpudrv_buffer_t s_instance_pool = {0};
 static jpu_drv_context_t s_jpu_drv_context;
-static int s_jpu_open_ref_count;
+static int s_jpu_open_ref_count = 0;
+static struct delayed_work jpu_monitor_work;
+
 static int s_jpu_irq[MAX_NUM_JPU_CORE] = {46, 47, 48, 49};
 int jpu_core_irq_count[MAX_NUM_JPU_CORE] = {0};
 int irq_status[MAX_NUM_JPU_CORE] = {0};
@@ -151,8 +192,8 @@ static jpu_power_ctrl jpu_pwm_ctrl = {0};
 #ifdef PLATFORM_SOC
 static struct device *jpu_dev;
 #endif
-static int s_interrupt_flag[MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE];
-static wait_queue_head_t s_interrupt_wait_q[MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE];
+static int *s_interrupt_flag;
+static wait_queue_head_t *s_interrupt_wait_q;
 
 
 // static spinlock_t s_jpu_lock = __SPIN_LOCK_UNLOCKED(s_jpu_lock);
@@ -160,6 +201,8 @@ static DEFINE_MUTEX(s_jpu_lock);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
 static DECLARE_MUTEX(s_jpu_sem);
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
+static DEFINE_SEMAPHORE(s_jpu_sem, 1);
 #else
 static DEFINE_SEMAPHORE(s_jpu_sem);
 #endif
@@ -172,8 +215,8 @@ static struct list_head s_inst_list_head = LIST_HEAD_INIT(s_inst_list_head);
 #define NPT_REG_SIZE                            0x300
 #define MJPEG_PIC_STATUS_REG(_inst_no)          (NPT_BASE + (_inst_no*NPT_REG_SIZE) + 0x004)
 
-#define ReadJpuRegister(core,addr)           platform_readl(s_jpu_register[core].phys_addr + addr, s_jpu_register[core].virt_addr + addr)
-#define WriteJpuRegister(core,addr, val)     platform_writel(s_jpu_register[core].phys_addr + addr, s_jpu_register[core].virt_addr + addr, val)
+#define ReadJpuRegister(core,addr)           platform_readl(core/MAX_NUM_JPU_CORE_CHIP, s_jpu_register[core].phys_addr + addr, s_jpu_register[core].virt_addr + addr)
+#define WriteJpuRegister(core,addr, val)     platform_writel(core/MAX_NUM_JPU_CORE_CHIP, s_jpu_register[core].phys_addr + addr, s_jpu_register[core].virt_addr + addr, val)
 
 
 extern int jpu_core_init_resources(unsigned int core_num);
@@ -184,8 +227,8 @@ uint32_t jpu_get_extension_address(int core_idx)
     uint32_t origin_value = 0;
     int shift = 0;
 
-    shift = (core_idx + 1) * 4;
-    origin_value = platform_readl(JPEG_TOP_REG, virt_top_addr);
+    shift = (core_idx%MAX_NUM_JPU_CORE_CHIP + 1) * 4;
+    origin_value = platform_readl(core_idx/MAX_NUM_JPU_CORE_CHIP, JPEG_TOP_REG, virt_top_addr);
     return ((origin_value >> shift) & 0xf);
 }
 
@@ -194,10 +237,11 @@ void jpu_set_extension_address(int core_idx, uint32_t addr)
     uint32_t origin_value = 0;
     uint32_t bit_mask = 0;
     int shift = 0;
+    int soc_idx = core_idx/MAX_NUM_JPU_CORE_CHIP;
 
     DPRINTK("[JPUDRV] jpu_set_extension_address: core_idx=%d, addr=0x%lx\n", core_idx, addr);
 
-    switch (core_idx) {
+    switch (core_idx%MAX_NUM_JPU_CORE_CHIP) {
         case 0:  // jpu core 0
             bit_mask = 0xffffff0f;
             shift = 4;
@@ -219,8 +263,8 @@ void jpu_set_extension_address(int core_idx, uint32_t addr)
             return;
     }
 
-    origin_value = platform_readl(JPEG_TOP_REG, virt_top_addr);
-    platform_writel(JPEG_TOP_REG, virt_top_addr, (origin_value & bit_mask) | ((addr & 0xf) << shift));
+    origin_value = platform_readl(soc_idx, JPEG_TOP_REG, virt_top_addr);
+    platform_writel(soc_idx, JPEG_TOP_REG, virt_top_addr, (origin_value & bit_mask) | ((addr & 0xf) << shift));
     return;
 }
 
@@ -229,8 +273,9 @@ void jpu_sw_top_reset(int core_idx)
     uint32_t origin_value = 0;
     uint32_t bit_mask = 0;
     unsigned long virt_top_reset_addr = 0;
+    int soc_idx = core_idx/MAX_NUM_JPU_CORE_CHIP;
 
-    switch (core_idx) {
+    switch (core_idx%MAX_NUM_JPU_CORE_CHIP) {
         case 0:  // jpu core 0
             bit_mask = 0xffffffff & (~(1 << 18));
             break;
@@ -251,11 +296,11 @@ void jpu_sw_top_reset(int core_idx)
 
     mutex_lock(&s_jpu_lock);
     virt_top_reset_addr = (unsigned long)platform_ioremap(JPEG_TOP_RESET_REG, 4);
-    origin_value = platform_readl(JPEG_TOP_RESET_REG, virt_top_reset_addr);
+    origin_value = platform_readl(soc_idx, JPEG_TOP_RESET_REG, virt_top_reset_addr);
     DPRINTK("[JPUDRV] jpu_top_reset: origin_value = 0x%lx\n", origin_value);
-    platform_writel(JPEG_TOP_RESET_REG, virt_top_reset_addr, origin_value & bit_mask);
+    platform_writel(soc_idx, JPEG_TOP_RESET_REG, virt_top_reset_addr, origin_value & bit_mask);
     udelay(1);
-    platform_writel(JPEG_TOP_RESET_REG, virt_top_reset_addr, origin_value);
+    platform_writel(soc_idx, JPEG_TOP_RESET_REG, virt_top_reset_addr, origin_value);
     platform_iounmap((void *)virt_top_reset_addr);
     mutex_unlock(&s_jpu_lock);
 
@@ -267,11 +312,12 @@ static int jpu_alloc_dma_buffer(jpudrv_buffer_t *jb)
     if (!jb)
         return -1;
 #ifdef JPU_SUPPORT_ION_MEMORY
-    if (base_ion_alloc((uint64_t *)&jb->phys_addr, (void **)&jb->virt_addr, "jpeg_ion", jb->size, jb->is_cached) != 0) {
+    if (platform_base_ion_alloc(jb->soc_idx, (uint64_t *)&jb->phys_addr, (void **)&jb->virt_addr, "jpeg_ion", jb->size, jb->is_cached) != 0) {
         JLOG(ERR, "[JPUDRV] Physical memory allocation error size=%lu\n", jb->size);
         return -1;
     }
     jb->base = jb->phys_addr;
+    base_ion_cache_invalidate(jb->phys_addr, (void *)jb->virt_addr, jb->size);
 #else
     jb->base = (unsigned long)dma_alloc_coherent(jpu_dev, PAGE_ALIGN(jb->size), (dma_addr_t *) (&jb->phys_addr), GFP_DMA | GFP_KERNEL);
     if ((void *)(jb->base) == NULL) {
@@ -290,7 +336,7 @@ static void jpu_free_dma_buffer(jpudrv_buffer_t *jb)
     }
     if (jb->base)
 #ifdef JPU_SUPPORT_ION_MEMORY
-        base_ion_free(jb->phys_addr);
+        platform_base_ion_free(jb->soc_idx, jb->phys_addr);
 #else
         dma_free_coherent(jpu_dev, PAGE_ALIGN(jb->size), (void *)jb->base, jb->phys_addr);
 #endif
@@ -320,7 +366,7 @@ int jpu_flush_cache(jpudrv_buffer_t *jb)
 
 int get_max_num_jpu_core(void) {
 
-    return MAX_NUM_JPU_CORE;
+    return MAX_NUM_JPU_CORE_CHIP*platform_get_soc_cnt();
 }
 
 irqreturn_t jpu_irq_handler(int param, void *dev_id)
@@ -341,7 +387,7 @@ irqreturn_t jpu_irq_handler(int param, void *dev_id)
     core = param;
 #endif
 
-	platform_disable_irq(s_jpu_irq[core]);
+	platform_disable_irq(core/MAX_NUM_JPU_CORE_CHIP, s_jpu_irq[core%MAX_NUM_JPU_CORE_CHIP]);
     jpu_core_irq_count[core]++;
     irq_status[core] = 0;
 
@@ -389,7 +435,7 @@ int jpu_enable_irq(int core_idx)
         jpu_core_irq_count[core_idx] = 0;
         return 0;
     }
-    platform_enable_irq(s_jpu_irq[core_idx]);
+    platform_enable_irq(core_idx/MAX_NUM_JPU_CORE_CHIP, s_jpu_irq[core_idx%MAX_NUM_JPU_CORE_CHIP]);
     jpu_core_irq_count[core_idx]--;
     irq_status[core_idx] = 1;
 
@@ -405,10 +451,13 @@ int jpu_wait_interrupt(jpudrv_intr_info_t *arg)
 
     instance_no = p_info->inst_idx;
     core_idx = p_info->core_idx;
+    atomic_inc(&s_jpu_usage_info.jpu_busy_status[core_idx]);
+
     DPRINTK("[JPUDRV] 2 INSTANCE NO: %u, core_idx:%u s_interrupt_flag:%d\n", instance_no, core_idx, s_interrupt_flag[core_idx* MAX_JPEG_NUM_INSTANCE + instance_no]);
     ret = wait_event_timeout(s_interrupt_wait_q[core_idx * MAX_JPEG_NUM_INSTANCE + instance_no], s_interrupt_flag[core_idx* MAX_JPEG_NUM_INSTANCE + instance_no] != 0, msecs_to_jiffies(p_info->timeout));
     if (!ret) {
         DPRINTK("[JPUDRV] INSTANCE NO: %d ETIME\n", instance_no);
+        atomic_dec(&s_jpu_usage_info.jpu_busy_status[core_idx]);
         return -ETIME;
     }
 
@@ -417,7 +466,7 @@ int jpu_wait_interrupt(jpudrv_intr_info_t *arg)
     p_info->intr_reason = s_jpu_drv_context.interrupt_reason[core_idx][instance_no];
     s_interrupt_flag[core_idx* MAX_JPEG_NUM_INSTANCE + instance_no] = 0;
     s_jpu_drv_context.interrupt_reason[core_idx][instance_no] = 0;
-
+    atomic_dec(&s_jpu_usage_info.jpu_busy_status[core_idx]);
     return 0;
 }
 
@@ -533,11 +582,62 @@ int jpu_get_instancepool(jpudrv_buffer_t* arg)
     return 0;
 }
 
+static int check_jpu_core_busy(jpu_statistic_info_t *jpu_usage_info, int coreIdx)
+{
+    int ret = 0;
+
+    if (atomic_read(&jpu_usage_info->jpu_busy_status[coreIdx]) > 0)
+        ret = 1;
+
+    return ret;
+}
+
+
+static int jpu_update_usage_info(jpu_statistic_info_t *jpu_usage_info)
+{
+    int ret = 0, i;
+
+    /* update usage */
+    for (i = 0; i < get_max_num_jpu_core(); i++) {
+        int busy = check_jpu_core_busy(jpu_usage_info, i);
+        int jpu_core_usage = 0;
+        int j;
+        jpu_usage_info->jpu_status_array[i][jpu_usage_info->jpu_status_index[i]] = busy;
+        jpu_usage_info->jpu_status_index[i]++;
+        jpu_usage_info->jpu_status_index[i] %= MAX_JPU_STAT_WIN_SIZE;
+
+        if (busy == 1)
+            jpu_usage_info->jpu_working_time_in_ms[i] += jpu_usage_info->jpu_instant_interval / MAX_JPU_STAT_WIN_SIZE;
+        jpu_usage_info->jpu_total_time_in_ms[i] += jpu_usage_info->jpu_instant_interval / MAX_JPU_STAT_WIN_SIZE;
+
+        for (j = 0; j < MAX_JPU_STAT_WIN_SIZE; j++)
+            jpu_core_usage += jpu_usage_info->jpu_status_array[i][j];
+
+        jpu_usage_info->jpu_core_usage[i] = jpu_core_usage;
+    }
+
+    return ret;
+}
+
+static void jpu_monitor_work_fn(struct work_struct *work)
+{
+    if (!READ_ONCE(s_jpu_open_ref_count))
+        return;
+
+    jpu_update_usage_info(&s_jpu_usage_info);
+    schedule_delayed_work(&jpu_monitor_work,
+                          msecs_to_jiffies(100));
+}
+
 int jpu_open_instance(jpudrv_inst_info_t *inst_info)
 {
     mutex_lock(&s_jpu_lock);
-    s_jpu_open_ref_count++; /* flag just for that jpu is in opened or closed */
+
+    if (++s_jpu_open_ref_count == 1) {
+        schedule_delayed_work(&jpu_monitor_work, 0);
+    }
     inst_info->inst_open_count = s_jpu_open_ref_count;
+
     mutex_unlock(&s_jpu_lock);
 
     DPRINTK("[JPUDRV] JDI_IOCTL_OPEN_INSTANCE inst_idx=%d, s_jpu_open_ref_count=%d, inst_open_count=%d\n",
@@ -550,11 +650,12 @@ int jpu_close_instance(jpudrv_inst_info_t *inst_info)
     DPRINTK("[JPUDRV][+]JDI_IOCTL_CLOSE_INSTANCE\n");
 
     mutex_lock(&s_jpu_lock);
-    s_jpu_open_ref_count--; /* flag just for that jpu is in opened or closed */
+
+    if (--s_jpu_open_ref_count == 0) {
+        cancel_delayed_work_sync(&jpu_monitor_work);
+    }
     inst_info->inst_open_count = s_jpu_open_ref_count;
     mutex_unlock(&s_jpu_lock);
-
-    //jpu_core_release_resource(inst_info.core_idx);
 
     DPRINTK("[JPUDRV] JDI_IOCTL_CLOSE_INSTANCE inst_idx=%d, s_jpu_open_ref_count=%d, inst_open_count=%d\n",
             (int)inst_info->inst_idx, s_jpu_open_ref_count, inst_info->inst_open_count);
@@ -645,6 +746,77 @@ int jpeg_drv_resume(struct platform_device *pdev)
 }
 #endif /* !CONFIG_PM */
 
+static ssize_t jpu_proc_info_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+{
+    char *dat;
+    int len = 0, core_idx = 0, err = 0;
+    struct timespec64 ts;
+    u64 currentTs;
+
+    ktime_get_ts64(&ts);
+    currentTs = ts.tv_sec * 1000 + ts.tv_nsec/1000000;
+
+    dat = vzalloc(1024*get_max_num_jpu_core());
+    sprintf(dat + strlen(dat), "\"jpuinfo\"\n");
+    for (core_idx = 0; core_idx < get_max_num_jpu_core(); core_idx++) {
+        sprintf(dat + strlen(dat),
+                "{\"core id\":%d, \"instance_count\":%d, \"usage(short|long)\":%d%%|%llu%%}\n",
+                core_idx,
+                s_jpu_open_ref_count,
+                s_jpu_usage_info.jpu_core_usage[core_idx],
+                s_jpu_usage_info.jpu_working_time_in_ms[core_idx]*100/s_jpu_usage_info.jpu_total_time_in_ms[core_idx]);
+    }
+
+    // If no new frame has arrived in the past second, reset fps, fps_counter, state etc to 0 (idle).
+    for (core_idx = 0; core_idx < get_max_num_jpu_core(); core_idx++) {
+        if (currentTs - jpu_inst_info[core_idx].last_frame_ts > 1000) {
+            jpu_inst_info[core_idx].fps = 0;
+            jpu_inst_info[core_idx].instance_id = 0;
+            jpu_inst_info[core_idx].width = 0;
+            jpu_inst_info[core_idx].height = 0;
+            jpu_inst_info[core_idx].fps_counter = 0;
+            jpu_inst_info[core_idx].state = 0;
+        }
+    }
+
+    for (core_idx = 0; core_idx < get_max_num_jpu_core(); core_idx++) {
+        sprintf(dat + strlen(dat),
+                "{\"instance_id\":%d, \"status\":%s, \"res\":%dx%d, "
+                "\"dec_nr\":%llu, \"dec_err_nr\":%llu, \"last_dec_err\":%d,"
+                "\"enc_nr\":%llu, \"enc_err_nr\":%llu, \"last_enc_err\":%d,"
+                "\"fps\":%d}\n",
+                jpu_inst_info[core_idx].instance_id,
+                jpu_inst_info[core_idx].state ? (jpu_inst_info[core_idx].state == DEC ? "DEC" : "ENC") : "IDLE",
+                jpu_inst_info[core_idx].width, jpu_inst_info[core_idx].height,
+                jpu_inst_info[core_idx].dec_nr, jpu_inst_info[core_idx].dec_err_nr, jpu_inst_info[core_idx].last_dec_err,
+                jpu_inst_info[core_idx].enc_nr, jpu_inst_info[core_idx].enc_err_nr, jpu_inst_info[core_idx].last_enc_err,
+                jpu_inst_info[core_idx].fps);
+    }
+
+    len = strlen(dat) + 1;
+    if (size < len) {
+        printk("read buf too small\n");
+        vfree(dat);
+        return -EIO;
+    }
+
+    if (*ppos >= len) return 0;
+
+    err = copy_to_user(buf, dat, len);
+    if (err) {
+        vfree(dat);
+        return 0;
+    }
+    *ppos = len;
+
+    vfree(dat);
+
+    return len;
+}
+
+static const struct proc_ops jpu_proc_info_operations = {
+    .proc_read  = jpu_proc_info_read,
+};
 
 int jpeg_platform_init(struct platform_device *pdev)
 {
@@ -653,6 +825,9 @@ int jpeg_platform_init(struct platform_device *pdev)
     struct resource *res = NULL;
 
     DPRINTK("[JPUDRV] begin jpeg_platform_init\n");
+
+    s_interrupt_wait_q = vzalloc(MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE*sizeof(wait_queue_head_t));
+    s_interrupt_flag = vzalloc(MAX_NUM_JPU_CORE*MAX_JPEG_NUM_INSTANCE*sizeof(int));
 
     for (i=0; i<MAX_NUM_JPU_CORE * MAX_JPEG_NUM_INSTANCE; i++) {
         init_waitqueue_head(&s_interrupt_wait_q[i]);
@@ -670,7 +845,7 @@ int jpeg_platform_init(struct platform_device *pdev)
             s_jpu_register[i].phys_addr = res->start;
             s_jpu_register[i].size  = resource_size(res);
         } else {
-            s_jpu_register[i].phys_addr = s_jpu_reg_phy_base[i];
+            s_jpu_register[i].phys_addr = s_jpu_reg_phy_base[i%MAX_NUM_JPU_CORE_CHIP];
             s_jpu_register[i].size      = JPU_REG_SIZE;
         }
         s_jpu_register[i].virt_addr = (unsigned long)platform_ioremap(s_jpu_register[i].phys_addr, s_jpu_register[i].size);
@@ -689,6 +864,9 @@ int jpeg_platform_init(struct platform_device *pdev)
 	    }
     }
 #endif
+
+    jpuinfo_entry = proc_create(JPUINFO_PROC_NAME, 0666, NULL, &jpu_proc_info_operations);
+    INIT_DELAYED_WORK(&jpu_monitor_work, jpu_monitor_work_fn);
 
 #ifdef JPU_SUPPORT_ISR
         for(i = 0; i < MAX_NUM_JPU_CORE; i++) {
@@ -727,7 +905,6 @@ ERROR_PROVE_DEVICE:
         s_jpu_register[i].virt_addr = 0;
     }
 
-
     DPRINTK("[JPUDRV] end jpeg_init result=0x%x\n", err);
     return err;
 }
@@ -760,8 +937,14 @@ void jpeg_platform_exit(void)
         virt_top_addr = 0;
     }
 
-    jpu_core_cleanup_resources();
+    if (jpuinfo_entry) {
+        proc_remove(jpuinfo_entry);
+        jpuinfo_entry = NULL;
+    }
 
+    jpu_core_cleanup_resources();
+    vfree(s_interrupt_wait_q);
+    vfree(s_interrupt_flag);
     DPRINTK("[JPUDRV] [-]jpeg_exit\n");
 
     return;

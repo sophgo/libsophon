@@ -8,7 +8,6 @@
 #include <functional>
 #include <thread>
 #include <mutex>
-#include "bmrt_arch_info.h"
 #include "bmruntime_common.h"
 #ifdef __linux__
 #define TIME_TO_USECS(t) (t.tv_sec*1000000+ t.tv_usec)
@@ -154,11 +153,11 @@ private:
     int getenv_int(const char* name, int default_val = 0);
     bool getenv_bool(const char* name, bool default_val = false);
     bm_handle_t get_handle() { return handle; }
+    Bmruntime* get_bmrt() { return p_bmrt; }
 
 private:
     Bmruntime* p_bmrt = nullptr;
     std::vector<profile_cmd_info_t*> cmd_infos;
-    int arch = -1;
     int devid = -1;
     bool enabled = false;
 

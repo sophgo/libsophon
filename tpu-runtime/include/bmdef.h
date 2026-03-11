@@ -53,6 +53,7 @@ typedef enum bm_runtime_flag_e {
   BM_RUNTIME_CHECK_MEM = 1 << 1,      /*bit1: 0,no check; 1,check sha256*/
   BM_RUNTIME_SHARE_DYNMEM = 1 << 2,   /*bit2: 0,no share; 1,share dyn mem*/
   BM_RUNTIME_SOC_CMDBUF_MEM = 1 << 3, /*bit3: 0,s2d sys mem for cmdbuf; 1,mmap ddr for cmdbuf, only support soc*/
+  BM_RUNTIME_FREE_COEFF = 1 << 4,     /*bit4: 0,keep coeff in memory; 1,free coeff when bmodel is released*/
 } bm_runtime_flag_t;
 
 /* flags for addr_mode */
@@ -88,6 +89,11 @@ typedef struct bm_tensor_s {
 
 /* --------------------------------------------------------------------------*/
 /* network information structure */
+
+typedef struct bm_coeff_info_s {
+  char path[256];
+  bm_device_mem_t device_mem;
+} bm_coeff_info_t;
 
 /* bm_stage_info_t holds input/output shapes and device mems; every network can contain one or more
  * stages */

@@ -1,8 +1,11 @@
 #include <linux/uaccess.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/ktime.h>
+#include <linux/jiffies.h>
 #include "bm_ctl.h"
 #include "bm_common.h"
+#include "bm_thermal.h"
 #include "bm_attr.h"
 #include "bm_pcie.h"
 #include "bm_card.h"
@@ -20,7 +23,7 @@
 #define CORE_ID0 0
 #define CORE_ID1 1
 
-int bm_monitor_thread(void *date)
+static int bm_monitor_thread(void *date)
 {
 	int ret = 0;
 	struct bm_device_info *bmdi = (struct bm_device_info *)date;

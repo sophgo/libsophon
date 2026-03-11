@@ -48,7 +48,6 @@
 //------------------------------------------------------------------------------
 #if defined(linux) || defined(__linux) || defined(ANDROID)
 #define SUPPORT_INTERRUPT
-#define SUPPORT_MULTI_INST_INTR
 #endif
 
 

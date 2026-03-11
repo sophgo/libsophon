@@ -1,6 +1,7 @@
 #include "bm_common.h"
 #include "bm_gmem.h"
 #include "bm1682_reg.h"
+#include "bm1682_gmem.h"
 
 #ifndef SOC_MODE
 int bmdrv_bm1682_parse_reserved_mem_info(struct bm_device_info *bmdi)

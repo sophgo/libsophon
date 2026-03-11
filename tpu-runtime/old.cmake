@@ -34,7 +34,6 @@ else()
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include/flatbuffers)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include/md5)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include)

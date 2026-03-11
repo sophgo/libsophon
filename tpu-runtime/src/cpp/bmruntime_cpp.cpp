@@ -13,7 +13,6 @@
 #include "bmruntime.h"
 #include "bmruntime_common.h"
 
-using bmruntime::bmfunc;
 using bmruntime::Bmruntime;
 
 namespace bmruntime {
@@ -89,32 +88,6 @@ bool IsSameShape(const bm_shape_t &left, const bm_shape_t &right)
   return true;
 }
 
-static std::string chip_name_by_id(unsigned int chipid) {
-  std::string chip_name = "";
-  if (chipid == 0x1684) {
-    chip_name = "BM1684";
-  } else if (chipid == 0x1686) {
-    chip_name = "BM1684X";
-  } else if (chipid == 0x1686a200) {
-    chip_name = "BM1688";
-  } else if (chipid == 0x1682) {
-    chip_name = "BM1682";
-  } else if (chipid == 0x1880) {
-    chip_name = "BM1880";
-  } else if (chipid == 0x2260) {
-    chip_name = "BM1690";
-  } else if (chipid == 0x184) {
-    chip_name = "MARS3";
-  } else if (chipid == 0x8000) {
-    chip_name = "SGTPUV8";
-  } else if (chipid == 0x2380) {
-    chip_name = "SG2380";
-  } else {
-    BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
-  }
-  return chip_name;
-}
-
 Context::Context(bm_handle_t bm_handle)
 {
   bm_handle_ = NULL;
@@ -126,10 +99,8 @@ Context::Context(bm_handle_t bm_handle)
     BMRT_LOG(FATAL, "Cannot get chipid");
   }
 
-  std::string chip_name = chip_name_by_id(chipid);
-
-  Bmruntime *p_bmrt = new Bmruntime(&bm_handle, true, chip_name);
-  BMRT_ASSERT_INFO(p_bmrt != NULL,"p_bmrt shouldn't be NULL,chip_name: %s",chip_name.c_str());
+  Bmruntime *p_bmrt = new Bmruntime(&bm_handle, true, chipid);
+  BMRT_ASSERT_INFO(p_bmrt != NULL,"p_bmrt shouldn't be NULL,chip_name: %d", chipid);
   body_ = (void *)p_bmrt;
 }
 
@@ -146,9 +117,7 @@ Context::Context(int devid)
     BMRT_LOG(FATAL, "Cannot get chipid");
   }
 
-  std::string chip_name = chip_name_by_id(chipid);
-
-  Bmruntime *p_bmrt = new Bmruntime(&bm_handle_, true, chip_name);
+  Bmruntime *p_bmrt = new Bmruntime(&bm_handle_, true, chipid);
   BMRT_ASSERT_INFO(p_bmrt != NULL,"p_bmrt shouldn't be NULL");
   body_ = (void *)p_bmrt;
 }

@@ -1562,22 +1562,14 @@ typedef struct TestEncConfig_struct {
     int    forcePicQpValue;
     int    forcePicTypePicIdx;
     int    forcePicTypeValue;
-    char optYuvPath[MAX_FILE_PATH];
 #ifdef SUPPORT_SOURCE_RELEASE_INTERRUPT
     int srcReleaseIntEnable;
 #endif
     int ringBufferWrapEnable;
 
     EncSeiNalData seiDataEnc;
-    char hrd_rbsp_file_name[MAX_FILE_PATH];
-    osal_file_t hrd_rbsp_fp;
-    char vui_rbsp_file_name[MAX_FILE_PATH];
-    osal_file_t vui_rbsp_fp;
-    char prefix_sei_nal_file_name[MAX_FILE_PATH];
-    osal_file_t prefix_sei_nal_fp;
     int  prefix_sei_file_max_size;
-    char suffix_sei_nal_file_name[MAX_FILE_PATH];
-    osal_file_t suffix_sei_nal_fp;
+
     int  suffix_sei_file_max_size;
     int s2SearchCenterEnable;
     int s2SearchCenterXDiv4;
@@ -1631,18 +1623,6 @@ extern void GenRegionToMap(
 
 #define VUI_HRD_RBSP_BUF_SIZE           0x4000
 #define SEI_NAL_DATA_BUF_SIZE           0x4000
-extern Int32 writeVuiRbsp(
-    int coreIdx,
-    TestEncConfig *encConfig,
-    EncOpenParam *encOP,
-    vpu_buffer_t *vbVuiRbsp
-    );
-extern Int32 writeHrdRbsp(
-    int coreIdx,
-    TestEncConfig *encConfig,
-    EncOpenParam *encOP,
-    vpu_buffer_t *vbHrdRbsp
-    );
 
 extern void setEncBgMode(
     EncParam *encParam,

@@ -16,7 +16,7 @@ void img_start(struct scaler *scaler, u8 dev_idx, u8 chn_num);
 void img_reset(struct scaler *scaler, u8 dev_idx);
 bool img_left_tile_cfg(struct scaler *scaler, u8 dev_idx, u16 online_l_width);
 bool img_right_tile_cfg(struct scaler *scaler, u8 dev_idx, u16 online_r_start, u16 online_r_end);
-bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_left);
+bool img_top_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_right);
 bool img_down_tile_cfg(struct scaler *scaler, u8 dev_idx, u8 is_right);
 
 void vpss_stauts(struct scaler *scaler, u8 dev_idx);

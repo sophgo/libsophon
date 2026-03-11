@@ -108,7 +108,11 @@ static ssize_t vpss_proc_write(struct file *file, const char __user *user_buf, s
 
 static int vpss_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+	return single_open(file, vpss_proc_show, pde_data(inode));
+#else
 	return single_open(file, vpss_proc_show, PDE_DATA(inode));
+#endif
 }
 
 static ssize_t vpp_proc_write(struct file *file, const char __user *user_buf, size_t count, loff_t *ppos)
@@ -130,7 +134,11 @@ static ssize_t vpp_proc_write(struct file *file, const char __user *user_buf, si
 
 static int vpp_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+	return single_open(file, vpp_proc_show, pde_data(inode));
+#else
 	return single_open(file, vpp_proc_show, PDE_DATA(inode));
+#endif
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))

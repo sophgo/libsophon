@@ -171,7 +171,7 @@ int pwr_ctrl_ioctl(struct bm_device_info *bmdi, void *arg)
 }
 
 
-int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
+static int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 {
 	int threshold = 1000000;
 	int i = 0;
@@ -223,7 +223,7 @@ int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 }
 
 DEFINE_SPINLOCK(msg_dump_lock);
-void bmdev_dump_reg(struct bm_device_info *bmdi, u32 channel, int core_id)
+static void bmdev_dump_reg(struct bm_device_info *bmdi, u32 channel, int core_id)
 {
     int i=0;
     spin_lock(&msg_dump_lock);
@@ -281,6 +281,12 @@ int bmdrv_api_init(struct bm_device_info *bmdi, u32 core, u32 channel)
 			gp_reg_write_enh(bmdi, GP_REG_MESSAGE_WP_CHANNEL_XPU, 0);
 			gp_reg_write_enh(bmdi, GP_REG_MESSAGE_RP_CHANNEL_XPU, 0);
 		}
+		if (ret != 0) {
+			dev_err(bmdi->dev, "kfifo_alloc failed! ret=%d, size=%d\n", ret, bmdi->cinfo.share_mem_size *4);
+			return ret;
+		}
+		pr_info("core:%d kfifo init: total size=%d, expect=%d\n", core,
+			kfifo_size(&apinfo->api_fifo), bmdi->cinfo.share_mem_size *4);
 	} else {
 		INIT_LIST_HEAD(&apinfo->api_list);
 		if (core == 0) {
@@ -324,7 +330,7 @@ void bmdrv_api_deinit(struct bm_device_info *bmdi, u32 core, u32 channel)
 #define LIB_MAX_NAME_LEN 64
 #define FUNC_MAX_NAME_LEN 64
 
-int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
+static int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 {
 	int ret = 0;
 	struct bmcpu_lib *lib_node;
@@ -394,7 +400,7 @@ int bmdrv_api_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 	return 0;
 }
 
-int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
+static int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_api)
 {
 	int ret = 0;
 	int i;
@@ -459,7 +465,7 @@ int bmdrv_api_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t bm_ap
 	return 0;
 }
 
-int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
+static int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api)
 {
 	int ret;
 	static int f_id = 22;
@@ -523,7 +529,7 @@ int bmdrv_api_dyn_get_func_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	return ret;
 }
 
-int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
+static int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -574,7 +580,7 @@ int bmdrv_api_dyn_load_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_
 	}
 }
 
-int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
+static int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *p_bm_api, struct file *file)
 {
 	int ret;
 	bm_api_dyn_cpu_load_library_internal_t api_cpu_load_library_internal;
@@ -633,7 +639,7 @@ int bmdrv_api_dyn_unload_lib_process(struct bm_device_info *bmdi, bm_api_ext_t *
 	return -1;
 }
 
-int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg, int core_id)
+static int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned char *msg, int core_id)
 {
 	int ret = 0;
 	struct bm_thread_info *thd_info;
@@ -1080,7 +1086,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 			/* copy api data to fifo */
 			ret = bmdev_copy_to_msgfifo(bmdi, &api_header, (bm_api_t *)bm_api_p, &api_opt_header, channel, api_from_userspace);;
 		} else {
-			mutex_unlock(&apinfo->api_fifo_mutex);
+			mutex_lock(&apinfo->api_fifo_mutex);
 			fifo_avail = kfifo_avail(&apinfo->api_fifo);
 			if (fifo_avail >= API_ENTRY_SIZE) {
 				kfifo_in(&apinfo->api_fifo, api_entry, API_ENTRY_SIZE);
@@ -1094,7 +1100,10 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 				} else {
 					mutex_unlock(&apinfo->api_mutex);
 				}
-				dev_err(bmdi->dev, "api fifo full!%d\n", fifo_avail);
+				dev_err(bmdi->dev,
+					"core:%d api fifo full! avail=%d, len=%d, total=%d\n api_id:%x share_mem_size:%d(bytes) ENTRY_SIZE:%ld",
+					core_id, fifo_avail, kfifo_len(&apinfo->api_fifo), kfifo_size(&apinfo->api_fifo),
+					bm_api.api_id, bmdi->cinfo.share_mem_size * 4, API_ENTRY_SIZE);
 				pr_err("%s bm-sophon%d api fifo full!\n", __func__, bmdi->dev_index);
 				kfree(api_entry);
 				return -EBUSY;

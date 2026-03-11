@@ -223,9 +223,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 #ifndef SOC_MODE
 	case BMDEV_TRIGGER_VPP:
+#ifdef MEDIA_ENABLE
 		//pr_info("begin process trigger_vpp in bm_ioctl.\n");
 		ret = trigger_vpp(bmdi, arg);
 		//pr_info("process trigger_vpp in bm_ioctl complete.ret=%d\n", ret);
+#endif
 		break;
 	case BMDEV_TRIGGER_SPACC:
 		//pr_info("begin process trigger_spacc in bm_ioctl.\n");
@@ -1117,7 +1119,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
 		mutex_lock(&c_attr->attr_mutex);
-		if (copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int)));
+		ret =copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int));
 		mutex_unlock(&c_attr->attr_mutex);
 		break;
 		}

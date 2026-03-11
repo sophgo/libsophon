@@ -150,6 +150,7 @@ typedef struct _InitEncConfig_ {
     int s32MirrorDirection;
     int s32CmdQueueDepth;
     int s32EncMode;
+    int socIdx;
 } InitEncConfig;
 
 typedef struct _EncOnePicCfg_ {
@@ -710,6 +711,7 @@ typedef struct _InitDecConfig_ {
     void* Ctable_buffer;
     unsigned int numOfDecFbc;
     unsigned int numOfDecwtl;
+    int socIdx;
 } InitDecConfig;
 
 typedef struct _DecOnePicCfg_ {
@@ -787,7 +789,7 @@ int set_user_pic(void *pHandle, const DispFrameCfg *usr_pic);
 int enable_user_pic(void *pHandle, int instant);
 int disable_user_pic(void *pHandle);
 int set_display_mode(void *pHandle, int display_mode);
-int vdec_init_handle_pool(void);
+int vdec_init_handle_pool(int soc_idx);
 int vdec_deinit_handle_pool(void);
 #ifdef __cplusplus
 }

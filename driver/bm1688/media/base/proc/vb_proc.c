@@ -14,7 +14,7 @@ static int32_t _get_vb_mod_ids(struct vb_pool_ctx *pool, uint32_t blk_idx, uint6
 	vb_blk blk;
 
 	phyaddr = pool->membase + (blk_idx * pool->blk_size);
-	blk = vb_phys_addr2handle(phyaddr);
+	blk = vb_phys_addr2handle(0, phyaddr);
 	if (blk == VB_INVALID_HANDLE)
 		return -EINVAL;
 

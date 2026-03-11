@@ -17,7 +17,7 @@
 #include "venc_rc.h"
 #include "platform.h"
 
-extern wait_queue_head_t tVencWaitQueue[];
+extern wait_queue_head_t *tVencWaitQueue;
 
 #ifdef USE_vb_pool
 extern int32_t vb_create_pool(struct vb_pool_cfg *config);
@@ -33,7 +33,7 @@ unsigned int venc_log_lv = 1;
 module_param(venc_log_lv, int, 0644);
 
 venc_context *handle;
-venc_vb_ctx vencVbCtx[VENC_MAX_CHN_NUM];
+venc_vb_ctx *vencVbCtx = NULL;
 
 static int _drv_process_result(venc_chn_context *pChnHandle,
                         venc_stream_s *pstStream);
@@ -216,24 +216,18 @@ static inline int _drv_check_common_rcparam(
     return s32Ret;
 }
 
-void *drv_venc_get_share_mem(void)
-{
-    return NULL;
-}
-
 static uint64_t _drv_get_current_time(void)
 {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
     struct timespec64 ts;
-#else
-    struct timespec ts;
-#endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
     ktime_get_ts64(&ts);
 #else
+    struct timespec ts;
+
     ktime_get_ts(&ts);
 #endif
+
     return ts.tv_sec * 1000 + ts.tv_nsec / 1000000; // in ms
 }
 
@@ -333,15 +327,6 @@ static int _venc_event_handler(void *data)
     DRV_VENC_DBG("[%d] venc_chn_STATE_START_ENC\n", VencChn);
 
     while (!kthread_should_stop() && pChnHandle->bChnEnable) {
-        DRV_VENC_DBG("[%d]\n", VencChn);
-        // if (IF_WANNA_DISABLE_BIND_MODE() ||
-        //     (pChnVars->s32RecvPicNum > 0 &&
-        //      vi_cnt >= pChnVars->s32RecvPicNum)) {
-        // 	pChnHandle->bChnEnable = 0;
-        // 	DRV_VENC_SYNC("end\n");
-        // 	break;
-        // }
-
         DRV_VENC_DBG("h26x_handle chn:%d wait.\n", VencChn);
 
         while (((ret = SEMA_TIMEWAIT(&pVbCtx->vb_jobs.sem, usecs_to_jiffies(1000 * 1000))) != 0)) {
@@ -562,15 +547,23 @@ int drv_venc_init(void)
         DRV_VENC_ERR("venc_context\n");
         s32Ret = DRV_ERR_VENC_NOMEM;
     }
+
+    vencVbCtx = vzalloc(VENC_MAX_CHN_NUM*sizeof(venc_vb_ctx));
     return s32Ret;
 }
 
 void drv_venc_deinit(void)
 {
     base_unregister_recv_cb(ID_VENC);
+
     if(handle)
         MEM_FREE(handle);
     handle = NULL;
+
+    if (vencVbCtx)
+        vfree(vencVbCtx);
+    vencVbCtx = NULL;
+
     return;
 }
 
@@ -2399,7 +2392,6 @@ static int _drv_init_chn_ctx(venc_chn VeChn, const venc_chn_attr_s *pstAttr)
     pChnHandle->VeChn = VeChn;
 
     MUTEX_INIT(&pChnHandle->chnMutex, 0);
-    MUTEX_INIT(&pChnHandle->chnShmMutex, &ma);
 
     pChnHandle->pChnAttr = MEM_MALLOC(sizeof(venc_chn_attr_s));
     if (pChnHandle->pChnAttr == NULL) {
@@ -2605,10 +2597,6 @@ static int _drv_set_venc_perfattr_to_proc(venc_chn_context *pChnHandle)
     pChnVars = pChnHandle->pChnVars;
     pEncCtx = &pChnHandle->encCtx;
 
-    if (MUTEX_LOCK(&pChnHandle->chnShmMutex) != 0) {
-        DRV_VENC_ERR("can not lock chnShmMutex\n");
-        return -1;
-    }
     if ((u64CurTime - pChnVars->u64LastGetStreamTimeStamp) > SEC_TO_MS) {
         pChnVars->stFPS.out_fps =
             (unsigned int)((pChnVars->u32GetStreamCnt * SEC_TO_MS) /
@@ -2619,7 +2607,7 @@ static int _drv_set_venc_perfattr_to_proc(venc_chn_context *pChnHandle)
     }
     pChnVars->stFPS.max_hw_time = MAX(pChnVars->stFPS.max_hw_time, pEncCtx->base.u64EncHwTime);
     pChnVars->stFPS.hw_time = pEncCtx->base.u64EncHwTime;
-    MUTEX_UNLOCK(&pChnHandle->chnShmMutex);
+
 
     return s32Ret;
 }
@@ -2657,7 +2645,7 @@ static int _drv_process_result(venc_chn_context *pChnHandle,
             ptr_stream = ppack->pu8Addr;
 #else
             ptr_stream = vzalloc(ppack->u32Len);
-            pcie_memcpy_d2s(ptr_stream, ppack->u64PhyAddr, ppack->u32Len);
+            pcie_memcpy_d2s(pVencAttr->u8SocIdx, ptr_stream, ppack->u64PhyAddr, ppack->u32Len);
 #endif
             for (j = (ppack->u32Len - ppack->u32Offset - 1); j > 0; j--) {
                 unsigned char *tmp_ptr = ptr_stream + ppack->u32Offset + j;
@@ -2717,10 +2705,6 @@ static int _drv_set_venc_chnattr_to_proc(venc_chn VeChn,
     pChnHandle = handle->chn_handle[VeChn];
     pChnVars = pChnHandle->pChnVars;
 
-    if (MUTEX_LOCK(&pChnHandle->chnShmMutex) != 0) {
-        DRV_VENC_ERR("can not lock chnShmMutex\n");
-        return -1;
-    }
     memcpy(&pChnVars->stFrameInfo, pstFrame, sizeof(video_frame_info_s));
     if ((u64CurTime - pChnVars->u64LastSendFrameTimeStamp) > SEC_TO_MS) {
         pChnVars->stFPS.in_fps =
@@ -2730,7 +2714,6 @@ static int _drv_set_venc_chnattr_to_proc(venc_chn VeChn,
         pChnVars->u64LastSendFrameTimeStamp = u64CurTime;
         pChnVars->u32SendFrameCnt = 0;
     }
-    MUTEX_UNLOCK(&pChnHandle->chnShmMutex);
 
     return s32Ret;
 }
@@ -4081,7 +4064,6 @@ int drv_venc_destroy_chn(venc_chn VeChn)
     }
 
     MUTEX_DESTROY(&pChnHandle->chnMutex);
-    MUTEX_DESTROY(&pChnHandle->chnShmMutex);
 
     if (handle->chn_handle[VeChn]) {
         MEM_FREE(handle->chn_handle[VeChn]);
@@ -4867,13 +4849,9 @@ int drv_venc_set_roi_attr(venc_chn VeChn, const venc_roi_attr_s *pstRoiAttr)
             return -1;
         }
 
-        if (MUTEX_LOCK(&pChnHandle->chnShmMutex) != 0) {
-            DRV_VENC_ERR("can not lock chnShmMutex\n");
-            return -1;
-        }
         memcpy(&pChnHandle->pChnVars->stRoiAttr[pstRoiAttr->u32Index],
                pstRoiAttr, sizeof(venc_roi_attr_s));
-        MUTEX_UNLOCK(&pChnHandle->chnShmMutex);
+
     }
 
     return s32Ret;

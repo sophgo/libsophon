@@ -924,7 +924,7 @@ static void vpss_job_finish(struct vpss_job *job)
 				for (i = 0; i < VPSS_MAX; i++){
 					if (!(job->vpss_dev_mask & BIT(i)))
 						continue;
-					if (!img_top_tile_cfg(scaler, i, false))
+					if (!img_top_tile_cfg(scaler, i, true))
 						atomic_set(&dev->vpss_cores[i].state, VIP_END);
 					else
 						atomic_set(&dev->vpss_cores[i].state, VIP_RUNNING);

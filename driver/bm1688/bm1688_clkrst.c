@@ -476,7 +476,7 @@ void bm1688_bmdrv_sw_reset_hau(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 }
 
-void bm1688_bmdrv_clk_set_module_reset(struct bm_device_info* bmdi, BM1688_MODULE_ID module)
+static void bm1688_bmdrv_clk_set_module_reset(struct bm_device_info* bmdi, BM1688_MODULE_ID module)
 {
 	switch (module) {
 	case BM1688_MODULE_TPU:

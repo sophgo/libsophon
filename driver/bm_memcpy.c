@@ -98,7 +98,7 @@ int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64
 	return 0;
 }
 /*bit_n == 0, slot n is free, bit_n == 1, slot n is used*/
-int caculate_stage_index(int *bitmap, int *index)
+static int caculate_stage_index(int *bitmap, int *index)
 {
 	int i = 0;
 
@@ -112,7 +112,7 @@ int caculate_stage_index(int *bitmap, int *index)
 	return -1;
 }
 
-int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
+static int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) {
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 
 	if (dir == HOST2CHIP) {
@@ -130,7 +130,7 @@ int bmdrv_free_stagemem(struct bm_device_info *bmdi, MEMCPY_DIR dir, int index) 
 	return 0;
 }
 
-int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
+static int bmdrv_get_stagemem(struct bm_device_info *bmdi, u64 *ppaddr,
 		void **pvaddr, MEMCPY_DIR dir, int *index)
 {
 
@@ -280,7 +280,7 @@ void bmdev_construct_cdma_arg(pbm_cdma_arg parg,
 	parg->use_iommu = use_iommu;
 }
 
-void bmdev_construct_2d_cdma_arg(pbm_cdma_arg parg,
+static void bmdev_construct_2d_cdma_arg(pbm_cdma_arg parg,
 		u64 src,
 		u64 dst,
 		struct bm_memcpy_param *memcpy_param,
@@ -306,7 +306,7 @@ void bmdev_construct_2d_cdma_arg(pbm_cdma_arg parg,
 	parg->use_iommu = use_iommu;
 }
 
-void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
+static void bmdev_construct_smmu_arg(struct iommu_region *iommu_rgn,
 		u64 user_start,
 		u64 user_size,
 		u32 is_dst,
@@ -740,7 +740,7 @@ struct bm_dual_cdma_memcpy_param {
 	struct bm_memcpy_param cdma_param[2];
 };
 
-int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
+static int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
 		struct bm_memcpy_param *memcpy_param, struct bm_cdma_arg *cdma_arg)
 {
 	u64 size = 0;
@@ -789,7 +789,7 @@ int dual_cdma_transfer_prepare(struct bm_device_info *bmdi, struct bm_stagemem *
 	return 0;
 }
 
-void dual_cdma_post_transfer(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
+static void dual_cdma_post_transfer(struct bm_device_info *bmdi, struct bm_stagemem *stagemem,
 		struct bm_memcpy_param *memcpy_param, struct bm_cdma_arg *cdma_arg)
 {
 	int ret = 0;

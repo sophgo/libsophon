@@ -7,8 +7,6 @@ int main(int argc, char **argv) {
 #include "bmlib_runtime.h"
 #include "bmodel.hpp"
 #include "bmruntime.h"
-#include "bmruntime.hpp"
-#include "bmruntime_bmnet.h"
 #include "bmruntime_cpp.h"
 #include "bmruntime_interface.h"
 #include "cnpy.h"

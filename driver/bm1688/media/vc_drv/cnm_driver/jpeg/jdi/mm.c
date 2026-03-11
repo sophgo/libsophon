@@ -10,7 +10,7 @@
 // Description  :
 //-----------------------------------------------------------------------------
 #include "mm.h"
-
+#include <linux/version.h>
 #include <linux/vmalloc.h>
 
 #ifdef MM_DEBUG
@@ -29,7 +29,9 @@
 #define P_FREE(_x)          vfree(_x)
 #define ASSERT(_exp)        if (!(_exp)) { pr_err("ASSERT at %s:%d\n", __FILE__, __LINE__); while(1); }
 #define HEIGHT(_tree)       (_tree==NULL ? -1 : _tree->height)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 #define MAX(_a, _b)         (_a >= _b ? _a : _b)
+#endif
 
 typedef enum {
     LEFT,

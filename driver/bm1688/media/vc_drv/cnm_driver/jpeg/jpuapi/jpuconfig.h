@@ -13,8 +13,10 @@
 #define _JPU_CONFIG_H_
 
 #include "../config.h"
+#include "platform.h"
 
-#define MAX_NUM_JPU_CORE                4
+#define MAX_NUM_JPU_CORE_CHIP           4
+#define MAX_NUM_JPU_CORE                (MAX_NUM_JPU_CORE_CHIP*MAX_NUM_SOPHON_SOC)
 #define MAX_JPEG_NUM_INSTANCE           512
 #define MAX_NUM_REGISTER_SET            4 //fixed value(do not modified)
 #define MAX_JPEG_INST_HANDLE_SIZE       64

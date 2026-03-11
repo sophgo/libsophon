@@ -1,6 +1,7 @@
 #include "bm_common.h"
 #include "bm_io.h"
 #include "bm1688_irq.h"
+#include "bm1688_msgfifo.h"
 
 #ifndef SOC_MODE
 int bm1688_clear_msgirq(struct bm_device_info *bmdi, int core_id)

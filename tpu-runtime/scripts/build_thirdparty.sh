@@ -93,7 +93,7 @@ backend=""
 if [ -d $LIBSOPHON_DIR/../TPU1684 ]; then
   pushd $LIBSOPHON_DIR/../TPU1684
   source scripts/envsetup.sh
-  build_backend_lib_cmodel
+  rebuild_backend_lib_release_cmodel
   RET=$?; if [ $RET -ne 0 ]; then exit $RET; fi;
   cp -v ./build_runtime/c_model/libcmodel.so $THIRDPARTY_DIR/lib/libcmodel_bm1684.so
   echo "TPU1684: `git rev-parse HEAD`" >> $THIRDPARTY_DIR/version.txt
@@ -103,7 +103,7 @@ fi
 
 if [ -d $LIBSOPHON_DIR/../TPU1686 ]; then
   pushd $LIBSOPHON_DIR/../TPU1686
-  CHIPS=(bm1684x bm1686 sg2260 mars3)
+  CHIPS=(bm1684x bm1686 sg2260 mars3 sg2260e)
   for chip in ${CHIPS[@]}; do
   source scripts/envsetup.sh ${chip}
   rm -rf build

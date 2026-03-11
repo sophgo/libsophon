@@ -1,4 +1,5 @@
 #include <linux/uaccess.h>
+#include <linux/platform_device.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include "bm_ctl.h"
@@ -13,6 +14,7 @@
 #include "bm1684/bm1684_jpu.h"
 #include "vpu/vpu.h"
 #include "bm1684_clkrst.h"
+#include "bm_debug.h"
 #include "version.h"
 #ifndef SOC_MODE
 #include <linux/pci.h>
@@ -42,8 +44,8 @@ struct proc_dir_entry *bmdi_folder;
 #define MAX_CORE_SUPPORT 16
 
 struct core_file_state {
-    int current_file;     
-    int msg_count;       
+    int current_file;
+    int msg_count;
     char filename[2][64];
 };
 
@@ -51,9 +53,9 @@ static struct core_file_state file_states[MAX_CORE_SUPPORT];
 
 static void init_filenames(int core_id, struct core_file_state *state)
 {
-    snprintf(state->filename[0], sizeof(state->filename[0]), 
+    snprintf(state->filename[0], sizeof(state->filename[0]),
             "/tmp/msgfifo_core%d_a.raw", core_id);
-    snprintf(state->filename[1], sizeof(state->filename[1]), 
+    snprintf(state->filename[1], sizeof(state->filename[1]),
             "/tmp/msgfifo_core%d_b.raw", core_id);
     state->current_file = 0;
     state->msg_count = 0;
@@ -71,32 +73,34 @@ static struct core_file_state* get_file_state(int core_id)
 static int switch_to_alternate_file(struct core_file_state *state)
 {
     int new_file_index = 1 - state->current_file;
+#ifdef SOC_MODE
     struct file *filep;
-    
+
     filep = filp_open(state->filename[new_file_index], O_WRONLY | O_TRUNC | O_CREAT, 0644);
     if (IS_ERR(filep)) {
         return PTR_ERR(filep);
     }
     filp_close(filep, NULL);
-    
+#endif
     state->current_file = new_file_index;
     state->msg_count = 0;
-    
+
     return 0;
 }
 
+#ifdef SOC_MODE
 static int save_to_current_file(struct core_file_state *state, void *data, size_t data_size)
 {
     struct file *filep;
     loff_t pos = 0;
     ssize_t write_ret;
     int ret = 0;
-    
+
     filep = filp_open(state->filename[state->current_file], O_WRONLY | O_CREAT | O_APPEND, 0644);
     if (IS_ERR(filep)) {
         return PTR_ERR(filep);
     }
-    
+
     write_ret = kernel_write(filep, data, data_size, &pos);
     if (write_ret == data_size) {
         state->msg_count++;
@@ -104,13 +108,13 @@ static int save_to_current_file(struct core_file_state *state, void *data, size_
     } else {
         ret = -EIO;
     }
-    
+
     vfs_fsync(filep, 0);
     filp_close(filep, NULL);
-    
+
     return ret;
 }
-
+#endif
 int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
                                              bm_kapi_header_t *api_header_p,
                                              bm_api_t *bm_api_p,
@@ -123,41 +127,41 @@ int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
     int ret = 0;
     u32 idx, msg_buf;
     int core_id;
-    
+
     core_id = bm_api_p->core_id;
-    
+
     state = get_file_state(core_id);
     if (state->msg_count == 0 && state->filename[0][0] == '\0') {
         init_filenames(core_id, state);
     }
-    
+
     if (state->msg_count >= MAX_MSG_COUNT) {
         ret = switch_to_alternate_file(state);
         if (ret != 0) {
             return ret;
         }
     }
-    
-    total_size = sizeof(bm_kapi_header_t) + 
+
+    total_size = sizeof(bm_kapi_header_t) +
                 (api_opt_header_p ? sizeof(bm_kapi_opt_header_t) : 0) +
                 (api_header_p->api_size * sizeof(u32));
-    
+
     data_buf = kmalloc(total_size, GFP_KERNEL);
     if (!data_buf) {
         return -ENOMEM;
     }
-    
+
     memcpy(data_buf + data_offset, api_header_p, sizeof(bm_kapi_header_t));
     data_offset += sizeof(bm_kapi_header_t);
-    
+
     if (api_opt_header_p != NULL) {
         memcpy(data_buf + data_offset, api_opt_header_p, sizeof(bm_kapi_opt_header_t));
         data_offset += sizeof(bm_kapi_opt_header_t);
     }
-    
+
     for (idx = 0; idx < api_header_p->api_size; idx++) {
         char *data_ptr = data_buf + data_offset + (idx * sizeof(u32));
-        
+
         if (api_from_userspace) {
             ret = get_user(msg_buf, (u32 __user *)(bm_api_p->api_addr) + idx);
             if (ret) {
@@ -169,9 +173,9 @@ int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
         }
         memcpy(data_ptr, &msg_buf, sizeof(u32));
     }
-    
+#ifdef SOC_MODE
     ret = save_to_current_file(state, data_buf, total_size);
-    
+#endif
     kfree(data_buf);
     return ret;
 }
@@ -413,7 +417,7 @@ void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi)
 		dev_err(&pdev->dev, "Create bmdi reg info proc failed!\n");
 }
 
-void remove_tpu_proc(void)
+static void remove_tpu_proc(void)
 {
 	remove_proc_entry("bmdi_base_info", bmdi_folder);
 	remove_proc_entry("bmdi_lib_info", bmdi_folder);
@@ -2509,7 +2513,9 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 		(void *)bmdi);
 	proc_create_data("ddr_capacity", 0444, bmdi->proc_dir, &bmdrv_ddr_config_file_ops,
 		(void *)bmdi);
+#ifdef MEDIA_ENABLE
 	vpss_proc_init(bmdi->proc_dir, &bmdi->vppdrvctx.vpss_dev);
+#endif
 #endif
 	return 0;
 }
@@ -2561,7 +2567,9 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 	remove_proc_entry("completed_api_counter", bmdi->proc_dir);
 	remove_proc_entry("arm9_cache", bmdi->proc_dir);
 	remove_proc_entry("ddr_capacity", bmdi->proc_dir);
+#ifdef MEDIA_ENABLE
 	vpss_proc_remove(bmdi->proc_dir, &bmdi->vppdrvctx.vpss_dev);
+#endif
 	proc_remove(bmdi->proc_dir);
 	if (bmdi->dev_index == bmdi->bmcd->dev_start_index) {
 		bmsophon_card_proc_dir = bmdi->card_proc_dir;
@@ -2594,7 +2602,7 @@ void bmdrv_proc_file_deinit(struct bm_device_info *bmdi)
 
 #undef MAX_NAMELEN
 
-bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi, int core_id)
+static bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi, int core_id)
 {
 	int read_index = 0;
 	int write_index = 0;
@@ -2610,7 +2618,7 @@ bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi, int core_id)
 
 }
 
-int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
+static int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 {
 	int size = 0;
 	int write_p = 0;
@@ -2676,7 +2684,7 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 #define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 4)
 #define ARM9FW_LOG_LINE_SIZE 512
 
-void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
+static void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 {
 	char str[ARM9FW_LOG_LINE_SIZE] = "";
 	int i = 0;

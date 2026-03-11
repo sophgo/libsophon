@@ -19,7 +19,7 @@
 #include "vputypes.h"
 #include "../vdi/vdi.h"
 #include "../vdi/vdi_osal.h"
-
+#include "../vdi/vdi_debug.h"
 
 #define MAX_GDI_IDX      31
 #define MAX_REG_FRAME    MAX_GDI_IDX*2 // 2 for WTL
@@ -1307,7 +1307,8 @@ typedef enum {
  * @brief  This is an enumeration type for representing product IDs.
  */
 typedef enum {
-    PRODUCT_ID_980=0,
+    PRODUCT_ID_NONE=0,
+    PRODUCT_ID_980,
     PRODUCT_ID_960,
     PRODUCT_ID_521,
     PRODUCT_ID_511,
@@ -1315,7 +1316,6 @@ typedef enum {
     PRODUCT_ID_617,
     PRODUCT_ID_627,
     PRODUCT_ID_637,
-    PRODUCT_ID_NONE,
 } ProductId;
 
 #define PRODUCT_ID_W5_SERIES(x)     (x == PRODUCT_ID_521 || x == PRODUCT_ID_511 || x == PRODUCT_ID_517)
@@ -7148,7 +7148,7 @@ RetCode VPU_EncSetWrPtr(
 
 
 PhysicalAddress VPU_MapToAddr40Bit(int coreIdx, unsigned int Addr);
-int VPU_DecRequestCore(void);
+int VPU_DecRequestCore(int soc_idx);
 int VPU_DecReleaseCore(unsigned int core_idx);
 
 #ifdef __cplusplus

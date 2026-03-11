@@ -23,8 +23,9 @@
 
 #define VMEM_ASSERT(_exp)        if (!(_exp)) { printk(KERN_INFO "VMEM_ASSERT at %s:%d\n", __FILE__, __LINE__); /*while(1);*/ }
 #define VMEM_HEIGHT(_tree)       (_tree == NULL ? -1 : _tree->height)
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 #define MAX(_a, _b)         (_a >= _b ? _a : _b)
+#endif
 
 typedef enum {
     LEFT,

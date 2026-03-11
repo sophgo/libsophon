@@ -11,13 +11,15 @@ int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id);
 void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int core_id);
 char *bmdrv_get_error_string(int error);
 int i2c2_deinit(struct bm_device_info *bmdi);
+#ifdef SOC_MODE
 int save_msgfifo_alternate_files_simple(struct bm_device_info *bmdi,
                                              bm_kapi_header_t *api_header_p,
                                              bm_api_t *bm_api_p,
                                              bm_kapi_opt_header_t *api_opt_header_p,
                                              bool api_from_userspace);
-
-extern void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi);
+extern uint32_t tpu_dump_msg;
+void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi);
+#endif
 struct bm_arm9fw_log_mem {
 	void *host_vaddr;
 	u64 host_paddr;

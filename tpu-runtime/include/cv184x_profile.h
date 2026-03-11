@@ -1,9 +1,9 @@
-#ifndef MARS3_PROFILE_H
-#define MARS3_PROFILE_H
+#ifndef CV184X_PROFILE_H
+#define CV184X_PROFILE_H
 #include "bmruntime_profile.h"
 
 using namespace bmruntime;
-namespace  mars3_profile {
+namespace  cv184x_profile {
 
 #pragma pack(1)
 typedef struct {
@@ -70,4 +70,4 @@ protected:
 };
 
 }
-#endif // MARS3_PROFILE_H
+#endif // CV184X_PROFILE_H

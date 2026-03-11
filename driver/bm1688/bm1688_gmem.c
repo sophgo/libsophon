@@ -1,5 +1,7 @@
+#include <linux/delay.h>
 #include "bm_common.h"
 #include "bm1688_reg.h"
+#include "bm1688_gmem.h"
 #include "bm_gmem.h"
 
 #ifndef SOC_MODE
@@ -8,9 +10,12 @@ int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 	struct reserved_mem_info *resmem_info = &bmdi->gmem_info.resmem_info;
 	struct chip_info *cinfo =  &bmdi->cinfo;
 	int gmem_mode = 0x0;
+	int max_retries = 100;
+	int retry_count = 0;
 	unsigned long ddr0_size;
 	unsigned long ddr1_size;
 	unsigned long ddr2_size;
+	unsigned long ddr_size;
 	unsigned long a53_os_reserved_size = 0x40000000;
 	// unsigned long heap2_size = 0xF5500000;
 
@@ -41,60 +46,48 @@ int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 	else
 		a53_os_reserved_size = 0x40000000;
 
-#if 0
-	// if (cinfo->heap2_size > 0x2000000 && cinfo->heap2_size < ddr2_size)
-	// 	heap2_size = cinfo->heap2_size;
-	// else
-	// 	heap2_size = 0xF5500000;
-	if (cinfo->chip_id == 0x1684)
-		heap2_size = ddr2_size - 0xAB00000;
-	else if (cinfo->chip_id == 0x1686)
-		heap2_size = ddr2_size - 0x6700000;
+	while (retry_count < max_retries) {
+	    ddr_size = ddr_reg_read(bmdi, 0x10954) & 0xff;
 
-	resmem_info->npureserved_addr[0] = GLOBAL_MEM_START_ADDR + EFECTIVE_GMEM_START;
-	resmem_info->npureserved_size[0] = ddr0_size - EFECTIVE_GMEM_START;
+	    if (ddr_size != 0) {
+	        break;
+	    }
 
-	if (gmem_mode == GMEM_NORMAL) {
-		resmem_info->vpp_addr = 0x300000000 + a53_os_reserved_size;
-		resmem_info->vpp_size = VPP_RESERVED_SIZE;
-
-		resmem_info->npureserved_addr[1] = resmem_info->vpp_addr + resmem_info->vpp_size;
-		resmem_info->npureserved_size[1] = ddr1_size - a53_os_reserved_size - resmem_info->vpp_size;
-
-		resmem_info->vpu_vmem_addr = 0x400000000;
-		resmem_info->vpu_vmem_size = ddr2_size - heap2_size;
-
-		resmem_info->npureserved_addr[2] = resmem_info->vpu_vmem_addr + resmem_info->vpu_vmem_size;
-		resmem_info->npureserved_size[2] = heap2_size;
-	} else if (gmem_mode == GMEM_TPU_ONLY) {
-		resmem_info->npureserved_addr[1] = 0x300000000;
-		resmem_info->npureserved_addr[2] = 0x400000000;
-		if (bmdi->boot_info.ddr_ecc_enable) {
-			resmem_info->npureserved_size[1] = bmdi->boot_info.ddr_1_size/8*7;
-			resmem_info->npureserved_size[2] = bmdi->boot_info.ddr_2_size/8*7;
-		} else {
-			resmem_info->npureserved_size[1] = bmdi->boot_info.ddr_1_size;
-			resmem_info->npureserved_size[2] = bmdi->boot_info.ddr_2_size;
-		}
-		resmem_info->vpu_vmem_addr = 0;
-		resmem_info->vpu_vmem_size = 0;
-		resmem_info->vpp_addr = 0;
-		resmem_info->vpp_size = 0;
+	    msleep(100);
+	    retry_count++;
 	}
-#else
-	resmem_info->npureserved_addr[0] = 0x124000000;
-	resmem_info->npureserved_size[0] = 0xDC000000;
-	/**
-	 * The reason for changing 0x200000000 to 0x200400000 is to avoid the hw exception of VPU.
-	 *  If you need to modify it, please contact VPU owner
-	 */
-	resmem_info->npureserved_addr[1] = 0x200400000;
-	resmem_info->npureserved_size[1] = 0xFFC00000;
+
+	if (retry_count >= max_retries) {
+	    printk("bm-sophon%d DDR size read timeout after %d attempts.\n", bmdi->dev_index, max_retries);
+	} else {
+	    pr_info("bm-sophon%d pcie mode: ddr total size=%lu GB\n", bmdi->dev_index, ddr_size);
+	}
+
+	if(ddr_size == 16) {
+		resmem_info->npureserved_addr[0] = 0x124000000;
+		resmem_info->npureserved_size[0] = 0x2DC000000;
+		resmem_info->npureserved_addr[1] = 0x400400000;
+		resmem_info->npureserved_size[1] = 0xFFC00000;
+	} else if(ddr_size == 4) {
+		resmem_info->npureserved_addr[0] = 0x124000000;
+		resmem_info->npureserved_size[0] = 0x30000000;
+		resmem_info->npureserved_addr[1] = 0x154000000;
+		resmem_info->npureserved_size[1] = 0xAC000000;
+	} else { //8G
+		resmem_info->npureserved_addr[0] = 0x124000000;
+		resmem_info->npureserved_size[0] = 0xDC000000;
+		/**
+		 * The reason for changing 0x200000000 to 0x200400000 is to avoid the hw exception of VPU.
+		 *  If you need to modify it, please contact VPU owner
+		 */
+		resmem_info->npureserved_addr[1] = 0x200400000;
+		resmem_info->npureserved_size[1] = 0xFFC00000;
+	}
 	resmem_info->vpu_vmem_addr = 0;
 	resmem_info->vpu_vmem_size = 0;
 	resmem_info->vpp_addr = 0;
 	resmem_info->vpp_size = 0;
-#endif
+
 	pr_info("bm-sophon%d pcie mode: armfw_addr = 0x%llx, armfw_size=0x%llx", bmdi->dev_index, resmem_info->armfw_addr, resmem_info->armfw_size);
 	pr_info("bm-sophon%d pcie mode: armreserved_addr = 0x%llx, armreserved_size=0x%llx", bmdi->dev_index, resmem_info->armreserved_addr, resmem_info->armreserved_size);
 	pr_info("bm-sophon%d pcie mode: smmu_addr = 0x%llx, smmu_size=0x%llx", bmdi->dev_index, resmem_info->smmu_addr, resmem_info->smmu_size);
