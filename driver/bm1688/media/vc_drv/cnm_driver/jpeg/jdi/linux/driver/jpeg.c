@@ -759,12 +759,19 @@ static ssize_t jpu_proc_info_read(struct file *file, char __user *buf, size_t si
     dat = vzalloc(1024*get_max_num_jpu_core());
     sprintf(dat + strlen(dat), "\"jpuinfo\"\n");
     for (core_idx = 0; core_idx < get_max_num_jpu_core(); core_idx++) {
-        sprintf(dat + strlen(dat),
-                "{\"core id\":%d, \"instance_count\":%d, \"usage(short|long)\":%d%%|%llu%%}\n",
+        unsigned int short_usage = s_jpu_usage_info.jpu_core_usage[core_idx];
+        unsigned long long total = s_jpu_usage_info.jpu_total_time_in_ms[core_idx];
+        unsigned long long long_usage_pct = 0;
+        if (total != 0)
+            long_usage_pct = (s_jpu_usage_info.jpu_working_time_in_ms[core_idx] * 100) / total;
+
+        /* use snprintf to avoid overruns if dat buffer smaller than expected */
+        snprintf(dat + strlen(dat), 1024,
+                "{\"core id\":%d, \"instance_count\":%d, \"usage(short|long)\":%u%%|%llu%%}\n",
                 core_idx,
                 s_jpu_open_ref_count,
-                s_jpu_usage_info.jpu_core_usage[core_idx],
-                s_jpu_usage_info.jpu_working_time_in_ms[core_idx]*100/s_jpu_usage_info.jpu_total_time_in_ms[core_idx]);
+                short_usage,
+                long_usage_pct);
     }
 
     // If no new frame has arrived in the past second, reset fps, fps_counter, state etc to 0 (idle).
