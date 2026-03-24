@@ -50,6 +50,46 @@ static void bm_smi_dev_free(bm_handle_t ctx) {
 }
 
 
+struct timespec tpu_time;
+static FILE *fp = NULL;
+
+static int bm_timer_for_tpu_usage() {
+    int tpu_usage = ATTR_FAULT_VALUE;
+
+    if(access("/tmp/bmcpu_app_usage", F_OK) != 0) {
+        return tpu_usage;
+    }
+
+    if (fp == NULL) {
+        fp = fopen("/tmp/bmcpu_app_usage", "r");
+        if(fp == NULL) {
+            return 0;
+        }
+        return 0;
+    }
+
+    rewind(fp); // Ensure file pointer is at the beginning before reading
+
+    if (fscanf(fp, "%d", &tpu_usage) < 0) {
+        printf("Failed to read from /tmp/bmcpu_app_usage, please check!\n");
+        tpu_usage = ATTR_FAULT_VALUE;
+        fclose(fp);
+        fp = NULL;
+    }
+
+    return (tpu_usage > 100 || tpu_usage < 0) ? 0 : tpu_usage;
+}
+
+/* convert tpu util to string*/
+static void bm_smi_tpu_util_to_str(int dev_id, char *s) {
+    if (g_attr[dev_id].tpu_util == ATTR_FAULT_VALUE) {
+        snprintf(s, 4, "%s", " F ");
+        return;
+    }
+    snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util);
+}
+
+
 /* get attibutes for the specified device*/
 static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
     g_attr[dev_id].dev_id = dev_id;
@@ -84,6 +124,8 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
         g_attr[dev_id].mem_total = mem_total / 1024 / 1024;
         g_attr[dev_id].mem_used  = mem_avail / 1024 / 1024;
     }
+
+    g_attr[dev_id].tpu_util = bm_timer_for_tpu_usage();
 }
 
 /* get process gmem info for the specified device */
@@ -150,7 +192,7 @@ static void bm_smi_display_format(std::ofstream &file, bool save_file) {
                 snprintf(line_str,
                          BUFFER_LEN,
                          "|card  Name      Mode        SN         |TPU  boardT "
-                         " chipT   TPU_P  TPU_V  ECC  CorrectN  Tpu-Util|\n");
+                         " chipT    TPU_P   TPU_V    CorrectN   Tpu-Util|\n");
                 break;
             case 5:
                 snprintf(line_str,
@@ -398,40 +440,6 @@ static void bm_smi_fan_to_str(int dev_id, char *s) {
     }
 }
 
-struct timespec tpu_time;
-static FILE *fp = NULL;
-
-int bm_timer_for_tpu_usage() {
-    int tpu_usage = 0;
-
-    if (fp == NULL) {
-        fp = fopen("/tmp/bmcpu_app_usage", "r");
-        if(fp == NULL) {
-            return 0;
-        }
-        return 0;
-    }
-
-    rewind(fp); // Ensure file pointer is at the beginning before reading
-
-    if (fscanf(fp, "%d", &tpu_usage) != 1) {
-        printf("Failed to read first timestamp from /tmp/bmcpu_app_time\n");
-        fclose(fp);
-        fp = NULL;
-        return 0;
-    }
-    fclose(fp);
-    fp = NULL;
-    usleep(10000);
-
-    return (tpu_usage > 100 || tpu_usage < 0) ? 0 : tpu_usage;
-}
-
-/* convert tpu util to string*/
-static void bm_smi_tpu_util_to_str(int dev_id, char *s) {
-    snprintf(s, 4, "%d%%", bm_timer_for_tpu_usage());
-}
-
 /* convert card index to string*/
 static void bm_smi_card_index_to_str(int dev_id, char *s) {
     if (g_attr[dev_id].card_index == ATTR_NOTSUPPORTED_VALUE) {
@@ -519,7 +527,7 @@ static void bm_smi_display_attr(int            dev_id,
                 if (g_attr[dev_id].board_attr) {
                     snprintf(line_str,
                              BUFFER_LEN,
-                             "|%2s %10s %5s %17s |%2d   %4s    %4s",
+                             "|%3s %10s %5s %17s |%2d    %4s     %4s",
                              card_index_s,
                              board_name,
                              mode_s,
@@ -530,7 +538,7 @@ static void bm_smi_display_attr(int            dev_id,
                     str_length = snprintf(color_str, BUFFER_LEN, " ");
                     snprintf(after_color_str,
                              BUFFER_LEN,
-                             "%5s   %5s     %3s       %5s |\n",
+                             "  %5s     %5s      %3s      %5s |\n",
                              tpup_s,
                              tpuv_s,
                              cnum_s,
@@ -538,7 +546,7 @@ static void bm_smi_display_attr(int            dev_id,
                     snprintf(whole_str,
                              BUFFER_LEN,
                              "|%2s %10s %5s %17s |%2d   %4s    %4s   %5s  "
-                             " %5s    %3s       %5s |\n",
+                             "   %5s     %3s      %5s |\n",
                              card_index_s,
                              board_name,
                              mode_s,
@@ -830,7 +838,7 @@ static void bm_smi_display_proc_gmem(int            dev_id,
 /* ncurses init screen before display */
 static void bm_smi_init_scr() {
     initscr();
-    resize_term(24, 100);
+    resize_term(24, 101);
     cbreak();
     noecho();
     keypad(stdscr, TRUE);

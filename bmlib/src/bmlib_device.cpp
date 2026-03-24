@@ -530,20 +530,6 @@
   return BM_SUCCESS;
   }
 
-  bm_status_t bm_device::sg_device_memcpy_s2d(sg_device_mem_t dst, void *src, int core_idx) {
-  u64 size_total = sg_mem_get_size(dst);
-  u64 dst_addr = sg_mem_get_device_addr(dst);
-  host_dma_copy_s2d_cmodel_(dst_addr, src, size_total, core_idx);
-  return BM_SUCCESS;
-  }
-
-  bm_status_t bm_device::sg_device_memcpy_d2s(void *dst, sg_device_mem_t src, int core_idx) {
-  u64 size_total = sg_mem_get_size(src);
-  u64 src_addr = sg_mem_get_device_addr(src);
-
-  host_dma_copy_d2s_cmodel_(dst, src_addr, size_total, core_idx);
-  return BM_SUCCESS;
-  }
   u64 bm_device::bm_device_arm_reserved_req() {
   pthread_mutex_lock(&arm_reserved_lock);
   return arm_reserved_dev_mem.u.device.device_addr;

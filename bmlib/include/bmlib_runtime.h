@@ -169,8 +169,8 @@ typedef struct bm_mem_desc {
   union {
     struct {
       unsigned long long device_addr;
-      unsigned int reserved;
       int dmabuf_fd;
+      void *mapped_memory;
     } device;
 
     struct {
@@ -213,8 +213,8 @@ typedef struct bm_mem_desc_u64 {
   union {
     struct {
       unsigned long long device_addr;
-      unsigned int reserved;
       int dmabuf_fd;
+      void *mapped_memory;
     } device;
 
     struct {
@@ -275,6 +275,13 @@ typedef struct bm_module
   char lib_name[LIB_MAX_NAME_LEN];
   unsigned char md5[MD5SUM_LEN];
 }bm_module;
+
+typedef struct
+{
+  tpu_kernel_function_t f_id;
+  u32 size;
+  u8 param[4096];
+} api_launch_func_t;
 
 typedef struct
 {

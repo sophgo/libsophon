@@ -668,6 +668,21 @@ bool bmrt_pre_alloc_mem(
     return true;
 }
 
+DECL_EXPORT bool bmrt_free_pre_alloc_mem(void *bmrt, const char *net_name) {
+  if (bmrt == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL");
+    return false;
+  }
+  int net_idx = ((Bmruntime *)bmrt)->get_net_idx(net_name);
+  if (net_idx < 0) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return false;
+  }
+
+  ((Bmruntime *)bmrt)->free_pre_alloc_neuron(net_idx);
+  return true;
+}
+
 bool bmrt_launch_data(void* p_bmrt, const char* net_name, void* const input_datas[],
                       const bm_shape_t input_shapes[], int input_num, void* output_datas[],
                       bm_shape_t output_shapes[], int output_num, bool user_mem)
@@ -763,6 +778,19 @@ const bm_net_info_t* bmrt_get_network_info(void* p_bmrt, const char* net_name)
     return NULL;
   }
   auto ret =  ((Bmruntime*)p_bmrt)->get_net_info(net_name);
+  if (ret == NULL) {
+    BMRT_LOG(WRONG, "net name:%s invalid", net_name);
+    return NULL;
+  }
+  return ret;
+}
+
+const bm_coeff_info_t* bmrt_get_coeff_info(void* p_bmrt, const char* net_name, int stage, int *coeff_num) {
+  if (p_bmrt == NULL || net_name == NULL || coeff_num == NULL) {
+    BMRT_LOG(WRONG, "parameter invalid p_bmrt is NULL or net_name is NULL");
+    return NULL;
+  }
+  auto ret =  ((Bmruntime*)p_bmrt)->get_coeff_info(net_name, stage, coeff_num);
   if (ret == NULL) {
     BMRT_LOG(WRONG, "net name:%s invalid", net_name);
     return NULL;

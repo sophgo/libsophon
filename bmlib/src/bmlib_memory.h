@@ -63,10 +63,6 @@ bm_status_t bm_memcpy_d2s_poll(bm_handle_t     handle,
                                void *          dst,
                                bm_device_mem_t src,
                                unsigned int    size);
-bm_status_t sg_memcpy_d2s_poll(bm_handle_t     handle,
-                               void *          dst,
-                               sg_device_mem_t src,
-                               unsigned long long size);
 bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
                                void *          dst,
                                bm_device_mem_u64_t src,
@@ -74,15 +70,12 @@ bm_status_t bm_memcpy_d2s_poll_u64(bm_handle_t     handle,
 bm_status_t bm_memcpy_s2d_poll(bm_handle_t     handle,
                                bm_device_mem_t dst,
                                void *          src);
-bm_status_t sg_memcpy_s2d_poll(bm_handle_t     handle,
-                               sg_device_mem_t dst,
-                               void *          src);
 bm_status_t bm_memcpy_s2d_poll_u64(bm_handle_t     handle,
                                bm_device_mem_u64_t dst,
                                void *          src);
 void *bm_mem_get_system_addr(struct bm_mem_desc mem);
 u32 bm_mem_get_size(struct bm_mem_desc mem);
-u64 sg_mem_get_size(struct sg_mem_desc mem);
+
 u64 bm_mem_get_size_u64(struct bm_mem_desc_u64 mem);
 bm_status_t bm_mem_mmap_device_mem(
     bm_handle_t      handle,
@@ -122,14 +115,17 @@ bm_status_t bm_mem_unmap_device_mem(
 bm_status_t bm_mem_write_data_to_ion(
     bm_handle_t      handle,
     bm_device_mem_t *dmem,
-		void *           vmem,
-		size_t size);
+    void *           vmem,
+    size_t           size,
+    uint64_t         offset=0);
 bm_status_t bm_mem_read_data_from_ion(
-    bm_handle_t handle,
-    bm_device_mem_t *dmem,
-    void *buffer,
-    size_t size);
+    bm_handle_t      handle,
+    bm_device_mem_t  *dmem,
+    void             *buffer,
+    size_t           size,
+    uint64_t         offset=0);
 bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx);
+void* bm_get_ion_mem_vaddr(u64 device_addr);
 #ifdef __cplusplus
 }
 #endif

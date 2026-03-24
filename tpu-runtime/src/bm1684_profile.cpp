@@ -125,7 +125,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
     // enable dynamic profile
     if(enable_arm){
         const auto &launcher = profile->get_bmrt()->backend()->launcher();
-        ret = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, true);
+        ret = dynamic_cast<Launcher_BM1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, true);
         CHECK_status(ret);
     }
     return true;
@@ -168,7 +168,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             size_t total_len = 0;
             u32 block_type = (i == 0) ? BLOCK_DYN_DATA : BLOCK_DYN_EXTRA;
             while(1){
-                bm_status_t status = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_get_profile_data_(
+                bm_status_t status = dynamic_cast<Launcher_BM1684*>(launcher.get())->_bmdnn_get_profile_data_(
                             handle,
                             bm_mem_get_device_addr(dyn_buffer.mem),
                             bm_mem_get_device_size(dyn_buffer.mem),
@@ -188,7 +188,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
             }
             profile->write_block(block_type, data.size(), data.data());
         }
-        bm_status_t status = dynamic_cast<bmdnn_func_1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, false);
+        bm_status_t status = dynamic_cast<Launcher_BM1684*>(launcher.get())->_bmdnn_set_profile_enable_(handle, false);
         CHECK_status(status);
     }
     return true;

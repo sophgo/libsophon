@@ -40,6 +40,7 @@ add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
 add_dependencies(bmrt kernel_header)
 add_dependencies(bmrt_static kernel_header)
 
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
 if(CMAKE_STRIP)
     add_custom_command(TARGET bmrt
         POST_BUILD
@@ -47,8 +48,10 @@ if(CMAKE_STRIP)
         COMMENT "Stripping symbols for target architecture"
         VERBATIM
     )
+    message(STATUS "Using cross-compile strip tool: ${CMAKE_STRIP}")
 else()
     message(WARNING "Cross-compile strip tool not found, skipping symbol stripping")
+endif()
 endif()
 
 if("${PLATFORM}" STREQUAL "soc")

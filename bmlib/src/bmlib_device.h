@@ -59,8 +59,6 @@ extern "C"
     bm_status_t bm_device_memcpy_d2s(void *dst, bm_device_mem_t src, int core_idx = 0);
     bm_status_t bm_device_memcpy_s2d_u64(bm_device_mem_u64_t dst, void *src, int core_idx = 0);
     bm_status_t bm_device_memcpy_d2s_u64(void *dst, bm_device_mem_u64_t src, int core_idx = 0);
-    bm_status_t sg_device_memcpy_s2d(sg_device_mem_t dst, void *src, int core_idx = 0);
-    bm_status_t sg_device_memcpy_d2s(void *dst, sg_device_mem_t src, int core_idx = 0);
     u64 bm_device_arm_reserved_req();
     void bm_device_arm_reserved_rel();
     void cmodel_setup(void);

@@ -135,6 +135,18 @@ struct bitmain_cache_range {
   size_t size;
 };
 
+struct cvitek_cache_range {
+	void *start;
+#ifdef __arm__
+	__u32 padding;
+#endif
+
+	__u32 size;
+	__u64 paddr;
+}__attribute__((aligned(8)));
+
+
+
 struct bitmain_heap_info {
   unsigned int id;
   unsigned long total_size;

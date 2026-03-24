@@ -1127,7 +1127,7 @@ void bmrt_test()
           auto& core_list = core_lists[group_idx];
           bool pre_alloc_neuron_ret;
           if (memory_prealloc) {
-            pre_alloc_neuron_ret =  bmrt_pre_alloc_mem_multi_thread(p_bmrt, group_idx, &mem_info_v[group_idx]);
+            pre_alloc_neuron_ret =  bmrt_pre_alloc_mem_multi_thread(p_bmrt, core_list[group_idx], &mem_info_v[group_idx]);
           } else {
             pre_alloc_neuron_ret =  bmrt_pre_alloc_neuron_multi_cores(p_bmrt, net_info->name, stage_idx, core_list.data(), core_list.size());
           }
@@ -1168,7 +1168,7 @@ void bmrt_test()
                                                 output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                                 core_list.data(), core_list.size(), net_idx, stage_idx,
                                                 chipid, std::ref(launch_times[group_idx]), std::ref(starts[group_idx]), std::ref(ends[group_idx]),
-                                                memory_prealloc, group_idx));
+                                                memory_prealloc, core_list[group_idx]));
             }
             for (auto& thread: threads) {
               thread.join();
@@ -1179,7 +1179,7 @@ void bmrt_test()
               bmrt_launch_tensor_thread_func(bm_handle, p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
                                             output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                             core_list.data(), core_list.size(), net_idx, stage_idx,
-                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx], memory_prealloc, group_idx);
+                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx], memory_prealloc, core_list[group_idx]);
             }
           }
 

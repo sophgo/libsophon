@@ -123,10 +123,14 @@ if(BUILD_STATIC_LIB)
 endif()
 
 if(TARGET ${TARGET_NAME})
-    add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-        COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${TARGET_NAME}>
-        COMMENT "Stripping ${TARGET_NAME} after build"
-    )
+    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_STRIP} $<TARGET_FILE:${TARGET_NAME}>
+            COMMENT "Stripping ${TARGET_NAME} after build"
+        )
+    else()
+        message(STATUS "Debug mode: skipping strip for ${TARGET_NAME}")
+    endif()
 endif()
 
 # if(TARGET ${STATIC_LIB_NAME})

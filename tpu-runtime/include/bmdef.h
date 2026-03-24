@@ -102,8 +102,6 @@ typedef struct bm_stage_info_s {
   bm_shape_t *output_shapes; /* output_shapes[0] / [1] / ... / [output_num-1] */
   bm_device_mem_t *input_mems; /* input_mems[0] / [1] / ... / [input_num-1] */
   bm_device_mem_t *output_mems; /* output_mems[0] / [1] / ... / [output_num-1] */
-  int coeff_num;                /* number of coeffs */
-  bm_coeff_info_t* coeffs;      /* coeffs[0] / [1] / ... / [coeff_num-1] */
 } bm_stage_info_t;
 
 /* bm_tensor_info_t holds all information of one net.

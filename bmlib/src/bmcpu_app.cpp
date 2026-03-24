@@ -15,6 +15,7 @@ The program ensures thread safety
 #include "bmcpu_app.h"
 #include "bmlib_ioctl.h"
 #include "bmlib_utils.h"
+#include "api.h"
 
 typedef uint8_t u8;
 typedef uint32_t u32;
@@ -30,7 +31,6 @@ static uint64_t start_bm_profile_timestamp=0;
 static uint64_t end_bm_profile_timestamp=0;
 bm_profile_t bm_profile = {0};
 static int flag= 0;
-
 
 typedef struct bm_api_cpu_load_library_internal {
   u8 library_path[256];
@@ -346,28 +346,70 @@ static int get_func_process(bm1688_get_func_internal_t *api) {
 static int call_func_process(bm1688_launch_func_internal* api_addr) {
   int ret = 0;
   bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "Function ID: %d\n", api_addr->f_id);
-  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "Function Size: %d\n", api_addr->size);;
+  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "Function Size: %d\n", api_addr->size);
+  int (*f_ptr)(void *, unsigned int);
+  char func_name[32];
 
   auto it = lib_table.begin();
-  for (; it != lib_table.end(); it++) {
-      SGTPUV8_lib_info lib_info = it->second;
-      if (lib_info.func_table.find(api_addr->f_id) != lib_info.func_table.end()) {
-          struct exec_func func = lib_info.func_table[api_addr->f_id];
-          bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "find func name----------- %s\n", func.func_name);
-          if (api_addr->param == NULL) {
-            bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO,"param is null\n");
-          }
-          if (func.f_ptr == NULL) {
-            bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "func.f_ptr is null\n");
-          }
-          ret = func.f_ptr((void *)api_addr->param, api_addr->size);
-          // std::cout << "launch func over**************" << std::endl;
-          if (ret != 0) {
-              perror("call_func");
-              return -1;
-          }
-          break;
+  if (api_addr->f_id == BM_API_ID_MEM_CPY ||
+      api_addr->f_id == BM_API_ID_MEMCPY_BYTE ||
+      api_addr->f_id == BM_API_ID_MEMCPY_WSTRIDE) {
+    for (; it != lib_table.end(); it++) {
+        SGTPUV8_lib_info lib_info = it->second;
+      bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_DEBUG, "Function not record. try to find directly in lib\n");
+
+      switch (api_addr->f_id)
+      {
+      case BM_API_ID_MEM_CPY:
+        strcpy(func_name, "sg_api_memcpy");
+        break;
+      case BM_API_ID_MEMCPY_BYTE:
+        strcpy(func_name, "sg_api_memcpy_byte");
+        break;
+      case BM_API_ID_MEMCPY_WSTRIDE:
+        strcpy(func_name, "sg_api_memcpy_wstride");
+        break;
+
+      default:
+        bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "Function not found, api_addr->f_id=%d\n", api_addr->f_id);
+        return -1;
       }
+      dlerror();
+      f_ptr = (int (*)(void *, unsigned int))dlsym(lib_info.lib_handle, func_name);
+      const char *dlsym_error = dlerror();
+      if (dlsym_error) {
+          fprintf(stderr, "dlsym error: %s\n", dlsym_error);
+          continue;
+      }
+      if (f_ptr != NULL) {
+        ret = f_ptr((void *)api_addr->param, api_addr->size);
+        if (ret != 0) {
+            perror("call_func_process call_func");
+            return -1;
+        }
+        return 0;
+      }
+    }
+  } else {
+    for (; it != lib_table.end(); it++) {
+        SGTPUV8_lib_info lib_info = it->second;
+        if (lib_info.func_table.find(api_addr->f_id) != lib_info.func_table.end()) {
+            struct exec_func func = lib_info.func_table[api_addr->f_id];
+            bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "find func name----------- %s\n", func.func_name);
+            if (api_addr->param == NULL) {
+              bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO,"param is null\n");
+            }
+            if (func.f_ptr == NULL) {
+              bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "func.f_ptr is null\n");
+            }
+            ret = func.f_ptr((void *)api_addr->param, api_addr->size);
+            if (ret != 0) {
+                perror("call_func_process call_func");
+                return -1;
+            }
+            break;
+        }
+    }
   }
 
   if (it == lib_table.end()) {
@@ -377,6 +419,18 @@ static int call_func_process(bm1688_launch_func_internal* api_addr) {
   return 0;
 }
 
+void usage_thread_cleanup_func(void *arg)
+{
+  bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_INFO, "usage_thread_cleanup_func set usage as 0\n");
+  int fd_file = open("/tmp/bmcpu_app_usage", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd_file < 0) {
+      perror("File open failed");
+      return;
+  }
+  dprintf(fd_file, "%d\n", 0);
+  fsync(fd_file);
+  close(fd_file);
+}
 
 void* timer_tpu_usage_thread(void* arg) {
     int fd_file = open("/tmp/bmcpu_app_usage", O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -411,7 +465,7 @@ void* timer_tpu_usage_thread(void* arg) {
         return NULL;
     }
 
-
+    pthread_cleanup_push(usage_thread_cleanup_func, NULL);
     while (1) {
         uint64_t exp;
         usleep(interval_us);
@@ -462,7 +516,7 @@ void* timer_tpu_usage_thread(void* arg) {
             // “TPU usage average_tpu_usage”
             dprintf(fd_tmp, "tpu_usage: %d\n", average_tpu_usage);
             fsync(fd_tmp);
-        } else if (tpu_usage != 0) {
+        } else {
             average_tpu_usage = (average_tpu_usage + tpu_usage) / 2;
             // “TPU usage average_tpu_usage”
             dprintf(fd_tmp, "tpu_usage: %d\n", average_tpu_usage);
@@ -481,6 +535,7 @@ void* timer_tpu_usage_thread(void* arg) {
         }
     }
 
+    pthread_cleanup_pop(1);
     close(tfd);
     close(fd_file);
     return NULL;
@@ -489,14 +544,15 @@ void* timer_tpu_usage_thread(void* arg) {
 
 void* bmcpu_thread(void* arg) {
   bm_api_to_bmcpu_t *bm_api;
-  bm_api = (bm_api_to_bmcpu_t *)malloc(sizeof(bm_api_to_bmcpu_t));
   bm_api_cpu_load_library_internal_t *api;
   bm1688_get_func_internal_t *bm_api_func;
   bm1688_launch_func_internal *bm_api_launch;
   u32 ret = 0;
+
+
+  bm_api = (bm_api_to_bmcpu_t *)malloc(sizeof(bm_api_to_bmcpu_t));
   start_bm_profile_timestamp = get_timestamp_us();
   end_bm_profile_timestamp = start_bm_profile_timestamp;
-  uint64_t tmp_start_bm_profile_timestamp = 0;
 
   // Check the environment variable SHOW_TPU_USAGE, if set, start the timer_tpu_usage_thread
   const char *env_var = getenv("SHOW_TPU_USAGE");
@@ -513,6 +569,7 @@ void* bmcpu_thread(void* arg) {
           errno = ret;
           perror("pthread_setschedparam");
       }
+      pthread_detach(tid);
   }
 
   int *fd = (int *)arg;

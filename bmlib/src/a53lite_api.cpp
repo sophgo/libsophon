@@ -618,12 +618,7 @@ tpu_kernel_function_t tpu_kernel_get_function(bm_handle_t handle, tpu_kernel_mod
   return tpu_kernel_get_function_from_core(handle, module, function, 0);
 }
 
-typedef struct
-{
-  tpu_kernel_function_t f_id;
-  u32 size;
-  u8 param[4096];
-} api_launch_func_t;
+
 
 typedef int (*f_ptr)(void *, unsigned int);
 bm_status_t tpu_kernel_launch_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)

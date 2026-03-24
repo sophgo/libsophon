@@ -356,7 +356,7 @@ void BMProfile::begin_subnet(net_ctx_t* net_ctx, int iteration, int subnet_id, i
     summary.start_usec = get_usec();
     if (p_bmrt->backend()->name() == "BM1682") {
         auto &launcher = p_bmrt->backend()->launcher();
-        dynamic_cast<bmdnn_func_1682*>(launcher.get())->set_bmdnn_func_profile(1);
+        dynamic_cast<Launcher_BM1682*>(launcher.get())->set_bmdnn_func_profile(1);
     } else if (device) {
         device->begin(net_ctx);
     }

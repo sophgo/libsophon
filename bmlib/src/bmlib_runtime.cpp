@@ -154,16 +154,40 @@ bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
 
 void P(int semid) {
     struct sembuf sb = {0, -1, 0};
-    if (semop(semid, &sb, 1) == -1) {
-        perror("bmlib_runtime semop");
-    }
+    int ret;
+    
+    do {
+        ret = semop(semid, &sb, 1);
+        if (ret == -1) {
+            if (errno == EINTR) {
+                bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, 
+                          "P operation interrupted by signal, retrying...\n");
+                continue;
+            } else {
+                perror("bmlib_runtime P semop failed");
+                break;
+            }
+        }
+    } while (ret == -1 && errno == EINTR);
 }
 
 void V(int semid) {
     struct sembuf sb = {0, 1, 0};
-    if (semop(semid, &sb, 1) == -1) {
-        perror("bmlib_runtime semop");
-    }
+    int ret;
+    
+    do {
+        ret = semop(semid, &sb, 1);
+        if (ret == -1) {
+            if (errno == EINTR) {
+                bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG, 
+                          "V operation interrupted by signal, retrying...\n");
+                continue;
+            } else {
+                perror("bmlib_runtime V semop failed");
+                break;
+            }
+        }
+    } while (ret == -1 && errno == EINTR);
 }
 
 
@@ -1640,7 +1664,7 @@ DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {
   #else
   int arch_code = handle->misc_info.chipid;
   #endif
-  return arch_code == 0x1686a200;
+  return arch_code == 0x184;
 }
 
 #ifndef USING_CMODEL
@@ -1669,6 +1693,8 @@ bm_status_t bm_memcpy_s2s(uint64_t u64PhyDst, uint64_t u64PhySrc, uint64_t u64Si
   }
 
   void *handle_lib = dlopen(lib_path, RTLD_NOW);
+  if (lib_path != nullptr)
+    free(lib_path);  // alloc in find_lib_path
   // mmap to firmware_core.so
   int (*CallPhysicalToVirtual)(void *, int) =
       (int (*)(void *, int))dlsym(handle_lib, "PhysicalToVirtual");
@@ -1749,6 +1775,8 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   }
 
   void *handle_lib = dlopen(lib_path, RTLD_NOW);
+  if (lib_path != nullptr)
+    free(lib_path);   // alloc in find_lib_path
   // mmap to firmware_core.so
   int (*CallPhysicalToVirtual)(void *, int) =
       (int (*)(void *, int))dlsym(handle_lib, "PhysicalToVirtual");

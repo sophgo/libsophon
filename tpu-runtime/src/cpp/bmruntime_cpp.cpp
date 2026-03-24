@@ -88,36 +88,6 @@ bool IsSameShape(const bm_shape_t &left, const bm_shape_t &right)
   return true;
 }
 
-static std::string chip_name_by_id(unsigned int chipid) {
-  std::string chip_name = "";
-  if (chipid == 0x1684) {
-    chip_name = "BM1684";
-  } else if (chipid == 0x1686) {
-    chip_name = "BM1684X";
-  } else if (chipid == 0x1686a200) {
-    chip_name = "BM1688";
-  } else if (chipid == 0x1682) {
-    chip_name = "BM1682";
-  } else if (chipid == 0x1880) {
-    chip_name = "BM1880";
-  } else if (chipid == 0x2260) {
-    chip_name = "BM1690";
-  } else if (chipid == 0x184) {
-    chip_name = "CV184X";
-  } else if (chipid == 0x8000) {
-    chip_name = "SGTPUV8";
-  } else if (chipid == 0x2380) {
-    chip_name = "SG2380";
-  } else if (chipid == 0x16862) {
-    chip_name = "BM1684X2";
-  } else if(chipid == 0x2260e){
-    chip_name = "BM1690E";
-  } else {
-    BMRT_LOG(FATAL, "Unknown chipid %x", chipid);
-  }
-  return chip_name;
-}
-
 Context::Context(bm_handle_t bm_handle)
 {
   bm_handle_ = NULL;
