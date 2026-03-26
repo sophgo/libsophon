@@ -2080,7 +2080,8 @@ static int _vc_drv_register_cdev(struct vc_drv_device *vdev)
     int err = 0;
     int i = 0;
     dev_t subDevice;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,11,0)
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0))
     vdev->vc_class = class_create(DRV_VC_DRV_CLASS_NAME);
 #else
     vdev->vc_class = class_create(THIS_MODULE, DRV_VC_DRV_CLASS_NAME);
