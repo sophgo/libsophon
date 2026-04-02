@@ -62,7 +62,6 @@ struct vpss_hal {
 };
 
 int work_mask = 0xff; //default vpss_v + vpss_t
-int avail_mask = 0xff;
 int sche_thread_enable = 1;
 
 module_param(work_mask, int, 0644);
@@ -82,53 +81,6 @@ static void show_hw_state(struct vpss_device *vpss_dev)
 		state[7], state[8], state[9]);
 }
 
-static int find_available_dev(struct vpss_device *vpss_dev, u8 chn_num, struct vpss_hal_grp_cfg cfg, int after_core)
-{
-	int i;
-	int start_idx = VPSS_V0;
-	int end_idx = VPSS_V3;
-	//int dev_num = 4;
-	u8 mask = 0, mask_tmp;
-	u8 user_mask = BIT(chn_num) - 1;
-	struct vpss_hal *hal = (struct vpss_hal *)vpss_dev->vpss_hal;
-
-	for (i = start_idx; i <= end_idx; i++)
-		if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE))
-			mask |= BIT(i);
-
-	for (i = start_idx; i <= end_idx; i++) {
-		mask_tmp = mask;
-		mask_tmp &= user_mask;
-		if (!(user_mask ^ mask_tmp)){
-			if (cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
-				after_core = i;
-				mask = mask >> 1;
-				continue;
-			}
-			return i;
-		}
-		//if (mask & 0x1) //v3 -> v0
-		//	mask |= BIT(dev_num);
-		mask = mask >> 1;
-	}
-
-	if (after_core != VPSS_MAX) {
-		if(!IS_POWER_OF_TWO(work_mask))
-			return after_core;
-		else { // slt scene, single core, find alternative core
-			for (i = VPSS_V0; i < VPSS_MAX; ++i) {
-				if ((avail_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-					if (cfg.addr[2] && hal->core_last_sign[i])
-						continue;
-					return i;
-				}
-			}
-		}
-	}
-
-	return -1;
-}
-
 static int job_check_hw_ready(struct vpss_device *vpss_dev, bool is_fbd, u8 chn_num, struct vpss_hal_grp_cfg cfg)
 {
 	int i, start_core, after_core;
@@ -143,72 +95,25 @@ static int job_check_hw_ready(struct vpss_device *vpss_dev, bool is_fbd, u8 chn_
 	start_core = VPSS_T0; //vpss_t -> vpss_v
 	after_core = VPSS_MAX;
 
-	if (cfg.bm_scene) {
-		for (i = start_core; i < VPSS_MAX; ++i) {
+	if (is_fbd) {
+		for (i = start_core; i < VPSS_MAX; ++i)
+			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE))
+				return i;
+	} else {
+		for (i = VPSS_V0; i < VPSS_MAX; ++i) {
 			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-				if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
-					after_core = i;
+				if (cfg.addr[2] && hal->core_last_sign[i]) {
+					// the experiment shows that vpss_t has almost no related problems
+					if (i >= VPSS_T0) after_core = i;
 					continue;
 				}
-				return i;
-			}
-		}
-		if (is_fbd)
-			return -1;
-		for (i = VPSS_V0; i < VPSS_T0; ++i) {
-			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)) {
-				if (cfg.addr[2] && hal->core_last_sign[i])
-					continue;
 				return i;
 			}
 		}
 		if (after_core != VPSS_MAX)
 			return after_core;
-		return -1;
 	}
-
-	if (chn_num == 1) {
-		for (i = start_core; i < VPSS_MAX; ++i) {
-			if ((work_mask & BIT(i)) && (atomic_read(&vpss_dev->vpss_cores[i].state) == VIP_IDLE)){
-				if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[i]){ // 3chn format limit
-					after_core = i;
-					continue;
-				}
-				return i;
-			}
-		}
-
-		if (is_fbd)
-			return -1;
-	} else if (chn_num == 2) {
-		if ((atomic_read(&vpss_dev->vpss_cores[VPSS_T0].state) == VIP_IDLE)
-			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_T1].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_T0]) // 3chn format limit
-				after_core = i;
-			else
-				return VPSS_T0;
-		}
-		if ((atomic_read(&vpss_dev->vpss_cores[VPSS_T2].state) == VIP_IDLE)
-			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_T3].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_T2]) // 3chn format limit
-				after_core = i;
-			else
-				return VPSS_T2;
-		}
-		if ((work_mask & BIT(VPSS_D0))  && (work_mask & BIT(VPSS_D1))
-			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_D0].state) == VIP_IDLE)
-			&& (atomic_read(&vpss_dev->vpss_cores[VPSS_D1].state) == VIP_IDLE)){
-			if ((!is_fbd) && cfg.addr[2] && hal->core_last_sign[VPSS_D0]) // 3chn format limit
-				after_core = i;
-			else
-				return VPSS_D0;
-		}
-
-		if (is_fbd)
-			return -1;
-	}
-
-	return find_available_dev(vpss_dev, chn_num, cfg, after_core);
+	return -1;
 }
 
 static int online_get_dev(struct vpss_job *job)
@@ -681,20 +586,24 @@ int vpss_hal_remove_job(struct vpss_job *job)
 		}
 		//hw hang
 		if (count == 0) {
-			if(!job->cfg.grp_cfg.bm_scene) // cvi sence
-				TRACE_VPSS(DBG_ERR, "Grp(%d) Wait timeout, HW hang.\n", job->grp_id);
 			for (i = 0; i < VPSS_MAX; i++) {
 				if (!(job->vpss_dev_mask & BIT(i)))
 					continue;
 				vpss_stauts(job->dev->scaler, i);
+				job->dev->vpss_cores[i].timeout_cnt++;
 				// BIT(10) always reset; BIT(11) never reset
-				if((work_mask & BIT(10)) || ((!hal->reset_time[i]) && ((work_mask & BIT(11)) == 0))){
+				// VPSS2 and VPSS3 need binding reset, manual set BIT(13) can reset
+				if(((work_mask & BIT(10)) ||
+					(IS_POWER_OF_TWO((work_mask & 0xf0))) ||
+					((!hal->reset_time[i]) && ((work_mask & BIT(11)) == 0))) &&
+					(i != VPSS_V2 || (BIT(13) & work_mask))){
 					vpss_hal_reset(job->dev, job->vpss_dev_mask, job->is_online);
 					hal->reset_time[i] = 1000;
 				} else {
 					work_mask &= (~BIT(i));
-					avail_mask &= (~BIT(i));
-					atomic_set(&job->dev->vpss_cores[i].state, VIP_END);
+					job->dev->vpss_cores[i].job = NULL;
+					atomic_set(&job->dev->vpss_cores[i].state, VIP_IDLE);
+					hal->reset_time[i] = 0;
 				}
 				if (job->dev->vpss_cores[i].clk_vpss &&
 					__clk_is_enabled(job->dev->vpss_cores[i].clk_vpss))
