@@ -189,7 +189,14 @@ else()
         add_subdirectory(bm-smi)
         add_dependencies(bm-smi bmlib)
     endif()
-
+    if(EXISTS "${CMAKE_SOURCE_DIR}/tpu-debugger/CMakeLists.txt" AND "${PLATFORM}" STREQUAL "soc")
+        # Route tpu-debugger install() entries without explicit COMPONENT
+        # into the existing libsophon package instead of Unspecified.
+        set(_OLD_INSTALL_DEFAULT_COMPONENT_NAME "${CMAKE_INSTALL_DEFAULT_COMPONENT_NAME}")
+        set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "libsophon")
+        add_subdirectory(tpu-debugger)
+        set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "${_OLD_INSTALL_DEFAULT_COMPONENT_NAME}")
+    endif()
     # remove unspecified component introduced by libyuv
     get_cmake_property(CPACK_COMPONENTS_ALL COMPONENTS)
     list(REMOVE_ITEM CPACK_COMPONENTS_ALL "Unspecified")

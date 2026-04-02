@@ -1058,7 +1058,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (c_attr->bm_get_board_temp != NULL)
 		  ret = put_user(c_attr->board_temp, (u32 __user *)arg);
 		else
-		  return -EFAULT;
+		  ret = put_user(ATTR_NOTSUPPORTED_VALUE, (u32 __user *)arg);
 		break;
 	}
 
@@ -1306,7 +1306,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
                        if(c_attr->bm_get_board_power != NULL) {
                          ret = copy_to_user((u32 __user *)arg, &c_attr->board_power, sizeof(u32));
                        } else {
-                         return -EFAULT;
+                         u32 not_supported = ATTR_NOTSUPPORTED_VALUE;
+                         ret = copy_to_user((u32 __user *)arg, &not_supported, sizeof(u32));
                        }
                        break;
                 }

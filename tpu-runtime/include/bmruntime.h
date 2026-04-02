@@ -48,7 +48,6 @@ namespace bmruntime {
 
 // class defined in this file.
 class Bmruntime;
-class BmCoeff;
 class KernelModule;
 
 struct BmMemory {
@@ -151,7 +150,8 @@ typedef struct {
 typedef struct {
   bm_shape_t shape;
   bm_store_mode_t st_mode;
-  bm_device_mem_t dev_mem;
+  bm_device_mem_t dev_mem; // runtime allocated, addr = ctx_offset + cmd_addr
+  uint64_t cmd_addr; // fixed addr which is from bmodel
   u32 pad_h;
 } tensor_attr_t;
 
@@ -188,6 +188,7 @@ typedef enum {
  */
 typedef struct {
   bm_tensor_t         tensor_info;
+  uint64_t            cmd_addr; // fixed addr which is from bmodel
   bm_shape_t          max_shape;
   host_mem_t          host_mem;
   int                 mem_type;
@@ -200,7 +201,7 @@ typedef struct {
   u32                 reloc_info[2];  /* (base_addr_id, addr-offset). IMM_RELOC tensors should be relocated to user-io-addrs. */
 } tensor_ext_t;
 
-typedef struct {
+typedef struct device_mem_info {
   uint64_t addr;
   uint64_t size;
   uint64_t offset;
@@ -254,18 +255,6 @@ struct net_stage_t {
    detailed to each stage and core permutations
 */
 
-struct dyn_neuron_stage_t {
-  std::mutex mutex;
-  vector<tensor_attr_t> input_v;
-  vector<tensor_attr_t> output_v;
-  vector<u64> ctx_offset;
-  vector<u64> dynamic_ctx_offset;
-  std::vector<bm_device_mem_u64_t> neuron_mem;
-
-  map<string, tensor_ext_t> subnet_tensor_v;
-  float* cpu_addr;
-};
-
 struct net_ctx_t {
   string net_name;
   vector<string> input_name_v;
@@ -277,11 +266,7 @@ struct net_ctx_t {
   vector<float> output_scale_v;
   vector<int> output_zero_point_v;
   vector<net_stage_t *> stage_v;              // each net has multi stages
-  std::unordered_map<uint64_t, dyn_neuron_stage_t *> dyn_neuron_stage_dict;   // {neron_code: dyn_neuron_stage_info}
 
-  // Bulk neuron memories.
-  vector<bm_device_mem_u64_t> neuron_mem;
-  vector<u64> neuron_size;
   std::unordered_map<string, uint64_t> mem_info_dict;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
@@ -379,7 +364,7 @@ class Bmruntime {
   bool load_bmodel_in_device(void * p_bmodel, uint64_t dev_addr, size_t size);
   bool load_bmodel_with_decrypt(const string &filepath, const std::string &decrypt_lib);
   bool load_bmodel_with_decrypt(const string &filepath, decrypt_func f);
-  void set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info);
+  void set_device_mem_info(ModelCtx* model_ctx, const mem_info_t* mem_info, const std::string &net_name);
   bool update_bmodel_weight_with_decrypt(
     const string& filepath, const string& update_path, const string& net_idx,
     const string& mem_idx, const std::vector<std::string>& weight_idx, decrypt_func f);
@@ -473,7 +458,7 @@ class Bmruntime {
   inline void set_flags(uint32_t flags) {
     m_flags |= flags;
     if (flags & BM_RUNTIME_SHARE_MEM) {
-      // even it is dynamic, we can share the memory, to avoid memory wastes
+      // workaround: even it is dynamic, we can share the memory, to avoid memory wastes
       m_flags |= BM_RUNTIME_SHARE_DYNMEM;
     }
   }
@@ -583,8 +568,8 @@ protected:
                          net_stage_t* stage, uint32_t device_id);
   bool setup_ir_context(ModelCtx* model_ctx, const bmodel::Binary* binary_ir,
                         const Vector<Offset<bmodel::StageIR>>* stage_ir, net_stage_t* stage, uint32_t device_id);
-  bool load_bmodel(ModelCtx*, bool in_device = false);
-  bool load_bmodel_net(ModelCtx*, int net_idx, bool in_device = false);
+  bool load_bmodel(ModelCtx*, bool in_device = false, const mem_info_t *mem_info = nullptr);
+  bool load_bmodel_net(ModelCtx*, int net_idx, bool in_device = false, const mem_info_t *mem_info = nullptr);
   bool load_bmodel_net(ModelCtx*, int net_idx, net_ctx_t* net_ctx, bool in_device = false);
   bool cascade_net_init(const Net* net, int net_idx, net_ctx_t* net_ctx);
   void build_tpu_module(const unsigned char* firmware_data, size_t firmware_size);
@@ -594,20 +579,13 @@ protected:
       ModelCtx* model_ctx,
       net_ctx_t* net_ctx, const Vector<Offset<NetParameter>>* params,
       vector<vector<u64>> &stage_ctx_sizes, net_stage_t *stages, bool in_device = false);
-  void fill_subnet_dyn_neuron_tensor(
-      net_ctx_t* net_ctx, dyn_neuron_stage_t* dyn_neuron,
-      const net_stage_t *common_stage_info);
-  void net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask,
-      const net_stage_t *common_stage_info, bool use_multi_subnet);
-  void __net_ctx_alloc_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const size_t dyn_core_mask);
-  std::shared_ptr<dyn_neuron_stage_t> net_ctx_get_dyn_neuron(net_ctx_t* net_ctx, const size_t dyn_core_mask);
-  void update_dyn_neuron(net_ctx_t* net_ctx, const size_t thread_id, const net_stage_t *common_stage_info);
+  void malloc_net_memory(const net_ctx_t *net_ctx, net_stage_t *stage, uint32_t core_mask);
+  void free_net_memory(const net_ctx_t* net_ctx);
+  void update_net_context(const net_ctx_t* net_ctx, net_stage_t *stage, uint32_t core_mask);
   void fill_net_info(net_ctx_t* net_ctx);
   void free_net_info(net_ctx_t* net_ctx);
-  void free_dyn_neuron(net_ctx_t* net_ctx);
   void update_net_middlebuf(net_ctx_t *net_ctx);
   void update_max_middlebuf_size(net_ctx_t* net_ctx);
-  void update_max_neuron_mem(uint32_t devid, const vector<u64> &sizes);
   bool setup_profile_context(ModelCtx* model_ctx, net_stage_t* net_stage,
                              const bmodel::Binary* net_profile,
                              const bmodel::Binary* net_stat);
@@ -704,7 +682,6 @@ protected:
   vector<net_cascade_t> m_net_cascade_v;                      // net in cascade info
   vector<std::shared_ptr<CascadeThread>> m_cascade_thread_v;  // thread for cascade
 
-  static const int MAX_DEVICE_NUM = 32;   // one bmruntime can run 32 device at most
   bm_handle_t m_handles[MAX_DEVICE_NUM];
   int m_device_num;
   bool using_internal_hidden_tensors; /* internal initlized hidden_tensors device_mem or accept from user parameter when launch */
@@ -720,10 +697,6 @@ protected:
 
   vector<bm_device_mem_u64_t> m_sg_device_mem_vec;     /* save device memory address, for free */
   vector<uint32_t> m_sg_device_mem_ids;            /* record each device memory belong which device*/
-
-  std::shared_ptr<BmCoeff> m_local_coeffs[MAX_DEVICE_NUM];
-  static map<int, std::shared_ptr<BmCoeff>> m_global_coeff_map;
-  static std::mutex m_global_coeff_mutex;
 
   static map<vector<u8>, std::unique_ptr<uint8_t[]>> m_global_cpu_const_map;
   static std::mutex m_global_cpu_const_mutex;
@@ -752,8 +725,6 @@ protected:
 
   // For neuron memory share
   u32 m_neuron_heap_mask;
-  vector<bm_device_mem_u64_t> max_neuron_mem[MAX_DEVICE_NUM];
-  vector<u64> max_neuron_mem_size[MAX_DEVICE_NUM];
   std::shared_ptr<KernelModule> kernel_modules[MAX_DEVICE_NUM];
 
  protected:
@@ -812,35 +783,6 @@ protected:
   void *tmpcpuso_handle_ = NULL;
   std::string temp_filename_;
   int card_chip_num;
-};
-
-class BmCoeff {
- public:
-  explicit BmCoeff(int devid);
-  ~BmCoeff();
-
-  u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, void* bmrt_ptr, addr_t addr_traits);
-  u64 Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr, void* bmrt_ptr, addr_t addr_traits);
-  u64 Update(
-    ModelCtx* model_ctx, const CoeffMem* coeff_mem, int mem_idx,
-    const std::vector<int> &weight_idx, const std::vector<uint8_t> &file_data, long long &start_position);
-  int64_t GetCoeffAddr(const CoeffMem* coeff_mem);
-  int Check();
-  bm_device_mem_u64_t GetCoeffDeviceMem() {
-    return m_latest_device_mem;
-  }
-  void register_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr);
-  std::vector<std::vector<u8>> get_all_check_codes();
-  void unregister_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr, bool free_unused_mem=false);
-
- protected:
-  std::map<std::vector<u8>, std::set<void*>> m_check_code_user_list;
-  map<vector<u8>, bm_device_mem_u64_t> m_coeff_map; /* to share the same coeff, by check code*/
-  std::mutex m_coeff_mutex;
-  bm_handle_t m_handle = NULL;
-  int m_devid = -1;
-  bm_device_mem_u64_t m_latest_device_mem;
-  std::vector<bm_device_mem_u64_t> m_mem_need_free;
 };
 
 class KernelModule {

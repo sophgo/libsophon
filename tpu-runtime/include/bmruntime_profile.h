@@ -86,11 +86,11 @@ typedef struct {
 
 u64 get_usec();
 
-typedef struct {
+typedef struct buffer_pair{
     size_t size = 0;
     u8* ptr = nullptr;
     bm_device_mem_t mem;
-} buffer_pair;
+} buffer_pair_t;
 
 typedef pair < u64, u64> mem_pair_t;
 
@@ -142,8 +142,8 @@ private:
 
   public:
     bool need_profile(int iteration, int subnet_id, int subnet_mode);
-    void alloc_buffer(buffer_pair* bp, size_t size, const std::string &desc);
-    void free_buffer(buffer_pair* bp);
+    void alloc_buffer(buffer_pair_t* bp, size_t size, const std::string &desc);
+    void free_buffer(buffer_pair_t* bp);
 
     void create_file();
     void write_block(u32 type, size_t len, const void *data);

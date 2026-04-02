@@ -20,9 +20,12 @@
 #include <string>
 #include <vector>
 #include <string.h>
+#include <memory>
 #include "bmlib_runtime.h"
 #include "bmruntime_interface.h"
 #include "bmruntime_legacy.h"
+
+#define MAX_DEVICE_NUM (32)
 
 #ifdef DEBUG
 #define BMRT_DEBUG(fmt, ...)                                                      \
@@ -31,6 +34,17 @@
   } while (0)
 #else
 #define BMRT_DEBUG(fmt, ...)
+#endif
+
+// workaround for old compiler which does not support C++14
+#if __cplusplus < 201402L && !defined(_MSC_VER)
+#pragma message ("Using custom make_unique")
+namespace std {
+    template<typename T, typename... Args>
+    std::unique_ptr<T> make_unique(Args&&... args) {
+        return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+    }
+}
 #endif
 
 
@@ -294,6 +308,12 @@ static inline const char* dtype_to_string(bm_data_type_t t){
   return "";
   #undef DTYPE_CASE
 }
+
+typedef enum {
+  kTagUsers = 0,
+  kTagWeight = 1,
+  kTagActivation = 2,
+} TagType;
 
 #if defined(__cplusplus)
 extern "C" {

@@ -58,6 +58,7 @@ bool b_bmodel_dir = true;
 bool memory_prealloc = false;
 string DECRYPT_LIB;
 bool use_runtime_share_mem = false;
+bool check_mem = true;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -887,6 +888,10 @@ void bmrt_test()
   if (use_runtime_share_mem) {
     bmrt_set_flags(p_bmrt, BM_RUNTIME_SHARE_MEM);
     BMRT_LOG(INFO, "Use runtime share mem");
+  }
+
+  if (check_mem) {
+    bmrt_set_flags(p_bmrt, BM_RUNTIME_CHECK_MEM);
   }
 
   if (PREALLOC_SIZE != 0) {

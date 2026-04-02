@@ -77,10 +77,8 @@ class TestBase:
       else:
           random.seed(self.seed)
           random.shuffle(self.bmodel_list)
-          with open(self.bmodel_list_file,'w') as file:
-              for bmodel in self.bmodel_list:
-                  file.writelines(bmodel + "\n")
-          self.cmd += " --bmodel_list " + self.bmodel_list_file
+          for bmodel in self.bmodel_list:
+              self.cmd += " --context_dir " + bmodel
       return self.cmd
 
   def run_single_mession(self):

@@ -1412,7 +1412,11 @@ static int bmdrv_chip_temp_proc_show(struct seq_file *m, void *v)
 		mutex_lock(&c_attr->attr_mutex);
 		c_attr->bm_get_chip_temp(bmdi, &chip_temp);
 		mutex_unlock(&c_attr->attr_mutex);
-		seq_printf(m, "%d C\n", chip_temp);
+		/* BM1688: bm_read_temp returns milli-Celsius */
+		if (bmdi->cinfo.chip_id == 0x1686a200)
+			seq_printf(m, "%d mC\n", chip_temp);
+		else
+			seq_printf(m, "%d C\n", chip_temp);
 	} else {
 		seq_printf(m, "N/A\n");
 	}

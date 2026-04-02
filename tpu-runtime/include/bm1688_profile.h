@@ -118,9 +118,9 @@ typedef struct {
 #pragma pack()
 
 typedef struct {
-    buffer_pair tiu;
-    buffer_pair gdma;
-    buffer_pair mcu;
+    buffer_pair_t tiu;
+    buffer_pair_t gdma;
+    buffer_pair_t mcu;
 } profile_core_buffer_t;
 
 using namespace bmruntime;

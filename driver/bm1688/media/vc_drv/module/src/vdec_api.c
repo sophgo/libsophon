@@ -725,7 +725,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
             sec_axi_info.u.wave.useBitEnable   = TRUE;
         }
         VPU_DecGiveCommand(pst_handle->handle, SET_SEC_AXI, &sec_axi_info);
-        vdi_update_resolution(pst_handle->core_idx, pst_handle->channel_index, pst_handle->seq_info->picWidth, pst_handle->seq_info->picHeight);
+        vdi_update_resolution(pst_handle->core_idx, pst_handle->handle->instIndex, pst_handle->seq_info->picWidth, pst_handle->seq_info->picHeight);
         if(pst_handle->frameBufFlag == 1)
         {
             if(height_from_user != 0 && width_from_user != 0 && (height_from_user != pst_handle->seq_info->picHeight || width_from_user != pst_handle->seq_info->picWidth)){
@@ -770,7 +770,7 @@ static int get_outputinfo(DECODER_HANDLE *pst_handle, int timeout)
     } else if (ret & (1<<INT_WAVE5_DEC_PIC)) {
         ret = VPU_DecGetOutputInfo(pst_handle->handle, pst_handle->output_info);
         if (ret != RETCODE_SUCCESS) {
-            vdi_update_channel_frames(pst_handle->core_idx, pst_handle->channel_index, ENCODE_FAIL, 1);
+            vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, ENCODE_FAIL, 1);
             return ret;
         }
 
