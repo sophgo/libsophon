@@ -2216,7 +2216,7 @@ bool bm_arm9fw_log_buffer_empty(struct bm_device_info *bmdi, int core_id)
 
 }
 
-int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
+static int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 {
 	int size = 0;
 	int write_p = 0;
@@ -2227,50 +2227,71 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 	u64 host_paddr = bmdi->monitor_thread_info.log_mem[core_id].host_paddr;
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 	bm_cdma_arg cdma_arg;
+	int available = 0;
+	int chunk = 0;
+	int first = 0;
+	int second = 0;
 
 	if (core_id == 1) {
 		write_p = gp_reg_read_enh(bmdi, GP_REG_FW1_LOG_WP);
 	} else {
 		write_p = gp_reg_read_enh(bmdi, GP_REG_FW0_LOG_WP);
 	}
+
+	/* Defensive: keep pointers within ring range. */
+	if (arm9fw_buffer_size <= 0 || host_size <= 0)
+		return 0;
+	if (read_p >= arm9fw_buffer_size)
+		read_p %= arm9fw_buffer_size;
+	if (write_p >= arm9fw_buffer_size)
+		write_p %= arm9fw_buffer_size;
+
 	PR_TRACE("wp = %d, rp = %d, device_paddr = %llx\n", write_p, read_p, device_paddr);
-	if (write_p < read_p) {
-		size = arm9fw_buffer_size - read_p;
 
-		if (size > host_size) {
-			size =  host_size;
-			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-				 host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
-				return 0;
-			}
-			read_p = read_p + size;
+	/* Compute available bytes in ring (FW writes a ring buffer with WP). */
+	if (write_p >= read_p)
+		available = write_p - read_p;
+	else
+		available = (arm9fw_buffer_size - read_p) + write_p;
 
-		} else {
-			size = arm9fw_buffer_size - read_p;
-			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-				host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
-				return 0;
-			}
-			read_p = 0;
-		}
-	} else {
-		size = write_p - read_p;
-		if (size >= host_size)
-			size = host_size;
+	if (available <= 0)
+		goto out;
 
-		bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-			host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
+	chunk = available;
+	if (chunk > host_size)
+		chunk = host_size;
+
+	/*
+	 * Never let one DMA cross the ring end; split into [read_p..end) and [0..].
+	 * Host buffer is linear, so second part is written after first.
+	 */
+	first = arm9fw_buffer_size - read_p;
+	if (first > chunk)
+		first = chunk;
+	second = chunk - first;
+
+	bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
+		host_paddr & 0xffffffffff, first, CHIP2HOST, false, false);
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+		pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
+		return 0;
+	}
+
+	if (second > 0) {
+		bmdev_construct_cdma_arg(&cdma_arg, device_paddr,
+			(host_paddr + first) & 0xffffffffff, second, CHIP2HOST, false, false);
+		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+			pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
 			return 0;
 		}
-		read_p = read_p + size;
-
 	}
+
+	read_p += chunk;
+	if (read_p >= arm9fw_buffer_size)
+		read_p -= arm9fw_buffer_size;
+	size = chunk;
+
+out:
 	// gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, read_p);
 	bmdi->monitor_thread_info.log_mem[core_id].read_size = size;
 	bmdi->monitor_thread_info.log_mem[core_id].read_pos = read_p;
@@ -2279,8 +2300,8 @@ int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_id)
 }
 
 #define ARM9FW_LOG_HOST_BUFFER_SIZE (1024 * 512)
-#define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 4)
-#define ARM9FW_LOG_LINE_SIZE 512
+#define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 1)
+#define ARM9FW_LOG_LINE_SIZE 64
 
 void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 {
@@ -2291,6 +2312,7 @@ void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 
 	for (i = 0; i < size/ARM9FW_LOG_LINE_SIZE; i++) {
 		strncpy(str, p, ARM9FW_LOG_LINE_SIZE - 1);
+		str[ARM9FW_LOG_LINE_SIZE - 1] = '\0';
 		pr_info("bm-sophon%d core_%d: %s", bmdi->dev_index, core_id, str);
 		p += ARM9FW_LOG_LINE_SIZE;
 	}
@@ -2324,6 +2346,12 @@ int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id)
 	PR_TRACE("host size = 0x%x, device_addr = 0x%llx, device size = 0x%x\n",
 		bmdi->monitor_thread_info.log_mem[core_id].host_size, bmdi->monitor_thread_info.log_mem[core_id].device_paddr,
 		bmdi->monitor_thread_info.log_mem[core_id].device_size);
+
+	if (core_id == 1) {
+		gp_reg_write_enh(bmdi, GP_REG_FW1_LOG_WP, 0);
+	} else {
+		gp_reg_write_enh(bmdi, GP_REG_FW0_LOG_WP, 0);
+	}
 
 	return ret;
 }
