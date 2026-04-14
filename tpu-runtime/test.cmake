@@ -20,6 +20,9 @@ target_include_directories(bmrt PUBLIC
     ${CMAKE_BINARY_DIR}
     )
 add_dependencies(bmrt kernel_header)
+if(SOC_MODE)
+    add_definitions(-DSOC_MODE)
+endif()
 
 set(app_srcs
     app/bmrt_test.cpp

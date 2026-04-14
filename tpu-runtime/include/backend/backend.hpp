@@ -1,6 +1,6 @@
 #pragma once
-#include "bmruntime_common.h"
 #include "backend/launcher.hpp"
+#include "bmruntime_common.h"
 
 #include <memory>
 #include <stdint.h>
@@ -18,16 +18,6 @@ struct ConversionParams {
   uint64_t cmd_addr;
   uint64_t cmd_size;
   const net_stage_t *stage;
-};
-
-struct tag_t {
-  uint32_t start;
-  uint32_t len;
-  uint64_t mask;
-};
-struct addr_t {
-  tag_t offset;
-  tag_t tag;
 };
 
 struct CmdInfo {
@@ -59,6 +49,12 @@ public:
         .tag = tag_t{0, 0, 0},
     };
   }
+  uint32_t tag(uint64_t addr) const {
+    return (addr >> addr_layout().tag.start) & addr_layout().tag.mask;
+  }
+  uint64_t offset(uint64_t addr) const {
+    return (addr >> addr_layout().offset.start) & addr_layout().offset.mask;
+  }
 
   virtual std::string name() const = 0;
   virtual bool name_verify(const std::string &model_name) const {
@@ -71,7 +67,7 @@ public:
     memcpy(params.dst_cmd, params.src_cmd, params.cmd_size);
     return true;
   }
-  virtual bool convert_gdma(ConversionParams &params) const {
+  virtual bool convert_gdma(ConversionParams &params) {
     memcpy(params.dst_cmd, params.src_cmd, params.cmd_size);
     return true;
   }
@@ -95,6 +91,8 @@ public:
   // STORE_MODE_1N, STORE_MODE_2N, STORE_MODE_4N
   virtual bool support_stmode() const { return false; }
 
+  virtual bool instruct_converted() const { return false; }
+
 protected:
   uint64_t update_gdma_cmd_addr(const net_stage_t *stage, uint64_t origin_addr, bool is_src) const;
   virtual uint32_t gdma_cmd_size(const uint32_t *cmd, uint64_t offset, bool last_cmd) const;
@@ -104,7 +102,8 @@ protected:
 
 class Backend_BM1682 : public Backend {
 public:
-  Backend_BM1682() { launcher_ = std::make_unique<Launcher_BM1682>(); }
+  Backend_BM1682() {
+    launcher_ = std::make_unique<Launcher_BM1682>(addr_layout()); }
   virtual ~Backend_BM1682() = default;
 
   virtual uint64_t ctx_start_addr() const override {
@@ -121,7 +120,7 @@ public:
   virtual std::string name() const override { return "BM1682"; }
 
   virtual bool convert_bdc(ConversionParams &params) const override;
-  virtual bool convert_gdma(ConversionParams &params) const override;
+  virtual bool convert_gdma(ConversionParams &params) override;
   virtual uint32_t aligned_cmd_words(ENGINE_ID engine) const override {
     uint32_t cmd_words = 0;
     if (engine == ENGINE_BD) {
@@ -134,14 +133,19 @@ public:
     return cmd_words;
   }
 
+  virtual bool instruct_converted() const { return m_instruct_converted; }
+
 private:
   const CmdInfo bdc_cmd_info = CmdInfo(8, 1 << 8, 24);
   const CmdInfo gdma_cmd_info = CmdInfo(6);
+
+  bool m_instruct_converted = false;
 };
 
 class Backend_BM1684 : public Backend {
 public:
-  Backend_BM1684() { launcher_ = std::make_unique<Launcher_BM1684>(); }
+  Backend_BM1684() {
+    launcher_ = std::make_unique<Launcher_BM1684>(addr_layout()); }
   virtual ~Backend_BM1684() = default;
 
   virtual uint64_t ctx_start_addr() const override {
@@ -151,7 +155,7 @@ public:
   virtual std::string name() const override { return "BM1684"; }
 
   virtual bool convert_bdc(ConversionParams &params) const override;
-  virtual bool convert_gdma(ConversionParams &params) const override;
+  virtual bool convert_gdma(ConversionParams &params) override;
   virtual uint32_t aligned_cmd_words(ENGINE_ID engine) const override {
     uint32_t cmd_words = 0;
     if (engine == ENGINE_BD) {
@@ -166,14 +170,19 @@ public:
 
   virtual bool support_stmode() const override { return true; }
 
+  virtual bool instruct_converted() const { return m_instruct_converted; }
+
 private:
   const CmdInfo bdc_cmd_info = CmdInfo(7);
   const CmdInfo gdma_cmd_info = CmdInfo(7);
+
+  bool m_instruct_converted = false;
 };
 
 class Backend_BM1684X : public Backend {
 public:
-  Backend_BM1684X() { launcher_ = std::make_unique<Launcher_BM1684X>(); }
+  Backend_BM1684X() {
+    launcher_ = std::make_unique<Launcher_BM1684X>(addr_layout()); }
   virtual ~Backend_BM1684X() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x100000000ul; }
@@ -182,21 +191,29 @@ public:
     return model_name == name() || model_name == "BM1686";
   }
 
-  virtual bool convert_gdma(ConversionParams &params) const override;
+  virtual bool convert_gdma(ConversionParams &params) override;
 
   virtual bool support_dynamic_loading() const override { return true; }
+
+  virtual bool instruct_converted() const { return m_instruct_converted; }
+
+private:
+  bool m_instruct_converted = false;
 };
 
 class Backend_BM1688 : public Backend {
 public:
-  Backend_BM1688() { launcher_ = std::make_unique<Launcher_BM1688>(); core_num_ = 2; }
+  Backend_BM1688() {
+    launcher_ = std::make_unique<Launcher_BM1688>(addr_layout());
+    core_num_ = 2;
+  }
   virtual ~Backend_BM1688() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x100000000ul; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 35, .mask = (1ul << 35) - 1},
-        .tag = tag_t{.start = 36, .len = 3, .mask = 0x7}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 35, .mask = (1ull << 35) - 1},
+                  .tag = tag_t{.start = 36, .len = 3, .mask = 0x7}};
   }
 
   virtual std::string name() const override { return "BM1688"; }
@@ -205,33 +222,39 @@ public:
            model_name == "BM1686";
   }
 
-  virtual bool convert_gdma(ConversionParams &params) const override;
+  virtual bool convert_gdma(ConversionParams &params) override;
 
   virtual bool support_dynamic_loading() const override { return true; }
 };
 class Backend_BM1690 : public Backend {
 public:
-  Backend_BM1690() { launcher_ = std::make_unique<Launcher_BM1690>("BM1690"); core_num_ = 8;}
+  Backend_BM1690() {
+    launcher_ = std::make_unique<Launcher_BM1690>("BM1690", addr_layout());
+    core_num_ = 8;
+  }
   virtual ~Backend_BM1690() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
   virtual std::string name() const override { return "BM1690"; }
 };
 class Backend_BM1690E : public Backend {
 public:
-  Backend_BM1690E() { launcher_ = std::make_unique<Launcher_BM1690>("BM1690E"); core_num_ = 4;}
+  Backend_BM1690E() {
+    launcher_ = std::make_unique<Launcher_BM1690>("BM1690E", addr_layout());
+    core_num_ = 4;
+  }
   virtual ~Backend_BM1690E() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
   virtual std::string name() const override { return "BM1690E"; }
@@ -243,9 +266,9 @@ public:
 
   virtual uint64_t gmem_start_addr() const override { return 0; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
   virtual std::string name() const override { return "SG2380"; }
@@ -254,14 +277,16 @@ public:
 };
 class Backend_CV184X : public Backend {
 public:
-  Backend_CV184X() { launcher_ = std::make_unique<Launcher_CV184X>(); }
+  Backend_CV184X() {
+    launcher_ = std::make_unique<Launcher_CV184X>(addr_layout());
+  }
   virtual ~Backend_CV184X() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x80000000ul; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
   virtual std::string name() const override { return "CV184X"; }
@@ -273,14 +298,17 @@ public:
 };
 class Backend_BM1684X2 : public Backend {
 public:
-  Backend_BM1684X2() { launcher_ = std::make_unique<Launcher_BM1684X2>(); core_num_ = 4;}
+  Backend_BM1684X2() {
+    launcher_ = std::make_unique<Launcher_BM1684X2>(addr_layout());
+    core_num_ = 4;
+  }
   virtual ~Backend_BM1684X2() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x1000000000ul; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
   virtual std::string name() const override { return "BM1684X2"; }
@@ -288,14 +316,16 @@ public:
 
 class Backend_SGTPUV8 : public Backend {
 public:
-  Backend_SGTPUV8() { launcher_ = std::make_unique<Launcher_SGTPUV8>(); }
+  Backend_SGTPUV8() {
+    launcher_ = std::make_unique<Launcher_SGTPUV8>(addr_layout());
+  }
   virtual ~Backend_SGTPUV8() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x80000000ul; }
   virtual addr_t addr_layout() const override {
-    return addr_t{
-        .offset = tag_t{.start = 0, .len = 40, .mask = (1ul << 40) - 1},
-        .tag = tag_t{.start = 40, .len = 5, .mask = (1ul << 5) - 1}};
+    return addr_t{.offset =
+                      tag_t{.start = 0, .len = 40, .mask = (1ull << 40) - 1},
+                  .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
   virtual std::string name() const override { return "SGTPUV8"; }

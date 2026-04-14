@@ -27,7 +27,7 @@ bool Backend_BM1684::convert_bdc(ConversionParams &params) const {
   return true;
 }
 
-bool Backend_BM1684::convert_gdma(ConversionParams &params) const {
+bool Backend_BM1684::convert_gdma(ConversionParams &params) {
   uint32_t *dst_ptr = static_cast<uint32_t *>(params.dst_cmd);
   const uint32_t *src_ptr = static_cast<const uint32_t *>(params.src_cmd);
   for (uint32_t cmd_idx = 0; cmd_idx < params.num_cmd; ++cmd_idx) {
@@ -61,6 +61,7 @@ bool Backend_BM1684::convert_gdma(ConversionParams &params) const {
     dst_ptr += (gdma_cmd_info.size >> 2);
     src_ptr += (gdma_cmd_info.size >> 2);
   }
+  m_instruct_converted = true;
   return true;
 }
 

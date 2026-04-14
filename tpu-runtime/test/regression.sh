@@ -17,6 +17,9 @@ function main(){
   if [ $ret -ne 0 ]; then echo "rebuild_tpu_runtime failed"; return $ret; fi
   test_bmrt_api; ret=$?
   if [ $ret -ne 0 ]; then echo "test_bmrt_api regression failed"; return $ret; fi
+
+  # test soc build
+  # rebuild_tpu_runtime_soc || echo "build soc runtime failed"; return -1
 }
 
 main

@@ -24,6 +24,8 @@
 #include "bmruntime_interface.h"
 #include "bmruntime_legacy.h"
 
+#define MAX_DEVICE_NUM (32)
+
 #ifdef DEBUG
 #define BMRT_DEBUG(fmt, ...)                                                      \
   do {                                                                            \
@@ -294,6 +296,12 @@ static inline const char* dtype_to_string(bm_data_type_t t){
   return "";
   #undef DTYPE_CASE
 }
+
+typedef enum {
+  kTagUsers = 0,
+  kTagWeight = 1,
+  kTagActivation = 2,
+} TagType;
 
 #if defined(__cplusplus)
 extern "C" {

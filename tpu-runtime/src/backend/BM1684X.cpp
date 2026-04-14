@@ -2,7 +2,7 @@
 #include "bmruntime.h"
 
 namespace bmruntime {
-bool Backend_BM1684X::convert_gdma(ConversionParams &params) const {
+bool Backend_BM1684X::convert_gdma(ConversionParams &params) {
   uint32_t *dst_ptr = static_cast<uint32_t *>(params.dst_cmd);
   const uint32_t *src_ptr = static_cast<const uint32_t *>(params.src_cmd);
 
@@ -56,6 +56,7 @@ bool Backend_BM1684X::convert_gdma(ConversionParams &params) const {
     dst_ptr += (cmd_size >> 2);
     src_ptr += (cmd_size >> 2);
   }
+  m_instruct_converted = true;
   return true;
 }
 
