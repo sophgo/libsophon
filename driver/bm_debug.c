@@ -26,6 +26,7 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/string.h>
+#include <linux/version.h>
 
 //static struct proc_dir_entry *bmsophon_total_node;
 static struct proc_dir_entry *bmsophon_proc_dir;
@@ -215,11 +216,20 @@ static int seq_bmdi_open(struct inode *inode, struct file *file)
 	return single_open(file, bmdi_proc_show, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops bmdi_proc_ops = {
 	.proc_open = seq_bmdi_open,
 	.proc_read = seq_read,
 	.proc_release = single_release,
 };
+#else
+static const struct file_operations bmdi_proc_ops = {
+	.owner = THIS_MODULE,
+	.open = seq_bmdi_open,
+	.read = seq_read,
+	.release = single_release,
+};
+#endif
 
 static int lib_proc_show(struct seq_file *m, void *v)
 {
@@ -252,11 +262,20 @@ static int seq_lib_open(struct inode *inode, struct file *file)
 	return single_open(file, lib_proc_show, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops lib_proc_ops = {
 	.proc_open = seq_lib_open,
 	.proc_read = seq_read,
 	.proc_release = single_release,
 };
+#else
+static const struct file_operations lib_proc_ops = {
+	.owner = THIS_MODULE,
+	.open = seq_lib_open,
+	.read = seq_read,
+	.release = single_release,
+};
+#endif
 
 extern int base_get_core_num(struct bm_device_info *bmdi);
 static int api_proc_show(struct seq_file *m, void *v)
@@ -305,11 +324,20 @@ static int seq_api_open(struct inode *inode, struct file *file)
 	return single_open(file, api_proc_show, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops api_proc_ops = {
 	.proc_open = seq_api_open,
 	.proc_read = seq_read,
 	.proc_release = single_release,
 };
+#else
+static const struct file_operations api_proc_ops = {
+	.owner = THIS_MODULE,
+	.open = seq_api_open,
+	.read = seq_read,
+	.release = single_release,
+};
+#endif
 
 static int tiu_gdma_proc_show(struct seq_file *m, void *v)
 {
@@ -380,11 +408,20 @@ static int seq_reg_open(struct inode *inode, struct file *file)
 	return single_open(file, tiu_gdma_proc_show, PDE_DATA(inode));
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops reg_proc_ops = {
 	.proc_open = seq_reg_open,
 	.proc_read = seq_read,
 	.proc_release = single_release,
 };
+#else
+static const struct file_operations reg_proc_ops = {
+	.owner = THIS_MODULE,
+	.open = seq_reg_open,
+	.read = seq_read,
+	.release = single_release,
+};
+#endif
 
 
 void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi)

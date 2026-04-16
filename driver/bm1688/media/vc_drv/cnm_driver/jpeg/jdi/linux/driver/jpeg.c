@@ -821,9 +821,16 @@ static ssize_t jpu_proc_info_read(struct file *file, char __user *buf, size_t si
     return len;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 static const struct proc_ops jpu_proc_info_operations = {
     .proc_read  = jpu_proc_info_read,
 };
+#else
+static const struct file_operations jpu_proc_info_operations = {
+    .owner = THIS_MODULE,
+    .read  = jpu_proc_info_read,
+};
+#endif
 
 int jpeg_platform_init(struct platform_device *pdev)
 {
