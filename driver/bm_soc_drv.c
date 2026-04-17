@@ -43,11 +43,6 @@ u32 c906_park_0_l, c906_park_0_h, c906_park_1_l, c906_park_1_h;
 u32 gp_reg1[32] = {0};
 extern void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi);
 
-static struct kobj_type bmdrv_ktype = {
-	NULL
-};
-
-
 static int platform_init_bar_address(struct platform_device *pdev, struct chip_info *cinfo)
 {
 	struct resource *res;
@@ -444,15 +439,6 @@ static int bmdrv_probe(struct platform_device *pdev)
 	if (rc)
 		goto err_platform_init;
 
-	/* Create sysfs node (/sys/kernel/bm1684-0/debug) */
-	rc = kobject_init_and_add(&bmdi->kobj, &bmdrv_ktype, kernel_kobj, "%s-%d",
-			cinfo->dev_name, bmdi->dev_index);
-	if (rc) {
-		dev_err(cinfo->device, "kobject_init_and_add fail %d\n", rc);
-		kobject_put(&bmdi->kobj);
-		goto err_kobject_init;
-	}
-
 	rc = bmdrv_software_init(bmdi);
 	if (rc) {
 		dev_err(cinfo->device, "device software init fail %d\n", rc);
@@ -534,8 +520,6 @@ err_fw:
 err_hardware_init:
 	bmdrv_software_deinit(bmdi);
 err_software_init:
-	kobject_del(&bmdi->kobj);
-err_kobject_init:
 	bmdrv_platform_deinit(bmdi, pdev);
 err_platform_init:
 	bmdrv_class_destroy();
@@ -563,8 +547,6 @@ static int bmdrv_remove(struct platform_device *pdev)
 	bmdrv_hardware_deinit(bmdi);
 	bmdrv_software_deinit(bmdi);
 	bmdrv_platform_deinit(bmdi, pdev);
-
-	kobject_del(&bmdi->kobj);
 
 	if (dev_count == 0) {
 		bmdrv_remove_bmci();
@@ -595,8 +577,6 @@ static void bmdrv_remove(struct platform_device *pdev)
         bmdrv_hardware_deinit(bmdi);
         bmdrv_software_deinit(bmdi);
         bmdrv_platform_deinit(bmdi, pdev);
-
-        kobject_del(&bmdi->kobj);
 
         if (dev_count == 0) {
                 bmdrv_remove_bmci();
