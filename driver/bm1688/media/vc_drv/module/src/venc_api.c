@@ -23,7 +23,7 @@
 #include "venc_rc.h"
 #include "platform.h"
 
-extern wait_queue_head_t tVencWaitQueue[];
+extern wait_queue_head_t *tVencWaitQueue;
 static DEFINE_MUTEX(__venc_init_mutex);
 
 #define MAX_SRC_BUFFER_NUM 32
@@ -160,6 +160,7 @@ typedef struct encoder_handle
     unsigned int bs_buf_size;
     BOOL use_extern_bs_buf;
     PhysicalAddress extern_bs_addr;
+    int soc_idx;
 } ENCODER_HANDLE;
 
 static int get_vpu_rcmode(int cvi_rcmode)
@@ -539,6 +540,7 @@ static int  alloc_framebuffer(void * handle)
             fbHeight = VPU_ALIGN32(pst_open_param->picWidth);
         }
     }
+    vdi_update_resolution(pst_handle->core_idx, pst_handle->handle->instIndex, pst_open_param->picWidth, pst_open_param->picHeight);
 
     pst_handle->pst_frame_buffer = (FrameBuffer *)vzalloc(pst_handle->min_recon_frame_count * sizeof(FrameBuffer));
     stride = VPU_GetFrameBufStride(pst_handle->handle, fbWidth, fbHeight,
@@ -880,7 +882,7 @@ static void venc_process_bsbuf_full(void *handle)
                         (void *)pst_bsfull_info->extra_vb_buffer.virt_addr,
                         pst_bsfull_info->extra_vb_buffer.size);
 #else
-            pcie_memcpy_c2c(vb_buffer.phys_addr,
+            pcie_memcpy_c2c(pst_handle->soc_idx, vb_buffer.phys_addr,
                             pst_bsfull_info->extra_vb_buffer.phys_addr,
                             pst_bsfull_info->extra_vb_buffer.size);
 #endif
@@ -906,7 +908,7 @@ static void venc_process_bsbuf_full(void *handle)
             , (unsigned char *)(pst_bsfull_info->extra_vb_buffer.virt_addr + pst_bsfull_info->bs_size)
             , cur_encoded_size,  VPU_STREAM_ENDIAN);
 #else
-    pcie_memcpy_c2c(pst_bsfull_info->extra_vb_buffer.phys_addr + pst_bsfull_info->bs_size, ptr_read, cur_encoded_size);
+    pcie_memcpy_c2c(pst_handle->soc_idx, pst_bsfull_info->extra_vb_buffer.phys_addr + pst_bsfull_info->bs_size, ptr_read, cur_encoded_size);
 #endif
     pst_bsfull_info->bs_size += cur_encoded_size;
 }
@@ -975,6 +977,7 @@ static int venc_process_frame_done(void* handle, int async_mode)
     } while (retry_times <= MAX_RETRY_TIMES);
 
     if (ret != RETCODE_SUCCESS) {
+        vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, ENCODE_FAIL, 1);
         VLOG(ERR, "Failed VPU_EncGetOutputInfo ret:%d, reason:0x%x\n", ret, output_info.errorReason);
         return -1;
     }
@@ -1067,7 +1070,7 @@ static int venc_process_frame_done(void* handle, int async_mode)
                         phys_to_virt(output_info.bitstreamBuffer),
                         remain_encoded_size);
 #else
-            pcie_memcpy_c2c(pst_extra_buf_info->extra_vb_buffer.phys_addr + pst_extra_buf_info->bs_size,
+            pcie_memcpy_c2c(pst_handle->soc_idx, pst_extra_buf_info->extra_vb_buffer.phys_addr + pst_extra_buf_info->bs_size,
                             output_info.bitstreamBuffer,
                             remain_encoded_size);
 #endif
@@ -1107,6 +1110,9 @@ static int venc_process_frame_done(void* handle, int async_mode)
             encode_pack.u64CustomMapAddr = pst_handle->input_frame[output_info.encSrcIdx].custom_map_addr;
         }
         Queue_Enqueue(pst_handle->stream_packs, &encode_pack);
+        if (output_info.reconFrameIndex != RECON_IDX_FLAG_HEADER_ONLY) {
+            vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, SUCCESS_NOT_GET, Queue_Get_Cnt(pst_handle->stream_packs));
+        }
         Queue_Enqueue(pst_handle->customMapBuffer, &pst_handle->input_frame[output_info.encSrcIdx].custom_map_addr);
     }
 
@@ -1203,11 +1209,12 @@ void *internal_venc_open(InitEncConfig *pInitEncCfg)
     int fw_size;
     Uint16 *pus_bitCode;
     int reinit_count = 0;
+    int core_idx = pInitEncCfg->socIdx * MAX_NUM_VPU_CORE_CHIP;
 
     pus_bitCode = (Uint16 *)bit_code;
     fw_size = ARRAY_SIZE(bit_code);
 reinit:
-    ret = VPU_InitWithBitcode(0, pus_bitCode, fw_size);
+    ret = VPU_InitWithBitcode(core_idx, pus_bitCode, fw_size);
     if ((ret == RETCODE_VPU_RESPONSE_TIMEOUT) && (reinit_count < 3)) {
         reinit_count++;
         goto reinit;
@@ -1221,6 +1228,8 @@ reinit:
         return NULL;
 
     set_open_param(&pst_handle->open_param, pInitEncCfg);
+    pst_handle->soc_idx = pInitEncCfg->socIdx;
+    pst_handle->core_idx = core_idx;
     pst_handle->open_param.coreIdx = pst_handle->core_idx;
     pst_handle->bframe_delay = presetGopDelay[pst_handle->open_param.EncStdParam.waveParam.gopPresetIdx];
     pst_handle->cmd_queue_depth = pInitEncCfg->s32CmdQueueDepth;
@@ -1520,7 +1529,7 @@ static int venc_build_enc_param(ENCODER_HANDLE *pst_handle, EncOnePicCfg *pPicCf
 
     if (pPicCfg->src_end == 0) {
         if (pPicCfg->src_idx < 0) {
-            if (vb_phys_addr2handle(pst_fb->bufY) == VB_INVALID_HANDLE) {
+            if (platform_vb_phys_addr2handle(pst_handle->soc_idx, pst_fb->bufY) == VB_INVALID_HANDLE) {
                 Queue_Enqueue(pst_handle->free_stream_buffer, addr);
                 return RETCODE_INVALID_PARAM;
             }
@@ -1617,6 +1626,7 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
     BOOL is_wait_interrupt = 0;
     BOOL is_publish = 0;
     BOOL is_header_update = FALSE;
+    vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, IN_FRAME, 1);
 
     // create venc_wait thread
     // 1. bind_mode is false
@@ -1715,6 +1725,7 @@ int internal_venc_enc_one_pic(void *handle, EncOnePicCfg *pPicCfg, int s32MilliS
         ret = VPU_EncStartOneFrame(pst_handle->handle, &enc_param);
     }
     if (ret != RETCODE_SUCCESS) {
+        vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, ENCODE_FAIL, 1);
         release_frame_idx(pst_handle, enc_param.srcIdx);
         Queue_Enqueue(pst_handle->free_stream_buffer, &enc_param.picStreamBufferAddr);
         if (ret == RETCODE_QUEUEING_FAILURE) {
@@ -1835,6 +1846,7 @@ int internal_venc_get_stream(void *handle, VEncStreamInfo *pStreamInfo, int s32M
         return -2;
     }
     pStreamInfo->psp = pst_handle->stream_packs;
+    vdi_update_channel_frames(pst_handle->core_idx, pst_handle->handle->instIndex, OUT_FRAME, 1);
     return 0;
 }
 

@@ -47,7 +47,7 @@ static void bmdrv_print_cardinfo(struct chip_info *cinfo)
 #endif
 }
 
-void print_api_log(u32 api_id, u32 api_result)
+static void print_api_log(u32 api_id, u32 api_result)
 {
 	switch (api_id) {
 	case 0x90000001:

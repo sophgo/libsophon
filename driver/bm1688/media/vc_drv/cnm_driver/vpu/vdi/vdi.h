@@ -174,9 +174,6 @@ extern int vdi_get_task_num(unsigned long core_idx);
 #endif
 extern int vdi_set_ddr_map(unsigned long core_idx, unsigned int ext_addr);
 extern int vdi_get_ddr_map(unsigned long core_idx);
-extern int vdi_get_instance_count(unsigned long core_idx);
-extern int vdi_request_instance(unsigned long core_idx);
-extern int vdi_release_instance(unsigned long core_idx);
 extern int vdi_invalidate_ion_cache(uint64_t u64PhyAddr, void *pVirAddr,
                  uint32_t u32Len);
 extern int vdi_flush_ion_cache(uint64_t u64PhyAddr, void *pVirAddr, uint32_t u32Len);

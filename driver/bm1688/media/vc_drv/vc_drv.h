@@ -12,9 +12,7 @@
 
 #include <linux/vc_uapi.h>
 #include "drv_venc.h"
-#ifdef ENABLE_DEC
 #include "drv_vdec.h"
-#endif
 
 #define DRV_VC_DRV_PLATFORM_DEVICE_NAME "vc_drv"
 #define DRV_VC_DRV_CLASS_NAME "vc_drv"
@@ -82,12 +80,11 @@ typedef struct _USER_FRAME_INFO_EX_S {
     int s32MilliSec;
 } USER_FRAME_INFO_EX_S;
 
-#ifdef ENABLE_DEC
 typedef struct _VDEC_STREAM_EX_S {
     vdec_stream_s *pstStream;
     int s32MilliSec;
 } VDEC_STREAM_EX_S;
-#endif
+
 typedef enum {
     REG_CTRL = 0,
     REG_REMAP,

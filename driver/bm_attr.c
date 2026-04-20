@@ -237,7 +237,7 @@ int bmdrv_get_tpu_target_freq(struct bm_device_info *bmdi, enum bm_freq_scaling_
 }
 #endif
 
-void bmdrv_thermal_init(struct bm_device_info *bmdi)
+static void bmdrv_thermal_init(struct bm_device_info *bmdi)
 {
 	int i = 0;
 
@@ -299,7 +299,7 @@ static void calculate_board_status(struct bm_device_info *bmdi)
 	}
 }
 
-void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
+static void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
 {
 	int fusing_tmp = 95;
 	int support_tmp = 90;
@@ -399,7 +399,7 @@ extreme:
 }
 #endif
 
-void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp)
+static void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp)
 {
 	int avg_tmp = 0;
 	int cur_tpu_clk = 0;

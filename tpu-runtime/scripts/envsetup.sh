@@ -13,7 +13,7 @@ function build_tpu_runtime_soc() {
   pushd $RUNTIME_DIR
   rm -rf build
   mkdir build && cd build
-  ONLY_TEST=1 cmake ../ -DCMAKE_C_COMPILER=$C_COMPILER  -DCMAKE_CXX_COMPILER=$CXX_COMPILER -DCMAKE_BUILD_TYPE=Release $EXTRA_CONFIG
+  ONLY_TEST=1 cmake ../ -DCMAKE_C_COMPILER=$C_COMPILER  -DCMAKE_CXX_COMPILER=$CXX_COMPILER -DCMAKE_BUILD_TYPE=Release -DSOC_MODE=ON $EXTRA_CONFIG
   make -j$((`nproc`-1))
   RET=$?; if [ $RET -ne 0 ]; then popd; return $RET; fi
   popd
@@ -68,6 +68,8 @@ function cmodel_run_bmodel() {
     chip="bm1686"
   elif [ $chip = 'bm1690' ]; then
     chip="sg2260"
+  elif [ $chip = 'bm1690e' ]; then
+    chip="sg2260e"
   fi
   TPUKERNEL_FIRMWARE_PATH=$THIRDPARTY_DIR/lib/libcmodel_${chip}.so $EXTRA_EXEC $RUNTIME_DIR/build/bmrt_test $bmodel_args $*
 }

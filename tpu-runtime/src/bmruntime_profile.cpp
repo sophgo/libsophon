@@ -5,7 +5,7 @@
 #include "bm1684_profile.h"
 #include "bm1684x_profile.h"
 #include "bm1688_profile.h"
-#include "mars3_profile.h"
+#include "cv184x_profile.h"
 #ifndef __linux__
 #include <direct.h>
 #endif
@@ -57,21 +57,21 @@ BMProfile::BMProfile(Bmruntime* p_bmrt): p_bmrt(p_bmrt), enabled(false) {
     set_save_dir("bmprofile_data");
     handle = p_bmrt->get_bm_handle();
     devid = p_bmrt->get_devid();
-    auto arch = bmrt_arch_info::get_bmtpu_arch();
-    if(arch== BM1684){
+    auto arch = p_bmrt->backend()->name();
+    if(arch== "BM1684"){
       device = decltype(device)(new bm1684_profile::BMProfileDevice(this));
-    } else if(arch == BM1684X){
+    } else if(arch == "BM1684X"){
       device = decltype(device)(new bm1684x_profile::BMProfileDevice(this));
-    } else if (arch == BM1688) {
+    } else if (arch == "BM1688") {
       device = decltype(device)(new bm1688_profile::BMProfileDevice(this));
-    } else if (arch == MARS3) {
-      device = decltype(device)(new mars3_profile::BMProfileDevice(this));
+    } else if (arch == "CV184X") {
+      device = decltype(device)(new cv184x_profile::BMProfileDevice(this));
     } else {
-      BMRT_LOG(WARNING, "Not support profile for arch=%d",  arch);
+      BMRT_LOG(WARNING, "Not support profile for arch=%s",  arch.c_str());
     }
     enabled = device && device->enabled();
     if (enabled){
-        BMRT_LOG(INFO, "Profile For arch=%d", arch);
+        BMRT_LOG(INFO, "Profile For arch=%s", arch.c_str());
     }
 }
 
@@ -215,12 +215,11 @@ std::string BMProfile::get_global_filename()
 void BMProfile::init(const string& net_name, const vector<u8>& data, const vector<u8>& stat, const std::vector<int>& core_list)
 {
     if (!is_enabled()) return;
-    auto arch = bmrt_arch_info::get_bmtpu_arch();
     string filename = get_global_filename();
     auto fp = fopen(filename.c_str(), "wb");
     int freq = 0;
     bm_get_clk_tpu_freq(handle, &freq);
-    fprintf(fp, "[bmprofile] arch=%d\n", arch);
+    fprintf(fp, "[bmprofile] arch=%s\n", p_bmrt->backend()->name().c_str());
     fprintf(fp, "[bmprofile] net_name=%s\n", net_name.c_str());
     fprintf(fp, "[bmprofile] tpu_freq=%d\n", freq);
     cmd_infos.assign(core_list.size(), nullptr);
@@ -237,7 +236,7 @@ void BMProfile::init(const string& net_name, const vector<u8>& data, const vecto
         fclose(fp);
     }
 
-    if(arch == BM1682) {
+    if(p_bmrt->backend()->name() == "BM1682") {
         bm_set_debug_mode(handle, 1);
         bmlib_log_set_level(BMLIB_LOG_DEBUG);
         bmlib_api_dbg_callback call_back = bm1682_profile::bm_log_profile_callback;
@@ -249,7 +248,7 @@ void BMProfile::init(const string& net_name, const vector<u8>& data, const vecto
     }
 }
 
-void BMProfile::alloc_buffer(buffer_pair *bp, size_t size, const string& desc)
+void BMProfile::alloc_buffer(buffer_pair_t *bp, size_t size, const string& desc)
 {
     if(bp->size != size || !bp->ptr){
         free_buffer(bp);
@@ -264,7 +263,7 @@ void BMProfile::alloc_buffer(buffer_pair *bp, size_t size, const string& desc)
     }
 }
 
-void BMProfile::free_buffer(buffer_pair *bp)
+void BMProfile::free_buffer(buffer_pair_t *bp)
 {
     if(bp->ptr){
         delete [] bp->ptr;
@@ -355,8 +354,9 @@ void BMProfile::begin_subnet(net_ctx_t* net_ctx, int iteration, int subnet_id, i
     summary.subnet_type = subnet_mode;
     summary.extra_data = 0;
     summary.start_usec = get_usec();
-    if (arch == BM1682) {
-        bmfunc::bmdnn_1682()->set_bmdnn_func_profile(1);
+    if (p_bmrt->backend()->name() == "BM1682") {
+        auto &launcher = p_bmrt->backend()->launcher();
+        dynamic_cast<Launcher_BM1682*>(launcher.get())->set_bmdnn_func_profile(1);
     } else if (device) {
         device->begin(net_ctx);
     }
@@ -389,8 +389,7 @@ void BMProfile::end_profile(net_ctx_t* net_ctx)
 {
     create_file();
     write_block(BLOCK_SUMMARY, sizeof(summary), &summary);
-    auto arch = bmrt_arch_info::get_bmtpu_arch();
-    if (arch == BM1682) {
+    if (p_bmrt->backend()->name() == "BM1682") {
         auto& v_log = bm1682_profile::get_log();
         write_block(BLOCK_FIRMWARE_LOG, v_log.size(), v_log.data());
         v_log.clear();

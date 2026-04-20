@@ -8,7 +8,6 @@
 #include <functional>
 #include <thread>
 #include <mutex>
-#include "bmrt_arch_info.h"
 #include "bmruntime_common.h"
 #ifdef __linux__
 #define TIME_TO_USECS(t) (t.tv_sec*1000000+ t.tv_usec)
@@ -87,11 +86,11 @@ typedef struct {
 
 u64 get_usec();
 
-typedef struct {
+typedef struct buffer_pair{
     size_t size = 0;
     u8* ptr = nullptr;
     bm_device_mem_t mem;
-} buffer_pair;
+} buffer_pair_t;
 
 typedef pair < u64, u64> mem_pair_t;
 
@@ -143,8 +142,8 @@ private:
 
   public:
     bool need_profile(int iteration, int subnet_id, int subnet_mode);
-    void alloc_buffer(buffer_pair* bp, size_t size, const std::string &desc);
-    void free_buffer(buffer_pair* bp);
+    void alloc_buffer(buffer_pair_t* bp, size_t size, const std::string &desc);
+    void free_buffer(buffer_pair_t* bp);
 
     void create_file();
     void write_block(u32 type, size_t len, const void *data);
@@ -154,11 +153,11 @@ private:
     int getenv_int(const char* name, int default_val = 0);
     bool getenv_bool(const char* name, bool default_val = false);
     bm_handle_t get_handle() { return handle; }
+    Bmruntime* get_bmrt() { return p_bmrt; }
 
 private:
     Bmruntime* p_bmrt = nullptr;
     std::vector<profile_cmd_info_t*> cmd_infos;
-    int arch = -1;
     int devid = -1;
     bool enabled = false;
 

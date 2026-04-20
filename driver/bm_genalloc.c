@@ -36,6 +36,17 @@
 #include <linux/of_device.h>
 #include <linux/vmalloc.h>
 #include <linux/version.h>
+#include <linux/device.h>     
+#include <linux/of.h>        
+#include <linux/of_device.h>
+#include <linux/property.h>
+#include <linux/slab.h>   
+#include <linux/module.h>
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+#include <linux/list.h>
+#include <linux/device/bus.h>
+#endif
+#include <linux/platform_device.h>
 #include "bm_genalloc.h"
 static inline size_t chunk_size(const struct bm_gen_pool_chunk *chunk)
 {
@@ -806,6 +817,38 @@ free_pool_name:
  * address of the device tree node pointed at by the phandle property,
  * or NULL if not found.
  */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0)
+struct bm_of_match_data {
+    struct device_node *target_np;  
+    struct platform_device *found_pdev; 
+};
+
+static int bm_platform_dev_match(struct device *d, void *data)
+{
+    struct bm_of_match_data *match_data = data;
+    struct platform_device *pdev = to_platform_device(d);
+
+    if (pdev->dev.of_node == match_data->target_np) {
+        get_device(&pdev->dev); 
+        match_data->found_pdev = pdev;
+        return 1; 
+    }
+
+    return 0;
+}
+
+static struct platform_device *bm_of_find_platform_device(struct device_node *np)
+{
+    struct bm_of_match_data match_data = {
+        .target_np = np,
+        .found_pdev = NULL
+    };
+
+    bus_for_each_dev(&platform_bus_type, NULL, &match_data, bm_platform_dev_match);
+
+    return match_data.found_pdev;
+}
+#endif
 struct bm_gen_pool *of_bm_gen_pool_get(struct device_node *np,
 	const char *propname, int index)
 {
@@ -818,6 +861,7 @@ struct bm_gen_pool *of_bm_gen_pool_get(struct device_node *np,
 	if (!np_pool)
 		return NULL;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
 	pdev = of_find_device_by_node(np_pool);
 	if (!pdev) {
 		/* Check if named bm_gen_pool is created by parent node device */
@@ -831,6 +875,29 @@ struct bm_gen_pool *of_bm_gen_pool_get(struct device_node *np,
 	}
 	if (pdev)
 		pool = bm_gen_pool_get(&pdev->dev, name);
+#else
+	pdev = bm_of_find_platform_device(np_pool);
+    if (!pdev) {
+        parent = of_get_parent(np_pool);
+        if (parent) {
+            pdev = bm_of_find_platform_device(parent);
+            of_node_put(parent);
+        }
+        if (!pdev) {
+            of_node_put(np_pool);
+            pr_err("of_bm_gen_pool_get: no platform device for node %pOFn\n", np_pool);
+            return NULL;
+        }
+    }
+
+    if (of_property_read_string(np_pool, "label", &name)) {
+        name = np_pool->name;
+    }
+
+    pool = bm_gen_pool_get(&pdev->dev, name);
+
+    put_device(&pdev->dev);
+#endif
 	of_node_put(np_pool);
 
 	return pool;

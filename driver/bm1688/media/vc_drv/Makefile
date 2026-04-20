@@ -97,9 +97,10 @@ KBUILD_EXTRA_SYMBOLS += $(PWD)/../sys/Module.symvers
 ccflags-y += $(VC_DRV_HEADER) -DUSE_KERNEL_MODE -DKERNEL_MODE -DENABLE_DEC -DMJPEG_INTERFACE_API -DCNM_WAVE_SERIES
 ccflags-y += -DPLATFORM_SOC -DVC_SUPPORT_CLOCK_CONTROL
 
-ccflags-y += -DRV_TEST -mno-outline-atomics
-
 ccflags-y += -DRV_TEST
+ifeq ($(CONFIG_TOOLCHAIN_GLIBC_ARM64_V1131), y)
+ccflags-y += -mno-outline-atomics
+endif
 
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system

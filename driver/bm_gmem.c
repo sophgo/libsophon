@@ -1,8 +1,11 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/sched.h>
+#include <linux/errno.h>
 #include <linux/sizes.h>
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
+#include <linux/page-flags.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
 #include <linux/slab.h>
@@ -19,6 +22,7 @@ int heap_id;
 
 extern void bm_flush_dcache_area(void *addr, size_t size);
 extern void bm_inval_dcache_area(void *addr, size_t size);
+extern u64 bm_ion_get_user_pa(u64 user_addr);
 
 int bmdrv_get_gmem_mode(struct bm_device_info *bmdi)
 {
@@ -213,37 +217,17 @@ int bmdrv_gmem_invalidate(struct bm_device_info *bmdi, u64 addr, u64 size)
 
 int bmdrv_gmem_vir_to_phy(struct bm_device_info *bmdi, struct bm_gmem_addr *addr)
 {
-	unsigned long pa_pfn = 0x0;
-        struct mm_struct *mm = current->mm;
-        struct vm_area_struct *vma;
-	unsigned int offset;
 	int ret = 0x0;
 
-	offset = addr->vir_addr & ~PAGE_MASK;
-	// down_read(&mm->mmap_sem);
-
-	vma = find_vma(mm, addr->vir_addr);
-
-	if (!vma) {
-		pr_info("find vma fail, vir addr = 0x%lx\n", addr->vir_addr);
-		// up_read(&current->mm->mmap_sem);
-		return -1;
+	addr->phy_addr = bm_ion_get_user_pa(addr->vir_addr);
+	if (!addr->phy_addr) {
+		pr_err("bmdrv_gmem_vir_to_phy failed, vir_addr = 0x%lx\n", addr->vir_addr);
+		ret = -EFAULT;
 	}
+	pr_debug("bmdrv_gmem_vir_to_phy vir_addr = 0x%lx, pa_addr = 0x%lx\n", addr->vir_addr, addr->phy_addr);
 
-	ret = follow_pfn(vma, addr->vir_addr, &pa_pfn);
+    return ret;
 
-	if (ret) {
-		pr_info("fllow_pfn fail, vir addr = 0x%lx, ret = %d\n", addr->vir_addr, ret);
-		// up_read(&current->mm->mmap_sem);
-		return -1;
-	}
-
-	// up_read(&current->mm->mmap_sem);
-
-	addr->phy_addr = (pa_pfn << PAGE_SHIFT) + offset;
-
-	//pr_info("bmdrv_gmem_vir_to_phy vir_addr = 0x%llx, pa_addr = 0x%llx\n", addr->vir_addr, addr->phy_addr);
-	return 0;
 }
 #endif
 

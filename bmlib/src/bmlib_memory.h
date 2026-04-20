@@ -14,10 +14,12 @@
 extern "C" {
 #endif
 
+#ifndef PAGE_SIZE
 #ifdef __linux__
     #define PAGE_SIZE ((u64)getpagesize())
 #else
     #define PAGE_SIZE ((u64)bm_getpagesize())
+#endif
 #endif
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 typedef enum host_cdma_dir { HOST2CHIP, CHIP2HOST, CHIP2CHIP } HOST_CDMA_DIR;

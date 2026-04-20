@@ -20,5 +20,15 @@ void vdi_log(unsigned long coreIdx, unsigned long instIdx, int cmd, int step);
 
 void vdi_stat_fps(int coreIdx, int instIndex, int picType);
 void vdi_stat_hwcycles(int coreIdx, int hwCycles);
+void vdi_update_resolution(int coreIdx, int instance, int width, int height);
+typedef enum encode_frame_status {
+	WAIT_TO_ENCODE   = 0,
+	ENCODE_FAIL      = 1,
+	SUCCESS_NOT_GET  = 2,
+	NOT_FREE         = 3,
+	OUT_FRAME        = 4,
+	IN_FRAME         = 5,
+} FrameStatus;
+void vdi_update_channel_frames(int coreIdx, int instance, FrameStatus status, int frame_num);
 #endif //#ifndef _VDI_DEBUG_H_
 

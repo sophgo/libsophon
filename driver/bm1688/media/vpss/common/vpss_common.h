@@ -4,7 +4,9 @@
 #define VIP_ALIGNMENT 0x40
 #define GOP_ALIGNMENT 0x10
 
+#ifndef MIN
 #define MIN(a, b) (((a) < (b))?(a):(b))
+#endif
 #define UPPER(x, y) (((x) + ((1 << (y)) - 1)) >> (y))   // for alignment
 
 #define VIP_64_ALIGN(x) (((x) + 0x3F) & ~0x3F)   // for 64byte alignment

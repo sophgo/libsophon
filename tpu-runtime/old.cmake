@@ -10,6 +10,9 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_INSTALL_PREFIX}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_INSTALL_PREFIX}/lib)
 
 set(OUT_INCLUDE_DIR ${CMAKE_INSTALL_PREFIX}/include)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(TARGET_TYPE STREQUAL "release")
     if(RUNTIME_LIB STREQUAL "MD")
@@ -34,7 +37,6 @@ else()
 endif()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/bmtap2/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include/flatbuffers)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include/md5)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../tpu-bmodel/include)

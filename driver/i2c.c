@@ -182,7 +182,7 @@ int bm_i2c_set_target_addr(struct bm_device_info *bmdi, u32 i2c_index, u32 targe
 	return 0;
 }
 
-void bm_i2c_recovery(struct bm_device_info *bmdi, u32 i2c_index)
+static void bm_i2c_recovery(struct bm_device_info *bmdi, u32 i2c_index)
 {
 	u32 i2c_addr = 0;
 	u32 tx_level = 0;
@@ -539,7 +539,7 @@ int bm_i2c_write_byte(struct bm_device_info *bmdi, u32 i2c_index, u8 cmd, u8 dat
 	return 0;
 }
 
-int bm_mcu_send_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u32 data)
+static int bm_mcu_send_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u32 data)
 {
 	u8 buf[4];
 	int ret = 0;
@@ -559,7 +559,7 @@ int bm_mcu_send_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u32 data
 	return ret;
 }
 
-int bm_mcu_send_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, void *data, int size)
+static int bm_mcu_send_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, void *data, int size)
 {
 	/*we send 4 bytes a round */
 	int left, slen = 4, off = 0;
@@ -636,7 +636,7 @@ int bm_mcu_read_reg(struct bm_device_info *bmdi, u8 cmd, u8 *data)
 	return ret;
 }
 
-int bm_mcu_read_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *data)
+static int bm_mcu_read_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *data)
 {
 	int i;
 	for (i = 0; i < 4; i++) {
@@ -647,7 +647,7 @@ int bm_mcu_read_u32(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *data
 	return 0;
 }
 
-int bm_mcu_read_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *buf, size_t size)
+static int bm_mcu_read_block(struct bm_device_info *bmdi, int i2c_index, u8 cmd, u8 *buf, size_t size)
 {
 	int left, slen = 4, off = 0;
 
@@ -736,7 +736,7 @@ static int bm_stmcu_send_page(struct bm_device_info *bmdi, u8 *buf, u32 offset)
 	return 0;
 }
 
-int bm_stmcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
+static int bm_stmcu_program(struct bm_device_info *bmdi, void *buf, size_t size, size_t offset)
 {
 	unsigned long nbytes, burn_size, percentage;
 	u8 tmp[128];

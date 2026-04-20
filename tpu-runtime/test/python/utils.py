@@ -77,10 +77,8 @@ class TestBase:
       else:
           random.seed(self.seed)
           random.shuffle(self.bmodel_list)
-          with open(self.bmodel_list_file,'w') as file:
-              for bmodel in self.bmodel_list:
-                  file.writelines(bmodel + "\n")
-          self.cmd += " --bmodel_list " + self.bmodel_list_file
+          for bmodel in self.bmodel_list:
+              self.cmd += " --context_dir " + bmodel
       return self.cmd
 
   def run_single_mession(self):
@@ -125,6 +123,11 @@ class TestBM1690(TestBase):
     def __init__(self, case_names, loop_num):
         super(TestBM1690, self).__init__(case_names, loop_num)
         self.set_arch_name("bm1690")
+
+class TestBM1690E(TestBase):
+    def __init__(self, case_names, loop_num):
+        super(TestBM1690E, self).__init__(case_names, loop_num)
+        self.set_arch_name("bm1690e")
 
 class BmodelInfo:
     def __init__(self):

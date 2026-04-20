@@ -59,6 +59,7 @@ typedef struct jpu_buffer_t {
     unsigned long base;
     unsigned long virt_addr;
     unsigned int  is_cached;
+    int soc_idx;
 } jpu_buffer_t;
 
 typedef struct jpu_instance_pool_t {
@@ -123,8 +124,8 @@ int jdi_lock(void);
 void jdi_unlock(void);
 void jdi_log(int core_idx, int cmd, int step, int inst);
 void jdi_delay_us(unsigned int us);
-void jdi_release_core(int coreidx);
-int jdi_request_core(int timeout);
+void jdi_release_core(int core_idx);
+int jdi_request_core(int soc_idx, int timeout);
 
 #define ACLK_MAX                    300
 #define ACLK_MIN                    16

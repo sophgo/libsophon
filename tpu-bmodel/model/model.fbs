@@ -132,6 +132,7 @@ table SubNet {
     merge_param: MergeParam (id: 12);
     switch_param: SwitchParam (id: 13);
     core_commands: [CoreCommands] (id: 14);
+    run_core:uint32 (id: 15);                   /* how many cores the subnet run */
 }
 
 table NetStatic {      // for old bmodel, not use any more
@@ -233,6 +234,7 @@ table Model {
     cpuop_module:CpuopModule (id: 8);
     bmodel_type:uint32 (id: 9);    // 0 : coeff not combine
                                    // 1 : coeff has been combine
+    lib_backend:Binary (id: 10);
 }
 
 root_type Model;

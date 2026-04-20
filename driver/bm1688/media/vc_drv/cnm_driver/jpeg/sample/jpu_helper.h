@@ -242,47 +242,9 @@ extern int GetDPBBufSize(int framebufFormat, int picWidth, int picHeight, int pi
 extern BOOL ParseDecTestLongArgs(void* config, const char* argName, char* value);
 extern BOOL ParseEncTestLongArgs(void* config, const char* argName, char* value);
 extern BOOL ParseMultiLongOptions(TestMultiConfig* config, const char* argName, char* value);
-extern BOOL AllocateFrameBuffer(Uint32 instIdx, FrameFormat subsample, CbCrInterLeave cbcrIntlv, PackedFormat packed,
-                                Uint32 rotation, BOOL scalerOn, Uint32 width, Uint32 height, Uint32 bitDepth, Uint32 num);
-extern void FreeFrameBuffer(int instIdx);
-extern FRAME_BUF *GetFrameBuffer(int instIdx, int index);
-extern int GetFrameBufBase(int instIdx);
-extern int GetFrameBufAllocSize(int instIdx);
-extern FRAME_BUF* FindFrameBuffer(int instIdx, PhysicalAddress addrY);
 extern void GetFrameBufStride(FrameFormat subsample, CbCrInterLeave cbcrIntlv, PackedFormat packed, BOOL scalerOn,
     Uint32 width, Uint32 height, Uint32 bytePerPixel, Uint32* oLumaStride, Uint32* oLumaHeight, Uint32* oChromaStride,
     Uint32* oChromaHeight);
-/* --------------------------------------------------------------------------
- * BS feeder
-   -------------------------------------------------------------------------- */
-typedef struct {
-    void*   data;
-    Uint32  size;
-    BOOL    eos;        //!<< End of stream
-} BSChunk;
-
-typedef void* BSFeeder;
-
-extern BSFeeder BitstreamFeeder_Create(const char* path, FeedingMethod method, EndianMode endian);
-extern Uint32 BitstreamFeeder_Act(BSFeeder feeder, JpgDecHandle handle, jpu_buffer_t* bsBuffer);
-extern BOOL BitstreamFeeder_Destroy(BSFeeder feeder);
-extern BOOL BitstreamFeeder_IsEos(BSFeeder feeder);
-
-/* --------------------------------------------------------------------------
- * BS writer
-   -------------------------------------------------------------------------- */
-typedef void* BSWriter;
-
-typedef struct BitstreamWriterImpl {
-    void*   context;
-    BOOL    (*Create)(struct BitstreamWriterImpl* impl, EncConfigParam* config, const char* path);
-    Uint32  (*Act)(struct BitstreamWriterImpl* impl, Uint8* es, Uint32 size);
-    BOOL    (*Destroy)(struct BitstreamWriterImpl* impl);
-} BitstreamWriterImpl;
-
-extern BSWriter BitstreamWriter_Create(BSWriterType type, EncConfigParam* config, const char* path);
-extern BOOL BitstreamWriter_Act(BSWriter writer, Uint8* es, Uint32 size, BOOL delayedWrite);
-extern void BitstreamWriter_Destroy(BSWriter writer);
 
 /* --------------------------------------------------------------------------
  * String

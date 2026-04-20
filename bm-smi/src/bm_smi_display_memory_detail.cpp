@@ -293,7 +293,7 @@ static void bm_smi_chipt_to_str(int dev_id, char *s) {
     } else if (g_attr[dev_id].chip_temp == ATTR_FAULT_VALUE) {
         snprintf(s, 5, "%s", " F ");
     } else {
-        snprintf(s, 5, "%dC", g_attr[dev_id].chip_temp);
+        snprintf(s, 5, "%dC", g_attr[dev_id].chip_temp /1000);
     }
 }
 

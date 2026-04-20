@@ -1,4 +1,3 @@
-#ifdef ENABLE_DEC
 #include "drv_vdec.h"
 #include <base_ctx.h>
 #include <linux/comm_buffer.h>
@@ -24,7 +23,7 @@ vdec_context *vdec_handle;
 
 uint32_t vdec_log_lv = DRV_VDEC_MASK_ERR;
 module_param(vdec_log_lv, int, 0644);
-extern wait_queue_head_t tVdecWaitQueue[];
+extern wait_queue_head_t *tVdecWaitQueue;
 
 static DEFINE_MUTEX(g_vdec_handle_mutex);
 
@@ -32,15 +31,14 @@ static uint64_t get_current_time(void)
 {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
     struct timespec64 ts;
-#else
-    struct timespec ts;
-#endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
     ktime_get_ts64(&ts);
 #else
+    struct timespec ts;
+
     ktime_get_ts(&ts);
 #endif
+
     return ts.tv_sec * 1000 + ts.tv_nsec / 1000000; // in ms
 }
 
@@ -233,80 +231,6 @@ static int set_vdec_fps_toproc(vdec_chn VdChn, unsigned char bSendStream)
     return s32Ret;
 }
 
-
-static inline int check_timeout_and_busy(int s32Ret, int line)
-{
-    if (s32Ret == 0)
-        return s32Ret;
-
-    if ((s32Ret == ETIMEDOUT) || (s32Ret == EBUSY)) {
-        DRV_VDEC_TRACE("mutex timeout and retry\n");
-        return  DRV_ERR_VDEC_BUSY;
-    }
-
-    DRV_VDEC_ERR("vdec mutex error[%d], line = %d\n", s32Ret, line);
-    return DRV_ERR_VDEC_ERR_VDEC_MUTEX;
-}
-
-
-static int vdec_mutex_unlock(struct mutex *__mutex)
-{
-    mutex_unlock(__mutex);
-    return 0;
-}
-
-static int vdec_mutex_lock(struct mutex *__restrict __mutex,
-                  int s32MilliSec, int *s32CostTime)
-{
-    int s32RetCostTime;
-    int s32RetCheck;
-    uint64_t u64StartTime, u64EndTime;
-
-    u64StartTime = get_current_time();
-    if (s32MilliSec < 0) {
-        //block mode
-        s32RetCheck = mutex_lock_interruptible(__mutex);
-        u64EndTime = get_current_time();
-        s32RetCostTime = u64EndTime - u64StartTime;
-    } else if (s32MilliSec == 0) {
-        //trylock
-        if (mutex_trylock(__mutex)) {
-            s32RetCheck = 0;
-        } else {
-            s32RetCheck = EBUSY;
-        }
-        s32RetCostTime = 0;
-    } else {
-        //timelock
-        int wait_cnt_ms = 1;
-        while (mutex_is_locked(__mutex)) {
-            set_current_state(TASK_INTERRUPTIBLE);
-            schedule_timeout(usecs_to_jiffies(1000));
-            if (wait_cnt_ms >= s32MilliSec) {
-                break;
-            }
-            wait_cnt_ms++;
-        }
-        if (mutex_trylock(__mutex)) {
-            s32RetCheck = 0;
-        } else {
-            s32RetCheck = EBUSY;
-        }
-        u64EndTime = get_current_time();
-        s32RetCostTime = u64EndTime - u64StartTime;
-    }
-    //calculate cost lock time
-
-    //check the mutex validity
-    if (s32RetCheck != 0) {
-        DRV_VDEC_ERR("mutex lock error[%d]\n", s32RetCheck);
-    }
-
-    if (s32CostTime != NULL)
-        *s32CostTime = s32RetCostTime;
-    return s32RetCheck;
-}
-
 int vdec_init_handle(void)
 {
     int s32Ret = 0;
@@ -355,7 +279,8 @@ int vdec_drv_init(void)
         s32Ret = DRV_ERR_VDEC_NOMEM;
     }
 
-    vdec_init_handle_pool();
+    vdec_init_handle_pool(0);
+
     return s32Ret;
 }
 
@@ -558,26 +483,6 @@ int drv_vdec_create_chn(vdec_chn VdChn, const vdec_chn_attr_s *pstAttr)
     pChnHandle->VdChn = VdChn;
     pstChnAttr = &pChnHandle->ChnAttr;
     memcpy(&pChnHandle->ChnAttr, pstAttr, sizeof(vdec_chn_attr_s));
-    pChnHandle->VideoFrameArrayNum = MAX_VDEC_DISPLAYQ_NUM;
-
-    pChnHandle->VideoFrameArray = MEM_CALLOC(pChnHandle->VideoFrameArrayNum,
-                         sizeof(video_frame_info_s));
-
-    if (pChnHandle->VideoFrameArray == NULL) {
-        DRV_VDEC_ERR("Allocate VideoFrameArray memory failed !\n");
-        return DRV_ERR_VDEC_NOMEM;
-    }
-
-    DRV_VDEC_TRACE("u32FrameBufCnt = %d\n",
-               pChnHandle->ChnAttr.u32FrameBufCnt);
-    DRV_VDEC_TRACE("VideoFrameArrayNum = %d\n",
-               pChnHandle->VideoFrameArrayNum);
-
-    memset(pChnHandle->display_queue, -1, DISPLAY_QUEUE_SIZE);
-
-    MUTEX_INIT(&pChnHandle->display_queue_lock, 0);
-    MUTEX_INIT(&pChnHandle->status_lock, 0);
-    MUTEX_INIT(&pChnHandle->chnShmMutex, &ma);
 
     if (pChnHandle->ChnAttr.enType == PT_JPEG ||
         pChnHandle->ChnAttr.enType == PT_MJPEG) {
@@ -604,7 +509,7 @@ int drv_vdec_create_chn(vdec_chn VdChn, const vdec_chn_attr_s *pstAttr)
         }
 
         config.s32ChnNum = pChnHandle->VdChn;
-
+        config.soc_idx = pstChnAttr->u8SocIdx;
         /* Open JPU Devices */
         s32Ret = jpeg_dec_open(pChnHandle->pHandle, config);
         if (s32Ret != 0) {
@@ -653,7 +558,7 @@ int drv_vdec_create_chn(vdec_chn VdChn, const vdec_chn_attr_s *pstAttr)
         pInitDecCfg->Ctable_buffer = pstAttr->stBufferInfo.Ctable_buffer;
         pInitDecCfg->numOfDecFbc = pstAttr->stBufferInfo.numOfDecFbc;
         pInitDecCfg->numOfDecwtl = pstAttr->stBufferInfo.numOfDecwtl;
-
+        pInitDecCfg->socIdx = pstAttr->u8SocIdx;
         s32Ret = vdec_open(pInitDecCfg, &pChnHandle->pHandle);
         if (s32Ret != 0) {
             DRV_VDEC_ERR("vdec_open, %d\n", s32Ret);
@@ -670,7 +575,6 @@ int drv_vdec_destroy_chn(vdec_chn VdChn)
     int s32Ret = 0;
     struct drv_vdec_vb_ctx *pVbCtx = NULL;
     vdec_chn_context *pChnHandle = NULL;
-
     DRV_VDEC_API("\n");
 
     if (vdec_handle == NULL || vdec_handle->chn_handle[VdChn] == NULL) {
@@ -695,31 +599,9 @@ int drv_vdec_destroy_chn(vdec_chn VdChn)
         }
     }
 
-    MUTEX_DESTROY(&pChnHandle->display_queue_lock);
-    MUTEX_DESTROY(&pChnHandle->status_lock);
-    MUTEX_DESTROY(&pChnHandle->chnShmMutex);
-
-    if (pChnHandle->VideoFrameArray) {
-        MEM_FREE(pChnHandle->VideoFrameArray);
-        pChnHandle->VideoFrameArray = NULL;
-    }
-
     if (vdec_handle->chn_handle[VdChn]) {
         MEM_FREE(vdec_handle->chn_handle[VdChn]);
         vdec_handle->chn_handle[VdChn] = NULL;
-    }
-
-    {
-        vdec_chn i = 0;
-        unsigned char bFreeVdecHandle = 1;
-
-        for (i = 0; i < VDEC_MAX_CHN_NUM; i++) {
-            if (vdec_handle->chn_handle[i] != NULL) {
-                bFreeVdecHandle = 0;
-                break;
-            }
-        }
-
     }
 
     return s32Ret;
@@ -895,12 +777,10 @@ int drv_vdec_send_stream(vdec_chn VdChn, const vdec_stream_s *pstStream,
         if (s32Ret == RETCODE_QUEUEING_FAILURE) {
             pChnHandle->stStatus.u32LeftStreamBytes -= pstStream->u32Len;
             return DRV_ERR_VDEC_BUF_FULL;
-        }
-        else if(s32Ret == RETCODE_INVALID_PARAM) {
+        } else if(s32Ret == RETCODE_INVALID_PARAM) {
             pChnHandle->stStatus.u32LeftStreamBytes -= pstStream->u32Len;
             return DRV_ERR_VDEC_ILLEGAL_PARAM;
         }
-
     } else {
         DRV_VDEC_ERR("enType = %d\n", pChnHandle->ChnAttr.enType);
         return DRV_ERR_VDEC_NOT_SUPPORT;
@@ -940,7 +820,6 @@ int drv_vdec_query_status(vdec_chn VdChn, vdec_chn_status_s *pstStatus)
     }
 
     pChnHandle = vdec_handle->chn_handle[VdChn];
-
     memcpy(pstStatus, &pChnHandle->stStatus, sizeof(vdec_chn_status_s));
     if(pChnHandle->ChnAttr.enType == PT_H264
         ||pChnHandle->ChnAttr.enType == PT_H265)
@@ -952,7 +831,6 @@ int drv_vdec_reset_chn(vdec_chn VdChn)
 {
     int s32Ret = 0;
     vdec_chn_attr_s *pstChnAttr;
-    unsigned int u32FrameBufCnt;
     vdec_chn_context *pChnHandle = NULL;
 
     DRV_VDEC_API("\n");
@@ -964,7 +842,6 @@ int drv_vdec_reset_chn(vdec_chn VdChn)
     }
 
     pChnHandle = vdec_handle->chn_handle[VdChn];
-
     pstChnAttr = &pChnHandle->ChnAttr;
 
     if (pstChnAttr->enType == PT_H264 || pstChnAttr->enType == PT_H265) {
@@ -972,12 +849,6 @@ int drv_vdec_reset_chn(vdec_chn VdChn)
         if (s32Ret < 0) {
             DRV_VDEC_ERR("vdec_reset, %d\n", s32Ret);
             return DRV_ERR_VDEC_ERR_INVALID_RET;
-        }
-
-        if (pChnHandle->VideoFrameArray != NULL) {
-            u32FrameBufCnt = pChnHandle->ChnAttr.u32FrameBufCnt;
-            memset(pChnHandle->VideoFrameArray, 0,
-                   sizeof(video_frame_info_s) * u32FrameBufCnt);
         }
     }
 
@@ -1221,48 +1092,34 @@ int drv_vdec_detach_vbpool(vdec_chn VdChn)
 
 int drv_vdec_set_mod_param(const vdec_mod_param_s *pstModParam)
 {
-    int s32Ret = 0;
-
     if (pstModParam == NULL) {
         return DRV_ERR_VDEC_ILLEGAL_PARAM;
     }
 
-    s32Ret = vdec_mutex_lock(&g_vdec_handle_mutex,
-                    VDEC_DEFAULT_MUTEX_MODE, NULL);
-    s32Ret = check_timeout_and_busy(s32Ret, __LINE__);
-    if (s32Ret != 0) {
-        return s32Ret;
+    if (MUTEX_LOCK(&g_vdec_handle_mutex) != 0) {
+        DRV_VDEC_ERR("can not lock g_vdec_handle_mutex\n");
+        return -1;
     }
-    memcpy(&vdec_handle->g_stModParam, pstModParam,
-           sizeof(vdec_mod_param_s));
-    vdec_mutex_unlock(&g_vdec_handle_mutex);
+    memcpy(&vdec_handle->g_stModParam, pstModParam, sizeof(vdec_mod_param_s));
+    MUTEX_UNLOCK(&g_vdec_handle_mutex);
 
-    return s32Ret;
+    return 0;
 }
 
 int drv_vdec_get_mod_param(vdec_mod_param_s *pstModParam)
 {
-    int s32Ret = 0;
-
     if (pstModParam == NULL) {
         return DRV_ERR_VDEC_ILLEGAL_PARAM;
     }
 
-    s32Ret = vdec_mutex_lock(&g_vdec_handle_mutex,
-                    VDEC_DEFAULT_MUTEX_MODE, NULL);
-    if (s32Ret != 0) {
-        if ((s32Ret == ETIMEDOUT) || (s32Ret == EBUSY)) {
-            DRV_VDEC_TRACE("mutex timeout and retry\n");
-            return  DRV_ERR_VDEC_BUSY;
-        }
-        DRV_VDEC_ERR("vdec mutex error[%d]\n", s32Ret);
-        return DRV_ERR_VDEC_ERR_VDEC_MUTEX;
+    if (MUTEX_LOCK(&g_vdec_handle_mutex) != 0) {
+        DRV_VDEC_ERR("can not lock g_vdec_handle_mutex\n");
+        return -1;
     }
-    memcpy(pstModParam, &vdec_handle->g_stModParam,
-           sizeof(vdec_mod_param_s));
-    vdec_mutex_unlock(&g_vdec_handle_mutex);
+    memcpy(pstModParam, &vdec_handle->g_stModParam, sizeof(vdec_mod_param_s));
+    MUTEX_UNLOCK(&g_vdec_handle_mutex);
 
-    return s32Ret;
+    return 0;
 }
 
 int drv_vdec_frame_buffer_add_user(vdec_chn VdChn, video_frame_info_s *pstFrameInfo)
@@ -1391,5 +1248,3 @@ int drv_vdec_set_display_mode(vdec_chn VdChn, video_display_mode_e display_mode)
     pChnHandle = vdec_handle->chn_handle[VdChn];
     return set_display_mode(pChnHandle->pHandle, display_mode);
 }
-
-#endif

@@ -482,6 +482,8 @@ static void bm1684_update_a53_enable(struct bm_device_info *bmdi)
 
 static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 {
+	int retry = 100;
+
 	switch (bmdi->cinfo.chip_id) {
 	case 0x1682:
 		if (bm1682_ddr_top_init(bmdi)) {
@@ -510,9 +512,11 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
 #endif
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_init(bmdi);
 			bm_vpu_init(bmdi);
 			bmdrv_jpu_init(bmdi);
+#endif
 			spacc_init(bmdi);
 			mutex_init(&bmdi->efuse_mutex);
 		}
@@ -539,8 +543,10 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		}
 		bm1684_init_iommu(&bmdi->memcpy_info.iommuctl, bmdi->parent);
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_init(bmdi);
 			vc_init(bmdi);
+#endif
 			spacc_init(bmdi);
 			mutex_init(&bmdi->efuse_mutex);
 		}
@@ -551,13 +557,19 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		}
 		break;
 	case 0x1686a200:
-		//if (a2_ddr_init(bmdi)) {
-		//	pr_err("bm-sophon%d bmdrv: ddr init failed!\n", bmdi->dev_index);
-		//	return -1;
-		//}
+		while (retry > 0) {
+			if (top_reg_read(bmdi, BM1688_PCIE_STATUS_OFFSET) & BM1688_PCIE_DDR_INITIALIZED) {
+				pr_info("bm-sophon%d: ddr initialized!\n", bmdi->dev_index);
+				break;
+			}
+			retry--;
+			msleep(100);
+		}
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_init(bmdi);
 			vc_init(bmdi);
+#endif
 		// 	spacc_init(bmdi);
 		// 	mutex_init(&bmdi->efuse_mutex);
 		}
@@ -644,9 +656,11 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 		sg_comm_deinit(bmdi);
 #endif
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_exit(bmdi);
 			bm_vpu_exit(bmdi);
 			bmdrv_jpu_exit(bmdi);
+#endif
 		}
 		bm1684_deinit_iommu(&bmdi->memcpy_info.iommuctl);
 		if (bmdi->c_attr.bm_set_led_status) {
@@ -661,15 +675,19 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 		break;
 	case 0x1686:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_exit(bmdi);
 			vc_exit(bmdi);
+#endif
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
 	case 0x1686a200:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 			vpp_exit(bmdi);
 			vc_exit(bmdi);
+#endif
 		}
 		pr_info("bm-sophon%d bm1688 bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
@@ -732,9 +750,11 @@ void bmdrv_modules_request_irq(struct bm_device_info *bmdi)
 	bm_msg_request_irq(bmdi);
 	bm_gpio_request_irq(bmdi);
 	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 		bm_vpp_request_irq(bmdi);
 		bm_vpu_request_irq(bmdi);
 		bm_jpu_request_irq(bmdi);
+#endif
 		bm_spacc_request_irq(bmdi);
 	}
 }
@@ -751,9 +771,11 @@ void bmdrv_modules_free_irq(struct bm_device_info *bmdi)
 	bm_msg_free_irq(bmdi);
 	bm_gpio_free_irq(bmdi);
 	if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+#ifdef MEDIA_ENABLE
 		bm_vpp_free_irq(bmdi);
 		bm_vpu_free_irq(bmdi);
 		bm_jpu_free_irq(bmdi);
+#endif
 	}
 }
 
@@ -1218,13 +1240,11 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_ctrl_add_dev;
 	}
 
-#if 0
 	rc = bm_monitor_thread_init(bmdi);
 	if (rc) {
 		dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
 		goto err_monitor_thread_init;
 	}
-#endif
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
 		dev_err(&pdev->dev, "bmdrv_card_init failed!\n");
@@ -1254,8 +1274,9 @@ err_card_init:
 	bmdrv_proc_file_deinit(bmdi);
 err_proc_file_init:
 	bm_monitor_thread_deinit(bmdi);
-err_ctrl_add_dev:
+err_monitor_thread_init:
 	bmdrv_ctrl_del_dev(bmci, bmdi);
+err_ctrl_add_dev:
 	if (dev_count == 0)
 		bmdrv_remove_bmci();
 err_chip_specific:

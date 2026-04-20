@@ -10,7 +10,7 @@
 
 static struct bm_card *g_bmcd[BM_MAX_CARD_NUM] = {NULL};
 
-int bm_card_get_chip_num(struct bm_device_info *bmdi)
+static int bm_card_get_chip_num(struct bm_device_info *bmdi)
 {
 #ifdef SOC_MODE
 	return 1;

@@ -30,8 +30,8 @@ int vpss_ctx_proc_show(struct seq_file *m, void *v)
 	struct vpss_device *dev = (struct vpss_device *)m->private;
 
 	seq_puts(m, "\n-------------------------------VPSS HW STATUS-----------------------\n");
-	seq_printf(m, "%10s%10s%10s%10s%10s%10s%10s\n",
-		"ID", "Dev", "Online", "Status", "StartCnt", "IntCnt", "DutyRatio");
+	seq_printf(m, "%10s%10s%10s%10s%10s%10s%10s%10s\n",
+		"ID", "Dev", "Online", "Status", "StartCnt", "IntCnt", "DutyRatio", "TimeoutCnt");
 	for (i = VPSS_V0; i < VPSS_MAX; ++i) {
 		int state = atomic_read(&dev->vpss_cores[i].state);
 
@@ -45,7 +45,7 @@ int vpss_ctx_proc_show(struct seq_file *m, void *v)
 		else if (state == VIP_ONLINE)
 			strncpy(c, "Online", sizeof(c));
 
-		seq_printf(m, "%8s%2d%10s%10s%10s%10d%10d%10d\n",
+		seq_printf(m, "%8s%2d%10s%10s%10s%10d%10d%10d%10d\n",
 			"#",
 			i,
 			vpss_name[i],
@@ -53,7 +53,8 @@ int vpss_ctx_proc_show(struct seq_file *m, void *v)
 			c,
 			dev->vpss_cores[i].start_cnt,
 			dev->vpss_cores[i].int_cnt,
-			dev->vpss_cores[i].duty_ratio);
+			dev->vpss_cores[i].duty_ratio,
+			dev->vpss_cores[i].timeout_cnt);
 	}
 
 	return 0;
@@ -108,7 +109,11 @@ static ssize_t vpss_proc_write(struct file *file, const char __user *user_buf, s
 
 static int vpss_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+	return single_open(file, vpss_proc_show, pde_data(inode));
+#else
 	return single_open(file, vpss_proc_show, PDE_DATA(inode));
+#endif
 }
 
 static ssize_t vpp_proc_write(struct file *file, const char __user *user_buf, size_t count, loff_t *ppos)
@@ -130,7 +135,11 @@ static ssize_t vpp_proc_write(struct file *file, const char __user *user_buf, si
 
 static int vpp_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,17,0)
+	return single_open(file, vpp_proc_show, pde_data(inode));
+#else
 	return single_open(file, vpp_proc_show, PDE_DATA(inode));
+#endif
 }
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))

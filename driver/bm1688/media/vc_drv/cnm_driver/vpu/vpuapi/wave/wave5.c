@@ -222,10 +222,10 @@ RetCode Wave5VpuInit(Uint32 coreIdx, void* firmware, Uint32 size)
         return RETCODE_INSUFFICIENT_RESOURCE;
     }
 
-    if (coreIdx == 0) {
+    if ((coreIdx % MAX_NUM_VPU_CORE_CHIP) == 0) {
         unsigned int *reg_addr = platform_ioremap(VE_TOP_EXT_ADDR, 4);
-        originValue = platform_readl(VE_TOP_EXT_ADDR, reg_addr);
-        platform_writel(VE_TOP_EXT_ADDR, reg_addr, (codeBase>>32) | originValue);
+        originValue = platform_readl(coreIdx/MAX_NUM_VPU_CORE_CHIP, VE_TOP_EXT_ADDR, reg_addr);
+        platform_writel(coreIdx/MAX_NUM_VPU_CORE_CHIP, VE_TOP_EXT_ADDR, reg_addr, (codeBase>>32) | originValue);
         platform_iounmap((void *)reg_addr);
     } else {
         vdi_fio_write_register(coreIdx, 0xFEC0, codeBase>>32);
@@ -666,9 +666,8 @@ RetCode Wave5VpuDecGetSeqInfo(CodecInst* instance, DecInitialInfo* info)
 #else
         info->warnInfo = VpuReadReg(instance->coreIdx, W5_RET_DEC_WARN_INFO);
 #endif
+        GetDecSequenceResult(instance, info);
     }
-
-    GetDecSequenceResult(instance, info);
 
     return ret;
 }
@@ -1432,9 +1431,10 @@ RetCode Wave5VpuReInit(Uint32 coreIdx, void* firmware, Uint32 size)
 {
     vpu_buffer_t    vb;
     PhysicalAddress codeBase, tempBase;
-    PhysicalAddress oldCodeBase, tempSize;
-    Uint32          codeSize;
+    Uint32          codeSize, tempSize;
     Uint32          regVal, remapSize;
+    Uint32          originValue;
+
     vdi_get_common_memory(coreIdx, &vb);
 
     codeBase = vb.phys_addr;
@@ -1446,12 +1446,19 @@ RetCode Wave5VpuReInit(Uint32 coreIdx, void* firmware, Uint32 size)
     tempBase = vb.phys_addr + WAVE5_TEMPBUF_OFFSET;
     tempSize = WAVE5_TEMPBUF_SIZE;
 
-    oldCodeBase = VpuReadReg(coreIdx, W5_VPU_REMAP_PADDR);
-    oldCodeBase = VPU_MapToAddr40Bit(coreIdx, oldCodeBase);
-
-    //if (oldCodeBase != codeBase + W_REMAP_INDEX1*W_REMAP_MAX_SIZE) {
     if (vdi_get_instance_num(coreIdx) == 0) {
         Uint32 hwOption = 0;
+
+        if ((coreIdx % MAX_NUM_VPU_CORE_CHIP) == 0) {
+            unsigned int *reg_addr = platform_ioremap(VE_TOP_EXT_ADDR, 4);
+            originValue = platform_readl(coreIdx/MAX_NUM_VPU_CORE_CHIP, VE_TOP_EXT_ADDR, reg_addr);
+            platform_writel(coreIdx/MAX_NUM_VPU_CORE_CHIP, VE_TOP_EXT_ADDR, reg_addr, (codeBase>>32) | originValue);
+            platform_iounmap((void *)reg_addr);
+        } else {
+            vdi_fio_write_register(coreIdx, 0xFEC0, codeBase>>32);
+            vdi_fio_write_register(coreIdx, 0x8EC0, codeBase>>32);
+            vdi_fio_write_register(coreIdx, 0x8EC4, codeBase>>32);
+        }
 
         VpuWriteMem(coreIdx, codeBase, (unsigned char*)firmware, size*2, VDI_128BIT_LITTLE_ENDIAN);
         vdi_set_bit_firmware_to_pm(coreIdx, (Uint16*)firmware);

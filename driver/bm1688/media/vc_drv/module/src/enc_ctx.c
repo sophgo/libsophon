@@ -312,6 +312,7 @@ static int jpege_open(void *handle, void *pchnctx)
     }
 
     config.s32ChnNum = pChnHandle->VeChn;
+    config.soc_idx = pChnAttr->stVencAttr.u8SocIdx;
     status = jpeg_enc_open(pEncCtx->ext.jpeg.handle, config);
     if (status != 0) {
         DRV_VENC_ERR("%s jpeg_enc_open failed !\n", __func__);
@@ -513,7 +514,7 @@ static int vid_enc_open(void *handle, void *pchnctx)
     if (pEncCtx->ext.vid.setInitCfgRc)
         pEncCtx->ext.vid.setInitCfgRc(pInitEncCfg, pChnHandle);
 
-
+    pInitEncCfg->socIdx = pChnAttr->stVencAttr.u8SocIdx;
     pEncCtx->ext.vid.pHandle = internal_venc_open(pInitEncCfg);
     if (!pEncCtx->ext.vid.pHandle) {
         DRV_VENC_ERR("internal_venc_open\n");

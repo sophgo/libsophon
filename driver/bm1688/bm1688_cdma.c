@@ -318,7 +318,7 @@ static u32 dual_cdma_reg_read(struct bm_device_info* bmdi, u32 reg_offset, u32 c
 	return cdma_reg_read(bmdi, reg_offset);
 }
 
-void bm1688_cdma0_irq_handler(struct bm_device_info* bmdi)
+static void bm1688_cdma0_irq_handler(struct bm_device_info* bmdi)
 {
 	u32 cdma_status = cdma_xfer_info.cdma_xfer_status >> 16;
 	u32 int_status = cdma0_reg_read(bmdi, CDMA_INT_STAT);
@@ -335,7 +335,7 @@ void bm1688_cdma0_irq_handler(struct bm_device_info* bmdi)
 	pr_debug("cdma0 interrupt 0x%x\n", int_status);
 }
 
-void bm1688_cdma1_irq_handler(struct bm_device_info* bmdi)
+static void bm1688_cdma1_irq_handler(struct bm_device_info* bmdi)
 {
 	u32 cdma_status = cdma_xfer_info.cdma_xfer_status >> 17;
 	u32 int_status = cdma1_reg_read(bmdi, CDMA_INT_STAT);

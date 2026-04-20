@@ -2,6 +2,7 @@ SOC_MODE ?= 0
 PLATFORM ?= asic
 PCIE_MODE_ENABLE_CPU ?= 1
 CLEAN_BUILD ?= 0
+MEDIA_ENABLE ?= 1
 
 ifeq ($(PLATFORM), palladium)
 ccflags-y += -DPLATFORM_PALLADIUM
@@ -40,33 +41,37 @@ BM1684_OBJ := $(addprefix $(BM1684_DIR)/, $(BM1684_OBJ))
 BM1688_DIR ?= bm1688
 ifeq ($(SOC_MODE), 1)
 else
-BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o  bm1688_vcodec.o
+BM1688_OBJ += bm1688_pcie.o bm1688_irq.o bm1688_smbus.o
 endif
 BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_clkrst.o bm1688_card.o \
 			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
 BM1688_OBJ := $(addprefix $(BM1688_DIR)/, $(BM1688_OBJ))
 
 VPP_DIR ?= vpp
-ifeq ($(SOC_MODE), 1)
-else
+ifeq ($(SOC_MODE), 0)
+ifeq ($(MEDIA_ENABLE), 1)
 VPP_OBJ += vpp_platform.o bm1688_vpp.o
+endif
 endif
 VPP_OBJ := $(addprefix $(VPP_DIR)/, $(VPP_OBJ))
 
 VPSS_DIR ?= bm1688/media/vpss
 ccflags-y += -I$(src)/bm1688/media/vpss/common -I$(src)/bm1688/media/vpss/chip/soph
 ccflags-y += -I$(src)/bm1688/media/include/common/uapi -I$(src)/bm1688/media/include/common/kapi
-ifeq ($(SOC_MODE), 1)
-else
+ifeq ($(SOC_MODE), 0)
+ifeq ($(MEDIA_ENABLE), 1)
 ccflags-y += -I$(src)/vpp
+ccflags-y += -DMEDIA_ENABLE
 VPSS_OBJ += common/vpss_proc.o common/vpss.o
 VPSS_OBJ += chip/soph/vpss_platform.o chip/soph/vpss_core.o chip/soph/vpss_hal.o chip/soph/scaler.o
 VPSS_OBJ := $(addprefix $(VPSS_DIR)/, $(VPSS_OBJ))
 VPP_OBJ += $(VPSS_OBJ)
 endif
+endif
 
 BASE_DIR ?= bm1688/media/base
 ifeq ($(SOC_MODE), 0)
+ifeq ($(MEDIA_ENABLE), 1)
 ccflags-y += 						\
 	-I$(src)/bm1688/media/include/common/uapi	\
 	-I$(src)/bm1688/media/include/common/kapi	\
@@ -83,11 +88,12 @@ BASE_OBJ += base.o	\
 
 BASE_OBJ := $(addprefix $(BASE_DIR)/, $(BASE_OBJ))
 endif
+endif
 
 
 VPU_DIR ?= bm1688/media/vc_drv
-ifeq ($(SOC_MODE), 1)
-else
+ifeq ($(SOC_MODE), 0)
+ifeq ($(MEDIA_ENABLE), 1)
 ccflags-y += -DENABLE_DEC
 ccflags-y +=								\
 	-I$(src)/$(VPU_DIR)						\
@@ -158,7 +164,8 @@ VPU_OBJ += vc_drv.o							\
 	cnm_driver/jpeg/sample/helper/jpulog.o				\
 	cnm_driver/jpeg/sample/helper/jpuhelper.o
 
-VPU_OBJ := $(addprefix $(VPU_DIR)/, $(VPU_OBJ))
+VPU_OBJ := $(addprefix $(VPU_DIR)/, $(VPU_OBJ)) $(BM1688_DIR)/bm1688_vcodec.o
+endif
 endif
 
 
@@ -171,6 +178,7 @@ endif
 
 ccflags-y += -O3
 ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function -fdata-sections -Wl,-gc-sections
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
 ifeq ($(PLATFORM), pcie_arm64)
 ccflags-y += -mno-outline-atomics
 endif

@@ -2279,8 +2279,8 @@ u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 		h_pos = 1 << 22;
 
 	TRACE_VPSS(DBG_DEBUG, "%s: on sc(%d)\n", __func__, inst);
-	TRACE_VPSS(DBG_DEBUG, "width: src(%d), crop(%d), dst(%d)\n",
-		scaler->g_sc_cfg[inst].sc.src.w, crop_size.w, out_size.w);
+	TRACE_VPSS(DBG_DEBUG, "height: src(%d), crop(%d), dst(%d)\n",
+		scaler->g_sc_cfg[inst].sc.src.h, crop_size.h, out_size.h);
 
 	if (cfg->crop.x >= src_l_last_pixel_max) {
 		// do nothing on left tile if crop out-of-range.
@@ -2334,12 +2334,12 @@ u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 	cfg->tile.out = out_size;
 	cfg->tile.border_enable = scaler->g_bd_cfg[inst].cfg.b.enable;
 	if (scaler->g_bd_cfg[inst].cfg.b.enable) {
-		// if border, then only on left tile enabled to fill bgcolor.
+		// if border, then only on top tile enabled to fill bgcolor.
 		cfg->tile.dma_l_x = scaler->g_bd_cfg[inst].start.x & ~0x01;
 		cfg->tile.dma_l_y = scaler->g_bd_cfg[inst].start.y;
 		cfg->tile.dma_r_x = cfg->tile.dma_l_x + out_l_width;
 		cfg->tile.dma_r_y = scaler->g_bd_cfg[inst].start.y;
-		cfg->tile.dma_l_width = scaler->g_odma_cfg[inst].mem.width;
+		cfg->tile.dma_l_width = scaler->g_odma_cfg[inst].mem.height;
 		if ((scaler->g_odma_cfg[inst].flip == SCL_FLIP_HFLIP) || (scaler->g_odma_cfg[inst].flip == SCL_FLIP_HVFLIP))
 			cfg->tile.dma_r_x
 				= scaler->g_odma_cfg[inst].frame_size.w - out_size.w - (scaler->g_bd_cfg[inst].start.x & ~0x01);
@@ -2622,6 +2622,8 @@ bool sclr_left_tile(struct scaler *scaler, u8 inst, u16 src_l_w)
 		scaler->g_bd_cfg[inst].start.x = sc->tile.dma_l_x;
 		scaler->g_bd_cfg[inst].start.y = sc->tile.dma_l_y;
 		sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
+		TRACE_VPSS(DBG_DEBUG, "sc%d border start: x=%d y=%d\n", inst, scaler->g_bd_cfg[inst].start.x,
+			scaler->g_bd_cfg[inst].start.y);
 	} else {
 		odma_cfg->mem.start_x = sc->tile.dma_l_x;
 		odma_cfg->mem.start_y = sc->tile.dma_l_y;
@@ -2667,7 +2669,7 @@ bool sclr_left_tile(struct scaler *scaler, u8 inst, u16 src_l_w)
 	return true;
 }
 
-bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_left)
+bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_right)
 {
 	struct sclr_scale_cfg *sc;
 	struct sclr_odma_cfg *odma_cfg;
@@ -2708,7 +2710,7 @@ bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_left)
 	sclr_set_crop(scaler, inst, crop, false);
 	sclr_set_output_size(scaler, inst, dst);
 
-	if (sc->v_tile.border_enable && (!is_left)) {
+	if (sc->v_tile.border_enable && (!is_right)) {
 		odma_cfg->mem.start_y = 0;
 		odma_cfg->mem.height = sc->v_tile.dma_l_width;
 		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
@@ -2716,9 +2718,11 @@ bool sclr_top_tile(struct scaler *scaler, u8 inst, u16 src_l_h, u8 is_left)
 		scaler->g_bd_cfg[inst].cfg.b.enable = true;
 		scaler->g_bd_cfg[inst].start.y = sc->v_tile.dma_l_y;
 		sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
+		TRACE_VPSS(DBG_DEBUG, "sc%d border start: x=%d y=%d\n", inst, scaler->g_bd_cfg[inst].start.x,
+			scaler->g_bd_cfg[inst].start.y);
 	} else {
 		odma_cfg->mem.start_y = sc->v_tile.dma_l_y;
-		odma_cfg->mem.height = sc->v_tile.dma_l_width;
+		odma_cfg->mem.height = dst.h;
 		sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 	}
 	TRACE_VPSS(DBG_DEBUG, "sc%d input size: w=%d h=%d\n", inst, src.w, src.h);
@@ -2961,11 +2965,12 @@ bool sclr_down_tile(struct scaler *scaler, u8 inst, u16 src_offset, u8 is_right)
 	else
 		sclr_set_scale_phase(scaler, inst, sc->fac.h_pos, sc->v_tile.r_ini_phase);
 
-	odma_cfg->mem.start_y = sc->v_tile.out_l_width;
+	odma_cfg->mem.start_y = sc->v_tile.dma_r_y;
+	odma_cfg->mem.width = dst.w;
 	odma_cfg->mem.height = dst.h;
 	sclr_odma_set_mem(scaler, inst, &odma_cfg->mem);
 
-	// right tile don't do border.
+	// down tile don't do border.
 	scaler->g_bd_cfg[inst].cfg.b.enable = false;
 	sclr_border_set_cfg(scaler, inst, &scaler->g_bd_cfg[inst]);
 

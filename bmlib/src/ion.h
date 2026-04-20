@@ -138,6 +138,13 @@ struct bitmain_heap_info {
   unsigned long avail_size;
 };
 
+struct cvitek_cache_range {
+	void *start;
+	__u32 size;
+	__u64 paddr;
+};
+
+
 #define ION_IOC_BITMAIN_FLUSH_RANGE    1
 #define ION_IOC_BITMAIN_GET_HEAP_INFO    2
 

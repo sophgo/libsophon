@@ -117,7 +117,7 @@ static long base_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					sizeof(struct sys_ion_data)))
 			return -EINVAL;
 
-		ret = base_ion_alloc(&stIonDate.addr_p, &addr_v, stIonDate.name,
+		ret = base_ion_alloc(0, &stIonDate.addr_p, &addr_v, stIonDate.name,
 				stIonDate.size, stIonDate.cached);
 
 		if (copy_to_user((struct sys_ion_data __user *)arg, &stIonDate,

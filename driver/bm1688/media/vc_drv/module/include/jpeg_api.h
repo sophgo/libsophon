@@ -180,6 +180,7 @@ typedef struct {
         JPG_DecConfigParam dec;
     } u;
     int s32ChnNum;
+    int soc_idx;
 } drv_jpg_config;
 
 typedef struct _jpeg_chn_attr_ {

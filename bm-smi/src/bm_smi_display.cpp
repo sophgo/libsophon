@@ -120,7 +120,7 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
 #endif
         g_attr[dev_id].chip_id = ATTR_FAULT_VALUE;
         g_attr[dev_id].status  = ATTR_FAULT_VALUE;
-        g_attr[dev_id].chip_mode = ATTR_FAULT_VALUE;  // 0---pcie, 1---soc
+        g_attr[dev_id].chip_mode = ATTR_FAULT_VALUE;  // 0---pciei, 1---soc
         g_attr[dev_id].domain_bdf        = ATTR_FAULT_VALUE;
         g_attr[dev_id].mem_used          = 0;
         g_attr[dev_id].mem_total         = 0;
@@ -349,7 +349,7 @@ static void bm_smi_chipt_to_str(int dev_id, char *s) {
     } else if (g_attr[dev_id].chip_temp == ATTR_FAULT_VALUE) {
         snprintf(s, 5, "%s", " F ");
     } else {
-        snprintf(s, 5, "%dC", g_attr[dev_id].chip_temp);
+        snprintf(s, 5, "%dC", g_attr[dev_id].chip_temp /1000);
     }
 }
 

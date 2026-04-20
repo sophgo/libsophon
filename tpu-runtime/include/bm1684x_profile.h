@@ -88,9 +88,9 @@ public:
     bool enabled();
 
 private:
-    buffer_pair tpu_buffer;
-    buffer_pair gdma_buffer;
-    buffer_pair dyn_buffer;
+    buffer_pair_t tpu_buffer;
+    buffer_pair_t gdma_buffer;
+    buffer_pair_t dyn_buffer;
     bm_perf_monitor tpu_perf_monitor;
     bm_perf_monitor gdma_perf_monitor;
 };

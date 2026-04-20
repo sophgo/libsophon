@@ -20,6 +20,8 @@
 #include <linux/types.h>
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
+#include <linux/scatterlist.h>
+#include <linux/dma-mapping.h>
 #include "vpuconfig.h"
 #include "vmm_type.h"
 #include "bm_cdma.h"

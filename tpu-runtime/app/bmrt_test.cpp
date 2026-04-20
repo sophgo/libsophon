@@ -58,6 +58,7 @@ bool b_bmodel_dir = true;
 bool memory_prealloc = false;
 string DECRYPT_LIB;
 bool use_runtime_share_mem = false;
+bool check_mem = true;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -889,6 +890,10 @@ void bmrt_test()
     BMRT_LOG(INFO, "Use runtime share mem");
   }
 
+  if (check_mem) {
+    bmrt_set_flags(p_bmrt, BM_RUNTIME_CHECK_MEM);
+  }
+
   if (PREALLOC_SIZE != 0) {
     bmrt_must_alloc_device_mem(p_bmrt, &prealloc_mem, PREALLOC_SIZE);
     BMRT_LOG(INFO, "prealloc device mem, base[0x%llx], size[0x%x]",
@@ -1127,7 +1132,7 @@ void bmrt_test()
           auto& core_list = core_lists[group_idx];
           bool pre_alloc_neuron_ret;
           if (memory_prealloc) {
-            pre_alloc_neuron_ret =  bmrt_pre_alloc_mem_multi_thread(p_bmrt, group_idx, &mem_info_v[group_idx]);
+            pre_alloc_neuron_ret =  bmrt_pre_alloc_mem_multi_thread(p_bmrt, core_list[group_idx], &mem_info_v[group_idx]);
           } else {
             pre_alloc_neuron_ret =  bmrt_pre_alloc_neuron_multi_cores(p_bmrt, net_info->name, stage_idx, core_list.data(), core_list.size());
           }
@@ -1168,7 +1173,7 @@ void bmrt_test()
                                                 output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                                 core_list.data(), core_list.size(), net_idx, stage_idx,
                                                 chipid, std::ref(launch_times[group_idx]), std::ref(starts[group_idx]), std::ref(ends[group_idx]),
-                                                memory_prealloc, group_idx));
+                                                memory_prealloc, core_list[group_idx]));
             }
             for (auto& thread: threads) {
               thread.join();
@@ -1179,7 +1184,7 @@ void bmrt_test()
               bmrt_launch_tensor_thread_func(bm_handle, p_bmrt, net_info->name, input_tensors.data(), net_info->input_num,
                                             output_tensors[n * core_lists.size() + group_idx].data(), net_info->output_num, true, false,
                                             core_list.data(), core_list.size(), net_idx, stage_idx,
-                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx], memory_prealloc, group_idx);
+                                            chipid, launch_times[group_idx], starts[group_idx], ends[group_idx], memory_prealloc, core_list[group_idx]);
             }
           }
 
@@ -1440,13 +1445,6 @@ vector<string> test_case_v = {
     "bmcpp_load_bmodel_data",
     "bmcpp_reshape",
     "bmcpp_multi_thread",
-    // bmtap2 c interface
-    "bmtap2_register_bmodel",
-    "bmtap2_register_data",
-    "bmtap2_multi_thread",
-    // bmtap2 c++ interface
-    "bmtap2cpp_load_bmodel",
-    "bmtap2cpp_multi_thread",
     // bmruntime multi-core interface
     "bmmc_multi_mession",
 };

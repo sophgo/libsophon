@@ -1,8 +1,11 @@
 #include <linux/uaccess.h>
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
+#include <linux/ktime.h>
+#include <linux/jiffies.h>
 #include "bm_ctl.h"
 #include "bm_common.h"
+#include "bm_thermal.h"
 #include "bm_attr.h"
 #include "bm_pcie.h"
 #include "bm_card.h"
@@ -20,7 +23,7 @@
 #define CORE_ID0 0
 #define CORE_ID1 1
 
-int bm_monitor_thread(void *date)
+static int bm_monitor_thread(void *date)
 {
 	int ret = 0;
 	struct bm_device_info *bmdi = (struct bm_device_info *)date;
@@ -92,8 +95,8 @@ int bm_monitor_thread_deinit(struct bm_device_info *bmdi)
 	struct bm_arm9fw_log_mem *log_mem1 = &bmdi->monitor_thread_info.log_mem[CORE_ID1];
 
 	if (bmdi->monitor_thread_info.monitor_task != NULL) {
-		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size);
-		bmdrv_stagemem_free(bmdi, log_mem1->host_paddr, log_mem1->host_vaddr, log_mem1->host_size);
+		bmdrv_stagemem_free(bmdi, log_mem0->host_paddr, log_mem0->host_vaddr, log_mem0->host_size, false);
+		bmdrv_stagemem_free(bmdi, log_mem1->host_paddr, log_mem1->host_vaddr, log_mem1->host_size, false);
 		kthread_stop(bmdi->monitor_thread_info.monitor_task);
 		pr_info("monitor thread bm_monitor-%d deinit done\n", bmdi->dev_index);
 		bmdi->monitor_thread_info.monitor_task = NULL;

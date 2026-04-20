@@ -2,6 +2,7 @@
 #include "bm1684_card.h"
 #include "bm_pcie.h"
 #include "bm1684_reg.h"
+#include "bm1684_gmem.h"
 #include "bm_gmem.h"
 
 #ifndef SOC_MODE

@@ -16,6 +16,7 @@
 #define RC_PROC_NAME PROC_PATH"rc"
 #define VDEC_PROC_NAME PROC_PATH"vdec"
 #define VPUINFO_PROC_NAME PROC_PATH"vpuinfo"
+#define JPUINFO_PROC_NAME PROC_PATH"jpuinfo"
 
 #define VIDEO_PROC_PERMS (0644)
 #define VIDEO_PROC_PARENT (NULL)

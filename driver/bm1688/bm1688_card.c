@@ -11,10 +11,10 @@
 #include <linux/clk.h>
 #endif
 
+#include "bm1688_card.h"
 #ifndef SOC_MODE
 #include "i2c.h"
 #include <linux/pci.h>
-#include "bm1688_card.h"
 
 static struct pci_dev *bm_pci_upstream_bridge(struct pci_dev *dev)
 {

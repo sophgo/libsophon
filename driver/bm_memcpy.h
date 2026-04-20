@@ -25,6 +25,7 @@ struct bm_stagemem {
 	u64 p_addr;
 	u32 size;
 	u32 bitmap;
+	bool cached;
 	struct mutex stage_mutex;
 	struct completion stagemem_done;
 };
@@ -97,10 +98,10 @@ void bmdev_construct_cdma_arg(pbm_cdma_arg parg, u64 src, u64 dst, u64 size, MEM
 int bmdrv_memcpy_init(struct bm_device_info *bmdi);
 void bmdrv_memcpy_deinit(struct bm_device_info *bmdi);
 int bmdev_mmap(struct file *file, struct vm_area_struct *vma);
-int bmdrv_stagemem_init(struct bm_device_info *bmdi, struct bm_stagemem *stagemem);
+int bmdrv_stagemem_init(struct bm_device_info *bmdi, struct bm_stagemem *stagemem, bool cached);
 int bmdrv_stagemem_release(struct bm_device_info *bmdi, struct bm_stagemem *stagemem);
-int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppaddr, void **pvaddr);
-int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size);
+int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppaddr, void **pvaddr, bool cached);
+int bmdrv_stagemem_free(struct bm_device_info *bmdi, u64 paddr, void *vaddr, u64 size, bool cached);
 int bmdev_memcpy(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 int bmdev_memcpy_s2d_internal(struct bm_device_info *bmdi, u64 dst, const void *src, u32 size, bool intr);
@@ -112,5 +113,8 @@ int bmdev_memcpy_c2c(struct bm_device_info *bmdi, struct file *file, u64 src, u6
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 int bmdev_dual_cdma_memcpy_for_test(struct bm_device_info *bmdi, struct file *file, unsigned long arg);
 
+int bmdev_memcpy_2d_s2d(struct bm_device_info *bmdi, struct file *file, struct bm_memcpy_param *memcpy_param);
+int bmdev_memcpy_2d_d2s(struct bm_device_info *bmdi, struct file *file, struct bm_memcpy_param *memcpy_param);
+int bmdev_memcpy_2d_c2c(struct bm_device_info *bmdi, struct file *file, struct bm_memcpy_param *memcpy_param);
 int bmdrv_compare_fw_stage(struct bm_device_info *bmdi, u64 src, u32 size, const unsigned int *firmware);
 #endif

@@ -25,8 +25,7 @@ static DEFINE_MUTEX(g_get_vb_lock);
 static DEFINE_MUTEX(g_pool_lock);
 static DEFINE_SPINLOCK(g_hash_lock);
 
-DEFINE_HASHTABLE(vb_hash, 8);
-
+static struct hlist_head vb_hash[8][256];
 #define CHECK_VB_HANDLE_NULL(x)							\
 	do {									\
 		if ((x) == NULL) {						\
@@ -77,14 +76,14 @@ static inline bool is_pool_inited(vb_pool poolid)
 }
 
 
-static bool _vb_hash_del(uint64_t phy_addr)
+static bool _vb_hash_del(int soc_idx, uint64_t phy_addr)
 {
 	bool is_found = false;
 	struct vb_s *obj;
 	struct hlist_node *tmp;
 
 	spin_lock(&g_hash_lock);
-	hash_for_each_possible_safe(vb_hash, obj, tmp, node, phy_addr) {
+	hash_for_each_possible_safe(vb_hash[soc_idx], obj, tmp, node, phy_addr) {
 		if (obj->phy_addr == phy_addr) {
 			hash_del(&obj->node);
 			is_found = true;
@@ -96,13 +95,13 @@ static bool _vb_hash_del(uint64_t phy_addr)
 	return is_found;
 }
 
-static bool _vb_hash_find(uint64_t phy_addr, struct vb_s **vb)
+static bool _vb_hash_find(int soc_idx, uint64_t phy_addr, struct vb_s **vb)
 {
 	bool is_found = false;
 	struct vb_s *obj;
 
 	spin_lock(&g_hash_lock);
-	hash_for_each_possible(vb_hash, obj, node, phy_addr) {
+	hash_for_each_possible(vb_hash[soc_idx], obj, node, phy_addr) {
 		if (obj->phy_addr == phy_addr) {
 			is_found = true;
 			break;
@@ -139,7 +138,7 @@ int32_t vb_print_pool(vb_pool poolid)
 	CHECK_VB_POOL_VALID_STRONG(poolid);
 
 	spin_lock(&g_hash_lock);
-	hash_for_each(vb_hash, bkt, vb, node) {
+	hash_for_each(vb_hash[0], bkt, vb, node) {
 		if (vb->poolid == poolid) {
 			sprintf(str, "Pool[%d] vb paddr(%#llx) usr_cnt(%d) /",
 				vb->poolid, vb->phy_addr, vb->usr_cnt.counter);
@@ -199,7 +198,7 @@ static void _vb_cleanup(void)
 			pool_ctx = &g_vb_ctx[i];
 			mutex_lock(&pool_ctx->lock);
 			FIFO_EXIT(&pool_ctx->freelist);
-			base_ion_free(pool_ctx->membase);
+			base_ion_free(0, pool_ctx->membase);
 			mutex_unlock(&pool_ctx->lock);
 			mutex_destroy(&pool_ctx->lock);
 			// free reqq
@@ -218,11 +217,11 @@ static void _vb_cleanup(void)
 
 	// free comm vb blk
 	spin_lock(&g_hash_lock);
-	hash_for_each_safe(vb_hash, bkt, tmp, vb, node) {
+	hash_for_each_safe(vb_hash[0], bkt, tmp, vb, node) {
 		if ((vb->poolid >= VB_MAX_COMM_POOLS) && (vb->poolid < vb_max_pools))
 			continue;
 		if (vb->poolid == VB_STATIC_POOLID)
-			base_ion_free(vb->phy_addr);
+			base_ion_free(0, vb->phy_addr);
 		hash_del(&vb->node);
 	}
 	spin_unlock(&g_hash_lock);
@@ -245,7 +244,7 @@ static int32_t _vb_create_pool(struct vb_pool_cfg *config, bool is_comm)
 	is_cache = (config->remap_mode == VB_REMAP_MODE_CACHED);
 
 	snprintf(ion_name, 10, "VbPool%d", pool_id);
-	ret = base_ion_alloc(&pool_ctx->membase, &ion_v, (uint8_t *)ion_name, pool_size, is_cache);
+	ret = base_ion_alloc(0, &pool_ctx->membase, &ion_v, (uint8_t *)ion_name, pool_size, is_cache);
 	if (ret) {
 		TRACE_BASE(DBG_ERR, "base_ion_alloc fail! ret(%d)\n", ret);
 		return ret;
@@ -284,7 +283,7 @@ static int32_t _vb_create_pool(struct vb_pool_cfg *config, bool is_comm)
 		p->external = false;
 		FIFO_PUSH(&pool_ctx->freelist, p);
 		spin_lock(&g_hash_lock);
-		hash_add(vb_hash, &p->node, p->phy_addr);
+		hash_add(vb_hash[0], &p->node, p->phy_addr);
 		spin_unlock(&g_hash_lock);
 	}
 	mutex_unlock(&pool_ctx->lock);
@@ -309,11 +308,12 @@ static int32_t _vb_destroy_pool(vb_pool poolid)
 	mutex_lock(&pool_ctx->lock);
 	while (!FIFO_EMPTY(&pool_ctx->freelist)) {
 		FIFO_POP(&pool_ctx->freelist, &vb);
-		_vb_hash_del(vb->phy_addr);
+		_vb_hash_del(vb->soc_idx, vb->phy_addr);
 		vfree(vb);
 	}
 	FIFO_EXIT(&pool_ctx->freelist);
-	base_ion_free(pool_ctx->membase);
+	base_ion_free(0, pool_ctx->membase);
+	base_ion_free(1, pool_ctx->membase);
 	mutex_unlock(&pool_ctx->lock);
 	mutex_destroy(&pool_ctx->lock);
 
@@ -414,20 +414,20 @@ vb_pool find_vb_pool(uint32_t blk_size)
 }
 EXPORT_SYMBOL_GPL(find_vb_pool);
 
-static vb_blk _vb_get_block_static(uint32_t blk_size)
+static vb_blk _vb_get_block_static(int soc_idx, uint32_t blk_size)
 {
 	int32_t ret = 0;
 	uint64_t phy_addr = 0;
 	void *ion_v = NULL;
 
 	//allocate with ion
-	ret = base_ion_alloc(&phy_addr, &ion_v, "static_pool", blk_size, true);
+	ret = base_ion_alloc(soc_idx, &phy_addr, &ion_v, "static_pool", blk_size, true);
 	if (ret) {
 		TRACE_BASE(DBG_ERR, "base_ion_alloc fail! ret(%d)\n", ret);
 		return VB_INVALID_HANDLE;
 	}
 
-	return vb_create_block(phy_addr, ion_v, VB_STATIC_POOLID, false);
+	return vb_create_block(soc_idx, phy_addr, ion_v, VB_STATIC_POOLID, false);
 }
 
 /* _vb_get_block: acquice a vb_blk with specific size from pool.
@@ -594,7 +594,7 @@ EXPORT_SYMBOL_GPL(vb_destroy_pool);
  * @param pool_id: the pool of the vb belonging.
  * @param is_external: if the buffer is not allocated by mmf
  */
-vb_blk vb_create_block(uint64_t phy_addr, void *vir_addr, vb_pool pool_id, bool is_external)
+vb_blk vb_create_block(int soc_idx, uint64_t phy_addr, void *vir_addr, vb_pool pool_id, bool is_external)
 {
 	struct vb_s *p = NULL;
 
@@ -607,19 +607,20 @@ vb_blk vb_create_block(uint64_t phy_addr, void *vir_addr, vb_pool pool_id, bool 
 	p->phy_addr = phy_addr;
 	p->vir_addr = vir_addr;
 	p->poolid = pool_id;
+	p->soc_idx = soc_idx;
 	atomic_set(&p->usr_cnt, 1);
 	p->magic = VB_MAGIC;
 	atomic_long_set(&p->mod_ids, 0);
 	p->external = is_external;
 	spin_lock(&g_hash_lock);
-	hash_add(vb_hash, &p->node, p->phy_addr);
+	hash_add(vb_hash[soc_idx], &p->node, p->phy_addr);
 	spin_unlock(&g_hash_lock);
 
 	return (vb_blk)p;
 }
 EXPORT_SYMBOL_GPL(vb_create_block);
 
-vb_blk vb_get_block_with_id(vb_pool pool_id, uint32_t blk_size, mod_id_e mod_id)
+vb_blk vb_get_block_with_id(int soc_idx, vb_pool pool_id, uint32_t blk_size, mod_id_e mod_id)
 {
 	vb_blk blk = VB_INVALID_HANDLE;
 
@@ -632,7 +633,7 @@ vb_blk vb_get_block_with_id(vb_pool pool_id, uint32_t blk_size, mod_id_e mod_id)
 			goto get_vb_done;
 		}
 	} else if (pool_id == VB_STATIC_POOLID) {
-		blk = _vb_get_block_static(blk_size);		//need not mapping pool, allocate vb block directly
+		blk = _vb_get_block_static(soc_idx, blk_size);		//need not mapping pool, allocate vb block directly
 		goto get_vb_done;
 	} else if (pool_id >= vb_max_pools) {
 		TRACE_BASE(DBG_ERR, " invalid VB Pool(%d)\n", pool_id);
@@ -678,7 +679,7 @@ int32_t vb_release_block(vb_blk blk)
 
 		if (vb->external) {
 			TRACE_BASE(DBG_DEBUG, "external buffer phy-addr(%#llx) release.\n", vb->phy_addr);
-			_vb_hash_del(vb->phy_addr);
+			_vb_hash_del(vb->soc_idx, vb->phy_addr);
 			vfree(vb);
 			return 0;
 		}
@@ -687,8 +688,8 @@ int32_t vb_release_block(vb_blk blk)
 		if (vb->poolid == VB_STATIC_POOLID) {
 			int32_t ret = 0;
 
-			_vb_hash_del(vb->phy_addr);
-			ret = base_ion_free(vb->phy_addr);
+			_vb_hash_del(vb->soc_idx, vb->phy_addr);
+			ret = base_ion_free(vb->soc_idx, vb->phy_addr);
 			vfree(vb);
 			return ret;
 		}
@@ -745,11 +746,11 @@ int32_t vb_release_block(vb_blk blk)
 }
 EXPORT_SYMBOL_GPL(vb_release_block);
 
-vb_blk vb_phys_addr2handle(uint64_t phy_addr)
+vb_blk vb_phys_addr2handle(int soc_idx, uint64_t phy_addr)
 {
 	struct vb_s *vb = NULL;
 
-	if (!_vb_hash_find(phy_addr, &vb)) {
+	if (!_vb_hash_find(soc_idx, phy_addr, &vb)) {
 		TRACE_BASE(DBG_DEBUG, "Cannot find vb corresponding to phyAddr:%#llx\n", phy_addr);
 		return VB_INVALID_HANDLE;
 	} else
@@ -951,7 +952,7 @@ long vb_ctrl(unsigned long arg)
 			break;
 		}
 
-		block = vb_get_block_with_id(cfg.pool_id, cfg.blk_size, ID_USER);
+		block = vb_get_block_with_id(0, cfg.pool_id, cfg.blk_size, ID_USER);
 		if (block == VB_INVALID_HANDLE)
 			ret = -ENOMEM;
 		else {
@@ -982,7 +983,7 @@ long vb_ctrl(unsigned long arg)
 			break;
 		}
 
-		block = vb_phys_addr2handle(blk_info.phy_addr);
+		block = vb_phys_addr2handle(0, blk_info.phy_addr);
 		if (block == VB_INVALID_HANDLE)
 			ret = -EINVAL;
 		else {
@@ -1056,8 +1057,11 @@ long vb_ctrl(unsigned long arg)
 	return ret;
 }
 
+extern int32_t ion_hash_init(void);
 int32_t vb_create_instance(void)
 {
+	int i = 0;
+
 	if (vb_max_pools < VB_MAX_COMM_POOLS) {
 		TRACE_BASE(DBG_ERR, "vb_max_pools is too small!\n");
 		return -EINVAL;
@@ -1068,6 +1072,12 @@ int32_t vb_create_instance(void)
 		TRACE_BASE(DBG_ERR, "g_vb_ctx kzalloc fail!\n");
 		return -ENOMEM;
 	}
+
+	for (i=0; i<8; i++) {
+		hash_init(vb_hash[i]);
+	}
+
+	ion_hash_init();
 	TRACE_BASE(DBG_INFO, "vb_max_pools(%d) vb_pool_max_blk(%d)\n", vb_max_pools, vb_pool_max_blk);
 
 	return 0;
