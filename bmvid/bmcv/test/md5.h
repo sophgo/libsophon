@@ -1,6 +1,7 @@
 #ifndef MD5_H
 #define MD5_H
 
+#define MD5_DIGEST_LENGTH 16
 
 /**
  * \brief          MD5 context structure
@@ -12,6 +13,13 @@ typedef struct
     unsigned char buffer[64];   /*!< data block being processed */
 }
 md5_context;
+
+typedef struct MD5state_st {
+    unsigned int A,B,C,D;
+    unsigned int Nl,Nh;
+    unsigned int data[16];
+    unsigned int num;
+} MD5_CTX;
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,6 +57,12 @@ void md5_finish( md5_context *ctx, unsigned char output[16] );
  * \param output   MD5 checksum result
  */
 void md5_get( unsigned char *input, int ilen, unsigned char output[16] );
+void calculate_md5(const char *filename, unsigned char *md5_result);
+
+int MD5Init(MD5_CTX *c);
+int MD5Update(MD5_CTX *c, const void *data, size_t len);
+int MD5Final(unsigned char *md, MD5_CTX *c);
+unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
 
 #ifdef __cplusplus
 }

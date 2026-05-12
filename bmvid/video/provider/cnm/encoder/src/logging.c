@@ -32,6 +32,16 @@
 
 vpu_log_level_t vpu_log_level_threshold = VPU_LOG_ERROR;
 
+#ifdef __linux__
+__attribute__((visibility("default")))
+static const char _vpu_commit_info[] = "commit hash: " COMMIT_HASH "   branch: " BRANCH_NAME;
+
+void bm_vpulite_get_commit_version()
+{
+    printf("VPULITE %s, compile time: %s %s\n", _vpu_commit_info, __DATE__, __TIME__);
+}
+#endif
+
 void vpu_set_logging_threshold(vpu_log_level_t threshold)
 {
     vpu_log_level_threshold = threshold;

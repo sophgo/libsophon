@@ -1,8 +1,6 @@
 #!/bin/bash
 #set -x
 
-USING_OPENBLAS=1
-
 function build_ion_lib()
 {
     if [ $CHIP != bm1684 ]; then
@@ -541,6 +539,8 @@ function build_vpp_lib()
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=sunwayLinux
     elif [ ${PRODUCTFORM} = "pcie_loongarch64" ]; then
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=loongLinux
+    elif [ ${PRODUCTFORM} = "pcie_loongarch64_anolis" ]; then
+        make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=loongLinuxAnolis
     elif [ ${PRODUCTFORM} = "pcie_arm64" ]; then
         make -f makefile_lib.mak CHIP=$CHIP SUBTYPE=$SUBTYPE DEBUG=$DEBUG OBJDIR=obj/${PRODUCTFORM}_${CHIP}_${SUBTYPE} BUILD_CONFIGURATION=arm64Linux
     elif [ ${PRODUCTFORM} = "pcie_riscv64" ]; then
@@ -869,11 +869,11 @@ function build_bmcv_lib()
     update_bmcv_commit_and_branch
     if [ -n "$1" ]; then
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
 
     else
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
     fi
 
     MAKE_OPT="$MAKE_OPT CHIP=$CHIP PRODUCTFORM=$PRODUCTFORM SUBTYPE=$SUBTYPE DEBUG=$DEBUG BMCV_ROOT=${BMVID_TOP_DIR}"
@@ -918,10 +918,10 @@ function clean_bmcv_lib()
 
     if [ -n "$1" ]; then
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
     else
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
     fi
     MAKE_OPT="$MAKE_OPT CHIP=$CHIP PRODUCTFORM=$PRODUCTFORM SUBTYPE=$SUBTYPE DEBUG=$DEBUG BMCV_ROOT=${BMVID_TOP_DIR}"
 
@@ -980,11 +980,11 @@ function build_bmcv_test()
 
     if [ -n "$1" ]; then
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
 
     else
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
     fi
 
     BMCPU_TOOLCHAIN_PATH=$(dirname `which aarch64-linux-gnu-g++`) || {
@@ -998,6 +998,32 @@ function build_bmcv_test()
 
     pushd ${BMVID_TOP_DIR}/bmcv
     make test_bmcv ${MAKE_OPT} BMCPU_CROSS_COMPILE=$BMCPU_CROSS_COMPILE -j`nproc`
+
+    if [ $? -ne 0 ]; then
+        popd
+        return -1
+    fi
+    popd
+
+    return 0
+}
+
+function build_example()
+{
+    if [ $CHIP != bm1684 -a $CHIP != bm1686 ]; then
+        echo "For ${CHIP}, ignore build_bmcv_lib()"
+        return 0
+    fi
+
+    BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
+    MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
+
+    MAKE_OPT="$MAKE_OPT CHIP=$CHIP PRODUCTFORM=$PRODUCTFORM SUBTYPE=$SUBTYPE DEBUG=$DEBUG BMCV_ROOT=${BMVID_TOP_DIR}"
+
+    pushd ${BMVID_TOP_DIR}/example
+    make ${MAKE_OPT} BMCPU_CROSS_COMPILE=$BMCPU_CROSS_COMPILE -j`nproc`
+    make ${MAKE_OPT} install
+    make ${MAKE_OPT} clean
 
     if [ $? -ne 0 ]; then
         popd
@@ -1063,10 +1089,10 @@ function clean_bmcv_test()
 
     if [ -n "$1" ]; then
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="USING_CMODEL=$1 OUT_DIR=${BMCV_OUTPUT_DIR}"
     else
         BMCV_OUTPUT_DIR=${BMVID_OUTPUT_DIR}
-        MAKE_OPT="USING_OPENBLAS=$USING_OPENBLAS OUT_DIR=${BMCV_OUTPUT_DIR}"
+        MAKE_OPT="OUT_DIR=${BMCV_OUTPUT_DIR}"
     fi
     MAKE_OPT="$MAKE_OPT CHIP=$CHIP PRODUCTFORM=$PRODUCTFORM SUBTYPE=$SUBTYPE DEBUG=$DEBUG BMCV_ROOT=${BMVID_TOP_DIR}"
 
@@ -1263,6 +1289,11 @@ fi
 
 if [ "$1" = "build_bmcv_test" ]; then
     build_bmcv_test
+    exit $?
+fi
+
+if [ "$1" = "build_example" ]; then
+    build_example
     exit $?
 fi
 

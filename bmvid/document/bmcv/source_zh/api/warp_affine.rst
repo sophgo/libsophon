@@ -237,7 +237,7 @@ bmcv_image_warp_affine_padding
             bm_image *output,
             int use_bilinear);
 
-**接口形式一:**
+**接口形式二:**
 
     .. code-block:: c
 
@@ -254,3 +254,42 @@ bmcv_image_warp_affine_padding
 **代码示例说明**
 
 * 同 bmcv_image_warp_affine 接口使用方式相同，只需要将接口名字换成 bmcv_image_warp_affine_padding 或 bmcv_image_warp_affine_similar_to_opencv_padding 即可。
+
+bmcv_image_warp_affine_padding_rgb
+==============================
+
+**接口说明**
+
+* 该接口可以按照指定颜色进行 padding 处理，padding_r、padding_g、padding_b 分别表示颜色分量，其他参数说明参考 bmcv_image_warp_affine：
+
+**接口形式一:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_padding_rgb(
+            bm_handle_t handle,
+            int image_num,
+            bmcv_affine_image_matrix matrix[4],
+            bm_image *input,
+            bm_image *output,
+            int padding_r,
+            int padding_g,
+            int padding_b,
+            int use_bilinear);
+
+**接口形式二:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_similar_to_opencv_padding_rgb(
+            bm_handle_t handle,
+            int image_num,
+            bmcv_affine_image_matrix matrix[4],
+            bm_image *input,
+            bm_image *output,
+            int padding_r,
+            int padding_g,
+            int padding_b,
+            int use_bilinear);
+
+* 接口仅仅支持1684x

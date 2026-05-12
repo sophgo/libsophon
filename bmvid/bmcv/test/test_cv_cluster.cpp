@@ -16,7 +16,7 @@
 #include <windows.h>
 #endif
 
-#if defined(__linux__) && defined(USING_OPENBLAS)
+#if defined(__linux__) && (USING_OPENBLAS)
 
 // #define TIME_COST_US(start, end) ((end.tv_sec - start.tv_sec) * 1000000 + (end.tv_usec - start.tv_usec))
 #define TIME_COST_S(start, end) (((end.tv_sec - start.tv_sec) * 1000000.0 + (end.tv_usec - start.tv_usec)) / 1000000.0)
@@ -150,9 +150,9 @@ int main(int argc, char *argv[]) {
         return a.second > b.second;  // Sort descending by frequency
     });
     // Printing results
-    std::cout << "Numbers sorted by descending frequency:\n";
+    printf("Numbers sorted by descending frequency:\n");
     for (const auto& elem : freq_vector) {
-        std::cout << "bmcv-Num " << elem.first << " appears " << elem.second << " times.\n";
+        printf("bmcv-Num %d appears %d times\n", elem.first, elem.second);
     }
 
     printf("write output_data success\n");

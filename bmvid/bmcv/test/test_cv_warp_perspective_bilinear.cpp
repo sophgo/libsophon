@@ -1094,19 +1094,17 @@ int main(int argc, char *argv[]) {
     }
 
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST WARP] loop times should be 1~1500" << std::endl;
+        printf("[TEST WARP PERSPECTIVE] loop times should be 1~1500\n");
         exit(-1);
     }
     if (thread_num < 1 || thread_num > 4) {
-        std::cout << "[TEST WARP PERSPECTIVE] thread_num should be 1~4" << std::endl;
+        printf("[TEST WARP PERSPECTIVE] thread_num should be 1~4\n");
         exit(-1);
     }
 
-    std::cout << "[TEST WARP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST WARP PERSPECTIVE] test starts... LOOP times will be %d", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST WARP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST WARP PERSPECTIVE] LOOP %d------\n", loop_idx);
 
         struct timespec tp;
         clock_gettime_(0, &tp);
@@ -1116,7 +1114,7 @@ int main(int argc, char *argv[]) {
         printf("random seed %d\n", seed);
         test_cv_warp_perspective_random(3);
     }
-    std::cout << "------[TEST WARP PERSPECTIVE] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST WARP PERSPECTIVE] ALL TEST PASSED!------\n");
 
     return 0;
 }

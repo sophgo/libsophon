@@ -674,7 +674,7 @@ int main(int argc, char **argv)
             break;
     }
     gettimeofday_(&t2);
-    cout << "time spend on api(100 round) is: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("time spend on api(100 round) is: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
 #ifdef USING_CMODEL
     UNUSED(feature_src_data_p);

@@ -28,14 +28,14 @@ static int cmpv2(unsigned char* got, unsigned char* exp,int L, int batch){
     unsigned char* md5_tpuOut = new unsigned char[16];
     md5_get(got, sizeof(float) * L * batch, md5_tpuOut);
     if(0 != strcmp((unsignedCharToHex(md5_tpuOut).c_str()), (const char*)exp)){
-        std::cout << "cmp error!" << std::endl;
+        printf("cmp error!\n");
         return -1;
     }
     return 0;
 }
 
 static int test(int L, int batch, bool forward, bool realInput) {
-    std::cout << "L = " << L << std::endl;
+    printf("L = %d\n", L);
     float *XRHost = new float[L * batch];//4
     float *XIHost = new float[L * batch];
     float *YRHost = new float[L * batch];
@@ -69,7 +69,7 @@ static int test(int L, int batch, bool forward, bool realInput) {
     else
         BM_CHECK_RET(bmcv_fft_execute(handle, XRDev, XIDev, YRDev, YIDev, plan));
     gettimeofday_(&t2);
-    std::cout << "fft 1d execute using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+    printf("fft 1d execute using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     bmcv_fft_destroy_plan(handle, plan);
     BM_CHECK_RET(bm_memcpy_d2s(handle, YRHost, YRDev));
@@ -102,13 +102,13 @@ int main(int argc, char *argv[]) {
             clock_gettime_(0, &tp);
 
             srand(tp.tv_nsec);
-            std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+            printf("test i %d, random seed %ld\n", i, tp.tv_nsec);
             int ret = test(4, 1, true, false);
             if(ret){
-                std::cout << "test fft_1d failed" << std::endl;
+                printf("test fft_1d failed\n");
                 return ret;
             }
-        std::cout << "Compare TPU result with OpenCV successfully" << std::endl;
+        printf("Compare TPU result with OpenCV successfully\n");
         }
     }
     return 0;

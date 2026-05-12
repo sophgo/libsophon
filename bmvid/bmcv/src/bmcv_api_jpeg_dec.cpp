@@ -810,13 +810,13 @@ bm_status_t bmcv_image_jpeg_dec(bm_handle_t  handle,
         bm_status_t ret;
         ret = bmcv_jpeg_dec_one_image(handle, jpeg_dec[i], p_jpeg_data[i], in_size[i], dst + i);
         if (ret != BM_SUCCESS) {
-            for (int j = 0; j < i; j++) {
+            for (int j = 0; j < i+1; j++) {
                 BmJpuJPEGDecInfo info;
                 bm_jpu_jpeg_dec_get_info(jpeg_dec[i]->decoder_, &info);
                 if (info.framebuffer)
                     bm_jpu_jpeg_dec_frame_finished(jpeg_dec[i]->decoder_, info.framebuffer);
                 else
-                    return BM_ERR_DATA;
+                    ret = BM_ERR_DATA;
                 bmcv_jpeg_decoder_destroy(jpeg_dec[i]);
             }
             return ret;

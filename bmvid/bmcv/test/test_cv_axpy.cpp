@@ -131,10 +131,10 @@ int main(int argc, char* argv[]) {
                               bm_mem_from_system((void *)tensor_F),
                               N, C, H, W);
         gettimeofday_(&t2);
-        cout << "The "<< idx_trial <<" loop "<< " axpy using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec)  << "us" << endl;
+        printf("The %d loop axpy using time: %ld(us)\n", idx_trial, ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
         if (ret){
-            cout << "test Axpy failed" << endl;
+            printf("test Axpy failed\n");
             ret = BM_ERR_FAILURE;
             break;
         } else {
@@ -143,11 +143,11 @@ int main(int argc, char* argv[]) {
                             (float*)tensor_F,
                             TENSOR_SIZE, "axpy", BMDNN_COMPARE_EPSILON);
             if ( cmp_res != 0) {
-                std::cout <<"Compare TPU with CPU: error, not equal,cmp fail" <<endl;
+                printf("Compare TPU with CPU: error, not equal, cmp fail\n");
                 ret = BM_ERR_FAILURE;
                 break;
             } else {
-                std::cout <<"Compare TPU with CPU: they are equal,cmp success" <<endl;
+                printf("Compare TPU with CPU: they are equal,cmp success\n");
             }
         }
 

@@ -70,8 +70,8 @@ bm_status_t test(int dim) {
                                L,
                                dtype));
         gettimeofday(&t2, NULL);
-        std::cout << "dim is " << dim << std::endl;
-        std::cout << "distance TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+        printf("dim is %d\n", dim);
+        printf("distance TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime_win(0, &tp1);
@@ -116,7 +116,7 @@ bm_status_t test(int dim) {
           err = std::abs(YRef[i] - YHost[i]) / (std::max)(YRef[i], YHost[i]);
           #endif
         if (err > max_error){
-            std::cout << "error :" << YRef[i] << " vs " << YHost[i] << " at " << i << std::endl;
+            printf("error: %f vs %f at %d\n", YRef[i], YHost[i], i);
             break;
         }
     }
@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
         clock_gettime_win(0, &tp);
         #endif
         srand(tp.tv_nsec);
-        std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+        printf("test %d: random seed %ld\n", i, tp.tv_nsec);
         test(i + 1);
     }
     return 0;

@@ -16,7 +16,7 @@ The function passes in the size and shape of the required Kernel and returns the
 
 **Processor model support**
 
-This interface only supports BM1684.
+This interface supports BM1684 and BM1684X.
 
 
 **Interface form:**

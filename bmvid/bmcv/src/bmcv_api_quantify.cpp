@@ -20,21 +20,27 @@ static bm_status_t bmcv_quantify_check(
     int dst_h = output.height;
     int dst_w = output.width;
     if (src_format != dst_format) {
-        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "input and output image format is NOT same");
+        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "Input and output image formats must be the same\r\n");
         return BM_ERR_PARAM;
     }
-    if (src_format != FORMAT_RGB_PLANAR &&
-        src_format != FORMAT_BGR_PLANAR) {
+    if (src_format != FORMAT_YUV444P &&
+        src_format != FORMAT_RGB_PLANAR &&
+        src_format != FORMAT_BGR_PLANAR &&
+        src_format != FORMAT_RGB_PACKED &&
+        src_format != FORMAT_BGR_PACKED &&
+        src_format != FORMAT_RGBP_SEPARATE &&
+        src_format != FORMAT_BGRP_SEPARATE &&
+        src_format != FORMAT_GRAY) {
         bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "Not supported image format");
         return BM_NOT_SUPPORTED;
     }
     if (src_type != DATA_TYPE_EXT_FLOAT32 ||
         dst_type != DATA_TYPE_EXT_1N_BYTE) {
-        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "Not supported image data type");
+        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "Not supported image data type\r\n");
         return BM_NOT_SUPPORTED;
     }
     if (src_h != dst_h || src_w != dst_w) {
-        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "inputs and output image size should be same");
+        bmlib_log("QUANTIFY", BMLIB_LOG_ERROR, "inputs and output image size should be same\r\n");
         return BM_ERR_PARAM;
     }
     return BM_SUCCESS;
@@ -45,7 +51,6 @@ bm_status_t bmcv_image_quantify(
         bm_image input,
         bm_image output) {
     bm_status_t ret = BM_SUCCESS;
-
     bm_handle_check_2(handle, input, output);
     ret = bmcv_quantify_check(handle, input, output);
     if (BM_SUCCESS != ret) {
@@ -80,9 +85,11 @@ bm_status_t bmcv_image_quantify(
         api.input_str[i] = input_str[i];
         api.output_str[i] = output_str[i];
     }
-    // rgb-planar format's channel is 1
+    // planar/packed format's channel is 1
     if (input.image_format == FORMAT_RGB_PLANAR ||
-        input.image_format == FORMAT_BGR_PLANAR) {
+        input.image_format == FORMAT_BGR_PLANAR ||
+        input.image_format == FORMAT_BGR_PACKED ||
+        input.image_format == FORMAT_RGB_PACKED) {
         api.height[0] *= 3;
     }
 

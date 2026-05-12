@@ -661,6 +661,24 @@ typedef struct bm_api_cv_axpy {
   int input_w;
 } bm_api_cv_axpy_t;
 
+typedef struct bm_api_cv_ssim {
+    u64 kernel_addr;
+    u64 im1_addr[3];
+    u64 im2_addr[3];
+    u64 diff_map_addr;
+    u64 ux_addr;
+    u64 uy_addr;
+    u64 u_vxx_addr;
+    u64 u_vyy_addr;
+    u64 u_vxy_addr;
+    int width;
+    int height;
+    int channel;
+    int kernel_len;
+    int win_size;
+    float data_range;
+} bm_api_cv_ssim_t;
+
 typedef struct bm_api_cv_warp {
   u64 S_global_offset[4];
   u64 P_global_offset;

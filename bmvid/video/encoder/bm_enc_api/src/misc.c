@@ -174,6 +174,16 @@ int bmvpu_enc_upload_data(int vpu_core_idx,
     int size = vpu_stride*height;
     int ret = 0;
 
+    /*if width exceeds stride, when memcpy for 0 <=i<height,
+    *  s0 += host_stride;
+    *  s1 += vpu_stride;
+    *  will cause out of bounds access.
+    */
+    if (width > host_stride || width > vpu_stride) {
+        BM_VPU_ERROR("width exceeds stride!");
+        return -1;
+    }
+
     if (vpu_stride != host_stride)
     {
         const uint8_t *s0 = host_va;

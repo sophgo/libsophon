@@ -66,6 +66,7 @@ BMCV API
 
    api/api_introduct
    api/bmcv_hist_balance
+   api/count_nonzero
    api/yuv2bgr
    api/warp_affine
    api/warp_perspective
@@ -143,6 +144,7 @@ BMCV API
    api/qr
    api/cluster
    api/cv_overlay
+   api/add_mask_to_image
 
 PCIe CPU
 --------

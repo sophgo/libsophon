@@ -345,34 +345,24 @@ static int test_vpp_random_cmp(u8 ***hw_rslt,
             for (k = 0; k < plane_len[i][j]; k++) {
                 if (alg == 1) {
                     if (hw_rslt[i][j][k] != ref_rslt[i][j][k]) {
-                        cout << "cmp error at image "
-                            << i << " plane "
-                            << j << " element "
-                            << k << " plane_len "
-                            << plane_len[i][j] << " exp "<<hex
-                            << (int)ref_rslt[i][j][k] << " got "<<hex
-                            << (int)hw_rslt[i][j][k] << endl;
+                        printf("cmp error at image %d plane %d element %d plane_len %d, exp %d, got %d\n",
+                               i, j, k, plane_len[i][j],(int)ref_rslt[i][j][k], (int)hw_rslt[i][j][k]);
                             exit(-1);
                     }
                 } else if (alg == 0) {
                      if (((int)hw_rslt[i][j][k] - (int)ref_rslt[i][j][k]) > 1
                         || ((int)ref_rslt[i][j][k] - (int)ref_rslt[i][j][k] > 1)) {
-                        cout << "cmp error at image "
-                            << i << " plane "
-                            << j << " element "
-                            << k << " plane_len "
-                            << plane_len[i][j] << " exp "<<hex
-                            << (int)ref_rslt[i][j][k] << " got "<<hex
-                            << (int)hw_rslt[i][j][k] << endl;
+                            printf("cmp error at image %d plane %d element %d plane_len %d, exp %d, got %d\n",
+                               i, j, k, plane_len[i][j],(int)ref_rslt[i][j][k], (int)hw_rslt[i][j][k]);
                             exit(-1);
                      }
                 } else {
-                     cout << "alg not supported!" << endl;
+                     printf("alg not supported!\n");
                 }
             }
         }
     }
-    cout << "cmp success!" << endl;
+    printf("cmp success!\n");
     return 1;
 }
 
@@ -422,11 +412,12 @@ static int test_vpp_random(bm_handle_t handle,
     alg = rand() % 2;
     h_in = (rand() % 540 + 28) * 2;
     w_in = (rand() % 960 + 28) * 2;
-    cout << "draw_rect_test start! " <<endl;
-    cout << "image_format_in is " << image_format_in <<endl;
-    cout << "image_format_out is " << image_format_out << endl;
-    cout << "h_in = " << h_in << endl;
-    cout << "w_in = " << w_in << endl;
+    printf("draw_rect_test start!\n");
+    printf("image_format_in is %d\n", image_format_in);
+    printf("image_format_out is %d\n", image_format_out);
+    printf("h_in = %d\n", h_in);
+    printf("w_in = %d\n", w_in);
+
 
     memset(&mat_in, 0x0, sizeof(vpp_mat_s));
     mat_in.cols = w_in;
@@ -493,15 +484,10 @@ static int test_vpp_random(bm_handle_t handle,
             rect[i].crop_h =16;
         if (rect[i].crop_h > 4096)
             rect[i].crop_h =4096;
-        cout << "rect[" << i << "].start_x = "
-            << rect[i].start_x << endl;
-        cout << "rect[" << i << "].start_y = "
-            << rect[i].start_y << endl;
-        cout << "rect[" << i << "].crop_w = "
-            << rect[i].crop_w << endl;
-        cout << "rect[" << i << "].crop_h = "
-            << rect[i].crop_h << endl;
-
+        printf("rect[%d].start_x = %d\n", i, rect[i].start_x);
+        printf("rect[%d].start_y = %d\n", i, rect[i].start_y);
+        printf("rect[%d].crop_w = %d\n", i, rect[i].crop_w);
+        printf("rect[%d].crop_h = %d\n", i, rect[i].crop_h);
         rect_vpp[i].x = rect[i].start_x;
         rect_vpp[i].y = rect[i].start_y;
         rect_vpp[i].width = rect[i].crop_w;
@@ -525,10 +511,8 @@ static int test_vpp_random(bm_handle_t handle,
             h_out[i] = 4096;
         if (h_out[i] < 16)
             h_out[i] = 16;
-        cout << "w_out[" << i << "] = "
-            << w_out[i] << endl;
-        cout << "h_out[" << i << "] = "
-            << h_out[i] << endl;
+        printf("w_out[%d] = %d\n", i, w_out[i]);
+        printf("h_out[%d] = %d\n", i, h_out[i]);
     }
 
     for (i = 0; i < rect_num; i++) {
@@ -544,10 +528,8 @@ static int test_vpp_random(bm_handle_t handle,
                       plane_num_out, plane_len_out[i],
                       plane_width_out[i], plane_height_out[i],
                       mat_stride_out[i]);
-        cout << "mat_out.startx[" << i << "] = "
-            << mat_out[i].axisX << endl;
-        cout << "mat_out.starty[" << i << "] = "
-            << mat_out[i].axisY << endl;
+        printf("mat_out.startx[%d] = %d\n", i, mat_out[i].axisX);
+        printf("mat_out.starty[%d] = %d\n", i, mat_out[i].axisY);
     }
 
     for (i = 0; i < rect_num; i++) {
@@ -626,11 +608,10 @@ static int test_vpp_random(bm_handle_t handle,
         }
         delete[] image_out;
         if (ret != BM_NOT_SUPPORTED) {
-            std::cout << "bmcv_api running failed!" << std::endl;
+            printf("bmcv_api running failed!\n");
             exit(-1);
         }
-        std::cout << "random input not support! nerver mind, just do it again!"
-                 << endl;
+        printf("random input not support! nerver mind, just do it again!\n");
         seed = seed + 1;
         return 0;
     }
@@ -648,7 +629,7 @@ static int test_vpp_random(bm_handle_t handle,
                 CSC_MAX, VPP_SCALE_BILINEAR);
         }
         if (CMODEL_NOT_SUPPORT == cmodel_ret) {
-            std::cout << "cmodel running failed!" << std::endl;
+            printf("cmodel running failed!\n");
             delete[] rect;
             delete[] rect_vpp;
             delete[] w_scale;
@@ -688,8 +669,7 @@ static int test_vpp_random(bm_handle_t handle,
             }
             delete[] image_out;
             delete[] plane_len_out;
-            std::cout << "random input not support! nerver mind, just do it again!"
-                     << endl;
+            printf("random input not support! nerver mind, just do it again!\n");
             seed = seed + 1;
             return 0;
         }
@@ -766,36 +746,33 @@ DWORD WINAPI test_vpp_random_thread(LPVOID arg) {
     dev = ((struct thread_arg *)arg)->devid;
     thread_id = ((struct thread_arg *)arg)->thread_id;
 
-    std::cout << "dev_id is " << dev <<endl;
+    printf("dev_id is %d\n", dev);
     bm_dev_request(&handle, dev);
     bm_get_chipid(handle, &chipid);
     if(chipid != 0x1684) {
-        std::cout << "Only 0x1684 is supported, but the current chipid is: 0x" << std::hex << chipid << std::endl;
+        printf("Only 0x1684 is supported, but the current chipid is: 0x%x\n", chipid);
         bm_dev_free(handle);
         return 0;
     }
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST CV VPP RANDOM] test starts... LOOP times will be "
-              << loop_times << std::endl;
+    printf("[TEST CV VPP RANDOM] test starts... LOOP times will be %d", loop_times);
 
     for(i = 0; i < loop_times; i++) {
-        std::cout << "------[TEST CV VPP RANDOM] LOOP " << i << "------"
-                  << std::endl;
+        printf("------[TEST CV VPP RANDOM] LOOP %d------\n", i);
         if (test_seed == -1) {
             seed = (unsigned)time(NULL);
         } else {
             seed = test_seed;
         }
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         srand(seed);
 
-        cout << "start of loop test " << i << endl;
+        printf("start of loop test %d\n", i);
         test_vpp_random(handle, FORMAT_BGR_PLANAR, FORMAT_RGB_PACKED, seed, thread_id);
         test_vpp_random(handle, FORMAT_RGBP_SEPARATE, FORMAT_RGB_PACKED, seed, thread_id);
         test_vpp_random(handle, FORMAT_NV12, FORMAT_YUV420P, seed, thread_id);
@@ -832,25 +809,23 @@ int main(int argc, char **argv) {
         test_threads_num = atoi(argv[3]);
         test_seed = strtol(argv[4],&pEnd,0);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_vpp_random loop_num devid multi_thread_num seed"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_vpp_random loop_num devid multi_thread_num seed\n");
         exit(-1);
     }
     if (test_loop_times > 1500000 || test_loop_times < 1) {
-        std::cout << "[TEST CV VPP RANDOM] loop times should be 1~15000" << std::endl;
+        printf("[TEST CV VPP RANDOM] loop times should be 1~15000\n");
         exit(-1);
     }
     if (devid > 255 || devid < 0) {
-        std::cout << "[TEST CV VPP RANDOM] devid times should be 0~255" << std::endl;
+        printf("[TEST CV VPP RANDOM] devid times should be 0~255\n");
         exit(-1);
     }
     if (test_threads_num > 32 || test_threads_num < 1) {
-        std::cout << "[TEST CV VPP RANDOM] thread nums should be 1~4 " << std::endl;
+        printf("[TEST CV VPP RANDOM] thread nums should be 1~4\n");
         exit(-1);
     }
     if (devid < 0 || devid > 255) {
-        std::cout << "[TEST CV VPP RANDOM] devid should be 0~255";
+        printf("[TEST CV VPP RANDOM] devid should be 0~255\n");
     }
     #ifdef __linux__
     pthread_t *          pid = new pthread_t[test_threads_num];
@@ -876,7 +851,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     #else
 #define THREAD_NUM 64
@@ -928,7 +903,7 @@ int main(int argc, char **argv) {
         CloseHandle(hThreadArray[i]);
     delete[] arg;
     #endif
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
 #else
     printf("cmodel not supported yet!\n");
     UNUSED(argc);

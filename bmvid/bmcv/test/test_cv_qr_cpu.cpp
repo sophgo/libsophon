@@ -22,7 +22,7 @@
   #include <windows.h>
 #endif
 
-#if defined(__linux__) && defined(USING_OPENBLAS)
+#if defined(__linux__) && (USING_OPENBLAS)
 
 #define GLOBAL_PRINT        0
 #define SORT_CMP            1

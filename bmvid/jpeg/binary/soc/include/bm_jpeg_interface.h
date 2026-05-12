@@ -753,6 +753,10 @@ DECL_EXPORT BmJpuEncReturnCodes bm_jpu_jpeg_enc_encode(BmJpuJPEGEncoder *jpeg_en
                                            void **acquired_handle,
                                            size_t *output_buffer_size);
 
+/* Obtain the compilation version information and time of the dynamic library */
+DECL_EXPORT void bm_jpuapi_get_commit_version();
+DECL_EXPORT void bm_jpulite_get_commit_version();
+
 #ifdef __cplusplus
 }
 #endif

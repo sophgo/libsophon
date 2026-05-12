@@ -797,17 +797,10 @@ bm_status_t bm_image_attach(bm_image image, bm_device_mem_t *device_memory) {
         return BM_ERR_DATA;
     if (image.image_private->data_owned) {
         std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
-        int                         total_size = 0;
         for (int i = 0; i < image.image_private->internal_alloc_plane; i++) {
-            // bm_free_device(image.image_private->handle,
-            // image.image_private->data[i]);
-            total_size += image.image_private->data[i].size;
+            bm_free_device(image.image_private->handle,
+            image.image_private->data[i]);
         }
-
-        bm_device_mem_t dmem = image.image_private->data[0];
-        dmem.size            = total_size;
-
-        bm_free_device(image.image_private->handle, dmem);
         image.image_private->internal_alloc_plane = 0;
         image.image_private->data_owned           = false;
     }
@@ -832,17 +825,10 @@ bm_status_t bm_image_detach(bm_image image) {
         return BM_ERR_DATA;
     if (image.image_private->data_owned == true) {
         std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
-        int                         total_size = 0;
         for (int i = 0; i < image.image_private->internal_alloc_plane; i++) {
-            // bm_free_device(image.image_private->handle,
-            // image.image_private->data[i]);
-            total_size += image.image_private->data[i].size;
+            bm_free_device(image.image_private->handle,
+            image.image_private->data[i]);
         }
-
-        bm_device_mem_t dmem = image.image_private->data[0];
-        dmem.size            = total_size;
-
-        bm_free_device(image.image_private->handle, dmem);
         image.image_private->internal_alloc_plane = 0;
         image.image_private->data_owned           = false;
         memset(image.image_private->data,
@@ -891,37 +877,15 @@ bm_status_t bm_image_alloc_dev_mem_heap_mask(bm_image image, int heap_mask) {
         return BM_SUCCESS;
     }
     std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
-    // malloc continuious memory for acceleration
-    int             total_size = 0;
-    bm_device_mem_t dmem;
+
     for (int i = 0; i < image.image_private->plane_num; ++i) {
-        total_size += image.image_private->memory_layout[i].size;
-    }
-
-    if (BM_SUCCESS !=
-        bm_malloc_device_byte_heap_mask(
-            image.image_private->handle, &dmem, heap_mask, total_size)) {
-        BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
-
-        return BM_ERR_NOMEM;
-    }
-
-    #ifdef __linux__
-    unsigned long base_addr = dmem.u.device.device_addr;
-    #else
-    unsigned long long base_addr = dmem.u.device.device_addr;
-    #endif
-    for (int i = 0; i < image.image_private->plane_num; i++) {
-        image.image_private->data[i] = bm_mem_from_device(
-            base_addr, image.image_private->memory_layout[i].size);
-        if (i == 0) {
-            image.image_private->data[0].flags.u.gmem_heapid =
-                dmem.flags.u.gmem_heapid;
-            image.image_private->data[0].u.device.dmabuf_fd =
-                dmem.u.device.dmabuf_fd;
+        if (BM_SUCCESS !=
+            bm_malloc_device_byte_heap_mask(
+                image.image_private->handle, &image.image_private->data[i], heap_mask,
+                image.image_private->memory_layout[i].size)) {
+            BMCV_ERR_LOG("bm_malloc_device_byte_heap plane%d error\r\n", i);
+            return BM_ERR_NOMEM;
         }
-        base_addr += image.image_private->memory_layout[i].size;
-
         image.image_private->internal_alloc_plane++;
     }
 
@@ -947,46 +911,24 @@ bm_status_t bm_image_alloc_dev_mem(bm_image image, int heap_id) {
         return BM_SUCCESS;
     }
     std::lock_guard<std::mutex> lock(image.image_private->memory_lock);
-    // malloc continuious memory for acceleration
-    int             total_size = 0;
-    bm_device_mem_t dmem;
     for (int i = 0; i < image.image_private->plane_num; ++i) {
-        total_size += image.image_private->memory_layout[i].size;
-    }
+        if (heap_id != BMCV_HEAP_ANY) {
+            if (BM_SUCCESS !=
+                bm_malloc_device_byte_heap(
+                    image.image_private->handle, &image.image_private->data[i], heap_id,
+                    image.image_private->memory_layout[i].size)) {
+                BMCV_ERR_LOG("bm_malloc_device_byte_heap plane%d error\r\n", i);
+                return BM_ERR_NOMEM;
+            }
+        } else {
+            if (BM_SUCCESS != bm_malloc_device_byte(
+                                image.image_private->handle, &image.image_private->data[i],
+                                image.image_private->memory_layout[i].size)) {
+                BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
 
-    if (heap_id != BMCV_HEAP_ANY) {
-        if (BM_SUCCESS !=
-            bm_malloc_device_byte_heap(
-                image.image_private->handle, &dmem, heap_id, total_size)) {
-            BMCV_ERR_LOG("bm_malloc_device_byte_heap error\r\n");
-
-            return BM_ERR_NOMEM;
+                return BM_ERR_NOMEM;
+            }
         }
-    } else {
-        if (BM_SUCCESS != bm_malloc_device_byte(
-                              image.image_private->handle, &dmem, total_size)) {
-            BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
-
-            return BM_ERR_NOMEM;
-        }
-    }
-
-    #ifdef __linux__
-    unsigned long base_addr = dmem.u.device.device_addr;
-    #else
-    unsigned long long base_addr = dmem.u.device.device_addr;
-    #endif
-    for (int i = 0; i < image.image_private->plane_num; i++) {
-        image.image_private->data[i] = bm_mem_from_device(
-            base_addr, image.image_private->memory_layout[i].size);
-        if (i == 0) {
-            image.image_private->data[0].flags.u.gmem_heapid =
-                dmem.flags.u.gmem_heapid;
-            image.image_private->data[0].u.device.dmabuf_fd =
-                dmem.u.device.dmabuf_fd;
-        }
-        base_addr += image.image_private->memory_layout[i].size;
-
         image.image_private->internal_alloc_plane++;
     }
 

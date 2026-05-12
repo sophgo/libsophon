@@ -14,6 +14,7 @@
 #include "test_misc.h"
 #include <random>
 #include <fstream>
+#include <cstring>
 #ifdef __linux__
   #include <pthread.h>
   #include <unistd.h>
@@ -33,7 +34,7 @@ using namespace std;
 #define SCIPY_SOURCE    0
 #define CPP_SOURCE      1
 
-#if defined(__linux__) && defined(USING_OPENBLAS)
+#if defined(__linux__) && (USING_OPENBLAS)
 enum tpudnnStatus_t
 {
     TPUDNN_STATUS_SUCCESS,
@@ -449,6 +450,15 @@ void naive_KNN_forward(
   delete [] dist;
 }
 
+float sqeuclidean(const float* a, const float* b, int dims) {
+    float dist = 0.0f;
+    for(int d = 0; d < dims; ++d) {
+        float diff = a[d] - b[d];
+        dist += diff * diff;
+    }
+    return dist;
+}
+
 void _kpp_weight_generator_kmeans(
         const float *data,
         float       *out,
@@ -458,109 +468,98 @@ void _kpp_weight_generator_kmeans(
         const int    dims_Output,
         const int    k,
         const int    random_mode) {
+
     if (random_mode == POISSON_CPP) {
-        printf("[INFO] start random_mode: POISSON_CPP. \n");
+        std::cout << "[INFO] start random_mode: POISSON_CPP.\n";
     } else if (random_mode == MT19937_CPP) {
-        printf("[INFO] start random_mode: MT19937_CPP. \n");
+        std::cout << "[INFO] start random_mode: MT19937_CPP.\n";
     } else if (random_mode == CONST_WEIGHT) {
-        printf("[INFO] start random_mode: CONST_WEIGHT. \n");
+        std::cout << "[INFO] start random_mode: CONST_WEIGHT.\n";
     } else {
+        std::cerr << "[ERROR] Unsupported random mode.\n";
         assert(0);
     }
-
-    int dims = 1;
-    if (dims_Input > 1) dims = Shape_Input[dims_Input - 1];
+    int dims = (dims_Input > 1) ? Shape_Input[dims_Input - 1] : 1;
     int shape_cnt = 1;
     for (int i = 0; i < dims_Input; i++) {
         shape_cnt *= Shape_Input[i];
     }
+    int m_obs = shape_cnt / dims;
+
     for (int i = 0; i < dims_Output; i++) {
         Shape_Output[i] = 1;
     }
-    int m_obs                     = shape_cnt / dims;
     Shape_Output[dims_Output - 1] = dims;
     Shape_Output[dims_Output - 2] = k;
 
-    std::mt19937 mt(UNIVERSAL_SEED);
-    std::poisson_distribution<int> dist_possion(m_obs );
-    // std::normal_distribution<float> dist_gaussian(m_obs*1.0,7.0 );
-    std::uniform_int_distribution<int> dist_uniform(0, m_obs);
-    std::cout << "[Random info]" << mt() << std::endl;
-    std::uniform_real_distribution<float> dist_float(0.0, 1.0);
-    for (int i = 0; i < k; i++) {
-        if (i == 0) {
+    std::mt19937 mt(std::random_device{}());
+    std::poisson_distribution<int> dist_poisson(m_obs);
+    std::uniform_int_distribution<int> dist_uniform(0, m_obs - 1);
+    std::uniform_real_distribution<float> dist_float(0.0f, 1.0f);
 
-            if (random_mode == POISSON_CPP ) {
-                int                                randint = dist_possion(mt);
-                memcpy(out, data + randint * dims, dims * sizeof(float));
-            } else if (random_mode == MT19937_CPP) {
-                int                                randint = dist_uniform(mt);
-                memcpy(out, data + randint * dims, dims * sizeof(float));
-            } else if (random_mode == CONST_WEIGHT) {
-                int fake_rng_randint = int(m_obs / 2);
-                memcpy(out, data + fake_rng_randint * dims, dims * sizeof(float));
-            } else {
-                assert(0);
-            }
-        } else {
-            // sqeuclidean(init[:i,:], data)
-            float* D2_0 = new float [i * m_obs];
-            for(int m = 0; m < i; m++) {
-                for(int idx_data = 0; idx_data < m_obs; idx_data++) {
-                    D2_0[m * m_obs + idx_data] = sqeucliden(out, data,  m ,idx_data, dims);
+    int first_centroid_idx;
+    if (random_mode == POISSON_CPP) {
+        first_centroid_idx = dist_poisson(mt) % m_obs;
+                first_centroid_idx = dist_uniform(mt);
+
+    } else if (random_mode == MT19937_CPP) {
+        first_centroid_idx = dist_uniform(mt);
+    } else if (random_mode == CONST_WEIGHT) {
+        first_centroid_idx = m_obs / 2;
+    } else {
+        assert(0);
+    }
+
+    // Copy the first centroid
+    std::memcpy(out, data + first_centroid_idx * dims, dims * sizeof(float));
+
+    // Iterate to select remaining centroids
+    for (int i = 1; i < k; ++i) {
+        // Vector to store the minimum squared distance for each data point
+        std::vector<float> min_dist_sq(m_obs, std::numeric_limits<float>::max());
+
+        // Compute the squared distances to the nearest existing centroid
+        for (int j = 0; j < m_obs; ++j) {
+            for (int m = 0; m < i; ++m) {
+                float dist_sq = sqeuclidean(out + m * dims, data + j * dims, dims);
+                if (dist_sq < min_dist_sq[j]) {
+                    min_dist_sq[j] = dist_sq;
                 }
             }
-            float* D2 = new float [m_obs];
-            for (int j = 0; j < m_obs; j++) {
-                float min = D2_0[j];
-                for(int m = 0; m < i; m++) {
-                    min = std::min(D2_0[m*m_obs + j], min);
-                }
-                D2[j] = min;
-            }
-            float T_sum = 0.0;
-            for (int j = 0; j < m_obs; j++) {
-                T_sum +=  D2[j];
-            }
-            float* probs = new float [m_obs];
-            for (int j = 0; j < m_obs; j++) {
-                probs[j] =  D2[j]/T_sum;
-            }
-            float* cumprobs = new float [m_obs];
-            cumprobs[0] = probs[0];
-            for (int j = 1; j < m_obs; j++) {
-                cumprobs[j] =  cumprobs[j-1] + probs[j];
-            }
-            //r = rng.uniform()
-            float r = 0.0;//dist_float(mt);
-            if (random_mode == MT19937_CPP || random_mode == POISSON_CPP) {
-              r = dist_float(mt);
-            } else if (random_mode == CONST_WEIGHT) {
-              //np.min(cumprobs) + (np.max(cumprobs)- np.min(cumprobs))/2
-              float max_temp = cumprobs[0];
-              float min_temp = cumprobs[0];
-              for (int idx = 1; idx < m_obs; idx++) {
-                min_temp = cumprobs[idx] > min_temp ? min_temp : cumprobs[idx];
-                max_temp = cumprobs[idx] > max_temp ? cumprobs[idx] : max_temp;
-              }
-              r = min_temp + (max_temp - min_temp)/2.0;//0.5072551558477147;
-            } else { assert(0); }
-            int sort_idx = 0;
-            for (int j = 1; j < m_obs; j++) {
-                if ((cumprobs[j - 1] < r) && (r <= cumprobs[j]))  {
-                    sort_idx = j;
-                    break;
-                }
-            }
-            memcpy(out + i * dims, data + sort_idx * dims, dims * sizeof(float));
-            delete [] D2;
-            delete [] D2_0;
-            delete [] probs;
-            delete [] cumprobs;
         }
+
+        // Compute the cumulative distribution
+        std::vector<float> cumprobs(m_obs, 0.0f);
+        float total = 0.0f;
+        for (int j = 0; j < m_obs; ++j) {
+            total += min_dist_sq[j];
+            cumprobs[j] = total;
+        }
+
+        // Normalize cumulative probabilities
+        for (int j = 0; j < m_obs; ++j) {
+            cumprobs[j] /= total;
+        }
+
+        // Sample a random number
+        float r;
+        if (random_mode == CONST_WEIGHT) {
+            // Deterministic middle value
+            r = 0.5f; // Middle of [0,1]
+        } else {
+            r = dist_float(mt);
+        }
+
+        // Binary search to find the appropriate centroid index
+        int sort_idx = std::lower_bound(cumprobs.begin(), cumprobs.end(), r) - cumprobs.begin();
+
+        // Safety check
+        sort_idx = std::min(sort_idx, m_obs - 1);
+
+        // Copy the selected centroid
+        std::memcpy(out + i * dims, data + sort_idx * dims, dims * sizeof(float));
     }
 }
-
 void static_gen_param(knn_naive_param_t* param, int max_len, int num_iter, int k, int n_feat, int buffer_coeff) {
   param->k            = k;
   param->n_feat       = n_feat;

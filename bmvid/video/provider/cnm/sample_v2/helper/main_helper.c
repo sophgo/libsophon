@@ -1048,6 +1048,9 @@ BOOL AllocateDecFrameBuffer(
                                              config->mapType, format, config->cbcrInterleave, pDramCfg);
     }
 
+    if(linearFbCount == 0 && format == FORMAT_420_P10_16BIT_LSB)
+        VLOG(ERR, "VPP not support 10bit data. Please use linear mode!!!\n");
+
     osal_memset((void*)&fbAllocInfo, 0x00, sizeof(fbAllocInfo));
     osal_memset((void*)retFbArray,   0x00, sizeof(FrameBuffer)*totalFbCount);
     fbAllocInfo.format          = format;

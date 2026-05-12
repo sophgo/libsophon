@@ -633,19 +633,15 @@ int main(int argc, char *argv[]) {
         seed = atoi(argv[4]);
     }
     if (argc > 5) {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_jpeg loop_num multi_thread_num dev_id random_seed"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_jpeg loop_num multi_thread_num dev_id random_seed\n");
         exit(-1);
     }
     if (test_loop_times < 1) {
-        std::cout << "[TEST JPEG] loop times should be greater than 0"
-                  << std::endl;
+        printf("[TEST JPEG] loop times should be greater than 0\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST JPEG] thread nums should be 1~4 "
-                  << std::endl;
+        printf("[TEST JPEG] thread nums should be 1~4\n");
         exit(-1);
     }
     printf("random seed %d\n", seed);
@@ -661,8 +657,7 @@ int main(int argc, char *argv[]) {
     int dev_cnt;
     bm_dev_getcount(&dev_cnt);
     if (dev_id >= dev_cnt) {
-        std::cout << "[TEST JPEG] dev_id should less than device count, only detect "<< dev_cnt << " devices "
-                  << std::endl;
+        printf("[TEST JPEG] dev_id should less than device count, only detect %d devices\n", dev_cnt);
         exit(-1);
     }
     printf("device count = %d\n", dev_cnt);
@@ -773,7 +768,7 @@ int main(int argc, char *argv[]) {
     delete[] jpeg_thread_arg;
     #endif
 
-    std::cout << "------[TEST JPEG] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST JPEG] ALL TEST PASSED!------\n");
     return 0;
 }
 #else

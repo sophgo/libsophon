@@ -1435,7 +1435,7 @@ int main(int argc, char *argv[]) {
             int thread_num = atoi(argv[2]);
             if(thread_num < 1 || thread_num > 4)
             {
-                std::cout << "[TEST WARP] thread_num should be 1~4" << std::endl;
+                printf("[TEST WARP] thread_num should be 1~4\n");
                 exit(-1);
             }
             if(thread_num != 1)
@@ -1449,16 +1449,14 @@ int main(int argc, char *argv[]) {
 
     if (test_loop_times > 1500 || test_loop_times < 1)
     {
-        std::cout << "[TEST STORAGE CONVERT] loop times should be 1~1500" << std::endl;
+        printf("[TEST STORAGE CONVERT] loop times should be 1~1500\n");
     exit(-1);
   }
-  std::cout << "[TEST STORAGE CONVERT] test starts... LOOP times will be "
-            << test_loop_times << std::endl;
+  printf("[TEST STORAGE CONVERT] test starts... LOOP times will be %d\n", test_loop_times);
 
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++)
     {
-        std::cout << "------[TEST STORAGE CONVERT] LOOP " << loop_idx <<
-                 "------" << std::endl;
+        printf("------[TEST STORAGE CONVERT] LOOP %d------\n", loop_idx);
 
     int             dev_id = 0;
     bm_status_t     ret    = bm_dev_request(&handle, dev_id);
@@ -1480,7 +1478,7 @@ int main(int argc, char *argv[]) {
         pool->wait_all_done();
         bm_dev_free(handle);
     }
-  std::cout << "------[TEST STORAGE CONVERT] ALL TEST PASSED!" << std::endl;
+  printf("------[TEST STORAGE CONVERT] ALL TEST PASSED!------\n");
 
   return 0;
 }

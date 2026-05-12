@@ -390,20 +390,13 @@ static bool fill_rectangle_cmp(u8 **hw_rslt,
     for (i = 0; i < plane_num; i++) {
         for (j = 0; j < img_len[i]; j++) {
             if (hw_rslt[i][j] != refs_rslt[i][j]) {
-                cout << "testcase failed at i = "
-                    << i
-                    << " j = "
-                    << j
-                    << " expect "
-                    << refs_rslt[i][j]
-                    << " got "
-                    << hw_rslt[i][j]
-                    << endl;
+                printf("testcase failed at i = %d, j = %d, expect %d, got %d\n",
+                       i, j, refs_rslt[i][j], hw_rslt[i][j]);
                 return false;
             }
         }
     }
-    cout << "testcase success!" << endl;
+    printf("testcase success!\n");
     return true;
 }
 
@@ -427,10 +420,9 @@ static int test_rectangle_random(bm_handle_t handle,
 
     h = rand() % 1072 + 12;
     w = rand() % 1912 + 12;
-    cout << "fill_rect_test start! " <<endl;
-    cout << "image_format is " << image_format <<endl;
-    cout << "h = " << h << endl;
-    cout << "w = " << w << endl;
+    printf("fill_rect_test start!\n");
+    printf("image_format is %d\n", image_format);
+    printf("h = %d, w = %d\n", h, w);
     rect_num = rand() % MAX_RECT_NUM_TEST + 1;
     rect = new bmcv_rect_t[rect_num];
     memset(rect, 0x0, sizeof(bmcv_rect_t) * rect_num);
@@ -451,7 +443,8 @@ static int test_rectangle_random(bm_handle_t handle,
         rect[i].start_y = rand() % ((h-8)/4);
         rect[i].crop_w = (rand() % (w-8)/2) + 8;
         rect[i].crop_h = (rand() % (h-8)/2) + 8;
-        cout << "num:"<< i <<",strat_x:"<< rect[i].start_x << ",start_y:"<<rect[i].start_y <<",crop_w:"<<rect[i].crop_w<<",crop_h:"<<rect[i].crop_h<<endl;
+        printf("num: %d, start_x: %d, start_y: %d, crop_w: %d, crop_h: %d\n",
+                i, rect[i].start_x, rect[i].start_y, rect[i].crop_w, rect[i].crop_h);
     }
     r = (unsigned char)(rand() % 255);
     g = (unsigned char)(rand() % 255);
@@ -504,7 +497,7 @@ static int test_rectangle_random(bm_handle_t handle,
 
     char fn[20] = "fill_rect.bin";
     if (BM_SUCCESS != ret) {
-        std::cout << "bmcv_api running failed!" << std::endl;
+        printf("bmcv_api running failed!\n");
         ret = BM_ERR_FAILURE;
         goto exit;
     }
@@ -516,7 +509,7 @@ static int test_rectangle_random(bm_handle_t handle,
     fill_rectangle_refs(org_img, image_format, image_len,
                         rect_num, rect, h, w, r, g, b);
     if(false == fill_rectangle_cmp(hw_rslt, org_img, plane_num, image_len)){
-        std::cout << "cmp error!" << std::endl;
+        printf("cmp error!\n");
         ret = BM_ERR_FAILURE;
         goto exit;
     }
@@ -549,25 +542,22 @@ DWORD WINAPI test_fill_rectangle_thread(LPVOID arg) {
     bm_dev_request(&handle, 0);
     loop_times = *(int *)arg;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST CV DRAW RECTANGLE] test starts... LOOP times will be "
-              << loop_times << std::endl;
+    printf("[TEST CV DRAW RECTANGLE] test starts... LOOP times will be %d\n", loop_times);
 
     unsigned int chipid = BM1684X;
     bm_get_chipid(handle, &chipid);
     for(i = 0; i < loop_times; i++) {
-        std::cout << "------[TEST CV DRAW RECTANGLE] LOOP " << i << "------"
-                  << std::endl;
+        printf("------[TEST CV DRAW RECTANGLE] LOOP %d ------\n", i);
         seed = (unsigned)time(NULL);
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         srand(seed);
 
-        cout << "start of loop test " << i << endl;
+        printf("start of loop test %d\n", i);
         if(chipid == 0x1684){
             test_rectangle_random(handle, FORMAT_BGR_PLANAR);
             test_rectangle_random(handle, FORMAT_BGR_PACKED);
@@ -597,17 +587,15 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_fill_rectangle loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_fill_rectangle loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST CV DRAW RECTANGLE] loop times should be 1~1500" << std::endl;
+        printf("[TEST CV DRAW RECTANGLE] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST CV DRAW RECTANGLE] thread nums should be 1~4 " << std::endl;
+        printf("[TEST CV DRAW RECTANGLE] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -629,7 +617,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     #else
     #define THREAD_NUM 64
@@ -675,7 +663,7 @@ int main(int argc, char **argv) {
     }
     for (int i = 0; i < test_threads_num; i++)
         CloseHandle(hThreadArray[i]);
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     #endif
 
     return 0;

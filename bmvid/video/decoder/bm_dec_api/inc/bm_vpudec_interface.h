@@ -523,6 +523,7 @@ DECL_EXPORT int bmvpu_dec_get_core_idx(BMVidCodHandle handle);
 //just for debuging.
 DECL_EXPORT int bmvpu_dec_dump_stream(BMVidCodHandle vidCodHandle, unsigned char *p_stream, int size);
 DECL_EXPORT int bmvpu_dec_get_inst_idx(BMVidCodHandle vidCodHandle);
+DECL_EXPORT void bm_video_get_commit_version();
 
 DECL_EXPORT BMVidDecRetStatus bmvpu_dec_get_stream_info(BMVidCodHandle vidCodHandle, int* width, int* height, int* mini_fb, int* frame_delay);
 

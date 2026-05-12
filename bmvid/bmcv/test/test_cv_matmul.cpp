@@ -281,7 +281,7 @@ static void matmul_speific_case(
         alpha,
         beta);
     gettimeofday_(&t2);
-    cout << "matmul TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("matmul TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if (ret == BM_SUCCESS) {
         // compare bmcv and reference

@@ -87,7 +87,19 @@ static void fillYuvRow(
     if (img.format == FORMAT_GRAY) {
         memset((uchar *)img.data[0] + starty * img.step[0] + startx, y, filllen);
     }
-    else if (img.format == FORMAT_YUV444P) {
+    else if (img.format == FORMAT_RGB_PACKED || img.format == FORMAT_BGR_PACKED) {
+        for (int i = 0; i < filllen; i++) {
+            uchar *addr = (uchar *)img.data[0] + starty * img.step[0] + (startx + i) * 3;
+            addr[0] = y; addr[1] = u; addr[2] = v;
+        }
+    }
+    else if (img.format == FORMAT_RGB_PLANAR || img.format == FORMAT_BGR_PLANAR) {
+        memset((uchar *)img.data[0] + starty * img.step[0] + startx, y, filllen);
+        memset((uchar *)img.data[0] + img.height * img.step[0] + starty * img.step[0] + startx, u, filllen);
+        memset((uchar *)img.data[0] + img.height * img.step[0] * 2 + starty * img.step[0] + startx, v, filllen);
+    }
+    else if (img.format == FORMAT_YUV444P ||
+        img.format == FORMAT_RGBP_SEPARATE || img.format == FORMAT_BGRP_SEPARATE) {
         memset((uchar *)img.data[0] + starty * img.step[0] + startx, y, filllen);
         memset((uchar *)img.data[1] + starty * img.step[1] + startx, u, filllen);
         memset((uchar *)img.data[2] + starty * img.step[2] + startx, v, filllen);
@@ -134,9 +146,21 @@ void draw_line(
     uchar rc = color.r;
     uchar gc = color.g;
     uchar bc = color.b;
-    uchar yc = rgbToY42x(rc, gc, bc);
-    uchar uc = 128, vc = 128;
-    rgbToUV42x(rc, gc, bc, uc, vc);
+    uchar yc, uc, vc;
+    if (inout.format == FORMAT_RGB_PACKED ||
+        inout.format == FORMAT_RGB_PLANAR ||
+        inout.format == FORMAT_RGBP_SEPARATE) {
+        yc = rc; uc = gc; vc = bc;
+    } else if (inout.format == FORMAT_BGR_PACKED ||
+        inout.format == FORMAT_BGR_PLANAR ||
+        inout.format == FORMAT_BGRP_SEPARATE) {
+        yc = bc; uc = gc; vc = rc;
+    } else {
+        yc = rgbToY42x(rc, gc, bc);
+        uc = 128;
+        vc = 128;
+        rgbToUV42x(rc, gc, bc, uc, vc);
+    }
 
     if (thickness <= 0){
         printf("thickness should be greater than 0\n");
@@ -199,7 +223,6 @@ void draw_line(
 
 static bm_status_t bmcv_draw_line_check(
         bm_handle_t handle,
-        bm_image image,
         int thickness) {
     if (handle == NULL) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
@@ -208,10 +231,6 @@ static bm_status_t bmcv_draw_line_check(
     if (thickness <= 0) {
         bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "thickness should greater than 0!\r\n");
         return BM_ERR_PARAM;
-    }
-    if (!IS_CS_YUV(image.image_format) && image.image_format != FORMAT_GRAY) {
-        bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "image format not supported %d !\r\n", image.image_format);
-        return BM_ERR_DATA;
     }
     return BM_SUCCESS;
 }
@@ -226,7 +245,7 @@ bm_status_t bmcv_image_draw_lines(
         int thickness) {
     bm_status_t ret = BM_SUCCESS;
     bm_handle_check_1(handle, image);
-    if (BM_SUCCESS != bmcv_draw_line_check(handle, image, thickness)) {
+    if (BM_SUCCESS != bmcv_draw_line_check(handle, thickness)) {
         return BM_ERR_FAILURE;
     }
     // clip point
@@ -295,36 +314,28 @@ bm_status_t bmcv_image_draw_lines(
         }
         delete [] param;
     } else {
-#ifdef SOC_MODE
-        bm_device_mem_t dmem;
         unsigned char *in_ptr[3];
-        unsigned long long virt_addr  = 0;
-        unsigned long long size[3] = {0};
-        unsigned long long total_size = 0;
+        unsigned char in_ptr_status[3] = {0};
 
         for (int i = 0; i < image.image_private->plane_num; i++) {
-            size[i] = image.image_private->memory_layout[i].size;
-            total_size += size[i];
-        }
-
-        dmem = image.image_private->data[0];
-        bm_set_device_mem(&dmem, total_size, dmem.u.device.device_addr);
-        ret = bm_mem_mmap_device_mem_no_cache(image.image_private->handle, &dmem, &virt_addr);
-        if (ret != BM_SUCCESS) {
-            bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_mem_mmap_device_mem failed with error code %d\r\n", ret);
-            goto fail;
-        }
-
-        in_ptr[0] = (unsigned char *)virt_addr;
-        in_ptr[1] = in_ptr[0] + size[0];
-        in_ptr[2] = in_ptr[1] + size[1];
+#ifdef SOC_MODE
+            ret = bm_mem_mmap_device_mem_no_cache(image.image_private->handle,
+                &image.image_private->data[i], (unsigned long long*)&in_ptr[i]);
 #else
-        int w = image.width;
-        int h = image.height;
-        unsigned char* host_buf = new unsigned char [w * h *3];
-        unsigned char* in_ptr[3] = {host_buf, host_buf + w * h, host_buf + w * h * 2};
-        bm_image_copy_device_to_host(image, (void **)in_ptr);
+            ret = BM_ERR_FAILURE;
 #endif
+            if (ret != BM_SUCCESS) {
+                in_ptr[i] = (unsigned char *)malloc(image.image_private->data[i].size);
+                in_ptr_status[i] = 2;
+                ret = bm_memcpy_d2s(image.image_private->handle, (void *)in_ptr[i], image.image_private->data[i]);
+                if (ret != BM_SUCCESS) {
+                    bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_memcpy_d2s failed with error code %d\r\n", ret);
+                    goto exit;
+                }
+            } else {
+                in_ptr_status[i] = 1;
+            }
+        }
         int strides[3];
         bm_image_get_stride(image, strides);
         bmMat mat;
@@ -336,16 +347,22 @@ bm_status_t bmcv_image_draw_lines(
         for (int i = 0; i < line_num; i++) {
             draw_line(mat, sp[i], ep[i], color, thickness);
         }
-#ifdef SOC_MODE
-        ret = bm_mem_unmap_device_mem(image.image_private->handle, (void *)virt_addr, total_size);
-        if (ret != BM_SUCCESS) {
-            bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_mem_unmap_device_mem failed with error code %d\r\n", ret);
-            goto fail;
+exit:
+        for (int i = 0; i < image.image_private->plane_num; i++) {
+            if (in_ptr_status[i] == 1) {
+                ret = bm_mem_unmap_device_mem(image.image_private->handle,
+                    (void *)in_ptr[i], image.image_private->data[i].size);
+                if (ret != BM_SUCCESS)
+                    bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR,
+                        "bm_mem_unmap_device_mem failed with error code %d\r\n", ret);
+            }
+            if (in_ptr_status[i] == 2) {
+                ret = bm_memcpy_s2d(image.image_private->handle, image.image_private->data[i], (void *)in_ptr[i]);
+                if (ret != BM_SUCCESS)
+                    bmlib_log("DRAW_LINE", BMLIB_LOG_ERROR, "bm_memcpy_s2d failed with error code %d\r\n", ret);
+                free((void *)in_ptr[i]);
+            }
         }
-#else
-        bm_image_copy_host_to_device(image, (void **)in_ptr);
-        delete [] host_buf;
-#endif
     }
 
 fail:

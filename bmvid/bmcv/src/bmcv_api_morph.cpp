@@ -433,6 +433,395 @@ bm_status_t bmcv_image_morph_bm1684(
     return BM_SUCCESS;
 }
 
+template<class Op>
+static void morph_cpu_84x(
+        const unsigned char* src,
+        const unsigned char* kernel,
+        unsigned char* dst,
+        int kw,
+        int kh,
+        int srcstep,
+        int dststep,
+        int width,
+        int height,
+        bool packed)
+{
+    Op op;
+    int cn = packed ? 3 : 1;
+    int pad_w_l = kw / 2;
+    int pad_w_r = kw - 1 - pad_w_l;
+    int pad_h_t = kh / 2;
+    int pad_h_b = kh - 1 - pad_h_t;
+    int sw = width + pad_w_l + pad_w_r;
+    int sh = height + pad_h_t + pad_h_b;
+    unsigned char* src_padded = new unsigned char [sw * sh * cn];
+    pad_const(
+            src,
+            src_padded,
+            cn,
+            width,
+            height,
+            srcstep,
+            pad_w_l,
+            pad_w_r,
+            pad_h_t,
+            pad_h_b,
+            op.val);
+
+    vector<bmcv_point_t> coords;
+    get_kernel_coord(kernel, kw, kh, coords);
+    const bmcv_point_t* pt = coords.data();
+    int nz = (int)coords.size();
+    width *= cn;
+    auto MORPH = [&](int start, int lines) {
+        vector<unsigned char*> ptrs(nz);
+        const unsigned char** kp = (const unsigned char**)(ptrs.data());
+        const unsigned char* S = static_cast<const unsigned char*>(src_padded) + start * sw * cn;
+        unsigned char* D = dst + start * dststep;
+        while (lines--) {
+            for (int k = 0; k < nz; k++) {
+                kp[k] = S + pt[k].y * sw * cn + pt[k].x * cn;
+            }
+            int i = 0;
+            for (; i <= width - 4; i += 4) {
+                const unsigned char* sptr = kp[0] + i;
+                unsigned char s0 = sptr[0], s1 = sptr[1], s2 = sptr[2], s3 = sptr[3];
+                for (int k = 1; k < nz; k++ ) {
+                    sptr = kp[k] + i;
+                    s0 = op(s0, sptr[0]); s1 = op(s1, sptr[1]);
+                    s2 = op(s2, sptr[2]); s3 = op(s3, sptr[3]);
+                }
+                D[i] = s0; D[i+1] = s1;
+                D[i+2] = s2; D[i+3] = s3;
+            }
+            for (; i < width; i++) {
+                unsigned char s0 = kp[0][i];
+                for (int k = 1; k < nz; k++)
+                    s0 = op(s0, kp[k][i]);
+                D[i] = s0;
+            }
+            S += sw * cn;
+            D += dststep;
+        }
+    };
+
+    int threadNum = thread::hardware_concurrency();
+    if (threadNum <= 0) threadNum = 1;
+
+    threadNum = std::min(threadNum, height); // threadNum < height
+    int base_lines = height / threadNum;
+    int remainder = height % threadNum;
+
+    vector<pair<int, int>> param;
+    int start = 0;
+    for (int i = 0; i < threadNum; i++) {
+        int lines = base_lines;
+        if (i < remainder) lines++;
+
+        param.push_back(std::make_pair(start, lines));
+        start += lines;
+    }
+
+    std::vector<std::thread> threads;
+    for (auto it:param)
+        threads.push_back(std::thread(MORPH, it.first, it.second));
+
+    for (auto &it:threads)
+        it.join();
+
+    delete[] src_padded;
+}
+
+void morph_ref_84x(unsigned char *input_data,
+                   unsigned char *output_data,
+                   int format,
+                   int img_w, int img_h,
+                   int kw, int kh,
+                   int op, int shape)
+{
+    int ch = (format == FORMAT_GRAY ||
+              format == FORMAT_BGR_PACKED ||
+              format == FORMAT_RGB_PACKED) ? 1 : 3;
+
+    bool packed = (format == FORMAT_BGR_PACKED || format == FORMAT_RGB_PACKED);
+
+    int w_stride = (format == FORMAT_BGR_PACKED ||
+                    format == FORMAT_RGB_PACKED ? 3 : 1) * img_w * sizeof(unsigned char);
+
+    /* get kernel data */
+    unsigned char *kernel = new unsigned char [kh * kw];
+    int j;
+    int r = 0, c = 0;
+    double inv_r2 = 0;
+    int center_x = kw / 2, center_y = kh / 2;
+
+    if (kh == 1 && kw == 1) shape = BM_MORPH_RECT;
+    if (shape == BM_MORPH_ELLIPSE) {
+        r = kh / 2;
+        c = kw / 2;
+        inv_r2 = r ? 1. / ((double) r * r) : 0;
+    }
+
+    for (int i = 0; i < kh; i++) {
+        unsigned char *ptr = kernel + i * kw;
+        int j1 = 0, j2 = 0;
+
+        if (shape == BM_MORPH_RECT || (shape == BM_MORPH_CROSS && i == center_y))
+            j2 = kw;
+        else if (shape == BM_MORPH_CROSS)
+            j1 = center_x, j2 = j1 + 1;
+        else {
+            int dy = i - r;
+            if (std::abs(dy) <= r) {
+                int dx = ceil(c * std::sqrt((r * r - dy * dy) * inv_r2));
+                j1 = std::max(c - dx, 0);
+                j2 = std::min(c + dx + 1, kw);
+            }
+        }
+
+        for (j = 0; j < j1; j++)
+            ptr[j] = 0;
+        for (; j < j2; j++)
+            ptr[j] = 1;
+        for (; j < kw; j++)
+            ptr[j] = 0;
+    }
+
+    for (int i = 0; i < ch; i++) {
+        if (op) {
+            morph_cpu_84x<MaxOp<unsigned char>>(input_data + i * img_h * w_stride,
+                                                   kernel,
+                                                   output_data + i * img_h * w_stride,
+                                                   kw, kh,
+                                                   w_stride,
+                                                   w_stride,
+                                                   img_w,
+                                                   img_h,
+                                                   packed);
+        } else {
+            morph_cpu_84x<MinOp<unsigned char>>(input_data + i * img_h * w_stride,
+                                                   kernel,
+                                                   output_data + i * img_h * w_stride,
+                                                   kw, kh,
+                                                   w_stride,
+                                                   w_stride,
+                                                   img_w,
+                                                   img_h,
+                                                   packed);
+        }
+    }
+
+    delete[] kernel;
+}
+
+static bm_status_t bmcv_morph_84x_check(
+        bm_handle_t handle,
+        bm_image input,
+        bm_image output,
+        int kw)
+{
+    if (handle == NULL) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "Can not get handle!\r\n");
+        return BM_ERR_DEVNOTREADY;
+    }
+
+    if (input.height != output.height ||
+        input.width != output.width) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "input and output image size should be same\n");
+        return BM_ERR_DATA;
+    }
+
+    if (input.image_format != FORMAT_BGR_PACKED &&
+        input.image_format != FORMAT_RGB_PACKED &&
+        input.image_format != FORMAT_BGR_PLANAR &&
+        input.image_format != FORMAT_RGB_PLANAR &&
+        input.image_format != FORMAT_GRAY) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "Not supported input image format\n");
+        return BM_ERR_DATA;
+    }
+
+    if (input.image_format != output.image_format) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "input and output image format should be same\n");
+        return BM_ERR_DATA;
+    }
+    if (input.data_type != DATA_TYPE_EXT_1N_BYTE ||
+        output.data_type != DATA_TYPE_EXT_1N_BYTE) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "Not supported image data type\n");
+        return BM_ERR_DATA;
+    }
+
+    if (input.width + kw - 1 >= 7207) {
+         bmlib_log("MORPH", BMLIB_LOG_ERROR, "image width is too large!\n");
+        return BM_ERR_DATA;
+    }
+
+    return BM_SUCCESS;
+}
+
+bm_status_t bmcv_image_morph_bm1684x(bm_handle_t handle,
+                                     bm_image input,
+                                     bm_image output,
+                                     int kw,
+                                     int kh,
+                                     bm_device_mem_t kmem,
+                                     int op)
+{
+    bm_status_t ret = BM_SUCCESS;
+    bool output_alloc_flag = false;
+
+    ret = bmcv_morph_84x_check(handle, input, output, kw);
+    if (ret != BM_SUCCESS) return ret;
+
+    if (!bm_image_is_attached(output)) {
+        ret = bm_image_alloc_dev_mem(output, BMCV_HEAP_ANY);
+        if (ret != BM_SUCCESS) {
+            bmlib_log("MORPH", BMLIB_LOG_ERROR, "output alloc dev mem!\r\n");
+            return ret;
+        }
+        output_alloc_flag = true;
+    }
+
+    int stride_i[3], stride_o[3];
+    bm_image_get_stride(input, stride_i);
+    bm_image_get_stride(input, stride_o);
+
+    unsigned char *kernel = new unsigned char[kh * kw];
+    ret = bm_memcpy_d2s(handle, kernel, kmem);
+    if (BM_SUCCESS != ret) {
+        bmlib_log("MORPH", BMLIB_LOG_ERROR, "kernel d2s failed!\r\n");
+        delete[] kernel;
+        return BM_ERR_NOMEM;
+    }
+
+    int not_zero_cnt = 0;
+    for (int i = 0; i < kh * kw; i++)
+        if (kernel[i]) not_zero_cnt++;
+
+    bool using_tpu = not_zero_cnt == kh * kw;
+    if (using_tpu) {
+        bm_device_mem_t imem, omem;
+        bm_image_get_device_mem(input, &imem);
+        bm_image_get_device_mem(output, &omem);
+
+        bm_api_cv_morph_t api;
+        api.src_addr = bm_mem_get_device_addr(imem);
+        api.dst_addr = bm_mem_get_device_addr(omem);
+        api.width = input.width;
+        api.height = input.height;
+        api.kh = kh;
+        api.kw = kw;
+        api.stride_i = stride_i[0];
+        api.stride_o = stride_o[0];
+        api.op = op;
+        api.format = input.image_format;
+
+        ret = bm_tpu_kernel_launch(handle, "cv_image_morph_84x", (u8 *)&api, sizeof(api));
+        if(BM_SUCCESS != ret){
+            bmlib_log("MORPH", BMLIB_LOG_ERROR, "MORPH sync api error\n");
+            if (output_alloc_flag) bm_free_device(handle, omem);
+            return BM_ERR_FAILURE;
+        }
+
+        if (output_alloc_flag) bm_free_device(handle, omem);
+
+        delete[] kernel;
+        return BM_SUCCESS;
+    }
+
+    int timeout = -1;
+    int process_id = get_cpu_process_id(handle);
+    if (process_id != -1) {
+        bm_device_mem_t imem, omem;
+        bm_image_get_device_mem(input, &imem);
+        bm_image_get_device_mem(output, &omem);
+
+        bmcv_morph_param_t morph_p;
+        morph_p.src_addr = get_mapped_addr(handle, &imem);
+        morph_p.dst_addr = get_mapped_addr(handle, &omem);
+        morph_p.kernel_addr = get_mapped_addr(handle, &kmem);
+        morph_p.kh = kh;
+        morph_p.kw = kw;
+        morph_p.width = input.width;
+        morph_p.height = input.height;
+        morph_p.srcstep = stride_i[0];
+        morph_p.dststep = stride_o[0];
+        morph_p.format = input.image_format;
+        morph_p.op = op;
+
+        /* copy param to device memory */
+        DeviceMemAllocator allocator(handle);
+        bm_device_mem_t pmem;
+
+        try {
+            pmem = allocator.map_input_to_device<char>(
+                             bm_mem_from_system(&morph_p),
+                             sizeof(bmcv_morph_param_t));\
+        } catch (bm_status_t ret) {
+            delete[] kernel;
+            return ret;
+        }
+
+        u64 param_addr_mapped = get_mapped_addr(handle, &pmem);
+        int ret = bmcpu_exec_function_ext(handle,
+                                          process_id,
+                                          (char*)"bmcv_cpu_morph",
+                                          (void*)&param_addr_mapped,
+                                          sizeof(void*),
+                                          1,
+                                          timeout);
+        if (ret) {
+            bmlib_log("MORPH", BMLIB_LOG_ERROR, "exec function failed! return %d\r\n", ret);
+            delete [] kernel;
+            return BM_ERR_FAILURE;
+        }
+
+        delete[] kernel;
+    } else {
+        int ch = (input.image_format == FORMAT_GRAY ||
+                  input.image_format == FORMAT_BGR_PACKED ||
+                  input.image_format == FORMAT_RGB_PACKED) ? 1 : 3;
+        bool packed = (input.image_format == FORMAT_BGR_PACKED ||
+                       input.image_format == FORMAT_RGB_PACKED);
+        unsigned char* data_i = new unsigned char [input.height * stride_i[0] * ch];
+        unsigned char* data_o = new unsigned char [output.height * stride_o[0] * ch];
+        bm_image_copy_device_to_host(input, (void **)&data_i);
+
+        for (int i = 0; i < ch; i++) {
+            if (op)
+                morph_cpu_84x<MaxOp<unsigned char>>(
+                        data_i + i * input.height * stride_i[0],
+                        kernel,
+                        data_o + i * input.height * stride_i[0],
+                        kw,
+                        kh,
+                        stride_i[0],
+                        stride_o[0],
+                        input.width,
+                        input.height,
+                        packed);
+            else
+                morph_cpu_84x<MinOp<unsigned char>>(
+                        data_i + i * input.height * stride_i[0],
+                        kernel,
+                        data_o + i * input.height * stride_i[0],
+                        kw,
+                        kh,
+                        stride_i[0],
+                        stride_o[0],
+                        input.width,
+                        input.height,
+                        packed);
+        }
+        bm_image_copy_host_to_device(output, (void **)&data_o);
+        delete [] data_i;
+        delete [] data_o;
+        delete [] kernel;
+    }
+
+    return BM_SUCCESS;
+}
+
+
 bm_status_t bmcv_image_morph(
         bm_handle_t handle,
         bm_image input,
@@ -457,8 +846,7 @@ bm_status_t bmcv_image_morph(
         break;
 
       case BM1684X:
-        printf("current card not support\n");
-        ret = BM_ERR_NOFEATURE;
+        ret = bmcv_image_morph_bm1684x(handle, input, output, kw, kh, kmem, op);
         break;
 
       default:

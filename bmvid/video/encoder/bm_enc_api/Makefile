@@ -21,6 +21,8 @@ else ifeq ($(PRODUCTFORM),pcie_mips64) # pcie mode
     CROSS_CC_PREFIX = mips-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64) # pcie mode
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis) # pcie mode
+    CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64) # pcie mode
@@ -50,7 +52,12 @@ CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
 
+BRANCH_NAME := $(shell git name-rev --name-only HEAD 2>/dev/null || echo unknown)
+COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+COMMIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo unknown)
+
 CFLAGS += -fPIC -Wall -Wl,--fatal-warning
+CFLAGS += -DBRANCH_NAME=\"${BRANCH_NAME}\" -DCOMMIT_COUNT=\"${COMMIT_COUNT}\" -DCOMMIT_HASH=\"${COMMIT_HASH}\"
 CFLAGS += -I$(BMVID_TOP_DIR)/video/encoder/bm_enc_api/inc -I$(INSTALL_DIR)/include -I$(BMVID_TOP_DIR)/provider/cnm/encoder/inc -I$(BMVID_TOP_DIR)/provider/cnm/encoder/inc/ #-I$(BMVID_ROOT)/3rdparty/libbmcv/include
 CFLAGS += -D$(BM_CHIP_TYPE) -D$(BM_SUB_TYPE)
 ifneq ($(PRODUCTFORM), soc)
@@ -78,6 +85,11 @@ ifeq ($(PRODUCTFORM),pcie_mips64)
 endif
 
 ifeq ($(PRODUCTFORM), pcie_loongarch64)
+    LDFLAGS += -Wl,-melf64loongarch
+    LDLIBS += -lstdc++
+endif
+
+ifeq ($(PRODUCTFORM), pcie_loongarch64_anolis)
     LDFLAGS += -Wl,-melf64loongarch
     LDLIBS += -lstdc++
 endif

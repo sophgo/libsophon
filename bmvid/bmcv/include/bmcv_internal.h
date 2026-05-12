@@ -505,6 +505,15 @@ namespace layout
                                       plane_layout    dst_layout);
 }  // namespace layout
 
+bm_status_t bmcv_memory_permute(bm_handle_t     handle,
+                                  bm_device_mem_t src,
+                                  bm_device_mem_t dst,
+                                  int N,
+                                  int C,
+                                  int H,
+                                  int W,
+                                  int data_size);
+
 struct bm_image_private {
     bm_handle_t     handle = 0;
     bm_device_mem_t data[MAX_bm_image_CHANNEL];

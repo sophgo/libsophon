@@ -59,6 +59,28 @@ static RetCode CheckDecInstanceValidity(CodecInst* pCodecInst)
     return ProductVpuDecCheckCapability(pCodecInst);
 }
 
+Int32 VPU_CheckTopAddr(Uint32 coreIdx, Uint64 addr, Uint32 size)
+{
+    unsigned char ext_addr, top_addr1, top_addr2;
+    vpu_buffer_t vb;
+
+    if(addr == 0)
+        return -1;
+
+    if(vdi_get_common_memory(coreIdx, &vb) != RETCODE_SUCCESS)
+        return -1;
+    ext_addr = (vb.phys_addr >> 32) & 0xff;
+
+    top_addr1 = addr >> 32 & 0xff;
+    top_addr2 = (addr + size - 1) >> 32 & 0xff;
+    VLOG(INFO, "%s addr:0x%lx common_memory:0x%lx ext_addr:0x%x top_addr1:0x%x top_addr2:0x%x\n",
+        __func__, addr, vb.phys_addr, ext_addr, top_addr1, top_addr2);
+    if(ext_addr == top_addr1 && ext_addr == top_addr2)
+        return 1;
+
+    return 0;
+}
+
 Int32 VPU_IsBusy(Uint32 coreIdx)
 {
     Uint32 ret = 0;
@@ -814,6 +836,7 @@ RetCode VPU_DecIssueSeqInit(DecHandle handle)
     ret = ProductVpuDecInitSeq(handle);
     if (ret == RETCODE_SUCCESS) {
         SetPendingInst(pCodecInst->coreIdx, pCodecInst);
+        vdi_vpuinfo_start_one_frame(pCodecInst->coreIdx, pCodecInst->instIndex);
     }
 
     if (pAttr->supportCommandQueue == TRUE) {
@@ -1411,6 +1434,8 @@ RetCode VPU_DecStartOneFrame(DecHandle handle, DecParam *param)
     pDecInfo->frameStartPos = pDecInfo->streamRdPtr;
 
     ret = ProductVpuDecode(pCodecInst, param);
+    if(ret == RETCODE_SUCCESS)
+        vdi_vpuinfo_start_one_frame(pCodecInst->coreIdx, pCodecInst->instIndex);
 
     if (pAttr->supportCommandQueue == TRUE) {
         SetPendingInst(pCodecInst->coreIdx, NULL);
@@ -1419,9 +1444,7 @@ RetCode VPU_DecStartOneFrame(DecHandle handle, DecParam *param)
     else {
         SetPendingInst(pCodecInst->coreIdx, pCodecInst);
     }
-    if (RETCODE_SUCCESS == ret) {
-        vdi_vpuinfo_start_one_frame(pCodecInst->coreIdx, pCodecInst->instIndex);
-    }
+
     return ret;
 }
 
@@ -1715,7 +1738,6 @@ RetCode VPU_DecGetOutputInfo(DecHandle handle, DecOutputInfo* info)
     }
 
     SetPendingInst(pCodecInst->coreIdx, 0);
-    vdi_vpuinfo_get_outputinfo(pCodecInst->coreIdx, pCodecInst->instIndex);
     LeaveLock(pCodecInst->coreIdx);
 
     return RETCODE_SUCCESS;

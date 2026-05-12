@@ -40,7 +40,6 @@ constexpr bool strings_equal(char const* a, char const* b)
 }
 
 typedef enum {
-    DEBUG   =-1,
     INFO    = 0,
     WARNING = 1,
     WRONG   = 2,

@@ -251,3 +251,44 @@ This interface supports BM1684X.
 **Code example**
 
 * Same as the bmcv_image_warp_affine interface, Just change the interface name to bmcv_image_warp_affine_padding or bmcv_image_warp_affine_similar_to_opencv_padding.
+
+
+bmcv_image_warp_affine_padding_rgb
+==============================
+
+* This interface supports padding processing based on specified colors, where `padding_r`, `padding_g`, and `padding_b` represent the red, green, and blue color components respectively. For other parameter descriptions, refer to `bmcv_image_warp_affine`.
+
+
+**Interface form 1:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_padding_rgb(
+                bm_handle_t handle,
+                int image_num,
+                bmcv_affine_image_matrix matrix[4],
+                bm_image* input,
+                bm_image* output,
+                int padding_r,
+                int padding_g,
+                int padding_b,
+                int use_bilinear = 0
+        );
+
+**Interface form 2:**
+
+    .. code-block:: c
+
+        bm_status_t bmcv_image_warp_affine_similar_to_opencv_padding_rgb(
+                bm_handle_t handle,
+                int image_num,
+                bmcv_affine_image_matrix matrix[4],
+                bm_image* input,
+                bm_image* output,
+                int padding_r,
+                int padding_g,
+                int padding_b,
+                int use_bilinear = 0
+        );
+
+This interface supports BM1684X.

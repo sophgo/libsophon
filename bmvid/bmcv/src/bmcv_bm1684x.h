@@ -93,6 +93,33 @@ typedef struct {
   int type;
 } sg_api_cv_warp_bilinear_t;
 
+typedef struct {
+  u64 input_image_addr;
+  u64 output_image_addr;
+  u64 index_image_addr;
+  u64 input_image_addr_align_r;
+  u64 input_image_addr_align_g;
+  u64 input_image_addr_align_b;
+  u64 out_image_addr_align_a;
+  u64 out_image_addr_align_b;
+  u64 system_image_addr_lu;
+  u64 system_image_addr_ld;
+  u64 system_image_addr_ru;
+  u64 system_image_addr_rd;
+  bm_image_data_format_ext input_format;
+  bm_image_data_format_ext output_format;
+  sgcv_affine_matrix m;
+  int image_c;
+  int image_sh;
+  int image_sw;
+  int image_dh;
+  int image_dw;
+  int padding_r;
+  int padding_g;
+  int padding_b;
+  int type;
+} sg_api_cv_warp_bilinear_padding_rgb_t;
+
 typedef struct sgcv_perspective_matrix_s{
     float m[9];
 } sgcv_perspective_matrix;
@@ -114,10 +141,24 @@ typedef struct sg_api_cv_warp_perspective_1684x {
   int type;
 } sg_api_cv_warp_perspective_1684x_t;
 
+typedef struct sg_api_cv_remap {
+    u64 input_addr[3];
+    u64 output_addr[3];
+    u64 mapx_addr;
+    u64 mapy_addr;
+    int channel;
+    int input_width;
+    int input_height;
+    int output_width;
+    int output_height;
+    int interpolation_mode;
+} sg_api_cv_remap_t;
+
 typedef struct sg_api_yolo_detect_out{
     u64 b0_global_addr;
     u64 b1_global_addr;
     u64 b2_global_addr;
+    u64 buffer_global_offset;
     u64 top_global_addr;
     u64 all_mask_ddr_addr; //for to support large box, need to alloc ddr at outside
     int input_num;
@@ -324,6 +365,33 @@ typedef struct bm_api_cv_knn {
     int dtype;
 } bm_api_cv_knn_t;
 
+typedef struct bm_api_cv_knn2 {
+    u64 ref_data_dev_mem;
+    u64 test_data_dev_mem;
+    u64 dist_to_sort_dev_mem;
+    u64 distance_tpu_dev_mem;
+    u64 indices_tpu_dev_mem;
+    int n_test;
+    int n_ref;
+    int n_feat;
+    int k;
+} bm_api_cv_knn2_t;
+
+typedef struct bm_api_cv_knn_match {
+    u64 ref_data_dev_mem;
+    u64 test_data_dev_mem;
+    u64 dist_to_sort_dev_mem;
+    u64 distance_tpu_dev_mem;
+    u64 good_match_dev_mem;
+    u64 index_sorted_dev_mem;
+    int n_ref;
+    int n_ref_feat;
+    int n_test_feat;
+    int n_descriptor;
+    int k;
+    float ratio_thresh;
+} bm_api_cv_knn_match_t;
+
 typedef struct sg_api_cv_rotate {
   int channel;
   int rotation_angle;
@@ -460,4 +528,24 @@ typedef struct sg_api_cv_canny_double_thred_t {
     float high_threshold;
     int size;
 }ALIGN_STRUCT sg_api_cv_canny_double_thred_t;
+
+typedef struct sg_api_cv_count_nonzero{
+    int width;
+    int height;
+    int channel;
+    u64 input_addr;
+    u64 nonzero_count_addr;
+    u64 nonzero_idx_addr;
+}ALIGN_STRUCT sg_api_cv_count_nonzero_t;
+
+typedef struct sg_api_add_mask_to_image
+{
+  unsigned long long input_addr;
+  unsigned long long output_addr;
+  int width;
+  int height;
+  int mask_num;
+  mask_info_t mask_info[4];
+} ALIGN_STRUCT sg_api_add_mask_to_image_t;
+
 // #endif

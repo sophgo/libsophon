@@ -150,7 +150,9 @@ DECL_EXPORT void bmvpu_enc_set_logging_function(BmVpuEncLoggingFunc logging_fn);
 /* Get the threshold for logging. */
 DECL_EXPORT BmVpuEncLogLevel bmvpu_enc_get_logging_threshold(void);
 
-
+/* Obtain the compilation version information and time of the dynamic library */
+DECL_EXPORT void bm_vpuapi_get_commit_version();
+DECL_EXPORT void bm_vpulite_get_commit_version();
 
 
 /**************************************************/

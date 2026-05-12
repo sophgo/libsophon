@@ -14,27 +14,19 @@ typedef struct {
     int loop_num;
     int height;
     int width;
+    int format;
     int use_real_img;
     char* input_path;
     char* output_path;
     bm_handle_t handle;
 } cv_quantify_thread_arg_t;
 
-static int parameters_check(int height, int width)
-{
-    if (height > 8192 || width > 8192){
-        printf("Unsupported size : size_max = 8192 x 8192 \n");
-        return -1;
-    }
-    return 0;
-}
-
 static void read_bin(const char *input_path, float *input_data, int width, int height)
 {
     FILE *fp_src = fopen(input_path, "rb");
     if (fp_src == NULL)
     {
-        printf("无法打开输出文件 %s\n", input_path);
+        printf("Unable to open input file %s\n", input_path);
         return;
     }
     if(fread(input_data, sizeof(float), width * height, fp_src) != 0)
@@ -47,7 +39,7 @@ static void write_bin(const char *output_path, unsigned char *output_data, int w
     FILE *fp_dst = fopen(output_path, "wb");
     if (fp_dst == NULL)
     {
-        printf("无法打开输出文件 %s\n", output_path);
+        printf("Unable to open output file %s\n", output_path);
         return;
     }
     fwrite(output_data, sizeof(int), width * height, fp_dst);
@@ -77,8 +69,9 @@ static int quantify_cpu(
         float* input,
         unsigned char* output,
         int height,
-        int width) {
-    for(int i = 0; i < width * height * 3; i++) {
+        int width,
+        int channel) {
+    for(int i = 0; i < width * height * channel; i++) {
         if (input[i] < 0.0f) {
             output[i] = 0;
         } else if(input[i] > 255.0f) {
@@ -95,24 +88,36 @@ static int quantify_tpu(
         unsigned char* output,
         int height,
         int width,
+        int format,
         bm_handle_t handle) {
-
     bm_image input_img;
     bm_image output_img;
     struct timeval t1, t2;
     pthread_mutex_lock(&lock);
-    bm_image_create(handle, height, width, (bm_image_format_ext)FORMAT_RGB_PLANAR, DATA_TYPE_EXT_FLOAT32, &input_img, NULL);
-    bm_image_create(handle, height, width, (bm_image_format_ext)FORMAT_RGB_PLANAR, DATA_TYPE_EXT_1N_BYTE, &output_img, NULL);
+    bm_image_create(handle, height, width, (bm_image_format_ext)format, DATA_TYPE_EXT_FLOAT32, &input_img, NULL);
+    bm_image_create(handle, height, width, (bm_image_format_ext)format, DATA_TYPE_EXT_1N_BYTE, &output_img, NULL);
     bm_image_alloc_dev_mem(input_img, 1);
     bm_image_alloc_dev_mem(output_img, 1);
-    float* in_ptr[1] = {input};
-    bm_image_copy_host_to_device(input_img, (void **)in_ptr);
+    if (format == FORMAT_RGB_PLANAR || format == FORMAT_BGR_PLANAR || format == FORMAT_RGB_PACKED ||
+        format == FORMAT_GRAY){
+        float* input_addr[1] = {input};
+        bm_image_copy_host_to_device(input_img, (void **)(input_addr));
+    }else{
+        float* input_addr[3] = {input, input + height * width, input + 2 * height * width};
+        bm_image_copy_host_to_device(input_img, (void **)(input_addr));
+    }
     gettimeofday(&t1, NULL);
     bmcv_image_quantify(handle, input_img, output_img);
     gettimeofday(&t2, NULL);
     printf("Quantify TPU using time = %ld(us)\n", TIME_COST_US(t1, t2));
-    unsigned char* out_ptr[1] = {output};
-    bm_image_copy_device_to_host(output_img, (void **)out_ptr);
+    if (format == FORMAT_RGB_PLANAR || format == FORMAT_BGR_PLANAR || format == FORMAT_RGB_PACKED ||
+        format == FORMAT_GRAY) {
+        unsigned char *output_addr[1] = {output};
+        bm_image_copy_device_to_host(output_img, (void **)output_addr);
+    } else {
+        unsigned char *output_addr[3] = {output, output + height * width, output + 2 * height * width};
+        bm_image_copy_device_to_host(output_img, (void **)output_addr);
+    }
     bm_image_destroy(input_img);
     bm_image_destroy(output_img);
     pthread_mutex_unlock(&lock);
@@ -133,26 +138,27 @@ static int cmp(
 }
 
 static int test_quantify_random(
+        int format,
         int height,
         int width,
         int use_real_img,
         char *input_path,
         char *output_path,
         bm_handle_t handle) {
-    printf("width: %d , height: %d\n", width, height);
+    printf("format = %d, width: %d , height: %d\n", format, width, height);
     int ret;
     struct timeval t1, t2;
-
-    float* input_data = (float*)malloc(width * height * 3 * sizeof(float));
-    unsigned char* output_cpu = (unsigned char*)malloc(width * height * 3 * sizeof(unsigned char));
-    unsigned char* output_tpu = (unsigned char*)malloc(width * height * 3 * sizeof(unsigned char));
+    int channel = format == FORMAT_GRAY ? 1 : 3;
+    float* input_data = (float*)malloc(width * height * channel * sizeof(float));
+    unsigned char* output_cpu = (unsigned char*)malloc(width * height * channel * sizeof(unsigned char));
+    unsigned char* output_tpu = (unsigned char*)malloc(width * height * channel * sizeof(unsigned char));
     if(use_real_img == 1){
         read_bin(input_path, input_data, width, height);
     } else {
-        fill(input_data, 3, width, height);
+        fill(input_data, channel, width, height);
     }
     gettimeofday(&t1, NULL);
-    ret = quantify_cpu(input_data, output_cpu, height, width);
+    ret = quantify_cpu(input_data, output_cpu, height, width, channel);
     gettimeofday(&t2, NULL);
     printf("Quantify CPU using time = %ld(us)\n", TIME_COST_US(t1, t2));
     if(ret != 0){
@@ -162,14 +168,14 @@ static int test_quantify_random(
         return ret;
     }
 
-    ret = quantify_tpu(input_data, output_tpu, height, width, handle);
+    ret = quantify_tpu(input_data, output_tpu, height, width, format, handle);
     if(ret != 0){
         free(input_data);
         free(output_cpu);
         free(output_tpu);
         return ret;
     }
-    ret = cmp(output_tpu, output_cpu, width * height * 3);
+    ret = cmp(output_tpu, output_cpu, width * height * channel);
     if (ret == 0) {
         printf("Compare TPU result with CPU result successfully!\n");
         if (use_real_img == 1) {
@@ -190,15 +196,18 @@ void* test_quantify(void* args) {
     int use_real_img = cv_quantify_thread_arg->use_real_img;
     int height = cv_quantify_thread_arg->height;
     int width = cv_quantify_thread_arg->width;
+    int format = cv_quantify_thread_arg->format;
     char* input_path = cv_quantify_thread_arg->input_path;
     char* output_path = cv_quantify_thread_arg->output_path;
     bm_handle_t handle = cv_quantify_thread_arg->handle;
     for (int i = 0; i < loop_num; i++) {
-        // if(loop_num > 1) {
-        //     width = 1 + rand() % 8192;
-        //     height = 1 + rand() % 8192;
-        // }
-        if (0 != test_quantify_random(height, width, use_real_img, input_path, output_path, handle)){
+        if(loop_num > 1) {
+            height = 1 + rand() % 8192;
+            width = 1 + rand() % 8192;
+            int format_num[8] = {FORMAT_YUV444P, FORMAT_RGB_PLANAR, FORMAT_BGR_PLANAR, FORMAT_RGB_PACKED, FORMAT_BGR_PACKED, FORMAT_RGBP_SEPARATE, FORMAT_BGRP_SEPARATE, FORMAT_GRAY};
+            format = format_num[rand() % 8];
+        }
+        if (0 != test_quantify_random(format, height, width, use_real_img, input_path, output_path, handle)){
             printf("------TEST CV_QUANTIFY FAILED------\n");
             exit(-1);
         }
@@ -216,8 +225,9 @@ int main(int argc, char* args[]) {
     int loop = 1;
     int height = 1 + rand() % 8192;
     int width = 1 + rand() % 8192;
+    int format_num[8] = {FORMAT_YUV444P, FORMAT_RGB_PLANAR, FORMAT_BGR_PLANAR, FORMAT_RGB_PACKED, FORMAT_BGR_PACKED, FORMAT_RGBP_SEPARATE, FORMAT_BGRP_SEPARATE, FORMAT_GRAY};
+    int format = format_num[rand() % 8];
     int thread_num = 1;
-    int check = 0;
     char *input_path = NULL;
     char *output_path = NULL;
     bm_handle_t handle;
@@ -229,12 +239,12 @@ int main(int argc, char* args[]) {
 
     if (argc == 2 && atoi(args[1]) == -1) {
         printf("usage:\n");
-        printf("%s thread_num loop use_real_img height width input_path output_path(when use_real_img = 1,need to set input_path and output_path) \n", args[0]);
+        printf("%s thread_num loop use_real_img height width format input_path output_path(when use_real_img = 1,need to set input_path and output_path) \n", args[0]);
         printf("example:\n");
         printf("%s \n", args[0]);
         printf("%s 2\n", args[0]);
-        printf("%s 2 1 0 512 512 \n", args[0]);
-        printf("%s 1 1 1 1920 1080 res/1920x1080_rgbp.bin out/out_quantify.bin \n", args[0]);
+        printf("%s 2 1 0 512 512 8 \n", args[0]);
+        printf("%s 1 1 1 1920 1080 8 res/1920x1080_rgbp.bin out/out_quantify.bin \n", args[0]);
         return 0;
     }
 
@@ -243,13 +253,9 @@ int main(int argc, char* args[]) {
     if (argc > 3) use_real_img = atoi(args[3]);
     if (argc > 4) width = atoi(args[4]);
     if (argc > 5) height = atoi(args[5]);
-    if (argc > 6) input_path = args[6];
-    if (argc > 7) output_path = args[7];
-    check = parameters_check(height, width);
-    if (check) {
-        printf("Parameters Failed! \n");
-        return check;
-    }
+    if (argc > 6) format = atoi(args[6]);
+    if (argc > 7) input_path = args[7];
+    if (argc > 8) output_path = args[8];
 
     // test for multi-thread
     pthread_t pid[thread_num];
@@ -258,6 +264,7 @@ int main(int argc, char* args[]) {
         cv_quantify_thread_arg[i].loop_num = loop;
         cv_quantify_thread_arg[i].height = height;
         cv_quantify_thread_arg[i].width = width;
+        cv_quantify_thread_arg[i].format = format;
         cv_quantify_thread_arg[i].use_real_img = use_real_img;
         cv_quantify_thread_arg[i].input_path = input_path;
         cv_quantify_thread_arg[i].output_path = output_path;

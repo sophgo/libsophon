@@ -380,7 +380,7 @@ bm_status_t faiss_indexPQ_ADC_test(
     ret = bm_dev_request(&handle, 0);
     if (BM_SUCCESS != ret)
     {
-        std::cout << "request dev failed" << std::endl;
+        printf("request dev failed\n");;
         return BM_ERR_FAILURE;
     }
 
@@ -390,7 +390,7 @@ bm_status_t faiss_indexPQ_ADC_test(
     std::uniform_real_distribution<float> dist_value(-10., 10.);
     std::uniform_int_distribution<int> dist_index(0, 255);
 
-    std::cout << "------------set input-----------" << std::endl;
+    printf("------------set input-----------\n");
     int round = 1;
     fp16 *centroids_input_sys_fp16 = new fp16[m * ks * ds];
     fp16 *nxquery_input_sys_fp16 = new fp16[nx * d];
@@ -428,7 +428,7 @@ bm_status_t faiss_indexPQ_ADC_test(
         }
     }
 
-    std::cout << "------------tpu input-----------" << std::endl;
+    printf("------------tpu input-----------\n");
     bm_device_mem_t centroids_input_dev;
     bm_device_mem_t nxquery_input_dev;
     bm_device_mem_t nycodes_input_dev;
@@ -465,8 +465,8 @@ bm_status_t faiss_indexPQ_ADC_test(
                            index_output_dev,
                            d, m, ks, ny, nx, k, IP_metric, input_dtype, output_dtype);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
-    std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
+    printf("TPU using time(us): %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
+    printf("TPU using time(ms): %ld(ms)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000);
 
     if(ret != BM_SUCCESS){
         bm_free_device(handle, centroids_input_dev);
@@ -492,17 +492,17 @@ bm_status_t faiss_indexPQ_ADC_test(
 
     if (show_result)
     {
-        std::cout << "ADCsearch result:" << std::endl;
+        printf("ADCsearch result:\n");;
         for (int i = 0; i < k; i++)
         {
-            std::cout << "top:" << i + 1 << std::endl;
-            std::cout << "index:" << index_output_sys[i] << "\t";
+            printf("top: %d ", i + 1);
+            printf("index: %d \t", index_output_sys[i]);
             if (output_dtype == DT_FP16) {
-                std::cout << "distance:" << fp16tofp32(((fp16*)distance_output_sys)[i]);
+                printf("distance:%f, ", fp16tofp32(((fp16*)distance_output_sys)[i]));
             } else {
-                std::cout << "distance:" << ((float*)distance_output_sys)[i];
+                printf("distance: %f, ", ((float*)distance_output_sys)[i]);
             }
-            std::cout << std::endl;
+            printf("\n");
         }
     }
 
@@ -541,7 +541,7 @@ bm_status_t faiss_indexPQ_SDC_test(
     ret = bm_dev_request(&handle, 0);
     if (BM_SUCCESS != ret)
     {
-        std::cout << "request dev failed" << std::endl;
+        printf("request dev failed\n");
         return BM_ERR_FAILURE;
     }
 
@@ -636,8 +636,8 @@ bm_status_t faiss_indexPQ_SDC_test(
                            index_output_dev,
                            m, ks, ny, nx, k, IP_metric, input_dtype, output_dtype);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU using time(us): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
-    std::cout << "TPU using time(ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << "(ms)" << std::endl;
+    printf("TPU using time(us): %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
+    printf("TPU using time(ms): %ld(um)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if(ret != BM_SUCCESS){
         bm_free_device(handle, sdc_table_input_dev);
@@ -662,17 +662,17 @@ bm_status_t faiss_indexPQ_SDC_test(
 
     if (show_result)
     {
-        std::cout << "SDCsearch result:" << std::endl;
+        printf("SDCsearch result:\n");;
         for (int i = 0; i < k; i++)
         {
-            std::cout << "top:" << i + 1 << std::endl;
-            std::cout << "index:" << ((int*)index_output_sys)[i] << "\t";
+            printf("top: %d ", i + 1);
+            printf("index: %d \t", index_output_sys[i]);
             if (output_dtype == DT_FP16) {
-                std::cout << "distance:" << fp16tofp32(((fp16*)distance_output_sys)[i]);
+                printf("distance:%f, ", fp16tofp32(((fp16*)distance_output_sys)[i]));
             } else {
-                std::cout << "distance:" << ((float*)distance_output_sys)[i];
+                printf("distance: %f, ", ((float*)distance_output_sys)[i]);
             }
-            std::cout << std::endl;
+            printf("\n");
         }
     }
 
@@ -724,18 +724,18 @@ int main(int argc, char *args[])
     if (argc > 7) idtype = atoi(args[9]);
     if (argc > 8) odtype = atoi(args[10]);
 
-    std::cout << "------------parameter------------" << std::endl;
-    std::cout << "database_num: " << ny << std::endl;
-    std::cout << "query_num:    " << nx << std::endl;
-    std::cout << "sort_count:   " << k << std::endl;
-    std::cout << "data_dims:    " << d << std::endl;
-    std::cout << "slice_num:    " << m << std::endl;
-    std::cout << "sdc_type:     " << is_sdc << std::endl;
-    std::cout << "ip_metric:    " << IP_metric << std::endl;
-    std::cout << "show_result:  " << show_result << std::endl;
-    std::cout << "random_seed:  " << seed << std::endl;
-	std::cout << "input dtype:  " << (idtype == DT_FP32?"fp32":"fp16") << std::endl;
-    std::cout << "output dtype: " << (odtype == DT_FP32?"fp32":"fp16") << std::endl;
+    printf("------------parameter------------\n");
+    printf("database_num: %d\n", ny);
+    printf("query_num:    %d\n", nx);
+    printf("sort_count:   %d\n", k);
+    printf("data_dims:    %d\n", d);
+    printf("slice_num:    %d\n", m);
+    printf("sdc_type:     %d\n", is_sdc);
+    printf("ip_metric:    %d\n", IP_metric);
+    printf("show_result:  %d\n", show_result);
+    printf("random_seed:  %d\n", seed);
+    printf("input dtype:  %s\n", (idtype == DT_FP32?"fp32":"fp16"));
+    printf( "output dtype: %s\n", (odtype == DT_FP32?"fp32":"fp16"));
 #if TEST_WITH_FAISS
     if (is_sdc)
     {
