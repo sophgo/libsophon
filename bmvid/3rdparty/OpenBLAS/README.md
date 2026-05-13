@@ -4,7 +4,10 @@ OpenBLAS is introduced for qr_decomposition.
 ## OpenBLAS Project
 ```bash
 https://github.com/OpenMathLib/OpenBLAS
+[pcie_x86][soc_ARM]
 commit cd3945b99881423035cd9cdd00928e5d1671f30a
+[loongarch_anolis]
+commit db0abfa9070f4f2b1f990c1738a6bcba04172001
 ```
 
 ## OpenBLAS Usage
@@ -210,6 +213,86 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/linaro/QR/libbm1684x_kernel_module
 ```bash
 ./test_cv_cluster 6k.txt output.txt 2400 256 0.01 2 8 2 #4.52s
 ```
+
+# BMCV Compiling CMD(LoongArch)
+## 1)Cross-Compile OpenBLAS
+### 1.1)make libopenblas.so for LoongArch on bmvid-X86
+#### [Arch] loongarch_anolis in OpenBlas belongs to LA64_GENERIC
+#### [Requirement] Directly use `bm_prebuilt_toolchains/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu`
+#### [Warning] Do not pre-install  `aarch64-linux-gnu-gcc` or `gfortran-aarch64-linux-gnu` on X86, ensure `/usr/aarch64-linux-gnu-gcc` is empty
+```bash
+git clone https://github.com/OpenMathLib/OpenBLAS.git
+cd OpenBLAS
+
+make TARGET=LA64_GENERIC NO_TEST=1 \
+     HOSTCC=gcc \
+     CC=/mnt/software/bm_prebuilt_toolchains/loongarch64-linux-gnu-2021-04-22-vector/bin/loongarch64-linux-gnu-gcc \
+     CXX=/mnt/software/bm_prebuilt_toolchains/loongarch64-linux-gnu-2021-04-22-vector/bin/loongarch64-linux-gnu-g++ \
+     AR=/mnt/software/bm_prebuilt_toolchains/loongarch64-linux-gnu-2021-04-22-vector/bin/loongarch64-linux-gnu-ar \
+     RANLIB=/mnt/software/bm_prebuilt_toolchains/loongarch64-linux-gnu-2021-04-22-vector/bin/loongarch64-linux-gnu-ranlib \
+     CROSS=loongarch64-linux-gnu- \
+     CFLAGS="-march=loongarch64" \
+     CXXFLAGS="-march=loongarch64" \
+     LDFLAGS="-lpthread -lm"
+```
+
+### 1.2)Update libopenblas.so to bmvid-X86
+```bash
+cp OpenBLAS/libopenblas_la64_genericp-r0.3.29.dev.so /mnt/software/bmvid/3rdparty/OpenBLAS/loongarch/libopenblas.so
+cd /mnt/software/bmvid/3rdparty/OpenBLAS/loongarch/
+ln -s libopenblas.so  libopenblas.so.0
+```
+
+## 2)Cross-Compile BMCV(for LoongArch on X86)
+### [Warning]
+Directly compile in host-ubuntu:20.04, not in a docker container, so that GLIBC on CC/FC/Target will be 2.3.1
+
+### 2.1)Export cross-compilers(X86)
+```bash
+cd /mnt/software/bmvid
+export CHIP=bm1684
+
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/x86-64-core-i7--glibc--stable/bin
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/gcc-arm-10.3-2021.07-x86_64-aarch64-none-linux-gnu/bin
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/mips-loongson-gcc7.3-linux-gnu/2019.06-29/bin
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/loongarch64-linux-gnu-2021-04-22-vector/bin
+export PATH=$PATH:/usr/sw/swgcc830_cross_tools-bb623bc9a/usr/bin
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-elf/bin
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/bin
+```
+### 2.2)Set variables and clean cmake(X86)
+```bash
+export USING_OPENBLAS=1
+DEBUG=1
+CHIP=bm1684
+
+PRODUCTFORM=pcie_loongarch64
+
+source build/envsetup.sh
+unset USING_CMODEL
+source build/build.sh
+clean_bmcv_lib
+```
+###  2.3)Export Necessary Shared Objects(X86)
+```bash
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/install/pcie_bm1684_asic/bmcv/lib/cmodel/libbmcv.so
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/install/pcie_bm1684_asic/bmcv/lib
+export PATH=$PATH:/mnt/software/bm_prebuilt_toolchains/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-elf/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/install/pcie_bm1684_asic/bmcv/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid//3rdparty/libbmcv/lib/pcie
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/install/pcie_bm1684_asic/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/install/pcie_bm1684_asic/bmcv/lib/tpu_module/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/mnt/software/bmvid/3rdparty/tpu_kernel_module/
+```
+###  2.4)Build BMCV and Test on X86(X86)
+```bash
+build_ion_lib
+build_vpp_lib
+build_jpu_lib
+build_bmcv_lib
+build_bmcv_test
+```
+
 
 # Cross-Compile Checklist
 # 1)libgfortran and gcc-linaro

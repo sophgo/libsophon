@@ -199,7 +199,7 @@ function(ADD_TARGET_JPU_LIB target_name chip_name platform subtype debug ion com
                            COMMAND rm -rf ${JPU_BINARY_LIB_PATH}
                            COMMAND mkdir -p ${JPU_BINARY_LIB_PATH} && cp -rd ${JPU_LIB_TARGET}/*jpu* ${JPU_BINARY_LIB_PATH}/
                            COMMAND rm -rf ${JPU_BINARY_HEADER_PATH}
-                           COMMAND mkdir -p ${JPU_BINARY_HEADER_PATH} && cp -rd ${JPU_HEADER_TARGET}/*jpu* ${JPU_BINARY_HEADER_PATH}/
+                           COMMAND mkdir -p ${JPU_BINARY_HEADER_PATH} && cp -rd ${JPU_HEADER_TARGET}/*jpu* ${JPU_BINARY_HEADER_PATH}/ && cp -rd ${JPU_HEADER_TARGET}/bm_jpeg* ${JPU_BINARY_HEADER_PATH}/
                            COMMAND rm -rf ${JPU_BINARY_APP_PATH}
                            COMMAND mkdir -p ${JPU_BINARY_APP_PATH} && cp -rd ${JPU_APP_TARGET}/bmjpeg* ${JPU_BINARY_APP_PATH}/)
     else()
@@ -420,6 +420,8 @@ function(ADD_TARGET_YUV_LIB target_name platform debug component yuv_abs_path)
             set(CMAKE_TOOLCHAIN_FILE ../sunway_toolchain/sw_64.toolchain.cmake)
         elseif(${platform} STREQUAL "pcie_loongarch64")
             set(CMAKE_TOOLCHAIN_FILE ../loongarch_toolchain/loongarch64.toolchain.cmake)
+        elseif(${platform} STREQUAL "pcie_loongarch64_anolis")
+            set(CMAKE_TOOLCHAIN_FILE ../loongarch_toolchain/loongLinuxAnolis.toolchain.cmake)
         elseif(${platform} STREQUAL "pcie_riscv64")
             set(CMAKE_TOOLCHAIN_FILE ../riscv_toolchain/riscv64.toolchain.cmake)
         else()
@@ -478,7 +480,11 @@ function(ADD_TARGET_VPP_LIB target_name chip_name platform subtype debug ion com
     set(VPP_HEADER_TARGET ${out_abs_path}/include)
     set(VPP_APP_TARGET ${out_abs_path}/bin)
     set(VPP_LIB2_TARGET ${out_abs_path}/lib/libbmvppapi.so)
-    set(TARGET_DEPEND_OBJ ${VPP_LIB_TARGET} ${VPP_ALIB_TARGET} ${VPP_APP_TARGET}/vpp_resize)
+	if(${platform} STREQUAL "pcie" OR ${platform} STREQUAL "soc")
+    	set(TARGET_DEPEND_OBJ ${VPP_LIB_TARGET} ${VPP_ALIB_TARGET} ${VPP_APP_TARGET}/vpp_resize)
+	else()
+		set(TARGET_DEPEND_OBJ ${VPP_LIB_TARGET} ${VPP_ALIB_TARGET})
+	endif()
     set(VPP_LIBS_TARGET ${VPP_LIB_TARGET})
     if(CROSS_COMPILE)
         set(CROSS_OPT CROSS_CC_PREFIX=${CROSS_COMPILE}
@@ -491,6 +497,8 @@ function(ADD_TARGET_VPP_LIB target_name chip_name platform subtype debug ion com
         set(CONFIG sunwayLinux)
     elseif(${platform} STREQUAL "pcie_loongarch64")
         set(CONFIG loongLinux)
+    elseif(${platform} STREQUAL "pcie_loongarch64_anolis")
+        set(CONFIG loongLinuxAnolis)
     elseif(${platform} STREQUAL "soc")
         set(CONFIG EmbeddedLinux)
     elseif(${platform} STREQUAL "pcie_arm64")
@@ -594,7 +602,7 @@ function(ADD_TARGET_VPP_LIB target_name chip_name platform subtype debug ion com
 
 endfunction(ADD_TARGET_VPP_LIB)
 
-function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion component out_abs_path jpu_abs_path vpp_abs_path ion_abs_path using_openblas)
+function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion component out_abs_path jpu_abs_path vpp_abs_path ion_abs_path using_openblas enable_abi0)
     if (NOT ${chip_name} STREQUAL "bm1684")
         message(WARNING "bmcv is unavailable for bm1682")
     else()
@@ -616,11 +624,19 @@ function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion co
 
         endif()
 
+        # 根据 enable_abi0 设置 ABI_FLAG
+        if (${enable_abi0})
+            set(ABI_FLAG_VALUE 0)
+        else()
+            set(ABI_FLAG_VALUE 1)
+        endif()
+
         set(MAKE_OPT CHIP=${chip_name}
                 PRODUCTFORM=${platform}
                 SUBTYPE=${subtype}
                 DEBUG=${debug}
                 BMVID_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+                ABI_FLAG=${ABI_FLAG_VALUE}
                 ${CROSS_OPT})
         if(${subtype} STREQUAL "cmodel")
             set(MAKE_OPT ${MAKE_OPT} USING_CMODEL=1)
@@ -726,6 +742,40 @@ function(ADD_TARGET_BMCV_LIB target_name chip_name platform subtype debug ion co
     endif()
 
 endfunction(ADD_TARGET_BMCV_LIB)
+
+function(ADD_TARGET_EXAMPLE target_name chip_name platform subtype debug component out_abs_path)
+    set(MAKE_OPT CHIP=${chip_name}
+            PRODUCTFORM=${platform}
+            SUBTYPE=${subtype}
+            DEBUG=${debug}
+            BMVID_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            OUT_DIR=${out_abs_path}
+            SDK_DIR=${out_abs_path}
+            BMCV_SDK_DIR=${out_abs_path}
+            ${CROSS_OPT})
+
+    set(BUILD_FLAG ${out_abs_path}/bin/media_version)
+
+    add_custom_command(OUTPUT ${BUILD_FLAG}
+        COMMAND make clean ${MAKE_OPT}
+        COMMAND make ${MAKE_OPT}
+        COMMAND make install ${MAKE_OPT}
+        COMMAND make clean ${MAKE_OPT}
+        COMMAND touch ${BUILD_FLAG}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/example
+        COMMENT "Building example target ${target_name}"
+    )
+
+    add_custom_target(${target_name} ALL
+        DEPENDS ${BUILD_FLAG}
+        COMMENT "Custom target for ${target_name}"
+    )
+
+    install(DIRECTORY ${out_abs_path}/bin/
+        DESTINATION bin
+        FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        COMPONENT ${component})
+endfunction(ADD_TARGET_EXAMPLE)
 
 function(ADD_TARGET_BMVID_DOC target_name)
     set(BMCV_DOC_TARGET_ZH ${CMAKE_BINARY_DIR}/doc/BMCV开发参考手册.pdf)

@@ -1173,8 +1173,17 @@ int bm_vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx) {
         char json[512] = {0};
         int writelen = 0;
         vdi->vpuinfo[inst_idx].inframenums++;
-        vdi->vpuinfo[inst_idx].time = get_formatted_time();
         vdi->vpuinfo[inst_idx].status = 1;
+
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
+        vdi->vpuinfo[inst_idx].time = get_formatted_time();
         buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
         int str_len = strlen(json);
         if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
@@ -1207,8 +1216,16 @@ int bm_vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx) {
         char json[512] = {0};
         int writelen = 0;
         vdi->vpuinfo[inst_idx].outframenums++;
-        vdi->vpuinfo[inst_idx].time = get_formatted_time();
         vdi->vpuinfo[inst_idx].status = 1;
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
+        vdi->vpuinfo[inst_idx].time = get_formatted_time();
         buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
         int str_len = strlen(json);
         if(fwrite(json, 1, writelen, vdi->vpuinfo_fd) != str_len) {
@@ -1757,10 +1774,10 @@ int bm_vdi_wait_interrupt(uint32_t core_idx, int timeout)
     if (ret < 0) {
 #if defined(BM_PCIE_MODE)
         int soc_idx = core_idx/MAX_NUM_VPU_CORE_CHIP;
-        VLOG(ERR, "[VDI] fail to wait for interrupt at SoC %d, core %d with ioctl() "
+        VLOG(WARN, "[VDI] fail to wait for interrupt at SoC %d, core %d with ioctl() "
              "request. [error=%s]\n", soc_idx, chip_core_idx, strerror(errno));
 #else
-        VLOG(ERR, "[VDI] fail to wait for interrupt at core %d with ioctl() "
+        VLOG(WARN, "[VDI] fail to wait for interrupt at core %d with ioctl() "
              "request. [error=%s]\n", chip_core_idx, strerror(errno));
 #endif
         return -1;

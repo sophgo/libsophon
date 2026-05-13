@@ -97,30 +97,30 @@ static int hamming_distance_single_test(int bits_len, int input1_num, int input2
     std::vector<bm_device_mem_t*> internal_mem_v;
 
     if(BM_SUCCESS != bm_malloc_device_byte(handle, &input1_dev_mem, input1_num * bits_len * sizeof(int))){
-        std::cout << "malloc input fail" << std::endl;
+        printf("malloc input fail\n");
         goto free_devmem;
     }
     internal_mem_v.push_back(&input1_dev_mem);
 
     if(BM_SUCCESS != bm_malloc_device_byte(handle, &input2_dev_mem, input2_num * bits_len * sizeof(int))){
-        std::cout << "malloc input fail" << std::endl;
+        printf("malloc input fail\n");
         goto free_devmem;
     }
     internal_mem_v.push_back(&input2_dev_mem);
 
     if(BM_SUCCESS != bm_malloc_device_byte(handle, &output_dev_mem, input1_num * input2_num * sizeof(int))){
-        std::cout << "malloc input fail" << std::endl;
+        printf("malloc input fail\n");
         goto free_devmem;
     }
     internal_mem_v.push_back(&output_dev_mem);
 
     if(BM_SUCCESS != bm_memcpy_s2d(handle, input1_dev_mem, input1_data)){
-        std::cout << "copy input1 to device fail" << std::endl;
+        printf("copy input1 to device fail\n");
         goto free_devmem;
     }
 
     if(BM_SUCCESS != bm_memcpy_s2d(handle, input2_dev_mem, input2_data)){
-        std::cout << "copy input2 to device fail" << std::endl;
+        printf("copy input2 to device fail\n");
         goto free_devmem;
     }
 
@@ -133,7 +133,7 @@ static int hamming_distance_single_test(int bits_len, int input1_num, int input2
                                                input1_num,
                                                input2_num);
     gettimeofday_(&t2);
-    cout << "--bmcv_hamming_distance using time = " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)--" << endl;
+    printf("--bmcv_hamming_distance using time = %ld(us)--\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if(status != BM_SUCCESS){
         printf("run bmcv_hamming_distance failed status = %d \n", status);
@@ -141,7 +141,7 @@ static int hamming_distance_single_test(int bits_len, int input1_num, int input2
     }
 
     if(BM_SUCCESS != bm_memcpy_d2s(handle, output_tpu, output_dev_mem)){
-        std::cout << "bm_memcpy_d2s fail" << std::endl;
+        printf("bm_memcpy_d2s fail\n");
         goto free_devmem;
     }
 
@@ -166,7 +166,7 @@ free_devmem:
 int main(int argc, char *argv[]){
     unsigned int seed = (unsigned)time(NULL);
     srand(seed);
-    std::cout << "random seed = " << seed << std::endl;
+    printf("random seed = %d\n", seed);
 
     int bits_len = 8;
     int input1_num = 2;
@@ -183,15 +183,15 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
-    std::cout << "bits_len is " << bits_len << std::endl;
-    std::cout << "input1_data len is " << input1_num << std::endl;
-    std::cout << "input2_data len is " << input2_num << std::endl;
+    printf("bits_len is %d\n", bits_len);
+    printf("input1_data len is %d\n", input1_num);
+    printf("input2_data len is %d\n", input2_num);
 
     int ret = hamming_distance_single_test(bits_len, input1_num, input2_num);
     if(ret != 0){
-        cout << "------[HAMMING_DISTANCE TEST FAILED!]------" << endl;
+        printf("------[HAMMING_DISTANCE TEST FAILED!]------\n");
     }else{
-        cout << "------[HAMMING_DISTANCE TEST PASSED!]------" << endl;
+        printf("------[HAMMING_DISTANCE TEST PASSED!]------\n");
     }
 
     bm_dev_free(handle);

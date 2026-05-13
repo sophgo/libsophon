@@ -176,19 +176,16 @@ DWORD WINAPI test_crop_v2_thread(LPVOID arg) {
     crop_thread_arg_t *crop_thread_arg = (crop_thread_arg_t *)arg;
     int test_loop_times = crop_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST CROP v2] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST CROP v2] test starts... LOOP times will be %d \n", test_loop_times);
     bm_handle_t    handle;
     bm_dev_request(&handle, 0);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST CROP v2] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST CROP v2] LOOP %d ------\n", loop_idx);
 
         // set parameter random
         bm_image_format_ext format_choice[5] = {FORMAT_BGR_PLANAR,
@@ -258,7 +255,7 @@ DWORD WINAPI test_crop_v2_thread(LPVOID arg) {
         printf("crop used time: %ld us\n", used);
 
         if (BM_SUCCESS != ret) {
-            std::cout << "bmcv_crop error !!!" << std::endl;
+            printf("bmcv_crop error !!!\n");
             bm_image_destroy(input);
             for (int i = 0; i < crop_num; i++) {
                 bm_image_destroy(output[i]);
@@ -327,7 +324,7 @@ DWORD WINAPI test_crop_v2_thread(LPVOID arg) {
         delete [] output;
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST CROP v2] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST CROP v2] ALL TEST PASSED!------\n");
     return NULL;
 }
 
@@ -339,19 +336,16 @@ DWORD WINAPI test_crop_thread(LPVOID arg) {
     crop_thread_arg_t *crop_thread_arg = (crop_thread_arg_t *)arg;
     int                test_loop_times = crop_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n",pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST CROP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST CROP] test starts... LOOP times will be %d", test_loop_times);
     bm_handle_t    handle;
     bm_dev_request(&handle, 0);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST CROP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST CROP] LOOP %d ------\n", loop_idx);
         int            w = 1920, h = 1080;
         void *         src_bgr  = 0;
         void *         dst_bgr  = 0;
@@ -495,13 +489,13 @@ DWORD WINAPI test_crop_thread(LPVOID arg) {
         }
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST CROP] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST CROP] ALL TEST PASSED!------\n");;
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
     unsigned int seed = (unsigned)time(NULL);
-    std::cout << "seed: " << seed << std::endl;
+    printf("seed: %d\n", seed);
     srand(seed);
     int test_loop_times  = 0;
     int test_threads_num = 1;
@@ -515,17 +509,15 @@ int main(int argc, char *argv[]) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_crop loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow thisorder:test_crop loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST CROP] loop times should be 1~1500" << std::endl;
+        printf("[TEST CROP] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST CROP] thread nums should be 1~4 " << std::endl;
+        printf("[TEST CROP] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -604,7 +596,7 @@ int main(int argc, char *argv[]) {
         CloseHandle(hThreadArray[i]);
     #endif
 
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     #ifdef __linux__
     delete[] pid;
     #endif

@@ -20,7 +20,7 @@ typedef struct {
     int start_y[10];
     int overlay_w[10];
     int overlay_h[10];
-    char* input_path;
+    const char* input_path;
     const char* output_path_cpu;
     const char* output_path_tpu;
     char* overlay_path[10];
@@ -275,7 +275,7 @@ static void* test_image_overlay(void* args) {
     int loop_num = thread_args->loop_num;
     int use_real_img = thread_args->use_real_img;
     int overlay_num = thread_args->overlay_num;
-    char* base_image_path = thread_args->input_path;
+    const char* base_image_path = thread_args->input_path;
     int base_width = thread_args->src_w;
     int base_height = thread_args->src_h;
     int* overlay_w = thread_args->overlay_w;
@@ -293,7 +293,7 @@ static void* test_image_overlay(void* args) {
     bm_status_t ret = BM_SUCCESS;
     struct timeval t1, t2;
     int res = 0;
-    int format = FORMAT_ARGB1555_PACKED; /*FORMAT_ARGB4444_PACKED / FORMAT_ABGR_PACKED */
+    int format = FORMAT_ARGB1555_PACKED; /*FORMAT_ARGB1555_PACKED*/ /*FORMAT_ARGB4444_PACKED / FORMAT_ABGR_PACKED */
 
     bm_handle_t handle;
     ret = bm_dev_request(&handle, 0);
@@ -404,9 +404,9 @@ int main(int argc, char *args[]) {
     char* oip = NULL;
 
     for (int i = 0; i < overlay_num; i++) {
-        int w = rand() % (850);
+        int w = rand() % (base_width);
         overlay_width[i] = w > base_width ? base_width : w;
-        int h = rand() % (850);
+        int h = rand() % (base_height);
         overlay_height[i] = h > base_height ? base_height : h;
         dis_x_max[i] = base_width - overlay_width[i];
         dis_y_max[i] = base_height - overlay_height[i];
@@ -418,7 +418,7 @@ int main(int argc, char *args[]) {
         pos_y[i] = rand() % (dis_y_max[i] + 1);
     }
 
-    char* base_image_path = NULL;
+    const char* base_image_path = NULL;
     const char* output_image_cpu_path = NULL;
     const char* output_image_tpu_path = NULL;
 

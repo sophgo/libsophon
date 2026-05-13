@@ -42,11 +42,9 @@
 #include "../../../jpuapi/regdefine.h"
 #include "../../../include/version.h"
 #include "jpu.h"
-#include <linux/mutex.h>
-#include <linux/rwsem.h>
 
-unsigned int rwlock_count = 0;
-extern struct rw_semaphore my_rwlock;
+extern void spacc_lock(void);
+extern void spacc_unlock(void);
 
 // #define ENABLE_DEBUG_MSG
 #ifdef ENABLE_DEBUG_MSG
@@ -164,6 +162,10 @@ typedef struct {
     int decode_err;         // Decoding error code
     int encode_err;         // Encoding error code
 } JPUCoreStatus;
+
+typedef struct jpu_private_data {
+    int rwlock_count;
+} jpu_private_data;
 
 typedef struct jpudrv_instance_pool_t {
     unsigned char jpgInstPool[MAX_NUM_INSTANCE][MAX_INST_HANDLE_SIZE];
@@ -516,6 +518,7 @@ static int jpu_open(struct inode *inode, struct file *filp)
 {
     jpudrv_instance_list_t *jil , *n;
     jpudrv_buffer_pool_t *jbp, *n2;
+    jpu_private_data *pd;
 
     if (!s_process_count)
     {
@@ -562,10 +565,9 @@ static int jpu_open(struct inode *inode, struct file *filp)
     }
     s_process_count++;
     DPRINTK("jpu_open: s_process_count=%d,s_mem_diff=%d\n", s_process_count,s_mem_diff);
-
-    LOCK(s_jpu_lock);
-    filp->private_data = (void *)(&s_jpu_drv_context);
-    UNLOCK(s_jpu_lock);
+    pd = kmalloc(sizeof(jpu_private_data), GFP_KERNEL);
+    pd->rwlock_count = 0;
+    filp->private_data = (void *)pd;
     return 0;
 }
 
@@ -670,14 +672,20 @@ static long jpu_ioctl(struct file *filp, u_int cmd, u_long arg)
     {
     case JDI_IOCTL_GET_RWLOCK:
         {
-            down_read(&my_rwlock);
-            rwlock_count++;
+            jpu_private_data *pd = (jpu_private_data *)filp->private_data;
+            spacc_lock();
+            LOCK(s_jpu_lock);
+            pd->rwlock_count++;
+            UNLOCK(s_jpu_lock);
         }
         break;
     case JDI_IOCTL_RELEASE_RWLOCK:
         {
-            up_read(&my_rwlock);
-            rwlock_count--;
+            jpu_private_data *pd = (jpu_private_data *)filp->private_data;
+            spacc_unlock();
+            LOCK(s_jpu_lock);
+            pd->rwlock_count--;
+            UNLOCK(s_jpu_lock);
         }
         break;
     case JDI_IOCTL_GET_MAX_NUM_JPU_CORE:
@@ -1228,19 +1236,16 @@ static ssize_t jpu_write(struct file *filp, const char __user *buf, size_t len, 
     return -1;
 }
 
-int ctrl_c_release(unsigned int value)
+int ctrl_c_release(int value)
 {
     int ret = 0;
     switch (value) {
         case 1:
-            up_read(&my_rwlock);
-            rwlock_count--;
+            spacc_unlock();
             break;
         case 2:
-            up_read(&my_rwlock);
-            rwlock_count--;
-            up_read(&my_rwlock);
-            rwlock_count--;
+            spacc_unlock();
+            spacc_unlock();
             break;
         default:
             break;
@@ -1251,12 +1256,15 @@ int ctrl_c_release(unsigned int value)
 
 static int jpu_release(struct inode *inode, struct file *filp)
 {
+    jpu_private_data *pd = (jpu_private_data *)filp->private_data;
     DPRINTK("jpu_release: s_process_count=%d\n", s_process_count);
 
     down(&s_jpu_sem);
 
-    ctrl_c_release(rwlock_count);
-    rwlock_count = 0;
+    ctrl_c_release(pd->rwlock_count);
+
+    kfree(pd);
+    filp->private_data = NULL;
 
     LOCK(s_jpu_lock);
     jpu_free_instances(filp);
@@ -1308,7 +1316,7 @@ static int jpu_release(struct inode *inode, struct file *filp)
 
 static int jpu_fasync(int fd, struct file *filp, int mode)
 {
-    struct jpu_drv_context_t *dev = (struct jpu_drv_context_t *)filp->private_data;
+    struct jpu_drv_context_t *dev = &s_jpu_drv_context;
     return fasync_helper(fd, filp, mode, &dev->async_queue);
 }
 

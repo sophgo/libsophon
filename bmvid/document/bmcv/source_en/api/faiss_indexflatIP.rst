@@ -77,11 +77,11 @@ This interface only supports BM1684X.
 
 * int input_dtype
 
-  Input parameter. Support float and char, 5 means float, 1 means char.
+  Input parameters. Input data types. Supports fp32, fp16, and char. 5 indicates fp32, 3 indicates fp16, and 1 indicates char.
 
 * int output_dtype
 
-  Output parameter. Support float and int, 5 means float, 9 means int.
+  Output parameters. Output data type. When the input data type is fp32, the output data type supports fp32 and fp16; when the input data type is fp16, the output data type supports fp32 and fp16; when the input data type is char, the output data type supports int. Here, 5 represents fp32, 3 represents fp16, and 9 represents int.
 
 
 **Return value description:**
@@ -93,9 +93,9 @@ This interface only supports BM1684X.
 
 **Note:**
 
-1. The input data type (query vectors) and data in the database (database vectors) are float or char.
+1. The input data type (query vectors) and data in the database (database vectors) are fp32, fp16 or char.
 
-2. The data type of the output sorted similarity result is float or int, and that of the corresponding indices is int.
+2. The data type of the output sorted similarity result is fp32, fp16 or int, and that of the corresponding indices is int.
 
 3. Usually, the data in the database is arranged in the memory as database_vecs_num * vec_dims. Therefore, the is_transpose needs to be set to 1.
 
@@ -103,7 +103,9 @@ This interface only supports BM1684X.
 
 5. The interface is used for Faiss::IndexFlatIP.search() and implemented on BM1684X. According to the continuous memory of Tensor Computing Processor on BM1684X, we can query about 512 inputs of 256 dimensions at a time on a single processor if the database is about 100W.
 
-6. The Faiss series operators have multiple input parameters, each of which has a usage range limit. If the input parameter exceeds the range, the corresponding TPU output will fail. We selected three main parameters for testing, fixed two of the dimensions, and tested the maximum value of the third dimension. The test results are shown in the following table:
+6. If the device memory requested in a single application exceeds 4GB, an interface with the suffix u64 must be used to request, transfer, and release device memory.
+
+7. The Faiss series operators have multiple input parameters, each of which has a usage range limit. If the input parameter exceeds the range, the corresponding TPU output will fail. We selected three main parameters for testing, fixed two of the dimensions, and tested the maximum value of the third dimension. The test results are shown in the following table:
 
 +-----------+--------------+-------------------+
 | query_num | vec_dims     | max_database_num  |
@@ -201,7 +203,6 @@ This interface only supports BM1684X.
         #include <stdlib.h>
         #include <stdint.h>
         #include "bmcv_api_ext.h"
-        #include "test_misc.h"
         int main()
         {
             int sort_cnt = 100;
@@ -256,6 +257,69 @@ This interface only supports BM1684X.
             bm_free_device(handle, buffer_dev_mem);
             bm_free_device(handle, sorted_similarity_dev_mem);
             bm_free_device(handle, sorted_index_dev_mem);
+            bm_dev_free(handle);
+            return 0;
+        }
+        //Requesting more than 4GB of device memory
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <stdint.h>
+        #include <cstdint>
+        #include "bmcv_api_ext.h"
+        int main()
+        {
+            int sort_cnt = 100;
+            int vec_dims = 256;
+            int query_vecs_num = 1;
+            int database_vecs_num = 10000;
+            int is_transpose = 1;
+            int input_dtype = 5; // 5: float
+            int output_dtype = 5;
+            float* input_data = new float[query_vecs_num * vec_dims];
+            float* db_data = new float[database_vecs_num * vec_dims];
+            float *output_dis = new float[query_vecs_num * sort_cnt];
+            int *output_inx = new int[query_vecs_num * sort_cnt];
+            bm_handle_t handle;
+            bm_device_mem_u64_t query_data_dev_mem;
+            bm_device_mem_u64_t db_data_dev_mem;
+            bm_device_mem_u64_t buffer_dev_mem;
+            bm_device_mem_u64_t sorted_similarity_dev_mem;
+            bm_device_mem_u64_t sorted_index_dev_mem;
+
+            bm_dev_request(&handle, 0);
+            for (int i = 0; i < query_vecs_num * vec_dims; i++) {
+                input_data[i] = ((float)rand() / (float)RAND_MAX) * 3.3;
+            }
+            for (int i = 0; i < vec_dims * database_vecs_num; i++) {
+                db_data[i] = ((float)rand() / (float)RAND_MAX) * 3.3;
+            }
+
+            bm_malloc_device_byte_u64(handle, &query_data_dev_mem, query_vecs_num * vec_dims * sizeof(float));
+            bm_malloc_device_byte_u64(handle, &db_data_dev_mem, (uint64_t)database_vecs_num * (uint64_t)vec_dims * (uint64_t)sizeof(float));
+            bm_malloc_device_byte_u64(handle, &buffer_dev_mem, (uint64_t)query_vecs_num * (uint64_t)database_vecs_num * (uint64_t)sizeof(float));
+            bm_malloc_device_byte_u64(handle, &sorted_similarity_dev_mem, query_vecs_num * sort_cnt * sizeof(float));
+            bm_malloc_device_byte_u64(handle, &sorted_index_dev_mem, query_vecs_num * sort_cnt * sizeof(int));
+            bm_memcpy_s2d_u64(handle, query_data_dev_mem, input_data);
+            bm_memcpy_s2d_u64(handle, db_data_dev_mem, db_data);
+
+            bmcv_faiss_indexflatIP_u64(handle, query_data_dev_mem, db_data_dev_mem, buffer_dev_mem,
+                                sorted_similarity_dev_mem, sorted_index_dev_mem, vec_dims,
+                                query_vecs_num, database_vecs_num, sort_cnt, is_transpose,
+                                input_dtype, output_dtype);
+
+            bm_memcpy_d2s_u64(handle, output_dis, sorted_similarity_dev_mem);
+            bm_memcpy_d2s_u64(handle, output_inx, sorted_index_dev_mem);
+
+            delete[] input_data;
+            delete[] db_data;
+            delete[] output_dis;
+            delete[] output_inx;
+            bm_free_device_u64(handle, query_data_dev_mem);
+            bm_free_device_u64(handle, db_data_dev_mem);
+            bm_free_device_u64(handle, buffer_dev_mem);
+            bm_free_device_u64(handle, sorted_similarity_dev_mem);
+            bm_free_device_u64(handle, sorted_index_dev_mem);
             bm_dev_free(handle);
             return 0;
         }

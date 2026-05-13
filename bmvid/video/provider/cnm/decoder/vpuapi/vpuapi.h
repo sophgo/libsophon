@@ -6163,6 +6163,7 @@ void VPU_EncSetHostParaAddr(
 
 
 void VPU_PrintW5AllReg(int coreIdx);
+Int32 VPU_CheckTopAddr(Uint32 coreIdx, Uint64 addr, Uint32 size);
 
 PhysicalAddress VPU_MapToAddr40Bit(int coreIdx, unsigned int Addr);
 

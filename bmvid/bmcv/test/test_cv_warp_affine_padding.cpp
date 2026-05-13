@@ -383,10 +383,9 @@ static int bmcv_warp_cmp(u8_data   p_exp,
     for (i = 0; i < image_dh; i++) {
         for (int j = 0;j < image_dw;j++){
              if (abs(p_exp->data[count] - p_got->data[count]) > 1){
-                std::cout << "image_dh = " << image_dh << "\n" << "image_dw = " << image_dw  << "\n" << std::endl;
-                std::cout << "i = " << i << "\n" << "j = " << j  << "\n" << std::endl;
-                std::cout << "p_exp->data = " << p_exp->data[count] << std::endl;
-                std::cout << "p_got->data = " << p_got->data[count] << std::endl;
+                printf("image_dh = %d, image_dw = %d\n", image_dh, image_dw);
+                printf("i = %d, j = %d\n", i, j);
+                printf("p_exp->data = %d, p_got->data = %d\n", p_exp->data[count], p_got->data[count]);
                 return -1;
             }
             count++;
@@ -888,7 +887,7 @@ static bm_status_t bmcv_warp_tpu(bm_handle_t handle,
         gettimeofday_(&t2);
     }
 
-    std::cout << "---warp_affine TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("---warp_affine TPU using time= %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     int size = 0;
     bm_image_get_byte_size(dst_img->data[0], &size);
@@ -1131,15 +1130,13 @@ int main(int argc, char *argv[]) {
     }
 
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST WARP] loop times should be 1~1500" << std::endl;
+        printf("[TEST WARP] loop times should be 1~1500\n");
         exit(-1);
     }
-    std::cout << "[TEST WARP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST WARP] test starts... LOOP times will be %d", test_loop_times);
 
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST WARP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST WARP] LOOP %d ------\n", loop_idx);
 
         struct timespec tp;
         clock_gettime_(0, &tp);
@@ -1148,7 +1145,7 @@ int main(int argc, char *argv[]) {
         printf("random seed %d\n", seed);
         test_cv_warp_random_padding(2);
     }
-    std::cout << "------[TEST WARP] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST WARP] ALL TEST PASSED!------\n");
 
     return 0;
 }

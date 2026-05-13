@@ -267,7 +267,7 @@ static int gen_test_size(int &batch_num,
         break;
       }
       default: {
-        cout << "gen mode error" << endl;
+        printf("gen mode error\n");
         exit(-1);
       }
     }
@@ -312,12 +312,12 @@ static int gen_test_size(int &batch_num,
         break;
       }
       default: {
-        cout << "gen mode error" << endl;
+        printf("gen mode error\n");
         exit(-1);
       }
     }
   }else {
-    cout << "not supported !\n" << endl;
+    printf("not supported !\n");
     ret = BM_NOT_SUPPORTED;
   }
 
@@ -902,7 +902,7 @@ static int test_yolov3_detect_out(int test_loop_times) {
     mode_value_end = chipid == BM1684X ? 3 : 2;
 
   for (int i = 0; i < test_loop_times; i++){
-    std::cout << "------[TEST yolov3_detect_out ] LOOP " << i << "------" << std::endl;
+    printf("------[TEST yolov3_detect_out ] LOOP %d------\n", i);
     for (int rand_mode = mode_value_start; rand_mode < mode_value_end; rand_mode++) {
     // for (int rand_mode = 3; rand_mode < 4; rand_mode++) {
       gen_test_size(batch_num, num_classes, keep_top_k, nms_threshold, conf_threshold, H, W, rand_mode);
@@ -911,7 +911,7 @@ static int test_yolov3_detect_out(int test_loop_times) {
         {H*2, W*2},
         {H*4, W*4},
       };
-      std::cout << "rand_mode : " << rand_mode << std::endl;
+      printf("rand_mode : %d\n", rand_mode);
       printf("Batch:%d, Class_num: %d, Height: %d, Width: %d\n", batch_num, num_classes, H, W);
       printf("Confidence threshold: %f\n", conf_threshold);
       printf("NMS threshold: %f\n", nms_threshold);
@@ -1146,7 +1146,7 @@ static int test_yolov3_detect_out(int test_loop_times) {
           ret = BM_ERR_FAILURE;
         }
         gettimeofday_(&t2);
-        cout << "nms yolo using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("nms yolo using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
         //bm_dev_free(handle);
 
@@ -1276,14 +1276,12 @@ int main(int argc, char* argv[]) {
   } else if (argc == 2) {
       test_loop_times  = atoi(argv[1]);
   } else {
-      std::cout << "command input error, please follow this "
-                    "order:test_ssd_detect_out loop_num "
-                << std::endl;
+      printf("command input error, please follow this order:test_ssd_detect_out loop_num\n");
       exit(-1);
   }
 
   if (test_loop_times > 1500 || test_loop_times < 1) {
-      std::cout << "[TEST ssd_detect_out] loop times should be 1~1500" << std::endl;
+      printf("[TEST ssd_detect_out] loop times should be 1~1500\n");
       exit(-1);
   }
 

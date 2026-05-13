@@ -100,7 +100,7 @@ static int fusion_tpu(
     // else
         // bmcv_image_erode(handle, img_i, img_o, kw, kh, kmem);
     gettimeofday_(&t2);
-    cout << "fusion TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("fusion TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     unsigned char* out_ptr[3] = {output, output + height * width, output + 2 * height * width};
     bm_image_copy_device_to_host(img_o, (void **)out_ptr);
     bm_image_destroy(img_i_1);
@@ -146,7 +146,7 @@ static int cmpv2(unsigned char* got, unsigned char* exp ,int width, int height, 
     unsigned char* md5_tpuOut = new unsigned char[16];
     md5_get(got, (sizeof(unsigned char) * channel * height * width), md5_tpuOut);
     if(0 != strcmp((unsignedCharToHex(md5_tpuOut).c_str()), (const char*)exp)){
-        cout << "cmp error!" << endl;
+        printf("cmp error!\n");
         return -1;
     }
     return 0;
@@ -165,7 +165,7 @@ static int test_morph_random(
 
     unsigned int seed = tp.tv_nsec;
     srand(seed);
-    cout << "seed = " << seed << endl;
+    printf("seed = %d\n", seed);
     format = 0; //rand() % 3;
     kh = 3; //rand() % 5 + 1;
     kw = 3; //rand() % 5 + 1;
@@ -176,11 +176,10 @@ static int test_morph_random(
     string shape_str[3] = {"RECT", "CROSS", "ELLIPSE"};
     string format_str[3] = {"gray", "rgb-planar", "rgb-packed"};
     // cout << "op: " << op_str[op] << endl;
-    cout << "format: " << format_str[format] << endl;
-    cout << "width: " << width << "  height: " << height << endl;
-    cout << "kh: " << kh << "  kw: " << kw << "  shape: " << shape_str[shape] << endl;
+    printf("format: %s, width: %d, height: %d\n", format_str[format].c_str(), width, height);
+    printf("kh: %d, kw: %d, shape: %s\n", kh, kw, shape_str[shape].c_str());
     int channel = format == 0 ? 1 : 3;
-    cout << "channel: " << channel <<endl;
+    printf("channel: %d\n", channel);
     unsigned char* input_data_1 = new unsigned char [width * height * channel];
     unsigned char* input_data_2 = new unsigned char [width * height * channel];
     unsigned char* output_tpu = new unsigned char [width * height * channel];
@@ -220,10 +219,10 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_morph_random(format, height, width);
         if (ret) {
-            cout << "test morph failed" << endl;
+            printf("test morph failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with OpenCV successfully!" << endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     return 0;
 }

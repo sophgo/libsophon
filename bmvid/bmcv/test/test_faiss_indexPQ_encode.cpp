@@ -120,8 +120,8 @@ int main() {
                                     ksub,
                                     IP_metric);
     gettimeofday(&t2, NULL);
-    std::cout << "TPU time (us): " << (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec << " us" << std::endl;
-    std::cout << "TPU time (ms): " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000 << " ms" << std::endl;
+    printf("TPU time (us): %ld(us)\n", (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec);
+    printf("TPU time (ms): %ld(um)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / 1000);
 
     if (ret != BM_SUCCESS) {
         bm_free_device(handle, centroids_input_dev);
@@ -133,16 +133,16 @@ int main() {
 
     bm_memcpy_d2s(handle, output_codes_sys.data(), codes_output_dev);
 
-    std::cout << "Output codes (TPU):" << std::endl;
+    printf("Output codes (TPU):\n");
     for (int i = 0; i < 2; ++i) {
         for (int j = 0; j < slice_m; ++j) {
-            std::cout << static_cast<unsigned>(output_codes_sys[i * slice_m + j]) << ", ";
+            printf("%d, ", static_cast<unsigned>(output_codes_sys[i * slice_m + j]));
             if (((j + 1) % 10) == 0) {
-                std::cout << std::endl;
+                printf("\n");
             }
         }
     }
-    std::cout << std::endl;
+    printf("\n");
 
     bm_free_device(handle, centroids_input_dev);
     bm_free_device(handle, nxcodes_input_dev);

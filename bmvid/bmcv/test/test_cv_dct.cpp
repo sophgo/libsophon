@@ -28,7 +28,7 @@ static void fill(
         int height){
     ifstream input_read((string(opencvFile_path) + string("/dct_input.bin")), ios :: in | ios :: binary);
     if(!input_read)
-        cout << "Error opening file" << endl;
+        printf("Error opening file\n");
     input_read.read((char*)input, sizeof(float) * width * height);
     input_read.close();
 }
@@ -44,8 +44,7 @@ static  void cmp(
         diff.push_back(abs(data1[i]-data2[i]));
     float diff_avg = accumulate(diff.begin(), diff.end(), diff[0]) / (width * height);
     float diff_max = *max_element(diff.begin(), diff.end());
-    cout << cmsg <<": " <<"diff_avg = " << diff_avg << ", ";
-    cout << "diff_max = " << diff_max << endl;
+    printf("%s: diff_avg %f, diff_max %f \n", cmsg.c_str(), diff_avg, diff_max);
 
 }
 
@@ -77,11 +76,11 @@ static int test_tpu_dct(
     gettimeofday_(&t1);
     bmcv_dct_coeff(handle, height, width, hcoeff_mem, wcoeff_mem, is_inversed);
     gettimeofday_(&t2);
-    cout << "DCT COEFF TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("DCT COEFF TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     gettimeofday_(&t1);
     bmcv_image_dct_with_coeff(handle, bm_input, hcoeff_mem, wcoeff_mem, bm_output);
     gettimeofday_(&t2);
-    cout << "DCT TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("DCT TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     float* output_ptr = output;
     bm_image_copy_device_to_host(bm_output, (void **)(&output_ptr));
@@ -117,7 +116,7 @@ static int test_tpu_idct(
     gettimeofday_(&t1);
     bmcv_image_dct(handle, bm_input, bm_output, is_inversed);
     gettimeofday_(&t2);
-    cout << "DCT all TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("DCT all TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     float* output_ptr = output;
     bm_image_copy_device_to_host(bm_output, (void **)(&output_ptr));
@@ -148,15 +147,15 @@ int main(int argc, char* argv[]){
         ifstream dctopencv_read((string(opencvFile_path) + string("/dct_opencv.bin")), ios :: in | ios :: binary);
         ifstream idctopencv_read((string(opencvFile_path) + string("/idct_opencv.bin")), ios :: in | ios :: binary);
         if(!dctopencv_read || !idctopencv_read){
-            cout << "Error opening file" << endl;
+            printf("Error opening file\n");
             return -1;
         }
         dctopencv_read.read((char*)dct_opencv, sizeof(float) * width * height);
         dctopencv_read.close();
-        cout << "DCT CPU using time: " << "48712" << "us" << endl;
+        printf("DCT CPU using time: 48712 us\n");
         idctopencv_read.read((char*)idct_opencv, sizeof(float) * width * height);
         idctopencv_read.close();
-        cout << "DCT CPU using time: " << "53348" << "us" << endl;
+        printf("DCT CPU using time: 53348 us\n");
     #else
         ifstream dctopencv_read((string(opencvFile_path) + string("/dct_opencv.bin")), ios :: in | ios :: binary);
         ifstream idctopencv_read((string(opencvFile_path) + string("/idct_opencv.bin")), ios :: in | ios :: binary);

@@ -89,13 +89,11 @@ static void print_binary(const char *file) {
     }
     UNUSED_VARIABLE(cnt);
     fclose(fp);
-    std::cout << "image width " << width << " image height " << height
-              << " image format " << image_format << " data type " << data_type
-              << " plane num " << plane_num << std::endl;
+    printf("image widht:%d, image height:%d, image format:%d, data type %d, plane_num %d\n",
+            width, height, image_format, data_type, plane_num);
     for (uint32_t i = 0; i < plane_num; i++) {
-        std::cout << "plane" << i << " size " << size[i] << " C " << C[i]
-                  << " H " << H[i] << " W " << W[i] << " stride "
-                  << pitch_stride[i] << std::endl;
+        printf("plane:%d, size:%ld, C:%d, H:%d, W:%d, stride:%d\n",
+                i, size[i], C[i], H[i], W[i], pitch_stride[i]);
     }
     bm_image recover;
     bm_image_create(handle,

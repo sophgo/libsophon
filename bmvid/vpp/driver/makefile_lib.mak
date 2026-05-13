@@ -25,6 +25,9 @@ else ifeq ("$(BUILD_CONFIGURATION)", "sunwayLinux") # sw64_pcie mode
 else ifeq ("$(BUILD_CONFIGURATION)", "loongLinux") # loong_pcie mode
     CROSS_CC_PREFIX = loongarch64-linux-gnu-
 	productform=pcie_loongarch64
+else ifeq ("$(BUILD_CONFIGURATION)", "loongLinuxAnolis") # loong_pcie mode
+    CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
+	productform=pcie_loongarch64_anolis
 else ifeq ("$(BUILD_CONFIGURATION)", "riscv64Linux") # riscv_pcie mode
     CROSS_CC_PREFIX =
 	productform=pcie_riscv64
@@ -83,12 +86,14 @@ CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
 
+VPP_CMODEL_DYN_LIB = $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(productform)/libvpp_cmodel.a
+
 INCLUDES = -I. -I ./include/ -I ./include/$(CHIP) -I ../../3rdparty/libbmcv/include/
 INCLUDES += -I./src/$(CHIP)
 DEFINES += -D$(chip_type) -D_GNU_SOURCE
 CFLAGS  += -I. -fPIC -Wno-implicit-function-declaration -Wno-unused-result -Wno-format -Wl,--fatal-warning $(INCLUDES) $(DEFINES) -std=c99
 ARFLAGS = cr
-LDFLAGS = -L../../3rdparty/libbmcv/lib/$(productform)/ -lvpp_cmodel
+LDFLAGS = $(VPP_CMODEL_DYN_LIB) -L../../3rdparty/libbmcv/lib/$(productform)/ -Wl,-rpath=../../3rdparty/libbmcv/lib/$(productform)/
 
 ifeq ($(DEBUG), 0)
 CFLAGS +=
@@ -101,6 +106,10 @@ CFLAGS += -mips64r2 -mabi=64 -march=gs464e -D_GLIBCXX_USE_CXX11_ABI=0
 endif
 
 ifeq ("$(BUILD_CONFIGURATION)", "loongLinux")
+CFLAGS += -Wl,-melf64loongarch
+endif
+
+ifeq ("$(BUILD_CONFIGURATION)", "loongLinuxAnolis")
 CFLAGS += -Wl,-melf64loongarch
 endif
 
@@ -144,7 +153,8 @@ $(TEST): $(OBJECTPATHS)
 
 $(TARGET): $(OBJECTPATHS)
 	$(MKDIR) $(INSTALL_DIR)
-	$(AR) $(ARFLAGS) $(TARGET) $(OBJECTPATHS)
+	$(AR) x $(VPP_CMODEL_DYN_LIB)
+	$(AR) $(ARFLAGS) $(TARGET) $(OBJECTPATHS) *.o && rm -r *.o
 	cp -f include/vppion.h $(INSTALL_DIR)
 	cp -f include/$(CHIP)/vpplib.h $(INSTALL_DIR)
 	cp -f include/$(CHIP)/$(header) $(INSTALL_DIR)

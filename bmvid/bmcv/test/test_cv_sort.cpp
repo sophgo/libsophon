@@ -41,6 +41,8 @@ typedef struct {
     bm_handle_t handle;
 } sort_thread_arg_t;
 
+int index_enable = -1;
+
 static u64 allocate_dev_mem(bm_handle_t      handle,
                             bm_device_mem_t *dst_dev_mem,
                             int32_t          size) {
@@ -262,7 +264,9 @@ int32_t cv_sort_test_rand(bm_handle_t          handle,
     std::vector<sort_t>              cdma_res;
     std::vector<bm_sort_data_type_t> dst_data;
     std::vector<int>                 dst_data_index;
-    bool index_enable = rand() % 2 ? true : false;
+    if (index_enable != 0 && index_enable != 1)
+        index_enable = ((data_num > 1024 * 256) || (sort_num > 1024 * 256)) ?
+            false : (rand() % 2 ? true : false);
     bool auto_index = rand() % 2 ? true : false;
     printf("data num: %d, sort num: %d\n", data_num, sort_num);
     cdma_res.resize(sort_num);
@@ -289,17 +293,25 @@ int32_t cv_sort_test_rand(bm_handle_t          handle,
     get_cdma_result(
         handle, order, location, src_data_index, src_data, cdma_res, index_enable, auto_index);
     // ref result
+    struct timeval t1, t2;
+    gettimeofday(&t1, NULL);
     if (order == ASCEND_ORDER) {
         stable_sort(ref_res.begin(), ref_res.end(), compare_ascend_order);
     } else {
         stable_sort(ref_res.begin(), ref_res.end(), compare_descend_order);
     }
+    gettimeofday(&t2, NULL);
+    long used = (t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec;
+    printf("CPU Used time: %.3f s\n", (float)used / 1000000);
     // results compare
     if (false == result_compare(cdma_res, ref_res, location, index_enable)) {
         printf("----SORT TEST ERROR!!!----\r\n");
 
         exit(-1);
     }
+    gettimeofday(&t1, NULL);
+    used = (t1.tv_sec - t2.tv_sec) * 1000000 + t1.tv_usec - t2.tv_usec;
+    printf("Compare Used time: %.3f s\n", (float)used / 1000000);
     // release memory
 
     return SORT_SUCCESS;
@@ -333,17 +345,18 @@ int32_t main(int32_t argc, char **argv) {
     if (argc > 3) {
         dev_id = atoi(argv[3]);
     }
+    if (argc > 4) {
+        index_enable = atoi(argv[4]);
+    }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST SORT] loop times should be 1~1500" << std::endl;
+        printf("[TEST SORT] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST SOER] thread nums should be 1~4 "
-                  << std::endl;
+        printf("[TEST SOER] thread nums should be 1~4\n");
         exit(-1);
     }
-    std::cout << "[TEST SORT] test starts... LOOP times = " << test_loop_times
-              << " threads num = " << test_loop_times << std::endl;
+    printf("[TEST SORT] test starts... LOOP times = %d, threads num = %d\n", test_loop_times, test_loop_times);
 
     unsigned int seed = (unsigned)time(NULL);
     srand(seed);
@@ -351,8 +364,7 @@ int32_t main(int32_t argc, char **argv) {
     int dev_cnt;
     bm_dev_getcount(&dev_cnt);
     if (dev_id >= dev_cnt) {
-        std::cout << "[TEST SOER] dev_id should less than device count, only detect "<< dev_cnt << " devices "
-                  << std::endl;
+        printf("[TEST SOER] dev_id should less than device count, only detect %d devices\n", dev_cnt);
         exit(-1);
     }
     printf("device count = %d\n", dev_cnt);
@@ -509,7 +521,7 @@ int32_t main(int32_t argc, char **argv) {
         bm_dev_free(handle);
     }
 #endif
-    std::cout << "------[TEST SORT] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST SORT] ALL TEST PASSED!------\n");
 
     return SORT_SUCCESS;
 }

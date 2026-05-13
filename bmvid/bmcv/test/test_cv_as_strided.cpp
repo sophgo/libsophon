@@ -123,7 +123,7 @@ bm_status_t test_as_strided_random(bm_handle_t handle, int input_row, int input_
     gettimeofday_(&t1);
     ret = bmcv_as_strided(handle, input_dev_mem, output_dev_mem, input_row * n, input_col, output_col, output_row, col_stride, row_stride);
     gettimeofday_(&t2);
-    std::cout << "as_strided TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("as_strided TPU using time = %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     if (ret != BM_SUCCESS) {
         printf("as_strided failed. ret = %d\n", ret);
         goto exit;
@@ -143,18 +143,18 @@ bm_status_t test_as_strided_random(bm_handle_t handle, int input_row, int input_
         // printdata((float*)output_data, output_row, output_col);
 
         int diff = cmp((float*)output_data_ref, (float*)output_data, output_row, output_col);
-        std::cout << "diff=" << diff << std::endl;
+        printf("diff = %d\n", diff);
         if (diff)
             ret = BM_ERR_DATA;
         delete[] output_data_ref;
     }
 
     if (ret != BM_SUCCESS) {
-        std::cout << "failed" << std::endl;
+        printf("failed\n");
         goto exit;
     }
     else {
-        std::cout << "success" << std::endl;
+        printf("success\n");
     }
     exit:
         bm_free_device(handle, input_dev_mem);
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]){
     if(argc == 1){
         ret = test_as_strided_random(handle, input_row, input_col, output_row, output_col, row_stride, col_stride);
         if (ret != BM_SUCCESS) {
-            cout << "test as_strided failed" << endl;
+            printf("test as_strided failed\n");
             goto exit;
         }
     }
@@ -193,7 +193,7 @@ int main(int argc, char* argv[]){
         for (int i = 0; i < loop; i++) {
             ret = test_as_strided_random(handle, input_row, input_col, output_row, output_col, row_stride, col_stride);
             if (ret != BM_SUCCESS) {
-                cout << "test as_strided failed" << endl;
+                printf("test as_strided failed\n");
                 goto exit;
             }
         }
@@ -209,7 +209,7 @@ int main(int argc, char* argv[]){
         for (int i = 0; i < loop; i++) {
             ret = test_as_strided_random(handle, input_row, input_col, output_row, output_col, row_stride, col_stride);
             if (ret != BM_SUCCESS) {
-                cout << "test as_strided failed" << endl;
+                printf("test as_strided failed\n");
                 goto exit;
             }
         }
@@ -237,7 +237,7 @@ int main(int argc, char* argv[]){
         goto exit;
     }
 
-    cout << "Compare TPU result with CPU successfully!" << endl;
+    printf("Compare TPU result with CPU successfully!\n");
     exit:
         bm_dev_free(handle);
         return ret;

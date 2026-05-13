@@ -136,6 +136,7 @@ bm_status_t bmcv_nms_yolov7(
     return BM_ERR_PARAM;
 
   bm_device_mem_t b_mem[3];
+  bm_device_mem_t buff_device;
   bm_device_mem_t top_mem;
   int roi_alloc_size = 1;
   if (keep_top_k > 0)
@@ -156,11 +157,16 @@ bm_status_t bmcv_nms_yolov7(
   }
   DEVICE_MEM_NEW_OUTPUT(handle, output, sizeof(float) * roi_alloc_size * 7,
                         top_mem);
+  if (BM_SUCCESS !=
+    bm_malloc_device_byte(handle, &buff_device, 4*1024*1024)) {
+    BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
+  }
 
   sg_api_yolo_detect_out_1684x_t api = {
     bm_mem_get_device_addr(b_mem[0]),
     bm_mem_get_device_addr(b_mem[1]),
     bm_mem_get_device_addr(b_mem[2]),
+    bm_mem_get_device_addr(buff_device),
     bm_mem_get_device_addr(top_mem),
     0, //for to support large boxes, need to alloc ddr,then transfer to nodechip
     input_num,
@@ -195,7 +201,7 @@ bm_status_t bmcv_nms_yolov7(
   for (int i = 0; i < input_num; ++i) {
     DEVICE_MEM_DEL_INPUT(handle, bottom[i], b_mem[i]);
   }
-
+  bm_free_device(handle, buff_device);
   return BM_SUCCESS;
 }
 
@@ -212,6 +218,7 @@ bm_status_t bmcv_nms_yolov3_bm1684X(
     return BM_ERR_PARAM;
 
   bm_device_mem_t b_mem[3];
+  bm_device_mem_t buff_device;
   bm_device_mem_t top_mem;
   for (int i = 0; i < 3; ++i) {
     b_mem[i] = bm_mem_from_device(0, 4);
@@ -249,11 +256,16 @@ bm_status_t bmcv_nms_yolov3_bm1684X(
   } else {
     top_mem = output;
   }
+  if (BM_SUCCESS !=
+    bm_malloc_device_byte(handle, &buff_device, 4*1024*1024)) {
+    BMCV_ERR_LOG("bm_malloc_device_byte error\r\n");
+  }
 
   sg_api_yolo_detect_out_1684x_t api = {
     bm_mem_get_device_addr(b_mem[0]),
     bm_mem_get_device_addr(b_mem[1]),
     bm_mem_get_device_addr(b_mem[2]),
+    bm_mem_get_device_addr(buff_device),
     bm_mem_get_device_addr(top_mem),
     0,
     input_num,
@@ -285,7 +297,7 @@ bm_status_t bmcv_nms_yolov3_bm1684X(
   for (int i = 0; i < input_num; ++i) {
     DEVICE_MEM_DEL_INPUT(handle, bottom[i], b_mem[i]);
   }
-
+  bm_free_device(handle, buff_device);
   return BM_SUCCESS;
 }
 

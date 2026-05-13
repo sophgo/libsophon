@@ -28,11 +28,10 @@ static int test() {
     int totalHists = 1;
     for (int i = 0; i < dim; ++i)
         totalHists *= histSizes[i];
-    std::cout << "C = " << C << " ";
-    std::cout << "H = " << H << " ";
-    std::cout << "W = " << W << " ";
-    std::cout << "dims = " << dim << " ";
-    std::cout << std::endl;
+    printf("C = %d ", C);
+    printf("H = %d ", H);
+    printf("W = %d ", W);
+    printf("dims = %d \n", dim);
     bm_handle_t handle = nullptr;
     bm_status_t ret = bm_dev_request(&handle, 0);
     float *inputHost = new float[C * H * W];
@@ -82,7 +81,7 @@ static int test() {
                         ranges,
                         0);
     gettimeofday_(&t2);
-    std::cout << "calcHist TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+    printf("calcHist TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if (ret != BM_SUCCESS) {
         printf("bmcv_calc_hist failed. ret = %d\n", ret);
@@ -100,48 +99,48 @@ static int test() {
         float *outputOpencv = new float[totalHists];
         std::ifstream opencv_readfile((std::string(opencvFile_path) + std::string("/opencv_calcHist.bin")), std::ios::binary | std::ios::in);
         if(!opencv_readfile){
-            std::cout << "Error opening file" << std::endl;
+            printf("Error opening file\n");
             return -1;
         }
         opencv_readfile.read((char*)outputOpencv, sizeof(float) * totalHists);
         opencv_readfile.close();
-        std::cout << "calcHist CV average using time: 2357um" << std::endl;
+        printf("calcHist CV average using time: 2357um");
     #else
         float *outputOpencv = new float[totalHists];
         std::ifstream opencv_readfile((std::string(opencvFile_path) + std::string("/opencv_calcHist.bin")), std::ios::binary | std::ios::in);
         if(!opencv_readfile){
-            std::cout << "Error opening file" << std::endl;
+            printf("Error opening file");
             return -1;
         }
         opencv_readfile.read((char*)outputOpencv, sizeof(float) * totalHists);
         opencv_readfile.close();
-        std::cout << "calcHist CV average using time: 2357um" << std::endl;
+        printf("calcHist CV average using time: 2357um");
     #endif
 #if 0
     float sum0 = 0.f, sum1 = 0.f;
 #if 0
     for (int i = 0; i < C * H * W; ++i)
-        std::cout << (float)inputHost[i] << " ";
-    std::cout << std::endl;
+        printf("%f ", (float)inputHost[i]);
+    printf("\n");
 #endif
     for (int i = 0; i < totalHists; ++i) {
-        std::cout << outputHost[i] << " ";
+        printf("%f ", outputHost[i]);
         sum0 += outputHost[i];
     }
-    std::cout << std::endl;
+    printf("\n");
     for (int i = 0; i < totalHists; ++i) {
-        std::cout << outputOpencv[i] << " ";
+        print("%f ", outputOpencv[i]);
         sum1 +=outputOpencv[i];
     }
-    std::cout << std::endl;
+    printf("\n");
     for (int i = 0; i < totalHists; ++i)
-        std::cout << outputHost[i] - outputOpencv[i] << " ";
-    std::cout << std::endl;
-    std::cout << sum0 << " " << sum1 << std::endl;
+        printf("%f, ", outputHost[i] - outputOpencv[i]);
+    printf("\n");
+    printf("sum0: %f, sum1:%f\n",sum0, sum1);
 #endif
     for (int i = 0; i < totalHists; ++i) {
         if (std::abs(outputHost[i] - outputOpencv[i]) > 5e-4) {
-            std::cout << outputHost[i] << " vs " << outputOpencv[i] << " at " << i << std::endl;
+            printf("%f vs %f at %d\n", outputHost[i], outputOpencv[i], i);
             flag = -1;
             exit(flag);
         }
@@ -169,14 +168,14 @@ int main(int argc, char *argv[]) {
         clock_gettime_(0, &tp);
 
         srand(tp.tv_nsec);
-        std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+        printf("test %d random seed: %ld\n", i, tp.tv_nsec);
         //test();
         ret = test();
         if (ret) {
-            std::cout << "test absdiff failed" << std::endl;
+            printf("test absdiff failed");
             return ret;
         }
     }
-    std::cout << "Compare TPU result with OpenCV successfully!" << std::endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     return 0;
 }

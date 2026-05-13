@@ -70,7 +70,7 @@ static vector<int> get_image_size(int format, int width, int height) {
             size.push_back(width * height);
             break;
         default:
-            cout << "format error" << endl;
+            printf("format error\n");
     }
     return size;
 }
@@ -99,7 +99,7 @@ static void get_image_default_step(int format, int width, int* step) {
             step[1] = ALIGN(width, 2);
             break;
         default:
-            cout << "not support format" << endl;
+            printf("not support format\n");
             break;
     }
 }
@@ -186,7 +186,7 @@ static int draw_line_cpu(
     }
     #ifdef __linux__
         gettimeofday(&t2, NULL);
-        cout << "Draw-Line cpu using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("Draw-Line cpu using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         clock_gettime(0, &tp2);
         cout << "Draw-Line cpu using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "us" << endl;
@@ -233,7 +233,7 @@ static int draw_line_bmcv(
         gettimeofday(&t1, NULL);
         bmcv_image_draw_lines(handle, input_img, p1, p2, line_num, rgb, thickness);
         gettimeofday(&t2, NULL);
-        cout << "Draw-Line bmcv using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "um" << endl;
+        printf("Draw-Line bmcv using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime(0, &tp1);
@@ -271,7 +271,7 @@ static int test_draw_line_random(
         #endif
         unsigned int seed = tp.tv_nsec;
         srand(seed);
-        cout << "seed = " << seed << endl;
+        printf("seed = %d\n", seed);
         width = 100 + rand() % 1900;
         height = 100 + rand() % 2048;
         format = rand() % 7;
@@ -281,8 +281,7 @@ static int test_draw_line_random(
     bmcv_point_t end[4] = {{100, 100}, {1000, 100}, {2000, 2000}, {0, 2000}};
     unsigned char color[3] = {255, 0, 0};
     int thickness = 4;
-    cout << "format: " << format << endl;
-    cout << "width: " << width << "  height: " << height << endl;
+    printf("format: %d, widht %d, height %d\n", format, width, height);
     unsigned char* data_cpu = new unsigned char [width * height * 3];
     unsigned char* data_bmcv = new unsigned char [width * height * 3];
     if((image != NULL) && (random != 1)){
@@ -345,10 +344,10 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_draw_line_random(random, height, width, format, enable_cpu, image);
         if (ret) {
-            cout << "test draw_line failed" << endl;
+            printf("test draw_line failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with OpenCV successfully!" << endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     return 0;
 }

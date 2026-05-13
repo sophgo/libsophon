@@ -1330,7 +1330,7 @@ static void* sigmgr_thread(void* argument)
                     {
                         printf("Thread 0x%lx is canceling...\n", ptid);
                         pthread_cancel(ptid);
-                        threads->handles[i] = NULL;
+                        threads->handles[i] = 0;
                     }
                 }
             }

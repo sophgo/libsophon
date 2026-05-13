@@ -53,14 +53,14 @@ static int fill_v2(
     ifstream preImgread((string(opencvFile_path) + string("/lkpyramid_preImg.bin")), ios::in | ios::binary);
     ifstream nextImgread((string(opencvFile_path) + string("/lkpyramid_nextImg.bin")), ios::in | ios::binary);
     if(!preImgread || !nextImgread){
-        cout << "Error opening file" << endl;
+        printf("Error opening file\n");
         return -1;
     }
     preImgread.read((char*)prev_data, sizeof(unsigned char) * height * width);
     nextImgread.read((char*)next_data, sizeof(unsigned char) * height * width);
     ifstream preImgPoints_readfile((string(opencvFile_path) + string("/preImg_points.bin")), ios::in | ios::binary);
     if(!preImgPoints_readfile){
-        cout << "Error opening file" << endl;
+        printf("Error opening file\n");
         return -1;
     }
     for(int i = 0; i < ptsNum;i++){
@@ -179,7 +179,7 @@ static int lkpyramid_tpu(
             criteria);
     gettimeofday_(&t2);
 
-    cout << "lkpyramid_execute TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("lkpyramid_execute TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     bmcv_image_lkpyramid_destroy_plan(handle, plan);
     bm_image_destroy(prevImg);
     bm_image_destroy(nextImg);
@@ -230,7 +230,7 @@ static int test_lkpyramid_random(
 
     unsigned int seed = tp.tv_nsec;
     srand(seed);
-    cout << "seed = " << seed << endl;
+    printf("seed = %d\n", seed);
     // maxLevel = rand() % 4;
     // int tmp = (100 + rand() % 1820) / pow(2, (1+ maxLevel));
     int tmp = (100 + 1050) / pow(2, (1+ maxLevel));
@@ -247,13 +247,14 @@ static int test_lkpyramid_random(
     bool* status_ocv = new bool [ptsNum];
     bool* status_tpu = new bool [ptsNum];
     fill_v2(prev_data, next_data, ptsNum, prev_pts, width, height);
-    cout << "width: " << width << "  height: " << height << endl;
-    cout << "winW: " << winW << "  winH: " << winH << endl;
-    cout << "maxLevel: " << maxLevel << "   ptsNum: " << ptsNum << endl;
-    cout << "LK cpu averge using time: 8948um" << endl;
+
+    printf("width: %d, height %d\n", width, height);
+    printf("winW: %d, winH: %d\n", winW, winH);
+    printf("maxLevel: %d, ptsNum: %d\n", maxLevel, ptsNum);
+    printf("LK cpu averge using time: 8948us\n");
     ifstream opencv_readfile((string(opencvFile_path) + string("/lkpyramid_nextOcv.bin")), ios::in | ios::binary);
     if(!opencv_readfile){
-        cout << "Error opening file" << endl;
+        printf("Error opening file\n");
         return -1;
     }
     for(int i = 0; i < ptsNum; i++){
@@ -310,11 +311,11 @@ int main(int argc, char* args[]) {
     for (int i = 0; i < loop; i++) {
         ret = test_lkpyramid_random(height, width);
         if (ret) {
-            cout << "test LK-pyramid failed" << endl;
+            printf("test LK-pyramid failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with CPU successfully!" << endl;
+    printf("Compare TPU result with CPU successfully!\n");
     return 0;
 }
 

@@ -54,6 +54,22 @@ typedef struct _BmVpuEncWriteContext {
 #define BM_VPU_ENC_GET_BS_VA(BMVPUENC, BITSTREAM_PHYS_ADDR) \
     (((BMVPUENC)->bs_virt_addr) + ((bmvpu_phys_addr_t)(BITSTREAM_PHYS_ADDR) - (bmvpu_phys_addr_t)((BMVPUENC)->bs_phys_addr)))
 
+#ifdef __linux__
+__attribute__((visibility("default")))
+static const char _vpu_commit_info[] = "commit hash: " COMMIT_HASH "   branch: " BRANCH_NAME;
+
+void bm_vpuapi_get_commit_version()
+{
+    printf("VPUAPI %s, compile time: %s %s\n", _vpu_commit_info, __DATE__, __TIME__);
+}
+#endif
+
+int bmvpu_enc_register_framebuffers(BmVpuEncoder *encoder,
+                                    BmVpuFramebuffer *framebuffers,
+                                    uint32_t num_framebuffers);
+
+
+int bmvpu_enc_get_initial_info(BmVpuEncoder *encoder, BmVpuEncInitialInfo *info);
 
 /* For BM1684 */
 #define MAX_NUM_VPU_CORE_CHIP     5
@@ -178,8 +194,9 @@ static int bmvpu_enc_alloc_proc(void *enc_ctx,
     int ret = 0;
 
     if (video_enc_ctx->buffer_alloc_func) {
-        ret = video_enc_ctx->buffer_alloc_func(video_enc_ctx->buffer_context
-                                            , vpu_core_idx, buf, size);
+        if (video_enc_ctx->buffer_alloc_func(video_enc_ctx->buffer_context, vpu_core_idx, buf, size) == NULL) {
+            ret = -1;
+        }
     } else {
         ret = bmvpu_enc_dma_buffer_allocate(vpu_core_idx, buf, size);
     }
@@ -194,8 +211,9 @@ static int bmvpu_enc_free_proc(void *enc_ctx,
     int ret = 0;
 
     if (video_enc_ctx->buffer_free_func) {
-        ret = video_enc_ctx->buffer_free_func(video_enc_ctx->buffer_context
-                                            , vpu_core_idx, buf);
+        if (video_enc_ctx->buffer_free_func(video_enc_ctx->buffer_context, vpu_core_idx, buf) == NULL) {
+            ret = -1;
+        }
     } else {
         ret = bmvpu_enc_dma_buffer_deallocate(vpu_core_idx, buf);
     }
@@ -1363,6 +1381,7 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
     VpuEncOutputInfo enc_output_info;
     VpuEncParam enc_param;
     VpuFrameBuffer src_fb;
+    bmvpu_phys_addr_t pa_YUV;
     bmvpu_phys_addr_t pa;
     bmvpu_phys_addr_t pa_y;
     bmvpu_phys_addr_t pa_u;
@@ -1390,6 +1409,24 @@ int bmvpu_enc_encode(BmVpuEncoder *encoder,
         BM_VPU_ERROR("bmvpu_enc_encode params err: encoding_params->acquire_output_buffer(0X%x), encoding_params->finish_output_buffer(0X%x).", \
                      encoding_params->acquire_output_buffer, encoding_params->finish_output_buffer);
         return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
+    }
+
+    VpuEncoder* handle = encoder->handle;
+    if (handle == NULL) {
+        BM_VPU_ERROR("bmvpu_enc_encode params err: encoder->handle(0X%x)).", handle);
+        return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
+    }
+    BmVpuFramebuffer* framebuffer =  raw_frame->framebuffer;
+    if (framebuffer != NULL) {
+        if (framebuffer->dma_buffer != NULL) {
+            pa_YUV = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer);
+        } else {
+            pa_YUV = bmvpu_enc_dma_buffer_get_physical_address(framebuffer->dma_buffer_y);
+        }
+        if ((pa_YUV >> 32) != (handle->vbMV.pa >> 32)) {
+            BM_VPU_ERROR("bmvpu_enc_encode params err: the input yuv(0X%lx) is not on the VPU(0X%lx) heap.", pa_YUV, handle->vbMV.pa);
+            return BM_VPU_ENC_RETURN_CODE_INVALID_PARAMS;
+        }
     }
 
     /* Set this here to ensure that the handle is NULL if an error occurs

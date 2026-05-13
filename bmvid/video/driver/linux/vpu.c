@@ -641,15 +641,17 @@ static int Wave5DecGetInstanceInfo(u32 core, u32 instanceIndex, u32* instance_in
     u32 regVal;
     int count = 0;
 
-    while(SendQuery(core, instanceIndex, GET_INSTANCE_INFO) != 0)
+    ret = SendQuery(core, instanceIndex, GET_INSTANCE_INFO);
+    if(ret != 0)
     {
-        if(count > 5) {
+        if(ret == 1) {
             regVal = ReadVpuRegister(W5_RET_FAIL_REASON);
-            pr_info("core:%d Wave5DecGetInstanceInfo failed. reason: 0x%x", core, instanceIndex, task_tgid_vnr(current), regVal);
-            return -1;
+            pr_info("core:%d inst:%d Wave5DecGetInstanceInfo failed. reason: 0x%x", core, instanceIndex, task_tgid_vnr(current), regVal);
         }
-        usleep_range(900, 1000);
-        count += 1;
+        else if(ret == 2) {
+            pr_info("core:%d inst:%d Wave5DecGetInstanceInfo timeout", core, instanceIndex, task_tgid_vnr(current));
+        }
+        return -1;
     }
 
     *instance_info = ReadVpuRegister(W5_RET_QUERY_DEC_GET_INSTANCE_INFO);
@@ -782,12 +784,12 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
                 if(ret == 0) {
                     break;
                 }
-                if(count > 10 && ret == VPU_WAIT_TIMEOUT) {
+                if(ret == VPU_WAIT_TIMEOUT) {
                     pr_err("[VPUDRV] self:0x%lx core:%d Wave5CloseInstanceCommand wait timeout\n", task_tgid_vnr(current) ,core);
                     break;
                 }
 
-                if(count > 500) {
+                if(count > 50) {
                     pr_err("[VPUDRV] self:0x%lx core:%d CloseInstanceCommand failed REASON=%d\n", task_tgid_vnr(current), core, ret);
                     break;
                 }
@@ -796,13 +798,14 @@ static int CloseInstanceCommand(int core, u32 instanceIndex)
                     if(WAVE521C_CODE != product_code) {
                         FlushDecResult(core, instanceIndex);
                         Wave5VpuDecSetBitstreamFlag(core, instanceIndex);
+                        Wave5DecClrDispFlag(core, instanceIndex);
                     }
                     else {
                         FlushEncResult(core, instanceIndex);
                     }
                 }
 
-                usleep_range(99900, 10100);
+                usleep_range(9900, 10100);
                 count += 1;
             }
 
@@ -1048,7 +1051,7 @@ int get_lock(int core_idx)
             count = 0;
         }
 
-        if(count >= 1000) {
+        if(count >= 5000) { // timeout 5s for ctrl-c issue
             pr_info("[VPUDRV] self:0x%lx can't get lock, core:%d org: 0x%lx, ker: 0x%lx, val=0x%lx\n", val1, core_idx, *addr, val1, val);
             __atomic_store_n(addr, val1, __ATOMIC_SEQ_CST);
             pr_info("[VPUDRV] self:0x%lx forced get lock, core:%d org: 0x%lx\n", val1, core_idx, *addr);
@@ -2689,6 +2692,7 @@ static int vpu_release(struct inode *inode, struct file *filp)
     int current_core_reset_flag = 0;
     unsigned long except_info = 0;
     int vpu_disable_reset_flag_sum = 0;
+    int inst;
     vpudrv_reset_flag_node_t *vrf, *n;
 
     DPRINTK("[VPUDRV] vpu_release\n");
@@ -2756,7 +2760,7 @@ static int vpu_release(struct inode *inode, struct file *filp)
             bm_vpu_assert(&vpu_rst_ctrl);
             memset(&s_vpu_drv_context.crst_cxt[0], 0, sizeof(vpu_crst_context_t) *  get_vpu_core_num(chip_id, video_cap));
 
-            for(core_idx=0; core_idx <  get_vpu_core_num(chip_id, video_cap); core_idx++){
+            for(core_idx = 0; core_idx <  get_vpu_core_num(chip_id, video_cap); core_idx++){
                 if (s_instance_pool[core_idx].base) {
 #ifdef USE_VMALLOC_FOR_INSTANCE_POOL_MEMORY
                     vfree((const void *)s_instance_pool[core_idx].base);
@@ -2772,6 +2776,10 @@ static int vpu_release(struct inode *inode, struct file *filp)
                     up(&s_vpu_sem);
                     s_common_memory[core_idx].base = 0;
                     s_common_memory[core_idx].phys_addr = 0;
+                }
+
+                for(inst = 0; inst < MAX_NUM_INSTANCE; inst++) {
+                    memset(&s_vpu_inst_info[core_idx * MAX_NUM_INSTANCE + inst], 0, sizeof(vpu_inst_info_t));
                 }
             }
         }

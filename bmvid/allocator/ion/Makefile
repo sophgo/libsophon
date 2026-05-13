@@ -14,6 +14,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64)
 CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
 CROSS_CC_PREFIX = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
 CROSS_CC_PREFIX =
 else
@@ -57,6 +59,10 @@ LDFLAGS +=
 endif
 
 ifeq ($(PRODUCTFORM), pcie_loongarch64)
+LDFLAGS += -Wl,-melf64loongarch
+endif
+
+ifeq ($(PRODUCTFORM), pcie_loongarch64_anolis)
 LDFLAGS += -Wl,-melf64loongarch
 endif
 

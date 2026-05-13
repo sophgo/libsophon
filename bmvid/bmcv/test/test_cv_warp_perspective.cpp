@@ -709,7 +709,7 @@ static bm_status_t bmcv_warp_perspective_tpu(
             bmcv_image_warp_perspective_similar_to_opencv(handle, image_n, matrix_image, src_img, dst_img->data, use_bilinear));
         gettimeofday_(&t2);
     }
-    std::cout << "---warp_perspective TPU using time= " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "(us)" << std::endl;
+    printf("---warp_perspective TPU using time= %ld(us)--\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     int size = 0;
     bm_image_get_byte_size(dst_img->data[0], &size);
     auto temp_out = MAKE_BLOB(u8, out_image_num * size);
@@ -1081,19 +1081,17 @@ int main(int argc, char *argv[]) {
     }
 
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST WARP] loop times should be 1~1500" << std::endl;
+        printf("[TEST WARP PERSPECTIVE] loop times should be 1~1500\n");
         exit(-1);
     }
     if (thread_num < 1 || thread_num > 4) {
-        std::cout << "[TEST WARP PERSPECTIVE] thread_num should be 1~4" << std::endl;
+        printf("[TEST WARP PERSPECTIVE] thread_num should be 1~4\n");
         exit(-1);
     }
 
-    std::cout << "[TEST WARP] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST WARP PERSPECTIVE] test starts... LOOP times will be %d", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST WARP] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST WARP PERSPECTIVE] LOOP %d------\n", loop_idx);
 
         struct timespec tp;
         clock_gettime_(0, &tp);
@@ -1103,7 +1101,7 @@ int main(int argc, char *argv[]) {
         printf("random seed %d\n", seed);
         test_cv_warp_perspective_random(3);
     }
-    std::cout << "------[TEST WARP PERSPECTIVE] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST WARP PERSPECTIVE] ALL TEST PASSED!------\n");
 
     return 0;
 }

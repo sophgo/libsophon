@@ -289,6 +289,11 @@ int vdi_init(u64 core_idx)
         return -1;
     }
 
+    if(vdi->vpu_omx_mutex == NULL) {
+        vdi->vpu_omx_mutex = malloc(sizeof(pthread_mutex_t));
+        pthread_mutex_init((pthread_mutex_t *)vdi->vpu_omx_mutex, NULL);
+    }
+
     char vpu_info_name[64] = {0};
 #if defined(BM_PCIE_MODE)
     int card_chip_id = 0;
@@ -369,11 +374,6 @@ int vdi_init(u64 core_idx)
         vdi->vpu_disp_mutex = sem_open(disp_sem_name, O_CREAT, 0666, 1);
     }
 #endif
-
-    if(vdi->vpu_omx_mutex == NULL) {
-        vdi->vpu_omx_mutex = malloc(sizeof(pthread_mutex_t));
-        pthread_mutex_init((pthread_mutex_t *)vdi->vpu_omx_mutex, NULL);
-    }
 
 #ifdef USE_VMALLOC_FOR_INSTANCE_POOL_MEMORY
 #ifndef BM_PCIE_MODE
@@ -526,9 +526,10 @@ int vdi_release(u64 core_idx)
         munmap((void *)vdi->vdb_register.virt_addr, vdi->vdb_register.size);
 
     osal_memset(&vdi->vdb_register, 0x00, sizeof(vpudrv_buffer_t));
-    vdb.size = 0;
+    osal_memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
     /* get common memory information to free virtual address */
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_common_memory.phys_addr >= vdi->vpu_buffer_pool[i].vdb.phys_addr &&
@@ -540,7 +541,8 @@ int vdi_release(u64 core_idx)
             break;
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
 
     vdi->task_num--;
 
@@ -707,7 +709,8 @@ int vdi_allocate_common_memory(u64 core_idx)
     vdi->pvip->vpu_common_buffer.virt_addr = (unsigned long)(vdb.virt_addr);
 #endif
     osal_memcpy(&vdi->vpu_common_memory, &vdi->pvip->vpu_common_buffer, sizeof(vpu_buffer_t));
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_buffer_pool[i].inuse == 0)
@@ -718,7 +721,8 @@ int vdi_allocate_common_memory(u64 core_idx)
             break;
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     VLOG(INFO, "[VDI] vdi_allocate_common_memory. physaddr=0x%lx, size=%d, virtaddr=0x%lx\n",
          vdi->vpu_common_memory.phys_addr, vdi->vpu_common_memory.size, vdi->vpu_common_memory.virt_addr);
 
@@ -829,7 +833,6 @@ int vdi_open_instance(unsigned long core_idx, unsigned long inst_idx)
     }
 
     vdi->pvip->vpu_instance_num = inst_info.inst_open_count;
-    printf("vdi_open_instance inst_info.core_idx=%d inst_info.inst_idx=%d \n", inst_info.core_idx, inst_info.inst_idx);
     if (vdi->vpuinfo_fd  != NULL) {
         int json_len = 512;
         char json[512] = {0};
@@ -1031,6 +1034,15 @@ int vdi_vpuinfo_start_one_frame(uint32_t core_idx, uint32_t inst_idx) {
         char json[512] = {0};
         int writelen = 0;
         vdi->vpuinfo[inst_idx].inframenums++;
+
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
         vdi->vpuinfo[inst_idx].time = get_formatted_time();
         buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
         int str_len = strlen(json);
@@ -1059,6 +1071,15 @@ int vdi_vpuinfo_get_outputinfo(uint32_t core_idx, uint32_t inst_idx) {
         char json[512] = {0};
         int writelen = 0;
         vdi->vpuinfo[inst_idx].outframenums++;
+
+        char* c_env_vpuinfo = getenv("VPUINFO_UPDATE_TIMES_MS");
+        int   b_env_vpuinfo = 1000;
+        if (c_env_vpuinfo)
+            b_env_vpuinfo = atoi(c_env_vpuinfo);
+        if ((b_env_vpuinfo != 0) && ((vdi->vpuinfo[inst_idx].time + b_env_vpuinfo) > get_formatted_time())) {
+            return 0;
+        }
+
         vdi->vpuinfo[inst_idx].time = get_formatted_time();
         buildjson_vpuinfo(json, json_len, &writelen, &vdi->vpuinfo[inst_idx]);
         int str_len = strlen(json);
@@ -1653,9 +1674,11 @@ int vdi_clear_memory(u64 core_idx, u64 addr, int len, int endian)
     {
         if (vdi->vpu_buffer_pool[i].inuse == 1)
         {
-            vdb = vdi->vpu_buffer_pool[i].vdb;
-            if (addr >= vdb.phys_addr && addr < (vdb.phys_addr + vdb.size))
-                break;
+            if (addr >= vdi->vpu_buffer_pool[i].vdb.phys_addr &&
+                addr < (vdi->vpu_buffer_pool[i].vdb.phys_addr + vdi->vpu_buffer_pool[i].vdb.size)) {
+                    vdb = vdi->vpu_buffer_pool[i].vdb;
+                    break;
+                }
         }
     }
 
@@ -1726,8 +1749,9 @@ int vdi_write_memory(u64 core_idx, u64 dst_addr, unsigned char *src_data, int le
     {
         if (vdi->vpu_buffer_pool[i].inuse == 1)
         {
-            vdb = vdi->vpu_buffer_pool[i].vdb;
-            if (dst_addr >= vdb.phys_addr && (dst_addr+len) <= (vdb.phys_addr + vdb.size)) {
+            if (dst_addr >= vdi->vpu_buffer_pool[i].vdb.phys_addr &&
+                (dst_addr+len) <= (vdi->vpu_buffer_pool[i].vdb.phys_addr + vdi->vpu_buffer_pool[i].vdb.size)) {
+                vdb = vdi->vpu_buffer_pool[i].vdb;
                 break;
             }
         }
@@ -1794,9 +1818,11 @@ int vdi_read_memory(u64 core_idx, u64 src_addr, unsigned char *dst_data, int len
     {
         if (vdi->vpu_buffer_pool[i].inuse == 1)
         {
-            vdb = vdi->vpu_buffer_pool[i].vdb;
-            if (src_addr >= vdb.phys_addr && (src_addr+len) <= (vdb.phys_addr + vdb.size))
+            if (src_addr >= vdi->vpu_buffer_pool[i].vdb.phys_addr &&
+                (src_addr+len) <= (vdi->vpu_buffer_pool[i].vdb.phys_addr + vdi->vpu_buffer_pool[i].vdb.size)) {
+                vdb = vdi->vpu_buffer_pool[i].vdb;
                 break;
+            }
         }
     }
 
@@ -1938,14 +1964,14 @@ int vdi_allocate_dma_memory(u64 core_idx, vpu_buffer_t *vb)
     }
 #else
     vdb.virt_addr = FAKE_PCIE_VIRT_ADDR;
-    vdi_clear_memory(core_idx, vdb.phys_addr, vdb.size, VDI_SYSTEM_ENDIAN);
 #endif
 
     vb->base      = vdb.base;
     vb->phys_addr = vdb.phys_addr;
     vb->virt_addr = vdb.virt_addr;
 
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_buffer_pool[i].inuse == 0)
@@ -1956,7 +1982,11 @@ int vdi_allocate_dma_memory(u64 core_idx, vpu_buffer_t *vb)
             break;
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+#ifdef BM_PCIE_MODE
+    vdi_clear_memory(core_idx, vdb.phys_addr, vdb.size, VDI_SYSTEM_ENDIAN);
+#endif
     VLOG(INFO, "[VDI] vdi_allocate_dma_memory, physaddr=0x%lx, virtaddr=0x%lx~0x%lx, size=%d\n",
          vb->phys_addr, vb->virt_addr, vb->virt_addr + vb->size, vb->size);
     return 0;
@@ -1981,7 +2011,8 @@ void vdi_free_dma_memory(u64 core_idx, vpu_buffer_t *vb)
         return ;
 
     osal_memset(&vdb, 0x00, sizeof(vpudrv_buffer_t));
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_buffer_pool[i].vdb.phys_addr == vb->phys_addr)
@@ -1993,7 +2024,8 @@ void vdi_free_dma_memory(u64 core_idx, vpu_buffer_t *vb)
             break;
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     if (!vdb.size)
     {
         VLOG(ERR, "[VDI] invalid buffer to free address = 0x%lx\n", vdb.virt_addr);
@@ -2085,7 +2117,8 @@ int vdi_attach_dma_memory(u64 core_idx, vpu_buffer_t *vb)
     vdb.base = vb->base;
 
     vdb.virt_addr = vb->virt_addr;
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_buffer_pool[i].vdb.phys_addr == vb->phys_addr)
@@ -2105,7 +2138,8 @@ int vdi_attach_dma_memory(u64 core_idx, vpu_buffer_t *vb)
             }
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
 
 #if 0
     VLOG(INFO, "[VDI] %s  physaddr=0x%lx, virtaddr=0x%lx, size=%d, index=%d\n",
@@ -2130,7 +2164,8 @@ int vdi_dettach_dma_memory(u64 core_idx, vpu_buffer_t *vb)
 
     if (vb->size == 0)
         return -1;
-    pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_lock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     for (i=0; i<MAX_VPU_BUFFER_POOL; i++)
     {
         if (vdi->vpu_buffer_pool[i].vdb.phys_addr == vb->phys_addr)
@@ -2140,7 +2175,8 @@ int vdi_dettach_dma_memory(u64 core_idx, vpu_buffer_t *vb)
             break;
         }
     }
-    pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
+    if(vdi->vpu_omx_mutex != NULL)
+        pthread_mutex_unlock((pthread_mutex_t *)vdi->vpu_omx_mutex);
     return 0;
 }
 
@@ -2738,15 +2774,16 @@ u64 vdi_get_virt_addr(u64 core_idx, u64 addr)
     {
         if (vdi->vpu_buffer_pool[i].inuse == 1)
         {
-            vdb = vdi->vpu_buffer_pool[i].vdb;
-            if (addr >= vdb.phys_addr && addr < (vdb.phys_addr + vdb.size)) {
+            if (addr >= vdi->vpu_buffer_pool[i].vdb.phys_addr &&
+                addr < (vdi->vpu_buffer_pool[i].vdb.phys_addr + vdi->vpu_buffer_pool[i].vdb.size)) {
+                vdb = vdi->vpu_buffer_pool[i].vdb;
                 break;
             }
         }
     }
 
     if (!vdb.size) {
-        VLOG(ERR, "address 0x%08x is not mapped address!!!\n", (int)addr);
+        VLOG(ERR, "core: %d address 0x%lx is not mapped address!!!\n", core_idx, addr);
         return -1;
     }
 

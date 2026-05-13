@@ -10,7 +10,7 @@
 #include "bmcv_api_ext.h"
 #include "bmcv_internal.h"
 #include "bmcv_bm1684x.h"
-#if defined(__linux__) && defined(USING_OPENBLAS)
+#if defined(__linux__) && (USING_OPENBLAS)
 #define GLOBAL_PRINT 0
 
 #define DUMP_SINGAL_FLIP_EIGENVECTOR 0
@@ -384,13 +384,16 @@ void bmcv_qr_cpu_ssyevr(
     float *A = (float *)malloc(n * n * sizeof(float));
     memcpy(A, input_A, n * n * sizeof(float));
     float *wr  = (float *)malloc(n * sizeof(float));
+    memset(wr, 0, n * sizeof(float));
     int lda    = n;
     int lwork  = 3 * n -1; // Workspace size query
     int *bwork = (int *)malloc(( 3 * n - 1) * sizeof(int));
+    memset(bwork, 0, ( 3 * n - 1) * sizeof(int));
     int info;
     char jobz  = 'V';
     char uplo  = 'U';
     float *optimal_work_size  = (float *)malloc(lwork * sizeof(float));
+    memset(optimal_work_size, 0, lwork * sizeof(float));
 
     struct timeval start, end;
     gettimeofday(&start, NULL);
@@ -444,22 +447,15 @@ void bmcv_qr_cpu_ssyevr(
         // num_spks = max(num_spks, min_num_spks)
         // return eig_vectors[:, :num_spks]
         *num_spks_output =  user_num_spks;
+
         if(user_num_spks <= 0) {
-                float *diff_v = (float *)malloc((max_num_spks) * sizeof(float));
+                std::vector<float> diff_v(max_num_spks, 0.0f);
                 assert(max_num_spks + 1 <= n);
                 for (int i = 0; i < max_num_spks ; i++) {
                         diff_v[i]  = wr[i+1] - wr[i];
                 }
-                // float max_value = diff_v[0];
-                // *num_spks_output = 1;
-                // for (int ii = 1; ii < max_num_spks ; ii++) {
-                //         if(diff_v[ii] > max_value) {
-                //             max_value = diff_v[ii];
-                //             *num_spks_output = ii + 1;
-                //         }
-                // }
-                auto maxIterator =std::max_element(diff_v, diff_v + max_num_spks);
-                *num_spks_output= std::distance(diff_v, maxIterator) + 1;
+                auto maxIterator =std::max_element(diff_v.begin(), diff_v.begin() + max_num_spks);
+                *num_spks_output= std::distance(diff_v.begin(), maxIterator) + 1;
                 *num_spks_output = *num_spks_output >  min_num_spks ? *num_spks_output  : min_num_spks;
                 // if(GLOBAL_PRINT) {
                 //     printf("diff_v: \n");
@@ -467,11 +463,10 @@ void bmcv_qr_cpu_ssyevr(
                 //         printf("%f \n",diff_v[i]);
                 //     }
                 // }
-                free(diff_v);
         }
 
         // Reorder eigenvecotr as A is column-priority
-        float *sortedB = (float *)malloc(n * n * sizeof(float));
+         std::vector<float> sortedB(n  * n, 0.0f);
         for (int i = 0; i < M; i++) {
             for (int j = 0; j < n; j++) {
                 sortedB[i + j*n] =  Z[i * n + j];
@@ -525,6 +520,7 @@ void bmcv_qr_cpu_ssyevr(
     free(wr);
     free(bwork);
     free(optimal_work_size);
+    free(ISUPPZ);
 }
 
 

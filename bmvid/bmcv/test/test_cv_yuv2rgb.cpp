@@ -506,7 +506,7 @@ static void test_cv_yuv2rgb_single_case() {
     bm_status_t ret =
         bmcv_image_yuv2bgr_ext(handle, IMAGE_N, src_image, dst_image);
     gettimeofday_(&t2);
-    cout << "yuv2rgb TPU using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("yuv2rgb TPU using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
 
     if (ret != BM_SUCCESS) {
@@ -648,7 +648,7 @@ int main(int argc, char *argv[]) {
             int thread_num = atoi(argv[2]);
             if(thread_num < 1 || thread_num > 4)
             {
-                std::cout << "[TEST WARP] thread_num should be 1~4" << std::endl;
+                printf("[TEST WARP] thread_num should be 1~4\n");
                 exit(-1);
             }
             if(thread_num != 1)
@@ -661,14 +661,12 @@ int main(int argc, char *argv[]) {
     }
     if (test_loop_times > 1500 || test_loop_times < 1)
     {
-        std::cout << "[TEST YUV2RGB] loop times should be 1~1500" << std::endl;
+        printf("[TEST YUV2RGB] loop times should be 1~1500\n");
         exit(-1);
     }
-    std::cout << "[TEST YUV2RGB] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST YUV2RGB] test starts... LOOP times will be %d", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST YUV2RGB] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST YUV2RGB] LOOP %d------\n", loop_idx);
         struct timespec tp;
         int             dev_id = 0;
         bm_status_t     ret    = bm_dev_request(&handle, dev_id);
@@ -689,7 +687,7 @@ int main(int argc, char *argv[]) {
         printf("yuv2rgb test pass\n");
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST YUV2RGB] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST YUV2RGB] ALL TEST PASSED!------\n");
 
     return 0;
 }

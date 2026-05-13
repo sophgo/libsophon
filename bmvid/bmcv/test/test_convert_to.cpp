@@ -104,7 +104,7 @@ static int gen_test_size(
             break;
         }
         default: {
-            cout << "gen mode error" << endl;
+            printf("gen mode error\n");
             exit(-1);
         }
     }
@@ -159,11 +159,8 @@ int32_t bmcv_convert_to_cmp(T * p_exp,
                     T got = p_got[check_idx];
                     T exp = p_exp[check_idx];
                     if (abs(got - exp) > 1) {
-                        std::cout << "n: " << n_idx << " ,c:" << c_idx << ",h "
-                                  << y << " w " << x
-                                  << ", got: " << (int32_t)got << "exp "
-                                  << (int32_t)exp << std::endl;
-
+                        printf("n %d, c_idx %d, h %d, w %d, got %d, exp %d\n",
+                                n_idx, c_idx, y, x, (int32_t)got, (int32_t)exp);
                         return -1;
                     }
                 }
@@ -476,13 +473,13 @@ static int32_t convert_to_test_rand(bm_handle_t       handle,
         gettimeofday(&t1, NULL);
         bmcv_image_convert_to(handle, input_num, convert_to_attr, input_images, output_images);
         gettimeofday(&t2, NULL);
-        cout << "Convert to  using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+        printf("Convert to using time %ld(us) \n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime_win(0, &tp1);
         bmcv_image_convert_to(handle, input_num, convert_to_attr, input_images, output_images);
         clock_gettime_win(0, &tp2);
-        cout << "Convert to using time: " << ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000) << "us" << endl;
+        printf("Convert to using time %ld(us) \n", ((tp2.tv_sec - tp1.tv_sec) * 1000000 + (tp2.tv_nsec - tp1.tv_nsec)/1000));
     #endif
 
     for (int img_idx = 0; img_idx < output_num; img_idx++) {
@@ -503,8 +500,7 @@ static int32_t convert_to_test_rand(bm_handle_t       handle,
     ret = bmcv_convert_to_cmp<DST_T>(
         ref_res, bmcv_res, image_num, image_channel, image_h, image_w);
     if (ret < 0) {
-        // printf("compare failed !\r\n");
-        std::cout << "compare failed !" << std::endl;
+        printf("compare failed !\r\n");
         delete[] input;
         delete[] bmcv_res;
         delete[] ref_res;
@@ -543,17 +539,13 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
     bm_handle_t handle = resize_thread_arg->handle;
     int test_loop_times = resize_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld ------\n", pthread_self());
     #else
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << GetCurrentThreadId() << std::endl;
+    printf("------MULTI THREAD TEST STARTING----------thread id is %ld\n", GetCurrentThreadId());
     #endif
-    std::cout << "[TEST CONVERT TO] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST CONVERT TO] test starts... LOOP times will be %d\n", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST CONVERT TO] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST CONVERT TO] LOOP %d\n", loop_idx);
         int              image_n = 4;
         int              image_c = 3;
         int              image_w = 1920;
@@ -583,11 +575,11 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
         } else {
            seed = test_seed;
         }
-        cout << "random seed " << seed << endl;
+		printf("random seed %d\n", seed);
         srand(seed);
         bm_status_t ret = bm_dev_request(&handle, dev_id);
         if (ret != BM_SUCCESS) {
-            std::cout << "Create bm handle failed. ret = " << ret << std::endl;
+			printf("Create bm handle failed. ret = %d\n", ret);
             exit(-1);
         }
         image_shape.n = image_n;
@@ -610,70 +602,68 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
         {
         case 0x1684:{
             printf("=========================BM1684===================\n");
-            cout << "---------CONVERT TO CLASSICAL SIZE TEST----------" << endl;
+            printf("---------CONVERT TO CLASSICAL SIZE TEST----------\n");
             convert_format = CONVERT_1N_TO_1N;
-            cout << "CONVERT TO 1Nint8 TO 1N fp32 " << endl;
+            printf("CONVERT TO 1Nint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << " compare passed" << endl;
-            cout << "CONVERT TO 1N uint8 TO 1N uint8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("CONVERT TO 1N uint8 TO 1N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "CONVERT TO 1N uint8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("CONVERT TO 1N uint8 TO 1N int8\n");
             convert_to_test_rand<uint8_t, int8_t>(handle,
                                                 UINT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_1N;
-            cout << "CONVERT TO 4N uint8 TO 1N fp32" << endl;
+            printf("CONVERT TO 4N uint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_4N;
-            cout << "CONVERT TO 4N uint8 TO 4N uint8" << endl;
+            printf("CONVERT TO 4N uint8 TO 4N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_1N_TO_1N;
-            cout << "[WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32 " << endl;
+            printf("[WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
@@ -681,8 +671,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << " compare passed" << endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
@@ -690,9 +680,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
@@ -700,9 +689,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8\n");
             convert_to_test_rand<uint8_t, int8_t>(handle,
                                                 UINT8_C3,
                                                 INT8_C3,
@@ -710,8 +698,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
@@ -719,9 +707,9 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_1N;
-            cout << "[WITH STRIDE] CONVERT TO 4N uint8 TO 1N fp32" << endl;
+            printf("[WITH STRIDE] CONVERT TO 4N uint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
@@ -729,9 +717,9 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_4N;
-            cout << "[WITH STRIDE] CONVERT TO 4N uint8 TO 4N uint8" << endl;
+            printf("[WITH STRIDE] CONVERT TO 4N uint8 TO 4N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
@@ -739,71 +727,68 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_1N_TO_1N;
-            cout << "[SAME PARA] CONVERT TO 1Nint8 TO 1N fp32 " << endl;
+            printf("[SAME PARA] CONVERT TO 1Nint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << " compare passed" << endl;
-            cout << "[SAME PARA] CONVERT TO 1N uint8 TO 1N uint8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N uint8 TO 1N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] CONVERT TO 1N uint8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N uint8 TO 1N int8");
             convert_to_test_rand<uint8_t, int8_t>(handle,
                                                 UINT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[SAME PARA] CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_1N;
-            cout << "[SAME PARA] CONVERT TO 4N uint8 TO 1N fp32" << endl;
+            printf("[SAME PARA] CONVERT TO 4N uint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_4N;
-            cout << "[SAME PARA] CONVERT TO 4N uint8 TO 4N uint8" << endl;
+            printf("[SAME PARA] CONVERT TO 4N uint8 TO 4N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_1N_TO_1N;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32 "
-                << endl;
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
@@ -811,9 +796,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << " compare passed" << endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
@@ -821,10 +805,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
@@ -832,10 +814,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8\n");
             convert_to_test_rand<uint8_t, int8_t>(handle,
                                                 UINT8_C3,
                                                 INT8_C3,
@@ -843,9 +823,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
@@ -853,10 +832,9 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_1N;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 4N uint8 TO 1N fp32"
-                << endl;
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 4N uint8 TO 1N fp32\n");
             convert_to_test_rand<uint8_t, float_t>(handle,
                                                 UINT8_C3,
                                                 FLOAT32_C3,
@@ -864,10 +842,9 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
             convert_format = CONVERT_4N_TO_4N;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 4N uint8 TO 4N uint8"
-                << endl;
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 4N uint8 TO 4N uint8\n");
             convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                 UINT8_C3,
                                                 UINT8_C3,
@@ -875,8 +852,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "---------CONVERT TO CORNER TEST----------" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("---------CONVERT TO CORNER TEST----------\n");;
             int rand_loop_num = 2;
             for (int rand_loop_idx = 0; rand_loop_idx < rand_loop_num;
                 rand_loop_idx++) {
@@ -887,58 +864,54 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                 &image_shape.n,
                                 &image_shape.c,
                                 rand_mode);
-                    std::cout << "rand mode : " << rand_mode
-                            << " ,img_w: " << image_shape.w
-                            << " ,img_h: " << image_shape.h
-                            << " ,img_c: " << image_shape.c
-                            << " ,img_n: " << image_shape.n << std::endl;
+                    printf("rand_mode %d, img_w %d, img_h %d, img_c %d, img_n %d\n",
+                            rand_mode, image_shape.w, image_shape.h, image_shape.c, image_shape.n);
                     test_cnt       = 0;
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << "CONVERT TO 1N int8 TO 1N fp32" << endl;
+                    printf("CONVERT TO 1N int8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed" << endl;
-                    cout << " CONVERT TO 1N int8 TO 1N int8" << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed  "
-                        << endl;
-                    cout << " CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_4N_TO_1N;
-                    cout << "CONVERT TO 4N uint8 TO 1N fp32" << endl;
+                    printf("CONVERT TO 4N uint8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_4N_TO_4N;
-                    cout << "CONVERT TO 4N int8 TO 4N int8" << endl;
+                    printf("CONVERT TO 4N int8 TO 4N int8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << "[WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32" << endl;
+                    printf("[WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
@@ -946,10 +919,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << " compare passed "
-                        << endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8 "
-                        << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
@@ -957,9 +928,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed "
-                            << std::endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<int8_t, int8_t>(handle,
                                                         INT8_C3,
                                                         INT8_C3,
@@ -967,9 +937,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed"
-                            << std::endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8\n");
                     convert_to_test_rand<uint8_t, int8_t>(handle,
                                                         UINT8_C3,
                                                         INT8_C3,
@@ -977,8 +946,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
@@ -986,53 +955,52 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << "[SAME PARA] CONVERT TO 1N int8 TO 1N fp32" << endl;
+                    printf("[SAME PARA] CONVERT TO 1N int8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed" << endl;
-                    cout << "[SAME PARA]  CONVERT TO 1N int8 TO 1N int8" << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA]  CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed  "
-                        << endl;
-                    cout << "[SAME PARA]  CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA]  CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_4N_TO_1N;
-                    cout << "[SAME PARA] CONVERT TO 4N uint8 TO 1N fp32" << endl;
+                    printf("[SAME PARA] CONVERT TO 4N uint8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_4N_TO_4N;
-                    cout << "[SAME PARA] CONVERT TO 4N int8 TO 4N int8" << endl;
+                    printf("[SAME PARA] CONVERT TO 4N int8 TO 4N int8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32" << endl;
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1Nint8 TO 1N fp32\n");
                     convert_to_test_rand<uint8_t, float_t>(handle,
                                                         UINT8_C3,
                                                         FLOAT32_C3,
@@ -1040,10 +1008,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << " compare passed "
-                        << endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8 "
-                        << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N uint8\n");
                     convert_to_test_rand<uint8_t, uint8_t>(handle,
                                                         UINT8_C3,
                                                         UINT8_C3,
@@ -1051,9 +1017,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed "
-                            << std::endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<int8_t, int8_t>(handle,
                                                         INT8_C3,
                                                         INT8_C3,
@@ -1061,9 +1026,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed"
-                            << std::endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N uint8 TO 1N int8\n");
                     convert_to_test_rand<uint8_t, int8_t>(handle,
                                                         UINT8_C3,
                                                         INT8_C3,
@@ -1071,8 +1035,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
@@ -1080,33 +1044,32 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
 
                 }
             }
             break;
         }
         case 0x1686:{
-            cout << "---------CONVERT TO CLASSICAL SIZE TEST----------" << endl;
+            printf("---------CONVERT TO CLASSICAL SIZE TEST----------\n");
             convert_format = CONVERT_1N_TO_1N;
-            cout << "CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
@@ -1114,9 +1077,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
@@ -1124,26 +1086,24 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[SAME PARA] CONVERT TO 1N int8 TO 1N int8" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] CONVERT TO 1N fp32 TO 1N fp32" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
                                                 image_shape,
                                                 same_convert_to_arg,
                                                 convert_format);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
             convert_to_test_rand<int8_t, int8_t>(handle,
                                                 INT8_C3,
                                                 INT8_C3,
@@ -1151,10 +1111,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            std::cout << "result of " << test_cnt++ << " compare passed"
-                    << std::endl;
-            cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32"
-                << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
             convert_to_test_rand<float_t, float_t>(handle,
                                                 FLOAT32_C3,
                                                 FLOAT32_C3,
@@ -1162,8 +1120,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                 same_convert_to_arg,
                                                 convert_format,
                                                 1);
-            cout << "result of " << test_cnt++ << "compare passed" << endl;
-            cout << "---------CONVERT TO CORNER TEST----------" << endl;
+            printf("result of %d compare passed\n", test_cnt++);
+            printf("---------CONVERT TO CORNER TEST----------\n");
             int rand_loop_num = 2;
             for (int rand_loop_idx = 0; rand_loop_idx < rand_loop_num;
                 rand_loop_idx++) {
@@ -1174,22 +1132,19 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                 &image_shape.n,
                                 &image_shape.c,
                                 rand_mode);
-                    std::cout << "rand mode : " << rand_mode
-                            << " ,img_w: " << image_shape.w
-                            << " ,img_h: " << image_shape.h
-                            << " ,img_c: " << image_shape.c
-                            << " ,img_n: " << image_shape.n << std::endl;
+                    printf("rand_mode %d, img_w %d, img_h %d, img_c %d, img_n %d\n",
+                            rand_mode, image_shape.w, image_shape.h, image_shape.c, image_shape.n);
                     test_cnt       = 0;
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << " CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf(" CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<int8_t, int8_t>(handle,
                                                         INT8_C3,
                                                         INT8_C3,
@@ -1197,9 +1152,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed"
-                            << std::endl;
-                    cout << "[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
@@ -1207,17 +1161,17 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                     convert_format = CONVERT_1N_TO_1N;
-                    cout << "[SAME PARA]  CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("[SAME PARA]  CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
                                                         image_shape,
                                                         convert_to_arg,
                                                         convert_format);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N int8 TO 1N int8\n");
                     convert_to_test_rand<int8_t, int8_t>(handle,
                                                         INT8_C3,
                                                         INT8_C3,
@@ -1225,8 +1179,8 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    std::cout << "result of " << test_cnt++ << " compare passed" << endl;
-                    cout << "[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32 " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
+                    printf("[SAME PARA] [WITH STRIDE] CONVERT TO 1N fp32 TO 1N fp32\n");
                     convert_to_test_rand<float_t, float_t>(handle,
                                                         FLOAT32_C3,
                                                         FLOAT32_C3,
@@ -1234,7 +1188,7 @@ DWORD WINAPI test_convert_to_thread(LPVOID arg) {
                                                         convert_to_arg,
                                                         convert_format,
                                                         1);
-                    cout << "result of " << test_cnt++ << "compare passed " << endl;
+                    printf("result of %d compare passed\n", test_cnt++);
                 }
             }
             break;
@@ -1270,27 +1224,22 @@ int main(int32_t argc, char **argv) {
         dev_id = atoi(argv[3]);
         test_seed = atoi(argv[4]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_convert_to loop_num multi_thread_numi dev_id seed"
-                  << std::endl;
+        printf("command input error, please follow this "
+                     "order:test_convert_to loop_num multi_thread_numi dev_id seed\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST CONVERT TO] loop times should be 1~1500"
-                  << std::endl;
+        printf("[TEST CONVERT TO] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST CONVERT TO] thread nums should be 1~4 "
-                  << std::endl;
+        printf("[TEST CONVERT TO] thread nums should be 1~4\n");
         exit(-1);
     }
     int dev_cnt;
     bm_dev_getcount(&dev_cnt);
     if (dev_id >= dev_cnt) {
-        std::cout << "[TEST SOER] dev_id should less than device count,"
-                     " only detect "<< dev_cnt << " devices "
-                  << std::endl;
+        printf("[TEST SOER] dev_id should less than device count, only detect %d devices\n", dev_cnt);
         exit(-1);
     }
     printf("device count = %d\n", dev_cnt);
@@ -1347,7 +1296,7 @@ int main(int32_t argc, char **argv) {
     for (int d = 0; d < dev_cnt; d++) {
         bm_dev_free(handle[d]);
     }
-    std::cout << "------[TEST CONVERT TO] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST CONVERT TO] ALL TEST PASSED!------\n");
     delete[] pid;
     delete[] convert_to_thread_arg;
     #else
@@ -1407,7 +1356,7 @@ int main(int32_t argc, char **argv) {
             CloseHandle(hThreadArray[idx]);
         }
     }
-    std::cout << "------[TEST CONVERT TO] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST CONVERT TO] ALL TEST PASSED!------\n");
     delete[] convert_to_thread_arg;
     #endif
     return 0;

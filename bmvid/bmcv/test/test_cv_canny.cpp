@@ -369,7 +369,7 @@ static int test_canny_random(int height, int width, int ksize, bool l2gradient,
 
     ret = canny_tpu(origin_data, output_tpu, height, width, ksize, low_thresh, high_thresh, l2gradient, handle);
     if (ret != 0) {
-        cout << "canny_tpu failed" << endl;
+        printf("canny_tpu failed\n");
         goto exit0;
     }
 
@@ -379,7 +379,7 @@ static int test_canny_random(int height, int width, int ksize, bool l2gradient,
     gettimeofday(&t2, NULL);
     printf("Canny CPU using time = %ld(us)\n", TIME_COST_US(t1, t2));
     if (ret != 0) {
-        cout << "canny_cpu failed" << endl;
+        printf("canny_cpu failed\n");
         goto exit0;
     }
 
@@ -394,7 +394,7 @@ static int test_canny_random(int height, int width, int ksize, bool l2gradient,
 
     ret = cmp_res(output_tpu, output_cpu, height, width);
     if (ret != 0) {
-        cout << "cmp_res failed" << endl;
+        printf("cmp_res failed\n");
         goto exit0;
     }
 
@@ -426,7 +426,7 @@ int main(int argc, char* args[])
 
     ret = (int)bm_dev_request(&handle, 0);
     if (ret != 0) {
-        cout << "bm_dev_request failed" << endl;
+        printf("bm_dev_request failed\n");
         bm_dev_free(handle);
         return ret;
     }
@@ -442,11 +442,11 @@ int main(int argc, char* args[])
     for (i = 0; i < loop; i++) {
         ret = test_canny_random(height, width, ksize, l2gradient, src_name, dst_name, gold_name, handle);
         if (ret) {
-            cout << "test canny failed" << endl;
+            printf("test canny failed\n");
             return ret;
         }
     }
-    cout << "Compare TPU result with OpenCV successfully!" << endl;
+    printf("Compare TPU result with OpenCV successfully!\n");
     bm_dev_free(handle);
     return ret;
 }

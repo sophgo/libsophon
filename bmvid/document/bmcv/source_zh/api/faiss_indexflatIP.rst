@@ -77,11 +77,11 @@ bmcv_faiss_indexflatIP
 
 * int input_dtype
 
-  输入参数。输入数据类型，支持 float 和 char, 5 表示float, 1 表示char。
+  输入参数。输入数据类型。支持 fp32, fp16 和 char, 5 表示fp32, 3 表示fp16, 1 表示char。
 
 * int output_dtype
 
-  输出参数。输出数据类型，支持 float 和 int, 5 表示float, 9 表示int。
+  输出参数。输出数据类型。当输入数据类型为 fp32 时，输出数据类型支持 fp32 和 fp16；当输入数据类型为 fp16 时，输出数据类型支持 fp32 和 fp16；当输入数据类型为 char 时，输出数据类型支持 int。其中 5 表示 fp32, 3表示 fp16, 9表示int。
 
 
 **返回值说明:**
@@ -93,9 +93,9 @@ bmcv_faiss_indexflatIP
 
 **注意事项：**
 
-1、输入数据(查询向量)和底库数据(底库向量)的数据类型为 float 或 char。
+1、输入数据(查询向量)和底库数据(底库向量)的数据类型为 fp32, fp16 或 char。
 
-2、输出的排序后的相似度的数据类型为 float 或 int, 相对应的索引的数据类型为 int。
+2、输出的排序后的相似度的数据类型为 fp32, fp16 或 int, 相对应的索引的数据类型为 int。
 
 3、底库数据通常以 database_vecs_num * vec_dims 的形式排布在内存中。此时, 参数 is_transpose 需要设置为 1。
 
@@ -103,7 +103,9 @@ bmcv_faiss_indexflatIP
 
 5、该接口用于 Faiss::IndexFlatIP.search(), 在 BM1684X 上实现。考虑 BM1684X 上 Tensor Computing Processor 的连续内存, 针对 100W 底库, 可以在单处理器上一次查询最多约 512 个 256 维的输入。
 
-6、faiss系列算子有多个输入参数，每个参数都有一个使用范围限制，超过该范围的入参对应tpu输出会出错，我们选择了三个主要参数做了测试，固定其中两个维度，测试了第三个维度的最大值，测试结果如下表格所示：
+6、如果一次性申请的设备内存超过4GB，需要使用带有u64后缀的接口进行设备内存申请、搬运和释放。
+
+7、faiss系列算子有多个输入参数，每个参数都有一个使用范围限制，超过该范围的入参对应tpu输出会出错，我们选择了三个主要参数做了测试，固定其中两个维度，测试了第三个维度的最大值，测试结果如下表格所示，所有测试输入输出均为 fp32 类型：
 
 +-----------+--------------+-------------------+
 | query_num | vec_dims     | max_database_num  |
@@ -201,7 +203,6 @@ bmcv_faiss_indexflatIP
         #include <stdlib.h>
         #include <stdint.h>
         #include "bmcv_api_ext.h"
-        #include "test_misc.h"
         int main()
         {
             int sort_cnt = 100;
@@ -256,6 +257,69 @@ bmcv_faiss_indexflatIP
             bm_free_device(handle, buffer_dev_mem);
             bm_free_device(handle, sorted_similarity_dev_mem);
             bm_free_device(handle, sorted_index_dev_mem);
+            bm_dev_free(handle);
+            return 0;
+        }
+        //Requesting more than 4GB of device memory
+        #include <math.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <stdint.h>
+        #include <cstdint>
+        #include "bmcv_api_ext.h"
+        int main()
+        {
+            int sort_cnt = 100;
+            int vec_dims = 256;
+            int query_vecs_num = 1;
+            int database_vecs_num = 10000;
+            int is_transpose = 1;
+            int input_dtype = 5; // 5: float
+            int output_dtype = 5;
+            float* input_data = new float[query_vecs_num * vec_dims];
+            float* db_data = new float[database_vecs_num * vec_dims];
+            float *output_dis = new float[query_vecs_num * sort_cnt];
+            int *output_inx = new int[query_vecs_num * sort_cnt];
+            bm_handle_t handle;
+            bm_device_mem_u64_t query_data_dev_mem;
+            bm_device_mem_u64_t db_data_dev_mem;
+            bm_device_mem_u64_t buffer_dev_mem;
+            bm_device_mem_u64_t sorted_similarity_dev_mem;
+            bm_device_mem_u64_t sorted_index_dev_mem;
+
+            bm_dev_request(&handle, 0);
+            for (int i = 0; i < query_vecs_num * vec_dims; i++) {
+                input_data[i] = ((float)rand() / (float)RAND_MAX) * 3.3;
+            }
+            for (int i = 0; i < vec_dims * database_vecs_num; i++) {
+                db_data[i] = ((float)rand() / (float)RAND_MAX) * 3.3;
+            }
+
+            bm_malloc_device_byte_u64(handle, &query_data_dev_mem, query_vecs_num * vec_dims * sizeof(float));
+            bm_malloc_device_byte_u64(handle, &db_data_dev_mem, (uint64_t)database_vecs_num * (uint64_t)vec_dims * (uint64_t)sizeof(float));
+            bm_malloc_device_byte_u64(handle, &buffer_dev_mem, (uint64_t)query_vecs_num * (uint64_t)database_vecs_num * (uint64_t)sizeof(float));
+            bm_malloc_device_byte_u64(handle, &sorted_similarity_dev_mem, query_vecs_num * sort_cnt * sizeof(float));
+            bm_malloc_device_byte_u64(handle, &sorted_index_dev_mem, query_vecs_num * sort_cnt * sizeof(int));
+            bm_memcpy_s2d_u64(handle, query_data_dev_mem, input_data);
+            bm_memcpy_s2d_u64(handle, db_data_dev_mem, db_data);
+
+            bmcv_faiss_indexflatIP_u64(handle, query_data_dev_mem, db_data_dev_mem, buffer_dev_mem,
+                                sorted_similarity_dev_mem, sorted_index_dev_mem, vec_dims,
+                                query_vecs_num, database_vecs_num, sort_cnt, is_transpose,
+                                input_dtype, output_dtype);
+
+            bm_memcpy_d2s_u64(handle, output_dis, sorted_similarity_dev_mem);
+            bm_memcpy_d2s_u64(handle, output_inx, sorted_index_dev_mem);
+
+            delete[] input_data;
+            delete[] db_data;
+            delete[] output_dis;
+            delete[] output_inx;
+            bm_free_device_u64(handle, query_data_dev_mem);
+            bm_free_device_u64(handle, db_data_dev_mem);
+            bm_free_device_u64(handle, buffer_dev_mem);
+            bm_free_device_u64(handle, sorted_similarity_dev_mem);
+            bm_free_device_u64(handle, sorted_index_dev_mem);
             bm_dev_free(handle);
             return 0;
         }

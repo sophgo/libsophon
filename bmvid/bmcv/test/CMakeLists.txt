@@ -157,6 +157,7 @@ test_bmcv(
     test_cv_qr_cpu.cpp
     test_cv_knn.cpp
     test_cv_cluster.cpp
+    test_cv_warp_affine_padding_rgb.cpp
 )
 elseif(WINDOWS)
 

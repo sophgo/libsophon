@@ -97,7 +97,7 @@ This interface is only supported by the BM1684X.
 
 4. The background image is supported at a minimum size of 8 * 8，  a maximum size of 8192 * 8192.
 
-5. The maximum number of images that can be stacked is 10, with the largest stackable image size being 850 * 850 (the maximum size for a single stacked image is also 850 * 850).
+5. The maximum number of images that can be stacked is 10, with the largest stackable image size being the size of background image.
 
 
 **Code Example**

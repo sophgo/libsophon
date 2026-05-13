@@ -9,7 +9,6 @@
 #    without the express written permission of Bitmain Technologies Inc.
 #
 ##############################################################################
-LDFLAGS = -L$(BMVID_ROOT)/3rdparty/libbmrt/lib/$(PRODUCTFORM)/
 
 TPU_PERFORMANCE_DIR = $(TEST_BMCV_DIR)/tpu_operators_performance_test_case
 
@@ -29,7 +28,7 @@ else ifeq ($(PRODUCTFORM), pcie_arm64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/
 else ifeq ($(PRODUCTFORM), pcie_mips64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/mips/
-else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+else ifneq (,$(filter $(PRODUCTFORM), pcie_loongarch64 pcie_loongarch64_anolis))
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/
 else ifeq ($(PRODUCTFORM), pcie_sw64)
 TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/
@@ -40,13 +39,14 @@ TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/pcie/
 endif
 
 #TEST_BMCV_SRCS_CXX = $(wildcard $(TEST_BMCV_DIR)/*.cpp wildcard $(TEST_BMCV_DIR)/bm1684x/*.cpp)
-TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_3channel.cpp  \
+TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_cv_remap.cpp  \
+					 $(TEST_BMCV_DIR)/test_bmodel/test_fisheye_correction.cpp  \
+					 $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_3channel.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_assigned_area_blur.cpp  \
                      $(TEST_BMCV_DIR)/test_cv_median_blur.cpp  \
 					 $(TEST_BMCV_DIR)/test_faiss_indexPQ_encode.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_surf.cpp \
 					 $(TEST_BMCV_DIR)/test_cv_matrix_prune.cpp  \
-					 $(TEST_BMCV_DIR)/test_cv_cluster.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_cos_similarity.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_overlay.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_rotate.cpp  \
@@ -86,7 +86,8 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_
   					 $(TEST_BMCV_DIR)/test_cv_img_scale.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_jpeg.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_json.cpp   \
-					 $(TEST_BMCV_DIR)/test_cv_knn.cpp\
+					 $(TEST_BMCV_DIR)/test_cv_knn2.cpp	\
+					 $(TEST_BMCV_DIR)/test_cv_knn_match.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_laplacian.cpp   \
 					 $(TEST_BMCV_DIR)/test_cv_lapmatrix.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_lkpyramid.cpp   \
@@ -98,11 +99,11 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_
   					 $(TEST_BMCV_DIR)/test_cv_nms.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_put_text.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_pyramid.cpp   \
-					 $(TEST_BMCV_DIR)/test_cv_qr_cpu.cpp\
 					 $(TEST_BMCV_DIR)/test_cv_quantify.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_sobel.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_sort.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_split.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_ssim.cpp	\
   					 $(TEST_BMCV_DIR)/test_cv_storage_convert.cpp   \
   					 $(TEST_BMCV_DIR)/test_cv_threshold.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_transpose.cpp  \
@@ -112,6 +113,8 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_
   					 $(TEST_BMCV_DIR)/test_cv_vpp_random.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_vpp_stitch.cpp  \
   					 $(TEST_BMCV_DIR)/test_cv_warp.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_warp_affine_padding_rgb.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_warp_affine_padding.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_affine.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_bilinear.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_warp_perspective.cpp  \
@@ -127,6 +130,7 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_
 					 $(TEST_BMCV_DIR)/test_resize.cpp  \
 					 $(TEST_BMCV_DIR)/test_cv_hm_distance.cpp  \
 					 $(TEST_BMCV_DIR)/test_yolov3_detect_out.cpp  \
+					 $(TEST_BMCV_DIR)/test_cv_add_mask_to_image.cpp  \
 					 $(TEST_BMCV_DIR)/test_matrix_log.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_fbd.cpp  \
 					 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_fbd_param.cpp  \
@@ -155,6 +159,18 @@ TEST_BMCV_SRCS_CXX = $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_
 			 		 $(TEST_BMCV_DIR)/bm1684x/test_bm1684x_gen_text_watermark.cpp\
 					 $(TPU_PERFORMANCE_DIR)/rotate_performance.cpp\
 
+ifneq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+TEST_BMCV_SRCS_CXX += $(TEST_BMCV_DIR)/test_bmodel/test_gaussian_blur_fp16_1080p_3channel.cpp\
+
+endif
+
+ifneq (,$(filter pcie soc,$(PRODUCTFORM)))
+TEST_BMCV_SRCS_CXX +=  $(TEST_BMCV_DIR)/test_cv_qr_cpu.cpp\
+					   $(TEST_BMCV_DIR)/test_cv_cluster.cpp  \
+					   $(TEST_BMCV_DIR)/test_cv_knn.cpp\
+
+endif
+
 TEST_BMCV_CXX_EXE1 = $(patsubst %.cpp,%,$(TEST_BMCV_SRCS_CXX))
 TEST_BMCV_CXX_EXE2 = $(patsubst $(BMVID_ROOT)/%,%,$(TEST_BMCV_CXX_EXE1))
 TEST_BMCV_CXX_EXE ?= $(addprefix $(OUT_DIR)/,$(TEST_BMCV_CXX_EXE2))
@@ -165,7 +181,6 @@ INSTALL_EXES += $(TEST_BMCV_CXX_EXE)
 DAILY_TEST_EXES += $(TEST_BMCV_CXX_EXE)
 
 BMLIB_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libbmlib.so
-VPP_DYN =  $(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM)/libvpp_cmodel.so
 
 $(TEST_BMCV_OBJ_DIR):
 	@$(MKDIR) $@
@@ -180,6 +195,8 @@ ifeq ($(PRODUCTFORM), pcie)
 TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
 else ifeq ($(PRODUCTFORM),soc)
 TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else ifeq ($(PRODUCTFORM),pcie_loongarch64)
+TEST_BMCV_DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
 else
     $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif
@@ -193,7 +210,7 @@ TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(BMCV_DIR)/lib/cmodel/ \
  -L$(BMVID_ROOT)/3rdparty/libbmcv/lib/pcie/pcie_cmodel/ \
 -ldl
 
-$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(VPP_DYN) | $(TEST_BMCV_OBJ_DIR)
+$(TEST_BMCV_CXX_EXE): $(OUT_DIR)/%:$(BMVID_ROOT)/%.cpp $(BMLIB_RUNTIME_STATIC) | $(TEST_BMCV_OBJ_DIR)
 	@echo cc -o $@ $<
 	@$(CXX) $(INCLUDE_DIR) $(CXXFLAGS) -Wextra -o $@ $< $(TEST_BMCV_DYN_LDFLAGS) $(TEST_BMCV_LDFLAGS) -std=c++0x -pthread
 
@@ -209,8 +226,14 @@ INCLUDE_DIR += -I$(BMVID_ROOT)/bmcv/include \
 TEST_BMCV_LDFLAGS = $(LDFLAGS) -L$(JPU_DIR)/lib/ -L$(BMION_DIR)/lib/ \
 					-L$(OUT_DIR)/lib/ -L$(BMCV_DIR)/lib/ -L$(VPP_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
+					-L$(BMVID_ROOT)/3rdparty/libbmrt/lib/$(PRODUCTFORM) \
 					-L$(TURBO_JPEG_PATH) \
-					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp -lturbojpeg -lvpp_cmodel -ldl -lbmrt\
+					-lbmjpuapi -lbmjpulite -lbmion -lbmcv -lbmlib -lvpp -lturbojpeg -ldl\
+
+ifneq ($(PRODUCTFORM), pcie_loongarch64_anolis)
+TEST_BMCV_LDFLAGS += -lbmrt\
+
+endif
 
 TEST_MISC_CXX = $(TEST_BMCV_DIR)/test_misc.cpp $(TEST_BMCV_DIR)/md5.cpp
 

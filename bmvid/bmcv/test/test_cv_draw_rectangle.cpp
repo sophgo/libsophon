@@ -640,20 +640,12 @@ static bool draw_rectangle_cmp(u8 **hw_rslt,
     for (i = 0; i < plane_num; i++) {
         for (j = 0; j < img_len[i]; j++) {
             if( hw_rslt[i][j] != refs_rslt[i][j]) {
-                cout << "testcase failed at i = "
-                    << i
-                    << " j = "
-                    << j
-                    << " expect "
-                    << refs_rslt[i][j]
-                    << " got "
-                    << hw_rslt[i][j]
-                    << endl;
+                printf("testcase failed at i = %d, j = %d, expect %d, got %d\n", i, j, refs_rslt[i][j], hw_rslt[i][j]);
                 return false;
             }
         }
     }
-    cout << "testcase success!" << endl;
+    printf("testcase success!\n");
     return true;
 }
 
@@ -680,10 +672,8 @@ static int test_rectangle_random(bm_handle_t handle,
 
     h = rand() % 1280 + 100;
     w = rand() % 1920 + 100;
-    cout << "draw_rect_test start! " <<endl;
-    cout << "image_format is " << image_format <<endl;
-    cout << "h = " << h << endl;
-    cout << "w = " << w << endl;
+    printf("draw_rect_test start!\n");
+    printf("image_format is %d, h %d, w %d\n", image_format, h, w);
 
     for (i = 0; i < 3; i++) {
         plane_height[i] = 0;
@@ -748,10 +738,10 @@ static int test_rectangle_random(bm_handle_t handle,
     ret = bmcv_image_draw_rectangle(handle, image, rect_num,
         rect, line_width, r, g, b);
     gettimeofday_(&t2);
-    cout << "draw rectangle using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+    printf("draw rectangle using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
     if(BM_SUCCESS != ret) {
-        std::cout << "bmcv_api running failed!" << std::endl;
+        printf("bmcv_api running failed!\n");
         ret = BM_ERR_FAILURE;
         goto exit;
     }
@@ -790,23 +780,20 @@ DWORD WINAPI test_draw_rectangle_thread(LPVOID arg) {
     bm_dev_request(&handle, 0);
     loop_times = *(int *)arg;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST CV DRAW RECTANGLE] test starts... LOOP times will be "
-              << loop_times << std::endl;
+    printf("[TEST CV DRAW RECTANGLE] test starts... LOOP times will be %d\n", loop_times);
 
     for(i = 0; i < loop_times; i++) {
-        std::cout << "------[TEST CV DRAW RECTANGLE] LOOP " << i << "------"
-                  << std::endl;
+        printf("------[TEST CV DRAW RECTANGLE] LOOP %d ------\n", i);
         seed = (unsigned)time(NULL);
-        std::cout << "seed: " << seed << std::endl;
+        printf("seed: %d\n", seed);
         srand(seed);
 
-        cout << "start of loop test " << i << endl;
+        printf("start of loop test %d\n", i);
         if(0 != test_rectangle_random(handle, FORMAT_BGR_PLANAR))
             goto exit;
         if(0 != test_rectangle_random(handle, FORMAT_BGR_PACKED))
@@ -838,17 +825,15 @@ int main(int argc, char **argv) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_draw_rectangle loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_draw_rectangle loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST CV DRAW RECTANGLE] loop times should be 1~1500" << std::endl;
+        printf("[TEST CV DRAW RECTANGLE] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST CV DRAW RECTANGLE] thread nums should be 1~4 " << std::endl;
+        printf("[TEST CV DRAW RECTANGLE] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -870,7 +855,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     #else
     #define THREAD_NUM 64

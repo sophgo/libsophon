@@ -386,6 +386,7 @@ static int test_gaussian_blur_random(int random, int channel, bool is_packed, in
         }
     } else {
         printf("cpu and tpu failed to compare \n");
+        exit(-1);
     }
     free(input_data);
     free(output_tpu);
@@ -436,7 +437,7 @@ void* test_gaussian_blur(void* args) {
         if (0 != test_gaussian_blur_random(random, channel, is_packed, height, width, ksize, format, sigmaX,
                                            sigmaY, input_path, output_path, handle)) {
             printf("------TEST GAUSSIAN_BLUR FAILED------\n");
-            return (void*)-1;
+            exit(-1);
         }
         printf("------TEST GAUSSIAN_BLUR PASSED!------\n");
     }

@@ -91,19 +91,16 @@ DWORD WINAPI test_split_thread(LPVOID arg) {
     split_thread_arg_t *split_thread_arg = (split_thread_arg_t *)arg;
     int test_loop_times = split_thread_arg->trials;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
+    printf("------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST SPLIT] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST SPLIT] test starts... LOOP times will be %d\n", test_loop_times);
     bm_handle_t    handle;
     bm_dev_request(&handle, 0);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST SPLIT] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST SPLIT] LOOP %d ------\n", loop_idx);
 
         // set parameter random
         bm_image_format_ext image_format = FORMAT_BGR_PACKED;
@@ -166,7 +163,7 @@ DWORD WINAPI test_split_thread(LPVOID arg) {
         printf("split used time: %ld us\n", used);
 
         if (BM_SUCCESS != ret) {
-            std::cout << "bmcv_split error !!!" << std::endl;
+            printf("bmcv_split error !!!\n");
             bm_image_destroy(input);
             for (int i = 0; i < split_num; i++) {
                 bm_image_destroy(output[i]);
@@ -236,13 +233,13 @@ DWORD WINAPI test_split_thread(LPVOID arg) {
         delete [] output;
     }
     bm_dev_free(handle);
-    std::cout << "------[TEST SPLIT] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST SPLIT] ALL TEST PASSED!\n");
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
     unsigned int seed = (unsigned)time(NULL);
-    std::cout << "seed: " << seed << std::endl;
+    printf("seed: %d\n", seed);
     srand(seed);
     int test_loop_times  = 0;
     int test_threads_num = 1;
@@ -256,17 +253,15 @@ int main(int argc, char *argv[]) {
         test_loop_times  = atoi(argv[1]);
         test_threads_num = atoi(argv[2]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_split loop_num multi_thread_num"
-                  << std::endl;
+        printf("command input error, please follow this order:test_split loop_num multi_thread_num\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST SPLIT] loop times should be 1~1500" << std::endl;
+        printf("[TEST SPLIT] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST SPLIT] thread nums should be 1~4 " << std::endl;
+        printf("[TEST SPLIT] thread nums should be 1~4 \n");
         exit(-1);
     }
     #ifdef __linux__
@@ -293,7 +288,7 @@ int main(int argc, char *argv[]) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] split_thread_arg;
     #else
@@ -345,7 +340,7 @@ int main(int argc, char *argv[]) {
     }
     for (int i = 0; i < test_threads_num; i++)
         CloseHandle(hThreadArray[i]);
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] split_thread_arg;
     #endif
     return 0;

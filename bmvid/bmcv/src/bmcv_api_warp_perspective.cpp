@@ -767,6 +767,11 @@ bm_status_t bmcv_image_warp_perspective_1684X(
 {
     bm_status_t ret = BM_SUCCESS;
     bm_device_mem_t tensor_output[4];
+
+    if(BM_SUCCESS != bmcv_perspective_check(handle, image_num, matrix, input, output)) {
+        return BM_ERR_FAILURE;
+    }
+
     #ifdef __linux__
         bool output_alloc_flag[image_num];
     #else

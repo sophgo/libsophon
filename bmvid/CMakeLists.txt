@@ -7,15 +7,6 @@ endif()
 
 project(bmvid_win C CXX)
 
-# update commit and branch
-execute_process(
-    COMMAND bash -c "find \"$(git rev-parse --show-toplevel)\" -type f -name \"update_bmvid_version.sh\" -exec bash {} \\;"
-    RESULT_VARIABLE result
-    OUTPUT_VARIABLE output
-    ERROR_VARIABLE error_output
-)
-#end
-
 if(CMAKE_HOST_WIN32)
     set(WINDOWS 1)
 elseif(CMAKE_HOST_APPLE)
@@ -62,8 +53,8 @@ set(HOST_ARCH_LIST aarch64 x86)
 set(HOST_ARCH x86 CACHE STRING "host arch: aarch64 x86" FORCE)
 set_property(CACHE HOST_ARCH PROPERTY STRINGS ${HOST_ARCH_LIST})
 
-set(PLATFORM_LIST pcie soc pice_arm64 pcie_loongarch64)
-set(PLATFORM pcie CACHE STRING "platform: pcie soc pice_arm64 pcie_loongarch64")
+set(PLATFORM_LIST pcie soc pice_arm64 pcie_loongarch64 pcie_loongarch64_anolis)
+set(PLATFORM pcie CACHE STRING "platform: pcie soc pice_arm64 pcie_loongarch64 pcie_loongarch64_anolis")
 set_property(CACHE PLATFORM PROPERTY STRINGS ${PLATFORM_LIST})
 
 set(SUBTYPE_LIST asic palladium fpga)
@@ -79,7 +70,13 @@ else()
     set(BM_MEDIA_ION 0)
 endif()
 
+# 确保 ENABLE_ABI0 可用，如果未定义则默认为 OFF
+if(NOT DEFINED ENABLE_ABI0)
+    set(ENABLE_ABI0 OFF)
+endif()
+
 message(STATUS "PLATFORM.................... ${PLATFORM}")
+message(STATUS "ENABLE_ABI0................. ${ENABLE_ABI0}")
 
 set(FIRMWARE_CORE_SRCS_C "" CACHE INTERNAL "FIRMWARE_CORE_SRCS_C" )
 
@@ -161,12 +158,14 @@ if (CHIP_NAME STREQUAL bm1684)
         if(${CHIP_NAME} STREQUAL "bm1684")
             ADD_TARGET_ION_LIB(ion_lib ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} libsophon ${BMVID_OUT_PATH})
             ADD_TARGET_BMCV_LIB(bmcv_lib ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION}
-                libsophon ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${USING_OPENBLAS})
+                libsophon ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${BMVID_OUT_PATH} ${USING_OPENBLAS} ${ENABLE_ABI0})
+            ADD_TARGET_EXAMPLE(example ${CHIP_NAME} ${PLATFORM} ${SUBTYPE} ${DEBUG} libsophon ${BMVID_OUT_PATH})
 
             add_dependencies(vpp_lib ion_lib)
             add_dependencies(jpu_lib ion_lib)
             add_dependencies(vpu_lib ion_lib)
             add_dependencies(bmcv_lib jpu_lib vpp_lib)
+            add_dependencies(example bmcv_lib)
         endif()
 
         if ("${BMCPU_USED}" STREQUAL "ON" AND "${CHIP_NAME}" STREQUAL "bm1684")
@@ -179,7 +178,7 @@ if (CHIP_NAME STREQUAL bm1684)
             ADD_TARGET_VPP_LIB(bmcpu_vpp_lib bm1684 soc ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} bmcpu ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH})
             ADD_TARGET_ION_LIB(bmcpu_ion_lib bm1684 soc ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} bmcpu ${BMVID_BMCPU_OUT_PATH})
             ADD_TARGET_BMCV_LIB(bmcpu_bmcv_lib bm1684 soc ${SUBTYPE} ${DEBUG} ${BM_MEDIA_ION} bmcpu
-                ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${USING_OPENBLAS})
+                ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${BMVID_BMCPU_OUT_PATH} ${USING_OPENBLAS} ${ENABLE_ABI0})
 
             add_dependencies(bmcpu_ion_lib ion_lib)  # avoid compile ion_lib bmcpu_ion_lib in parallel
             add_dependencies(bmcpu_yuv_lib yuv_lib)  # avoid compile yuv_lib bmcpu_yuv_lib in parallel

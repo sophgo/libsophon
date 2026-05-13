@@ -66,6 +66,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64)
 BUILD_CONFIGURATION = SunwayLinux
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
 BUILD_CONFIGURATION = LoongLinux
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+BUILD_CONFIGURATION = LoongLinuxAnolis
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
 BUILD_CONFIGURATION = RiscvLinux
 else # pcie_arm64 and soc
@@ -165,6 +167,11 @@ ifeq ("$(BUILD_CONFIGURATION)", "LoongLinux")
     PLATFORM        = loongLinux
     SLIBNAME        = libbmvideo.so
 endif
+ifeq ("$(BUILD_CONFIGURATION)", "LoongLinuxAnolis")
+    CROSS_CC_PREFIX = loongarch64-unknown-linux-gnu-
+    PLATFORM        = loongLinuxAnolis
+    SLIBNAME        = libbmvideo.so
+endif
 ifeq ("$(BUILD_CONFIGURATION)", "SunwayLinux")
     CROSS_CC_PREFIX = sw_64-sunway-linux-gnu-
     PLATFORM        = sunwaylinux
@@ -185,6 +192,10 @@ CC  = $(CROSS_CC_PREFIX)gcc
 CXX = $(CROSS_CC_PREFIX)g++
 AR  = $(CROSS_CC_PREFIX)ar
 
+BRANCH_NAME := $(shell git name-rev --name-only HEAD 2>/dev/null || echo unknown)
+COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+COMMIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo unknown)
+
 INCLUDES = -I$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vpuapi -I$(BMVID_TOP_DIR)/video/provider/cnm/decoder/vdi -I$(BMVID_TOP_DIR)/video/driver -I$(BMVID_TOP_DIR)/3rdparty/libbmcv/include
 INCLUDES += -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_decoder -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/component_encoder -I$(BMVID_TOP_DIR)/video/provider/cnm/sample_v2/helper
 INCLUDES += -I$(BMVID_TOP_DIR)/video/decoder/bm_dec_api/inc
@@ -199,6 +210,7 @@ endif
 DEFINES += -D$(product) -D$(chip_type) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 
 CFLAGS  += -I. -fPIC -Wall -Wl,--fatal-warning $(INCLUDES) $(DEFINES) $(PLATFORM_FLAGS)
+CFLAGS  += -DBRANCH_NAME=\"${BRANCH_NAME}\" -DCOMMIT_COUNT=\"${COMMIT_COUNT}\" -DCOMMIT_HASH=\"${COMMIT_HASH}\"
 
 ifeq ($(SLT_TEST), slt)
 CFLAGS += -DSLT_TEST
@@ -239,6 +251,10 @@ endif
 ifeq ($(PRODUCTFORM),pcie_loongarch64)
 LDFLAGS +=  -Wl,-melf64loongarch
 endif
+ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+LDFLAGS +=  -Wl,-melf64loongarch
+LDLIBS  +=  -lstdc++
+endif
 ifeq ($(PRODUCTFORM),pcie_sw64)
 LDLIBS  +=  -lstdc++
 endif
@@ -258,6 +274,9 @@ ifeq ("$(BUILD_CONFIGURATION)", "MipsLinux")
 BUILDLIST += $(VPUCHECK) $(VPUINFO)
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "LoongLinux")
+BUILDLIST += $(VPUCHECK) $(VPUINFO)
+endif
+ifeq ("$(BUILD_CONFIGURATION)", "LoongLinuxAnolis")
 BUILDLIST += $(VPUCHECK) $(VPUINFO)
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "SunwayLinux")
@@ -326,6 +345,10 @@ SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interfa
 SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/log.c
 endif
 ifeq ("$(BUILD_CONFIGURATION)", "LoongLinux")
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
+SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/log.c
+endif
+ifeq ("$(BUILD_CONFIGURATION)", "LoongLinuxAnolis")
 SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/bm_video_interface.c
 SOURCES_COMMON += $(BMVID_TOP_DIR)/video/decoder/bm_dec_api/src/log.c
 endif

@@ -48,6 +48,8 @@ else ifeq ($(PRODUCTFORM),pcie_sw64) # pcie mode
     CROSS_COMPILE = sw_64-sunway-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_loongarch64)
     CROSS_COMPILE = loongarch64-linux-gnu-
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
+    CROSS_COMPILE = loongarch64-unknown-linux-gnu-
 else ifeq ($(PRODUCTFORM),pcie_riscv64)
     CROSS_COMPILE =
 else # pcie_arm64 and soc mode
@@ -57,6 +59,10 @@ endif
 CC = $(CROSS_COMPILE)gcc
 CXX= $(CROSS_COMPILE)g++
 AR = $(CROSS_COMPILE)ar
+
+BRANCH_NAME := $(shell git name-rev --name-only HEAD 2>/dev/null || echo unknown)
+COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+COMMIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo unknown)
 
 CFLAGS          = -Wall -Werror -Wno-error=deprecated-declarations $(CONFIG_FLAGS)\
  				  -ffunction-sections -fdata-sections \
@@ -68,7 +74,15 @@ CXXFLAGS        += -Wextra -funwind-tables -fno-short-enums $(CONFIG_FLAGS)\
  				   -Wall -Werror -Wno-error=deprecated-declarations \
  				   -ffunction-sections -fdata-sections -fno-strict-aliasing \
  				   -std=c++11 -Wno-unused-function \
- 				   -fPIC -ffp-contract=off -fexceptions
+ 				   -fPIC -ffp-contract=off -fexceptions \
+				   -DBRANCH_NAME=\"${BRANCH_NAME}\" \
+				   -DCOMMIT_COUNT=\"${COMMIT_COUNT}\" \
+				   -DCOMMIT_HASH=\"${COMMIT_HASH}\"
+
+ifeq ($(ABI_FLAG),0)
+CFLAGS   += -D_GLIBCXX_USE_CXX11_ABI=0
+CXXFLAGS += -D_GLIBCXX_USE_CXX11_ABI=0
+endif
 
 ifeq ($(PRODUCTFORM), soc)
 CFLAGS += -fsigned-char
@@ -80,6 +94,9 @@ else ifeq ($(PRODUCTFORM), pcie_mips64)
 CFLAGS +=  -mips64r2 -mabi=64 -march=gs464e -D_GLIBCXX_USE_CXX11_ABI=0
 CXXFLAGS += -mips64r2 -mabi=64 -march=gs464e -D_GLIBCXX_USE_CXX11_ABI=0
 else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+CFLAGS +=
+CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation
+else ifeq ($(PRODUCTFORM),pcie_loongarch64_anolis)
 CFLAGS +=
 CXXFLAGS += -Wno-format-truncation -Wno-stringop-truncation
 else ifeq ($(PRODUCTFORM), pcie_sw64)
@@ -110,6 +127,9 @@ DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/x86 -lopenblas
 else ifeq ($(PRODUCTFORM),soc)
 LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
 DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/arm -lopenblas
+else ifeq ($(PRODUCTFORM),pcie_loongarch64)
+LDFLAGS             += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
+DYN_LDFLAGS         += -L$(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch -lopenblas
 else
     $(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif
@@ -119,7 +139,7 @@ DYN_LDFLAGS     +=  -L$(JPU_DIR)/lib/ \
 					-L$(BMION_DIR)/lib \
 					-L$(OUT_DIR)/lib/ \
 					-L$(BMVID_ROOT)/3rdparty/libbmcv/lib/$(PRODUCTFORM) \
-					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl -lvpp_cmodel
+					-lbmion -lbmlib -lbmjpuapi -lbmjpulite -ldl
 
 ifeq ($(DEBUG),1)
 CFLAGS          += -g -DDEBUG
@@ -195,7 +215,7 @@ else ifeq ($(PRODUCTFORM), pcie_arm64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/soc/libturbojpeg.a
 else ifeq ($(PRODUCTFORM), pcie_mips64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/mips/libturbojpeg.a
-else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+else ifneq (,$(filter $(PRODUCTFORM), pcie_loongarch64 pcie_loongarch64_anolis))
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/loongarch64/libturbojpeg.a
 else ifeq ($(PRODUCTFORM), pcie_sw64)
 LIB_TURBO_JPEG_PATH =  $(BMVID_ROOT)/3rdparty/libjpeg-turbo/binary/lib/sw64/libturbojpeg.a
@@ -244,7 +264,7 @@ $(BMCV_STATIC): $(BMCV_CXX_OBJS)
 	@echo ar $(BMCV_STATIC)
 	@mkdir -p $(OUT_DIR)/bmcv/lib
 	@$(AR) x $(BMVPP_INSTALL)
-	@$(AR) rcs $(BMCV_STATIC) $(BMCV_CXX_OBJS)
+	@$(AR) rcs $(BMCV_STATIC) $(BMCV_CXX_OBJS) && rm -r *.o
 
 $(BMCV_DYN): $(BMCV_CXX_OBJS)
 	@echo cc $(BMCV_DYN)
@@ -308,6 +328,8 @@ ifeq ($(PRODUCTFORM), pcie)
 	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/x86/* $(OUT_DIR)/bmcv/lib/
 else ifeq ($(PRODUCTFORM), soc)
 	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/arm/* $(OUT_DIR)/bmcv/lib/
+else ifeq ($(PRODUCTFORM), pcie_loongarch64)
+	@cp -f $(BMVID_ROOT)/3rdparty/OpenBLAS/loongarch/* $(OUT_DIR)/bmcv/lib/
 else
 	$(error Unsupported PRODUCTFORM: $(PRODUCTFORM))
 endif

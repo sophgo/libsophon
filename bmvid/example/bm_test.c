@@ -36,6 +36,8 @@
 #include "bm_vpudec_interface.h"
 #include "bmlib_runtime.h"
 
+extern void bmvpu_dec_set_logging_function(BmVpuDecLoggingFunc logging_fn);
+
 #define VPU_ALIGN16(_x)             (((_x)+0x0f)&~0x0f)
 #define VPU_ALIGN32(_x)             (((_x)+0x1f)&~0x1f)
 #define VPU_ALIGN256(_x)            (((_x)+0xff)&~0xff)
@@ -78,6 +80,7 @@ typedef struct BMTestConfig_struct {
     int extraFrame;
     int min_frame_cnt;
     int frame_delay;
+    int across_4g;
     int enable_cache;
     BMVidCodHandle vidCodHandle;
     char outputPath[MAX_FILE_PATH];
@@ -172,11 +175,16 @@ static void stat_pthread(void *arg)
     if (display) dis_mode = atoi(display);
     printf("BMVPUDEC_DISPLAY_FRAMERATE=%d  thread_num=%d g_exit_flag=%d \n", dis_mode, thread_num, g_exit_flag);
     while(!g_exit_flag) {
+        for(i = 0; i < INTERVAL; i++){
+            if(g_exit_flag)
+                break;
 #ifdef __linux__
-        sleep(INTERVAL);
+            sleep(1);
 #elif _WIN32
-        Sleep(INTERVAL*1000);
+            Sleep(1000);
 #endif
+        }
+
         if (dis_mode == 1) {
             for (i = 0; i < thread_num; i++) {
                 if (i == 0) {
@@ -797,7 +805,7 @@ static void dec_test(void* arg)
     BmVpuDecDMABuffer *vpu_Ctab_buf = NULL;
     int height, width, stride;
     uint32_t heap_num;
-    uint32_t heap_mask = 0;
+    uint32_t heap_mask = 0, bs_heap_mask = 0;
     int frame_size_coeff = 1;
     int eof_flag = 0;
 
@@ -836,9 +844,9 @@ static void dec_test(void* arg)
     /* alloc frame buffer outside */
     if(testConfigPara->mem_alloc_type == 1)
     {
-        if(testConfigPara->min_frame_cnt <= 0 || testConfigPara->extraFrame <= 0)
+        if(testConfigPara->min_frame_cnt <= 0 || testConfigPara->extraFrame < 0)
         {
-            printf("invalid buffer count. min_frame_cnt:%d min_frame_cnt:%d\n", testConfigPara->min_frame_cnt, testConfigPara->extraFrame);
+            printf("invalid buffer count. min_frame_cnt:%d extraFrame:%d\n", testConfigPara->min_frame_cnt, testConfigPara->extraFrame);
             global_ret = -1;
             return;
         }
@@ -869,6 +877,10 @@ static void dec_test(void* arg)
             if((1 << i) && HEAP_MASK != 0)
             {
                 heap_mask = (1 << i);
+                if(testConfigPara->across_4g == 1)
+                    bs_heap_mask = (heap_mask >> 1);
+                else
+                    bs_heap_mask = heap_mask;
                 break;
             }
         }
@@ -949,6 +961,9 @@ static void dec_test(void* arg)
             }
             vpu_Ctab_buf[i].size = Ctab_buf[i].size;
             vpu_Ctab_buf[i].phys_addr = Ctab_buf[i].u.device.device_addr;
+
+            VLOG(INFO, "allocate FBC buffer. frame: 0x%lx Ytab: 0x%lx Ctab: 0x%lx\n",
+                vpu_frame_buf[i].phys_addr, vpu_Ytab_buf[i].phys_addr, vpu_Ctab_buf[i].phys_addr);
         }
 
         if(testConfigPara->wtlFormat != BMDEC_OUTPUT_COMPRESSED)
@@ -982,12 +997,13 @@ static void dec_test(void* arg)
                 }
                 vpu_frame_buf[i].size = frame_buf[i].size;
                 vpu_frame_buf[i].phys_addr = frame_buf[i].u.device.device_addr;
+                VLOG(INFO, "allocate linear buffer. frame: 0x%lx\n", vpu_frame_buf[i].phys_addr);
             }
         }
 
         /* allocate bitstream buffer */
         bitstream_buf.size = param.streamBufferSize;
-        if(bm_malloc_device_byte_heap_mask(bm_handle, &bitstream_buf, heap_mask, param.streamBufferSize) != 0)
+        if(bm_malloc_device_byte_heap_mask(bm_handle, &bitstream_buf, bs_heap_mask, param.streamBufferSize) != 0)
         {
             printf("allocate bitstream buffer failed.\n");
             global_ret = -1;
@@ -1005,6 +1021,7 @@ static void dec_test(void* arg)
         param.frame_buffer = vpu_frame_buf;
         param.Ytable_buffer = vpu_Ytab_buf;
         param.Ctable_buffer = vpu_Ctab_buf;
+        VLOG(INFO, "allocate bitstream buffer: 0x%lx\n", param.bitstream_buffer.phys_addr);
     }
 
     if (bmvpu_dec_create(&vidHandle, param)!= 0)
@@ -1329,6 +1346,7 @@ Help(const char *programName)
     fprintf(stderr, "--height           input height\n");
     fprintf(stderr, "--extraFrame       extra frame nums. default 2.\n");
     fprintf(stderr, "--mem_alloc_type   memory allocate type. default 0: allocate memory in sdk, 1: allocate memory by user.\n");
+    fprintf(stderr, "--across_4g        bitstream buffer across 4g. default 0: disable, 1: enable.\n");
     fprintf(stderr, "--min_frame_cnt    minimum count of frame buffer use by VPU\n");
     fprintf(stderr, "--frame_delay      minimum count of linear buffer delay.\n");
     fprintf(stderr, "--read-block-len      block length of read from file, default is 0x80000\n");
@@ -1414,6 +1432,7 @@ static struct option   options[] = {
     {"width",                 1, NULL, 0},
     {"height",                1, NULL, 0},
     {"frame_delay",           1, NULL, 0},
+    {"across_4g",             1, NULL, 0},
     {"comp-skip",             1, NULL, 0},
     {"read-block-len",        1, NULL, 0},
     {"inject-percent",        1, NULL, 0},
@@ -1509,6 +1528,10 @@ static int parse_args(int argc, char **argv, BMTestConfig* par)
             else if (!strcmp(options[index].name, "mem_alloc_type"))
             {
                 par->mem_alloc_type = atoi(optarg);
+            }
+            else if (!strcmp(options[index].name, "across_4g"))
+            {
+                par->across_4g = atoi(optarg);
             }
             else if (!strcmp(options[index].name, "min_frame_cnt"))
             {

@@ -12,7 +12,7 @@ using namespace std;
 char* opencvFile_path = NULL;
 
 static int test(int M, int N, bool forward, bool realInput) {
-    std::cout << "M = " << M << " N = " << N << std::endl;
+    printf("M = %d, N = %d\n", M, N);
     float *XRHost = new float[M * N];
     float *XIHost = new float[M * N];
     float *YRHost = new float[M * N];
@@ -48,7 +48,7 @@ static int test(int M, int N, bool forward, bool realInput) {
         else
             BM_CHECK_RET(bmcv_fft_execute(handle, XRDev, XIDev, YRDev, YIDev, plan));
         gettimeofday(&t2, NULL);
-        std::cout << "fft 2d execute using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << std::endl;
+        printf("fft 2d execute using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
     #else
         struct timespec tp1, tp2;
         clock_gettime_win(0, &tp1);
@@ -70,7 +70,7 @@ static int test(int M, int N, bool forward, bool realInput) {
     std::ifstream opencv_readfile_YRRef((std::string(opencvFile_path) + std::string("/opencv_fft_2d_YRRef.bin")), std::ios::binary | std::ios::in);
     std::ifstream opencv_readfile_YIRef((std::string(opencvFile_path) + std::string("/opencv_fft_2d_YIRef.bin")), std::ios::binary | std::ios::in);
     if((!opencv_readfile_YRRef) || (!opencv_readfile_YIRef)){
-        std::cout << "Error opening file" << std::endl;
+        printf("Error opening file\n");
         // exit(-1);
         return -1;
     }
@@ -86,10 +86,8 @@ static int test(int M, int N, bool forward, bool realInput) {
             float errR = std::abs(YRRef[idx_ref] - YRHost[idx_cal]) / std::max(std::max(std::abs(YRRef[idx_ref]), std::abs(YRHost[idx_cal])), 1.f);
             float errI = std::abs(YIRef[idx_ref] - YIHost[idx_cal]) / std::max(std::max(std::abs(YIRef[idx_ref]), std::abs(YIHost[idx_cal])), 1.f);
             if (errR > tol || errI > tol) {
-                std::cout << "<" << b << ", " << i << ">: ";
-                std::cout << "(" << YRRef[idx_ref] << ", " << YIRef[idx_ref] << ") vs ";
-                std::cout << "(" << YRHost[idx_cal] << ", " << YIHost[idx_cal] << ")";
-                std::cout << std::endl;
+                printf("<%d, %d>: (%f, %f) vs (%f, %f)\n",
+                       b, i, YRRef[idx_ref], YIRef[idx_ref], YRHost[idx_cal], YIHost[idx_cal]);
                 //exit(-1);
                 return -1;
             }
@@ -122,13 +120,13 @@ int main(int argc, char *argv[]) {
             clock_gettime_win(0, &tp);
             #endif
             srand(tp.tv_nsec);
-            std::cout << "test " << i << ": random seed: " << tp.tv_nsec << std::endl;
+            printf("test %d: random seed %ld\n", i, tp.tv_nsec);
             int ret = test(4, 10, true, false);
             if (ret) {
-                std::cout << "test fft_2d failed" << std::endl;
+                printf("test fft_2d failed\n");
                 return ret;
             }
-        std::cout << "Compare TPU result with OpenCV successfully!" << std::endl;
+        printf("Compare TPU result with OpenCV successfully!\n");
         }
     }
     return 0;

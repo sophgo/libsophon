@@ -3,6 +3,8 @@
 #include <iostream>
 #ifdef __linux__
   #include <sys/time.h>
+  #include <langinfo.h>
+  #include <cstring>
 #else
   #include <time.h>
 #endif
@@ -569,6 +571,60 @@ static void paint_mat(unsigned char* font_buff, unsigned long offset, int datasi
     return;
 }
 
+static bm_status_t resize_watermark(bm_handle_t handle, bm_image *out, bm_image *in, float fontscale) {
+
+    short resize_w, resize_h;
+    bm_status_t ret = BM_SUCCESS;
+
+    resize_w = (in->width * fontscale) < 8 ? 8 : (in->width * fontscale);
+    resize_h = (in->height * fontscale) < 8 ? 8 : (in->height * fontscale);
+
+    ret = bm_image_create(handle, resize_h, resize_w, FORMAT_GRAY, DATA_TYPE_EXT_1N_BYTE, out, NULL);
+    if (ret != BM_SUCCESS)
+        return ret;
+
+    ret = bm_image_alloc_dev_mem(out[0], BMCV_HEAP1_ID);
+    if (ret != BM_SUCCESS)
+        return ret;
+
+    ret = bmcv_image_vpp_convert(handle, 1, in[0], out);
+    if (ret != BM_SUCCESS) {
+        bm_image_destroy(out[0]);
+        out[0].image_private = NULL;
+    }
+
+    return ret;
+}
+
+static bool is_integer_fp32(float x) {
+    return fabsf(x - roundf(x)) < 1e-6f;
+}
+
+#ifdef __linux__
+static bool determine_environment(void) {
+    static bool is_utf8 = 0;
+    char* codeset;
+    if (!is_utf8) {
+        std::setlocale(LC_CTYPE, "");
+        codeset = nl_langinfo(CODESET);
+        if (!codeset) {
+            std::cerr << "nl_langinfo(CODESET) returned null\n";
+            return 1;
+        }
+
+        // not case sensitive, some systems may return "UTF8", "utf-8", etc
+        std::string cs = codeset;
+        for (auto& c : cs) c = std::tolower(static_cast<unsigned char>(c));
+
+        is_utf8 = (cs == "utf-8" || cs == "utf8");
+    }
+    if (!is_utf8)
+        std::cout << "Current codeset: " << codeset << "\n"
+                << "please set it to UTF-8\n";
+    return is_utf8;
+}
+#endif
+
 bm_status_t bmcv_gen_text_watermark(
     bm_handle_t handle,
     const wchar_t* hexcode,
@@ -584,8 +640,16 @@ bm_status_t bmcv_gen_text_watermark(
     unsigned char fontscale_u8 = (unsigned char)fontscale;
     unsigned char *ASCII = bmcv_test_res_1624_ez;
     unsigned char *HZK = bmcv_test_res_2424_unicode_1;
+    unsigned char need_resize =
+        ((!is_integer_fp32(fontscale)) && fontscale > 0 && fontscale < 10 && format == FORMAT_GRAY);
+    bm_image resize_bmimg;
 #ifdef SOC_MODE
     bm_device_mem_t pmem;
+#endif
+
+#ifdef __linux__
+    if (!determine_environment())
+        return BM_ERR_PARAM;
 #endif
 
     if (format != FORMAT_GRAY && format != FORMAT_ARGB_PACKED) {
@@ -625,9 +689,9 @@ bm_status_t bmcv_gen_text_watermark(
     ret = bm_image_get_device_mem(output[0], &pmem);
     if (ret != BM_SUCCESS)
         goto fail;
-    ret = bm_mem_mmap_device_mem_no_cache(handle, &pmem, &virt_addr);
+    ret = bm_mem_mmap_device_mem(handle, &pmem, &virt_addr);
     if (ret != BM_SUCCESS) {
-        printf("bm_mem_mmap_device_mem_no_cache fail, paddr(0x%lx)\n", pmem.u.device.device_addr);
+        printf("bm_mem_mmap_device_mem fail, paddr(0x%lx)\n", pmem.u.device.device_addr);
         goto fail;
     }
 #endif
@@ -648,6 +712,9 @@ bm_status_t bmcv_gen_text_watermark(
         }
     }
 #ifdef SOC_MODE
+    ret = bm_mem_flush_device_mem(handle, &pmem);
+    if (ret != BM_SUCCESS)
+        goto fail;
     ret = bm_mem_unmap_device_mem(handle, (void *)virt_addr, stride_w * 24 * fontscale_u8);
     if (ret != BM_SUCCESS) {
         printf("bm_mem_unmap_device_mem fail, vaddr(0x%llx)\n", virt_addr);
@@ -662,6 +729,14 @@ bm_status_t bmcv_gen_text_watermark(
     }
 #endif
     output->width = idx;
+
+    if (need_resize) {
+        ret = resize_watermark(handle, &resize_bmimg, output, fontscale / (float)fontscale_u8);
+        if (ret != BM_SUCCESS)
+            goto fail;
+        bm_image_destroy(output[0]);
+        output[0] = resize_bmimg;
+    }
 
 fail:
     if (ret != BM_SUCCESS)
@@ -723,17 +798,24 @@ bm_status_t bmcv_image_put_text(
         float fontScale,
         int thickness) {
     bm_status_t ret = BM_SUCCESS;
-
-    if (thickness == 0) {
+    static int soft_putttext = -1;
+    if (soft_putttext == -1) {
+        char* val = std::getenv("SOFT_PUTTEXT");
+        if (!val)
+            soft_putttext = false;
+        else
+            soft_putttext = atoi(val);
+    }
+    if (soft_putttext == false) {
         setlocale(LC_ALL, "");
-        size_t len = mbstowcs(NULL, text, 0); // 获取转换后宽字符字符串的长度
+        size_t len = mbstowcs(NULL, text, 0);
 #ifdef _WIN32
         std::vector<wchar_t> wide(len + 1);
         wchar_t* wideStr = wide.data();
 #else
-        wchar_t wideStr[len + 1]; // 分配宽字符字符串的内存
+        wchar_t wideStr[len + 1];
 #endif
-        mbstowcs(wideStr, text, len + 1); // 进行转换
+        mbstowcs(wideStr, text, len + 1);
         ret = bmcv_watermark_put_text(handle, image, wideStr, org, color, fontScale);
         return ret;
     }
@@ -743,36 +825,28 @@ bm_status_t bmcv_image_put_text(
         return BM_ERR_FAILURE;
     }
 
-#ifdef SOC_MODE
-    bm_device_mem_t dmem;
-    unsigned char* in_ptr[3];
-    unsigned long long virt_addr = 0;
-    unsigned long long size[3] = {0};
-    unsigned long long total_size = 0;
+    unsigned char *in_ptr[3];
+    unsigned char in_ptr_status[3] = {0};
 
     for (int i = 0; i < image.image_private->plane_num; i++) {
-        size[i] = image.image_private->memory_layout[i].size;
-        total_size += size[i];
-    }
-
-    dmem = image.image_private->data[0];
-    bm_set_device_mem(&dmem, total_size, dmem.u.device.device_addr);
-    ret = bm_mem_mmap_device_mem_no_cache(image.image_private->handle, &dmem, &virt_addr);
-    if (ret != BM_SUCCESS) {
-        bmlib_log("PUT_TEXT", BMLIB_LOG_ERROR, "bm_mem_mmap_device_mem failed with error code %d\r\n", ret);
-        return ret;
-    }
-
-    in_ptr[0] = (unsigned char *)virt_addr;
-    in_ptr[1] = in_ptr[0] + size[0];
-    in_ptr[2] = in_ptr[1] + size[1];
+#ifdef SOC_MODE
+        ret = bm_mem_mmap_device_mem_no_cache(image.image_private->handle,
+            &image.image_private->data[i], (unsigned long long*)&in_ptr[i]);
 #else
-    int w = image.width;
-    int h = image.height;
-    unsigned char* host_buf = new unsigned char [w * h * 3];
-    unsigned char* in_ptr[3] = {host_buf, host_buf + w * h, host_buf + w * h * 2};
-    bm_image_copy_device_to_host(image, (void **)in_ptr);
+        ret = BM_ERR_FAILURE;
 #endif
+        if (ret != BM_SUCCESS) {
+            in_ptr[i] = (unsigned char *)malloc(image.image_private->data[i].size);
+            in_ptr_status[i] = 2;
+            ret = bm_memcpy_d2s(image.image_private->handle, (void *)in_ptr[i], image.image_private->data[i]);
+            if (ret != BM_SUCCESS) {
+                bmlib_log("PUT_TEXT", BMLIB_LOG_ERROR, "bm_memcpy_d2s failed with error code %d\r\n", ret);
+                goto exit;
+            }
+        } else {
+            in_ptr_status[i] = 1;
+        }
+    }
     int strides[3];
     bm_image_get_stride(image, strides);
     bmMat mat;
@@ -784,16 +858,21 @@ bm_status_t bmcv_image_put_text(
 
     put_text(mat, text, org, FONT_HERSHEY_SIMPLEX, fontScale, color, thickness);
 
-#ifdef SOC_MODE
-    ret = bm_mem_unmap_device_mem(image.image_private->handle, (void *)virt_addr, total_size);
-    if (ret != BM_SUCCESS) {
-        bmlib_log("PUT_TEXT", BMLIB_LOG_ERROR, "bm_mem_unmap_device_mem failed with error code %d\r\n", ret);
-        return ret;
+exit:
+    for (int i = 0; i < image.image_private->plane_num; i++) {
+        if (in_ptr_status[i] == 1) {
+            ret = bm_mem_unmap_device_mem(image.image_private->handle, (void *)in_ptr[i],
+                image.image_private->data[i].size);
+            if (ret != BM_SUCCESS)
+                bmlib_log("PUT_TEXT", BMLIB_LOG_ERROR, "bm_mem_unmap_device_mem failed with error code %d\r\n", ret);
+        }
+        if (in_ptr_status[i] == 2) {
+            ret = bm_memcpy_s2d(image.image_private->handle, image.image_private->data[i], (void *)in_ptr[i]);
+            if (ret != BM_SUCCESS)
+                bmlib_log("PUT_TEXT", BMLIB_LOG_ERROR, "bm_memcpy_s2d failed with error code %d\r\n", ret);
+            free((void *)in_ptr[i]);
+        }
     }
-#else
-    bm_image_copy_host_to_device(image, (void **)in_ptr);
-    delete [] host_buf;
-#endif
     return ret;
 }
 

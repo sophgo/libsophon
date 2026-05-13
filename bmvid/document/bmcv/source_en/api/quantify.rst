@@ -48,9 +48,21 @@ The interface currently supports the following image_format and data_type:
 +-----+------------------------+------------------------+
 | num | input image_format     | output image_format    |
 +=====+========================+========================+
-| 1   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
+| 1   | FORMAT_YUV444P         | FORMAT_YUV444P         |
 +-----+------------------------+------------------------+
-| 2   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
+| 2   | FORMAT_RGB_PLANAR      | FORMAT_RGB_PLANAR      |
++-----+------------------------+------------------------+
+| 3   | FORMAT_BGR_PLANAR      | FORMAT_BGR_PLANAR      |
++-----+------------------------+------------------------+
+| 4   | FORMAT_RGB_PACKED      | FORMAT_RGB_PACKED      |
++-----+------------------------+------------------------+
+| 5   | FORMAT_BGR_PACKED      | FORMAT_BGR_PACKED      |
++-----+------------------------+------------------------+
+| 6   | FORMAT_RGBP_SEPARATE   | FORMAT_RGBP_SEPARATE   |
++-----+------------------------+------------------------+
+| 7   | FORMAT_BGRP_SEPARATE   | FORMAT_BGRP_SEPARATE   |
++-----+------------------------+------------------------+
+| 8   | FORMAT_GRAY            | FORMAT_GRAY            |
 +-----+------------------------+------------------------+
 
 

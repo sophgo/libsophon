@@ -142,13 +142,14 @@ int main(int argc, char* argv[]) {
     loop = argc > 8 ? atoi(argv[8]) : loop;
     int oh = crop_h + 2 * pad_h;
     int ow = crop_w + 2 * pad_w;
-    cout << "---------------parameter-------------" << endl;
-    cout << "fmt convert: " << fmt_i << " -> HSV" << endl;
-    cout << "input size: " << iw << " * " << ih << endl;
-    cout << "crop size: " << crop_w << " * " << crop_h << endl;
-    cout << "pad_w: " << pad_w << "   pad_h: " << pad_h << endl;
-    cout << "ow: " << ow << "   oh: " << oh << endl;
-    cout << "-------------------------------------" << endl;
+    printf("---------------parameter-------------\n");
+    printf("fmt convert: %d -> HSV", fmt_i);
+    printf("input size: %d * %d\n", iw, ih);
+    printf("crop size: %d * %d\n", crop_w, crop_h);
+    printf("pad_w: %d, pad_h: %d\n", pad_w ,pad_h);
+    printf("ow: %d, oh: %d\n", ow, oh);
+    printf("-------------------------------------\n");
+
     bm_image_format_ext fmt_o = FORMAT_HSV_PLANAR;
     bm_image_data_format_ext data_type = DATA_TYPE_EXT_1N_BYTE;
     bm_status_t ret = BM_SUCCESS;
@@ -197,7 +198,7 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < loop; i++)
         bmcv_image_yuv2hsv(handle, rect, input, output);
     gettimeofday_(&t2);
-    cout << "yuv2hsv using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop << "us" << endl;
+    printf("yuv2hsv using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) / loop);
 
     // copy output data from device memory to host memory
     unsigned char *out_ptr[] = {*res0_tpu.get(), *res1_tpu.get(), *res2_tpu.get()};
@@ -207,9 +208,9 @@ int main(int argc, char* argv[]) {
     if (cmp(*res0_cpu.get(), *res0_tpu.get(), oh * ow) ||
         cmp(*res1_cpu.get(), *res1_tpu.get(), oh * ow) ||
         cmp(*res2_cpu.get(), *res2_tpu.get(), oh * ow)) {
-        cout << "YUV2HSV failed" << endl;
+        printf("YUV2HSV failed\n");
     } else {
-        cout << "YUV2HSV succeed" << endl;
+        printf("YUV2HSV succeed\n");
     }
     // free
     bm_image_destroy(input);

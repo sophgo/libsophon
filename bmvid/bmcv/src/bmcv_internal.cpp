@@ -36,9 +36,6 @@ EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #else
 #define DLLEXPORT __attribute__((visibility("default")))
 #endif
-#define COMMIT_HASH "9bfb06c6"
-#define BRANCH_NAME "HEAD"
-#define COMMIT_COUNT "2316"
 #define FIRMWARE_NAME "libbm1684x_kernel_module.so"
 
 const  char* fw_fname = FIRMWARE_NAME;
@@ -233,7 +230,7 @@ static std::map<std::pair<bm_image_format_ext, bm_image_format_ext>, vpp_limitat
     {std::pair<bm_image_format_ext, bm_image_format_ext>(FORMAT_COMPRESSED, FORMAT_YUV420P), {32, 32, {STRIDE_ALIGN, STRIDE_ALIGN, STRIDE_ALIGN, STRIDE_ALIGN}, {STRIDE_ALIGN, STRIDE_ALIGN/2, STRIDE_ALIGN/2, 1}, 4096, 16, 4096, 16, 32, 32, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1}},
 
 };
-
+#ifdef __linux__
 extern "C" {
     //__attribute__((visibility("default")))
     DLLEXPORT const char* libbmcv_version() {
@@ -241,6 +238,7 @@ extern "C" {
         return version_string;
     }
 }
+#endif
 
 bm_status_t bm_image_check(bm_image image)
 {
@@ -1314,6 +1312,53 @@ layout::plane_layout layout::stride_width(plane_layout src, int stride)
     bmlib_log(BMCV_LOG_TAG, BMLIB_LOG_DEBUG,"stride_width stride=%d \n",stride);
     return res;
 };
+
+bm_status_t bmcv_memory_permute(bm_handle_t     handle,
+                                  bm_device_mem_t src,
+                                  bm_device_mem_t dst,
+                                  int N,
+                                  int C,
+                                  int H,
+                                  int W,
+                                  int data_size){
+    int src_n_stride = C * H * W;
+    int src_c_stride = H * W;
+    int src_h_stride = W;
+    int dst_n_stride = C * H * W;
+    int dst_c_stride = W;
+    int dst_h_stride = C * W;
+
+  bm_api_cv_width_align_t api = {bm_mem_get_device_addr(src),
+                                 bm_mem_get_device_addr(dst),
+                                 N,
+                                 C,
+                                 H,
+                                 W,
+                                 src_n_stride,
+                                 src_c_stride,
+                                 src_h_stride,
+                                 dst_n_stride,
+                                 dst_c_stride,
+                                 dst_h_stride,
+                                 data_size};
+
+    unsigned int chipid;
+    bm_get_chipid(handle, &chipid);
+    switch(chipid){
+        case 0x1684:
+            if(bm_send_api(handle,  BM_API_ID_CV_CORRECT_LAYOUT, (u8 *)&api, sizeof(api)) != BM_SUCCESS || bm_sync_api(handle) != BM_SUCCESS)
+                return BM_ERR_TIMEOUT;
+            break;
+        case BM1684X:
+            bm_tpu_kernel_launch(handle, "cv_width_align", (u8 *)&api, sizeof(api));
+            break;
+        default:
+            printf("BM_NOT_SUPPORT!\n");
+            return BM_ERR_NOFEATURE;
+            break;
+    }
+    return BM_SUCCESS;
+}
 
 bm_status_t layout::update_memory_layout(bm_handle_t     handle,
                         bm_device_mem_t src,

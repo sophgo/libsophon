@@ -184,7 +184,7 @@ static int gen_test_size(bm_nms_data_type_t &threshold,
             break;
         }
         default: {
-            cout << "gen mode error" << endl;
+            printf("gen mode error\n");
             exit(-1);
         }
     }
@@ -246,7 +246,7 @@ static int soft_nms_gen_test_size(bm_nms_data_type_t &score_threshold,
             break;
         }
         default: {
-            cout << "gen mode error" << endl;
+            printf("gen mode error\n");
             exit(-1);
         }
     }
@@ -463,10 +463,10 @@ int32_t cv_nms_test_rand(bm_handle_t handle, int box_num) {
     unsigned int seed1 = tp.tv_nsec;
     if (seed != -1) {
         srand(seed);
-        cout << "seed: " << seed << endl;
+        printf("seed: %d", seed);
     } else {
         srand(seed1);
-        cout << "ramdon seed: " << seed1 << endl;
+        printf("ramdon seed: %d\n", seed1);
     }
     bm_nms_data_type_t nms_threshold = 0.22;
     int                proposal_size = 0;
@@ -478,7 +478,7 @@ int32_t cv_nms_test_rand(bm_handle_t handle, int box_num) {
             gen_test_size(nms_threshold, proposal_size, rand_mode);
             proposal_size = box_num <= 0 ? proposal_size : box_num;
             proposal_size = 1000;
-            std::cout << "[HARD NMS] rand_mode : " << rand_mode << std::endl;
+            printf("[HARD NMS] rand_mode: %d\n", rand_mode);
             face_rect_t *   proposal_rand   = new face_rect_t[MAX_PROPOSAL_NUM];
             nms_proposal_t *output_proposal = new nms_proposal_t;
 
@@ -506,7 +506,7 @@ int32_t cv_nms_test_rand(bm_handle_t handle, int box_num) {
                     nms_threshold,
                     bm_mem_from_system(output_proposal));
             gettimeofday_(&t2);
-            cout << "hard using time: " << ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec) << "us" << endl;
+            printf("hard using time: %ld(us)\n", ((t2.tv_sec - t1.tv_sec) * 1000000 + t2.tv_usec - t1.tv_usec));
 
             if (false == result_compare(nms_proposal, output_proposal)) {
                 delete[] proposal_rand;
@@ -733,10 +733,10 @@ int32_t cv_soft_nms_test_rand(bm_handle_t handle) {
     // seed1              = 36551579;
     if (seed != -1) {
         srand(seed);
-        cout << "seed: " << seed << endl;
+        printf("seed: %d", seed);
     } else {
         srand(seed1);
-        cout << "ramdon seed: " << seed1 << endl;
+        printf("ramdon seed: %d\n", seed1);
     }
     bm_nms_data_type_t                 nms_threshold       = 0.22;
     bm_nms_data_type_t                 nms_score_threshold = 0.22;
@@ -750,7 +750,7 @@ int32_t cv_soft_nms_test_rand(bm_handle_t handle) {
 
     unsigned int chipid;
     if (BM_SUCCESS != bm_get_chipid(handle, &chipid)) {
-        cout << "bmcv_nms_send_api get chipid error\r\n" << endl;
+        printf("bmcv_nms_send_api get chipid error\r\n");
         return BM_ERR_FAILURE;
     }
 
@@ -765,15 +765,13 @@ int32_t cv_soft_nms_test_rand(bm_handle_t handle) {
                                    rand_mode);
             nms_type = rand_loop_idx % soft_nms_total_types + HARD_NMS + 1;
             if (nms_type == ADAPTIVE_NMS) {
-                std::cout << "[ADAPTIVE NMS] rand_mode : " << rand_mode
-                          << std::endl;
+                printf("[ADAPTIVE NMS] rand_mode: %d", rand_mode);
             } else if (nms_type == SOFT_NMS) {
-                std::cout << "[SOFT NMS] rand_mode : " << rand_mode
-                          << std::endl;
+                printf("[SOFT NMS] rand_mode: %d", rand_mode);
             } else if (nms_type == SSD_NMS) {
-                std::cout << "[SSD NMS] rand_mode : " << rand_mode << std::endl;
+                printf("[SSD NMS] rand_mode: %d", rand_mode);
             } else {
-                std::cout << "nms type error" << std::endl;
+                printf("nms type error\n");
                 exit(-1);
             }
 
@@ -811,8 +809,7 @@ int32_t cv_soft_nms_test_rand(bm_handle_t handle) {
             } else if (weighting_method == GAUSSIAN_WEIGHTING) {
                 weighting_func = gaussian_weighting;
             } else {
-                std::cout << "weighting_method error: " << weighting_method
-                          << std::endl;
+                printf("weighting_method error: %d\n", weighting_method);
             }
             if (nms_type == ADAPTIVE_NMS) {
                 for (int i = 0; i < proposal_size; i++) {
@@ -877,17 +874,14 @@ DWORD WINAPI test_nms_thread(LPVOID arg) {
     int test_loop_times = nms_thread_arg->trials;
     int box_num = nms_thread_arg->box_num;
     #ifdef __linux__
-    std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
-              << pthread_self() << std::endl;
+    printf("------MULTI THREAD TEST STARTING thread id is %ld----------\n", pthread_self());
     #else
     std::cout << "------MULTI THREAD TEST STARTING----------thread id is "
               << GetCurrentThreadId() << std::endl;
     #endif
-    std::cout << "[TEST NMS] test starts... LOOP times will be "
-              << test_loop_times << std::endl;
+    printf("[TEST NMS] test starts... LOOP times will be %d\n", test_loop_times);
     for (int loop_idx = 0; loop_idx < test_loop_times; loop_idx++) {
-        std::cout << "------[TEST NMS] LOOP " << loop_idx << "------"
-                  << std::endl;
+        printf("------[TEST NMS] LOOP %d ------\n", loop_idx);
         bm_handle_t handle;
         int         dev_id = 0;
         bm_status_t ret    = bm_dev_request(&handle, dev_id);
@@ -899,13 +893,13 @@ DWORD WINAPI test_nms_thread(LPVOID arg) {
         cv_soft_nms_test_rand(handle);
         bm_dev_free(handle);
     }
-    std::cout << "------[TEST NMS] ALL TEST PASSED!" << std::endl;
+    printf("------[TEST NMS] ALL TEST PASSED!------\n");
 
     return NULL;
 }
 
 int32_t main(int32_t argc, char **argv) {
-    std::cout << "bmcv version:" << bm_get_bmcv_version() << std::endl;
+    printf("bmcv version: %s\n", bm_get_bmcv_version());
     int test_loop_times  = 0;
     int test_threads_num = 1;
     int box_num = 0;
@@ -928,17 +922,15 @@ int32_t main(int32_t argc, char **argv) {
         box_num          = atoi(argv[3]);
         seed             = atoi(argv[4]);
     } else {
-        std::cout << "command input error, please follow this "
-                     "order:test_cv_nms loop_num multi_thread_num box_num seed"
-                  << std::endl;
+        printf("command input error, please follow this order:test_cv_nms loop_num multi_thread_num box_num seed\n");
         exit(-1);
     }
     if (test_loop_times > 1500 || test_loop_times < 1) {
-        std::cout << "[TEST NMS] loop times should be 1~1500" << std::endl;
+        printf("[TEST NMS] loop times should be 1~1500\n");
         exit(-1);
     }
     if (test_threads_num > 4 || test_threads_num < 1) {
-        std::cout << "[TEST NMS] thread nums should be 1~4 " << std::endl;
+        printf("[TEST NMS] thread nums should be 1~4\n");
         exit(-1);
     }
     #ifdef __linux__
@@ -966,7 +958,7 @@ int32_t main(int32_t argc, char **argv) {
             exit(-1);
         }
     }
-    std::cout << "--------ALL THREADS TEST OVER---------" << std::endl;
+    printf("--------ALL THREADS TEST OVER---------\n");
     delete[] pid;
     delete[] nms_thread_arg;
     #else
