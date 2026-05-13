@@ -19,11 +19,10 @@ typedef enum bmtpu_arch {
   BM1684,
   BM1880,
   BM1684X,
-  BM1684XE,
   BM1688,
   BM1690,
   SGTPUV8,
-  MARS3,
+  CV184X,
   SG2380,
   UNKOWN_ARCH
 } bmtpu_arch_t;
@@ -57,6 +56,7 @@ class bmrt_arch_info {
     static u64 get_soc_base_distance();
 
     static u64 addr_mask();
+    static int max_gaddr_bits();
 
   private:
     static bmrt_arch_info* sta_bmtpu_ptr;

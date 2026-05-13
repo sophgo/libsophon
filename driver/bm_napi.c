@@ -373,7 +373,8 @@ int eth_register_napi(struct eth_dev_info *info) {
     *pinfo     = info;
     info->ndev = ndev;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 19)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 19) || (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18, 0) \
+    && CENTOS_KERNEL_FIX >= 408))
     netif_napi_add(ndev, &info->napi, eth_ndo_napi_poll);
 #else
     netif_napi_add(ndev, &info->napi, eth_ndo_napi_poll, NAPI_POLL_WEIGHT);
@@ -445,21 +446,9 @@ static void host_queue_set_tail_veth(struct host_queue *q, u32 tail) {
 
 void bmdrv_clear_veth(struct bm_device_info *bmdi) {
     struct eth_dev_info *veth = &bmdi->vir_eth;
-    struct pt *pt = veth->ring_buffer;
 
     bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + 0x60, 0);
     eth_set_handshake(veth, 0);
-
-    // veth->ring_buffer
-    host_queue_set_head_veth(&pt->tx.hq, 0);
-    host_queue_set_tail_veth(&pt->tx.hq, 0);
-    pt->tx.lq.head = 0;
-    pt->tx.lq.tail = 0;
-
-    host_queue_set_head_veth(&pt->rx.hq, 0);
-    host_queue_set_tail_veth(&pt->rx.hq, 0);
-    pt->rx.lq.head = 0;
-    pt->rx.lq.tail = 0;
 }
 
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {

@@ -29,6 +29,7 @@
 #include "bm_napi.h"
 #include "bm_pt.h"
 #include "efuse.h"
+#include "bm1684_reg.h"
 #endif
 
 extern dev_t bm_devno_base;
@@ -749,10 +750,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_thread_sync_api(bmdi, file);
 			bmdi->status_sync_api = ret;
-			if(bmdi->api_process_status != 0){
-				ret = -EBUSY;
-				bmdi->api_process_status = 0;
-			}
+			// if(bmdi->api_process_status != 0){
+			// 	ret = -EBUSY;
+			// 	bmdi->api_process_status = 0;
+			// }
 		} else {
 			pr_err("bm-sophon%d: tpu hang\n",bmdi->dev_index);
 			ret = -EBUSY;
@@ -862,6 +863,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			u8 *kernel_bin_addr;
 			u8 *align_128_kernel_bin_addr;
 			u32 size = 0;
+			int i = 0;
 			u8 *read_bin_addr;
 			struct console_ctx ctx;
 			ctx.uart.bmdi= bmdi;
@@ -879,6 +881,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 			}
 
+restart:
 			if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC5_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PRO) ||
 				(BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_FP150) ||
@@ -906,9 +909,15 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				ret = console_cmd_download(&ctx, bin_buf.target_addr, align_128_kernel_bin_addr, size);
 				mutex_unlock(&ctx.uart.bmdi->c_attr.attr_mutex);
 				if (ret) {
-					kfree(kernel_bin_addr);
-					kfree(align_128_kernel_bin_addr);
-					break;
+					if(i < 2){
+						pr_info("The %dth upgrade failed, try next time\n",i);
+						i++;
+						goto restart;
+					}else{
+						kfree(kernel_bin_addr);
+						kfree(align_128_kernel_bin_addr);
+						break;
+					}
 				}
 
 				msleep(1500);
@@ -1224,7 +1233,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
 		mutex_lock(&c_attr->attr_mutex);
-		if (copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int)));
+		ret = copy_from_user(&bmdi->enable_dyn_freq, (unsigned int __user *)arg, sizeof(int));
 		mutex_unlock(&c_attr->attr_mutex);
 		break;
 		}
@@ -1596,6 +1605,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_BASE64_CODEC:
 		{
 			struct ce_base test_base;
+			u32 timeout_ms = bmdi->cinfo.delay_ms;
+			u32 lock_timeout = timeout_ms * 1000;
 
 			switch (bmdi->cinfo.chip_id) {
 			case 0x1682:
@@ -1609,10 +1620,22 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					pr_err("s2d failed\n");
 					return -EFAULT;
 				}
+
+				while (top_reg_read(bmdi, TOP_SPACC_TPU_LOCK)) {
+					udelay(1);
+					if (--lock_timeout == 0) {
+						pr_err("SPACC resource wait timeout\n");
+						return -EFAULT;
+					}
+				}
+
 				mutex_lock(&bmdi->spaccdrvctx.spacc_mutex);
 				base64_prepare(bmdi, test_base);
 				base64_start(bmdi);
 				mutex_unlock(&bmdi->spaccdrvctx.spacc_mutex);
+
+				top_reg_write(bmdi, TOP_SPACC_TPU_LOCK, 0);
+
 				if (ret)
 					return -EFAULT;
 				break;

@@ -378,8 +378,8 @@ static int get_lock(struct bm_device_info *bmdi, int core_idx, LOCK_INDEX lock_i
     vpudrv_buffer_t* p = &(bmdi->vpudrvctx.instance_pool[core_idx]);
     int *addr = NULL;
     int val = 0;
-    const int val1 = current->tgid; //in soc, getpid() get the tgid.
-    const int val2 = current->pid;
+    const int val1 = task_tgid_vnr(current); //in soc, getpid() get the tgid.
+    const int val2 = task_pid_nr(current);
     int last_val = 0;
     int ret = 1;
     int count = 0;
@@ -401,14 +401,14 @@ static int get_lock(struct bm_device_info *bmdi, int core_idx, LOCK_INDEX lock_i
             count = 0;
         }
 
-        if(count >= 1000) {
+        if(count >= 10000) { // timeout 10s for ctrl-c issue
             pr_info("[VPUDRV] self:0x%x can't get lock, core:%d org: 0x%x, ker: 0x%x, val=0x%x\n", val1, core_idx, *addr, val1, val);
             __atomic_store_n(addr, val1, __ATOMIC_SEQ_CST);
             pr_info("[VPUDRV] self:0x%x forced get lock, core:%d org: 0x%x\n", val1, core_idx, *addr);
             ret = 0;
             break;
         }
-        msleep(1);
+        usleep_range(900, 1100);
         count += 1;
     }
 
@@ -436,7 +436,7 @@ static void release_exception_lock(struct bm_device_info *bmdi, long except_info
     volatile int *tmp_addr;
     int i;
 
-    if(*current_addr != 0 && *current_addr != current->tgid && *current_addr != current->pid)
+    if(*current_addr != 0 && *current_addr != task_tgid_vnr(current) && *current_addr != task_pid_nr(current))
     {
         for(i=0; i<MAX_NUM_VPU_CORE; i++)
         {
@@ -444,7 +444,7 @@ static void release_exception_lock(struct bm_device_info *bmdi, long except_info
                 continue;
 
             tmp_addr = (int *)(p[i].base + p[i].size - PTHREAD_MUTEX_T_HANDLE_SIZE*4);
-            if(*tmp_addr ==  current->tgid || *tmp_addr == current->pid )
+            if(*tmp_addr ==  task_tgid_vnr(current) || *tmp_addr == task_pid_nr(current) )
                 release_lock(bmdi, i, CORE_LOCK);
         }
     }
@@ -493,7 +493,7 @@ static int WaitBusyTimeout(struct bm_device_info *bmdi, u32 core, u32 addr)
         if (time_after(jiffies, timeout)) {
             return 1;
         }
-        msleep(1);
+        usleep_range(900, 1100);
     }
     return 0;
 }
@@ -569,20 +569,24 @@ static int Wave5VpuDecSetBitstreamFlag(struct bm_device_info *bmdi, u32 core, u3
 
 static int Wave5DecGetInstanceInfo(struct bm_device_info *bmdi, u32 core, u32 instanceIndex, u32* instance_info)
 {
+	int ret = 0;
     u32 regVal;
-    int count = 0;
 
 #define GET_INSTANCE_INFO 0x60
 
-    while(SendQuery(bmdi, core, instanceIndex, GET_INSTANCE_INFO) != 0)
-    {
-        if(count > 5) {
-            regVal = vpu_read_register(core, W5_RET_FAIL_REASON);
-            return regVal;
+	ret = SendQuery(bmdi, core, instanceIndex, GET_INSTANCE_INFO);
+	if(ret != 0)
+	{
+		if(ret == 1)
+		{
+			regVal = vpu_read_register(core, W5_RET_FAIL_REASON);
+			pr_info("core:%d inst:%d Wave5DecGetInstanceInfo failed. reason: 0x%x", core, instanceIndex, regVal);
+		}
+		else if(ret == 2) {
+            pr_info("core:%d inst:%d Wave5DecGetInstanceInfo timeout", core, instanceIndex);
         }
-        msleep(1);
-        count += 1;
-    }
+		return -1;
+	}
 
     *instance_info = vpu_read_register(core, W5_RET_QUERY_DEC_GET_INSTANCE_INFO);
 
@@ -627,6 +631,10 @@ static int FlushEncResult(struct bm_device_info *bmdi, u32 core, u32 instanceInd
     return 0;
 }
 
+#define VPU_CLOSE_WAIT_TIMEOUT    1
+#define VPU_CLOSE_STILL_RUNNING   2
+#define VPU_CLOSE_FAILURE   	  99
+
 int Wave5CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceIndex)
 {
 	int ret = 0;
@@ -643,10 +651,10 @@ int Wave5CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanc
 	while (vpu_read_register(core, W5_VPU_BUSY_STATUS)) {
 		if (time_after(jiffies, timeout)) {
 			DPRINTK("Wave5CloseInstanceCommand after BUSY timeout\n");
-			ret = 1;
+			ret = VPU_CLOSE_WAIT_TIMEOUT;
 			goto DONE_CMD;
 		}
-        msleep(1);
+        usleep_range(900, 1100);
 	}
 
 	if (vpu_read_register(core, W5_RET_SUCCESS) == 0) {
@@ -657,9 +665,9 @@ int Wave5CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanc
 		if (regVal == WAVE5_INVALID_TASK_BUF)
 			ret = 0;
 		else if (regVal == WAVE5_VPU_STILL_RUNNING)
-			ret = 2;
+			ret = VPU_CLOSE_STILL_RUNNING;
 		else
-			ret = 1;
+			ret = VPU_CLOSE_FAILURE;
 		goto DONE_CMD;
 	}
 	ret = 0;
@@ -703,11 +711,17 @@ int CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceInde
 				if(ret == 0) {
 					break;
 				}
-				if((count > 10 && ret == 1 ) || count > 500) {
-					pr_err("CloseInstanceCommand failed core:%d REASON=%d\n", core, ret);
-					break;
-				}
-				if(ret == 2) {
+				if(ret == VPU_CLOSE_WAIT_TIMEOUT) {
+                    pr_err("[VPUDRV] self:0x%x core:%d Wave5CloseInstanceCommand wait timeout\n", task_tgid_vnr(current) ,core);
+                    break;
+                }
+
+                if(count > 50) {
+                    pr_err("[VPUDRV] self:0x%x core:%d CloseInstanceCommand failed REASON=%d\n", task_tgid_vnr(current), core, ret);
+                    break;
+                }
+
+				if(ret == VPU_CLOSE_STILL_RUNNING) {
                     if(WAVE521C_CODE != product_code) {
                         FlushDecResult(bmdi, core, instanceIndex);
                         Wave5VpuDecSetBitstreamFlag(bmdi, core, instanceIndex);
@@ -716,7 +730,7 @@ int CloseInstanceCommand(struct bm_device_info *bmdi, int core, u32 instanceInde
                         FlushEncResult(bmdi, core, instanceIndex);
                     }
                 }
-				msleep(10);
+				usleep_range(9900, 10100);
 				count += 1;
 			}
 
@@ -1275,10 +1289,11 @@ static int polling_interrupt_work(void *data)
 void create_irq_poll_thread(void)
 {
 	irq_task = kthread_run(polling_interrupt_work, NULL, "IrqPoll");
-	if (IS_ERR(irq_task))
+	if (IS_ERR(irq_task)) {
 		DPRINTK(KERN_ERR "[VPUDRV] : %s failed!\n", __func__);
-	else
+	} else {
 		DPRINTK("[VPUDRV] : %s sucess!\n", __func__);
+	}
 }
 
 void destory_irq_poll_thread(void)
@@ -2074,7 +2089,7 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 			{
 				vpudrv_reset_flag_node_t *reset_flag;
 				vpudrv_reset_flag_node_t *vrf, *n;
-				DPRINTK("[VPUDRV][+]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", current->tgid, current->pid);
+				DPRINTK("[VPUDRV][+]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", task_tgid_vnr(current), task_pid_nr(current));
 				if ((ret = mutex_lock_interruptible(&dev->s_vpu_lock)) == 0) {
                                 	reset_flag = kzalloc(sizeof(*reset_flag), GFP_KERNEL);
 					ret = copy_from_user(reset_flag, (vpudrv_reset_flag *)arg, sizeof(vpudrv_reset_flag));
@@ -2110,7 +2125,7 @@ long bm_vpu_ioctl(struct file *filp, u_int cmd, u_long arg)
 				return -ERESTARTSYS;
 				}
 
-				DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", current->tgid, current->pid);
+				DPRINTK("[VPUDRV][-]VDI_IOCTL_CTRL_KERNEL_RESET, tpid: 0x%x, pid: 0x%x\n", task_tgid_vnr(current), task_pid_nr(current));
 			}
 			break;
 		case VDI_IOCTL_GET_KERNEL_RESET_STATUS:
@@ -2463,7 +2478,7 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 	{
 		if((vrf->reset_flag.core_idx == core_idx))
 		{
-			if((vrf->reset_flag.pid == current->tgid) || (vrf->reset_flag.pid == current->pid))
+			if((vrf->reset_flag.pid == task_tgid_vnr(current)) || (vrf->reset_flag.pid == task_pid_nr(current)))
 			{
 				list_del(&vrf->list);
 				kfree(vrf);
@@ -2488,6 +2503,7 @@ int bm_vpu_release(struct inode *inode, struct file *filp)
 			for (i = 0; i < bmdi->vpudrvctx.max_num_instance; i++) {
 				kfifo_reset(&bmdi->vpudrvctx.interrupt_pending_q[j][i]);
 				bmdi->vpudrvctx.interrupt_flag[j][i] = 0;
+				memset(&bmdi->vpudrvctx.s_vpu_inst_info[j * bmdi->vpudrvctx.max_num_instance + i], 0, sizeof(vpu_inst_info_t));
 			}
 		}
 		for (i = 0; i < get_max_num_vpu_core(bmdi); i++) {
@@ -2794,23 +2810,25 @@ static int bm_vpu_reset_core(struct bm_device_info *bmdi, int core_idx, int rese
 
     if (bmdi->cinfo.chip_id == 0x1684) {
 		value = bm_read32(bmdi, bm_vpu_rst[core_idx].reg);
-		if (reset == 0)
+		if (reset == 0) {
 			value &= ~(0x1 << bm_vpu_rst[core_idx].bit_n);
-		else if (reset == 1)
+		} else if (reset == 1) {
 			value |= (0x1 << bm_vpu_rst[core_idx].bit_n);
-		else
+		} else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst[core_idx].reg);
 	}
     if (bmdi->cinfo.chip_id == 0x1686) {
 		value = bm_read32(bmdi, bm_vpu_rst_1686[core_idx].reg);
-		if (reset == 0)
+		if (reset == 0) {
 			value &= ~(0x1 << bm_vpu_rst_1686[core_idx].bit_n);
-		else if (reset == 1)
+		} else if (reset == 1) {
 			value |= (0x1 << bm_vpu_rst_1686[core_idx].bit_n);
-		else
+		} else {
 			DPRINTK(KERN_ERR "VPUDRV :vpu reset unsupported operation\n");
+		}
 		bm_write32(bmdi, bm_vpu_rst_1686[core_idx].reg, value);
 		value = bm_read32(bmdi, bm_vpu_rst_1686[core_idx].reg);
 	}
@@ -3189,7 +3207,7 @@ static unsigned long get_ms_time(void)
 
 static void clean_exception_inst_info(struct bm_device_info *bmdi)
 {
-    int cur_tgid = current->pid;
+    int cur_tgid = task_tgid_vnr(current);
     int i;
     //pr_info("exception tgid : %d\n", cur_tgid);
     mutex_lock(&s_vpu_proc_lock);
@@ -3348,7 +3366,7 @@ static void printf_inst_info(struct bm_device_info *bmdi, int coreid, void *mem,
 	return;
 }
 
-#define MAX_DATA_SIZE (256 * 5 * 8)
+#define MAX_DATA_SIZE (256 * 5 * 32)
 static ssize_t info_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 {
 	struct bm_device_info *bmdi;
@@ -3446,7 +3464,7 @@ static ssize_t info_write(struct file *filp, const char __user *buf, size_t size
 	bmdi->vpudrvctx.s_vpu_inst_info[index].status             =  vpuinfo.status;
 	memcpy(bmdi->vpudrvctx.s_vpu_inst_info[index].url, vpuinfo.url, sizeof(vpuinfo.url));
 
-	bmdi->vpudrvctx.s_vpu_inst_info[index].pid = current->pid;
+	bmdi->vpudrvctx.s_vpu_inst_info[index].pid = task_pid_nr(current);
 	if ((timeold + 1000) < vpuinfo.time) {
 		timeold = vpuinfo.time;
 		for (index = 0; index < get_max_num_vpu_core(bmdi) * MAX_NUM_INSTANCE_VPU; index++) {

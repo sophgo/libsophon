@@ -15,16 +15,37 @@ find_package(bmlib REQUIRED)
 find_package(bmodel REQUIRED)
 find_package(Threads REQUIRED)
 
-include(gen_kernel_header.cmake)
-add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
+
+if(NOT DEFINED LITE_BUILD)
+    include(gen_kernel_header.cmake)
+    add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
+endif()
 
 file(GLOB_RECURSE srcs src/*.cpp src/*.c)
 
 add_library(bmrt SHARED ${srcs})
 add_library(bmrt_static STATIC ${srcs})
 target_compile_options(bmrt_static PRIVATE -fPIC)
-add_dependencies(bmrt kernel_header)
-add_dependencies(bmrt_static kernel_header)
+
+if(LITE_BUILD)
+    target_compile_options(bmrt PRIVATE -Os -fno-omit-frame-pointer -ffunction-sections -fdata-sections -fno-exceptions -fmerge-all-constants -fexceptions)
+    target_compile_options(bmrt_static PRIVATE -Os -fno-omit-frame-pointer -ffunction-sections -fdata-sections -fno-exceptions -fmerge-all-constants -fexceptions)
+    add_definitions(-DLITE_BUILD)
+else()
+    add_dependencies(bmrt kernel_header)
+    add_dependencies(bmrt_static kernel_header)
+endif()
+
+if(CMAKE_STRIP)
+    add_custom_command(TARGET bmrt
+        POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:bmrt>
+        COMMENT "Stripping symbols for target architecture"
+        VERBATIM
+    )
+else()
+    message(WARNING "Cross-compile strip tool not found, skipping symbol stripping")
+endif()
 
 if("${PLATFORM}" STREQUAL "soc")
     add_definitions(-DSOC_MODE=1)
@@ -70,10 +91,15 @@ set(runner_srcs
     app/model_runner/model_runner.cpp)
 add_executable(model_runner ${runner_srcs})
 
-if("${ARCH}" STREQUAL "arm64")
+if("${ARCH}" STREQUAL "arm64" OR "${ARCH}" STREQUAL "arm")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)
-    target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so -lrt)
+    message(STATUS "SDK_VER: $ENV{SDK_VER}")
+    if("$ENV{SDK_VER}" STREQUAL "musl_arm")
+        target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libzmusl_arm.so -lrt)
+    else()
+        target_link_libraries(model_runner bmrt bmrt_static  ${LIB_DIR}/lib/libz.so -lrt)
+    endif()
 elseif("${ARCH}" STREQUAL "loongarch64")
     find_library(ZLIB_LIBRARY NAMES z PATHS ${LIB_DIR}/lib/)
     target_include_directories(model_runner PRIVATE ${LIB_DIR}/include/)

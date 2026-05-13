@@ -102,6 +102,7 @@
 #define TOP_ARM_ADDRMODE       0x034
 #define TOP_CDMA_LOCK          0x040
 #define TOP_CLK_LOCK           0x044
+#define TOP_SPACC_TPU_LOCK     0x048
 #define TOP_PLL_STATUS         0x0c0
 #define TOP_PLL_ENABLE         0x0c4
 #define TOP_TPLL_CTL           0x0ec

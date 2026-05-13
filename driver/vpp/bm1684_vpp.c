@@ -725,7 +725,7 @@ static int vpp_handle_setup(struct bm_device_info *bmdi, struct vpp_batch *batch
 
 	//pr_info("in vpp_handle_setup\n");
 	if (down_interruptible(&bmdi->vppdrvctx.vpp_core_sem)) {
-		pr_err("down_interruptible id interrupted, dev_index %d\n", bmdi->dev_index);
+		//pr_err("down_interruptible id interrupted, dev_index %d\n", bmdi->dev_index);
 		return VPP_ERESTARTSYS;
 	}
 	ret = vpp_get_core_id(bmdi, &core_id);

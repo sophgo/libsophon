@@ -796,6 +796,7 @@ free_pool_name:
 	return ERR_PTR(-ENOMEM);
 }
 
+#if 0
 #ifdef CONFIG_OF
 /**
  * of_bm_gen_pool_get - find a pool by phandle property
@@ -837,3 +838,4 @@ struct bm_gen_pool *of_bm_gen_pool_get(struct device_node *np,
 	return pool;
 }
 #endif /* CONFIG_OF */
+#endif

@@ -372,6 +372,7 @@ static void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp
 	struct bm_chip_attr *c_attr = &bmdi->c_attr;
 	int new_led_status = c_attr->led_status;
 	int target = 0;
+	struct bm_freq_scaling_db * p_data = bmdi->bmcd->vfs_db;
 
 	cur_tpu_clk = c_attr->tpu_current_clock;
 	c_attr->thermal_info.elapsed_temp[bmdi->c_attr.thermal_info.idx] = cur_tmp;
@@ -409,7 +410,7 @@ static void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp
 				&& cur_tpu_clk == (bmdi->boot_info.tpu_min_clk)) {
 			pr_info("bm-sohpon %d, bmdrv_thermal_update_status cur_tpu_clk=%d cur_tmp = %d, \
 				avg tmp = %d, change to mid\n", bmdi->dev_index, cur_tpu_clk, cur_tmp, avg_tmp);
-			target = (bmdi->boot_info.tpu_max_clk * 8) / 10;
+			target = p_data->freq_volt_pair[p_data->vf_relbl_level].freq;
 #ifndef SOC_MODE
 			bmdrv_get_tpu_target_freq(bmdi, FREQ_CALLER_TEMP, &target);
 #endif
@@ -420,7 +421,7 @@ static void bmdrv_thermal_update_status(struct bm_device_info *bmdi, int cur_tmp
 				&& cur_tpu_clk == (bmdi->boot_info.tpu_max_clk)) {
 			pr_info("bm-sophon %d, bmdrv_thermal_update_status cur_tpu_clk=%d cur_tmp = %d, \
 				avg tmp = %d, change to mid\n", bmdi->dev_index, cur_tpu_clk, cur_tmp, avg_tmp);
-			target = (bmdi->boot_info.tpu_max_clk * 8) / 10;
+			target = p_data->freq_volt_pair[p_data->vf_relbl_level].freq;
 #ifndef SOC_MODE
 			bmdrv_get_tpu_target_freq(bmdi, FREQ_CALLER_TEMP, &target);
 #endif
@@ -2851,7 +2852,8 @@ void bmdrv_init_freq_scaling_status(struct bm_device_info *bmdi)
 		{450, 640},
 		{25, 640}
 	};
-	struct bm_vfs_pair freq_volt_pair_cp24[VFS_MAX_LEVEL_SC7_PLUS] = {
+	struct bm_vfs_pair freq_volt_pair_cp24[VFS_MAX_LEVEL_CP24] = {
+		{1000, 820},
 		{750, 740},
 		{700, 720},
 		{650, 700},
@@ -2878,6 +2880,10 @@ void bmdrv_init_freq_scaling_status(struct bm_device_info *bmdi)
 		p_data->vf_init_level = VFS_INIT_LEVEL_AIV02X;
 		p_data->vf_relbl_level = VFS_RELBL_LEVEL_AIV02X;
 		p_data->vfs_max_level = VFS_MAX_LEVEL_AIV02X;
+	} else if ((BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_CP24)) {
+		p_data->vf_init_level = VFS_INIT_LEVEL_CP24;
+		p_data->vf_relbl_level = VFS_RELBL_LEVEL_CP24;
+		p_data->vfs_max_level = VFS_MAX_LEVEL_CP24;
 	} else {
 		p_data->vf_init_level = VFS_INIT_LEVEL_SC7_PLUS;
 		p_data->vf_relbl_level = VFS_RELBL_LEVEL_SC7_PLUS;
@@ -3272,9 +3278,9 @@ int bmdrv_set_vfs_volt(struct bm_device_info *bmdi)
 	if (p_data == NULL)
 		return -1;
 
+	bmdrv_init_freq_scaling_status(bmdi);
 	if ((bmdi->bmcd->card_bmdi[bmdi->bmcd->chip_num - 1] != NULL)) {
 		pr_info("vfs init, dev_index = %d\n", bmdi->dev_index);
-		bmdrv_init_freq_scaling_status(bmdi);
 		p_data->start_flag = VFS_INIT_MODE;
 		if (((int)BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_PLUS) ||
 			((int)BM1684_BOARD_TYPE(bmdi) == BOARD_TYPE_SC7_HP75_1) ||

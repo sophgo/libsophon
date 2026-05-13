@@ -565,6 +565,7 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 	int i;
 	int size, trans_size;
 	int init_index;
+	void __iomem *cfg_base_addr;
 
 	ret = copy_from_user(&memcpy_param, (const struct bm_memcpy_p2p_param __user *)arg,
 			sizeof(memcpy_param));
@@ -575,8 +576,11 @@ int bmdev_memcpy_p2p(struct bm_device_info *bmdi, struct file *file, unsigned lo
 
 	init_index = bmdi->bmcd->card_bmdi[0]->dev_index;
 
-	chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
-	bar4_addr = chip_bmdi->cinfo.bar_info.bar4_start;
+	// chip_bmdi = bmdi->bmcd->card_bmdi[memcpy_param.dst_num - init_index];
+	chip_bmdi = bmdi_array[memcpy_param.dst_num];
+	cfg_base_addr = chip_bmdi->cinfo.bar_info.bar0_vaddr;
+	bar4_addr = (REG_READ32(cfg_base_addr, 0x20) & ~0xf) | ((u64)(REG_READ32(cfg_base_addr, 0x24)) << 32);
+	// bar4_addr = chip_bmdi->cinfo.bar_info.bar4_start;
 	size = memcpy_param.size;
 
 	mutex_lock(&chip_bmdi->memcpy_info.p2p_mutex);
@@ -660,7 +664,8 @@ int bmdev_test_p2p_available(struct bm_device_info *bmdi)
 	int chip_num;
 
 	if (BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_PRO &&
-		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150)
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_SC7_FP150 &&
+		BM1684_BOARD_TYPE(bmdi) != BOARD_TYPE_AIV02X)
 		return -1;
 
 	chip_num = bmdi->bmcd->chip_num;

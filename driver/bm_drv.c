@@ -107,7 +107,8 @@ void bmdrv_post_api_process(struct bm_device_info *bmdi,
 	}
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0) || (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18, 0) \
+	&& CENTOS_KERNEL_FIX >= 408))
 static char *bmdrv_class_devnode(const struct device *dev, umode_t *mode)
 #else
 static char *bmdrv_class_devnode(struct device *dev, umode_t *mode)

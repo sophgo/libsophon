@@ -190,7 +190,7 @@ public:
         enable_arm = !profile->getenv_bool(ENV_DISABLE_ARM) && dyn_max_size > 0;
         enable = enable_gdma || enable_arm || enable_bdc;
       }
-      BMRT_LOG(INFO, "gdma=%d, tiu=%d, mcu=%d", enable_gdma, enable_bdc, enable_gdma);
+      BMRT_LOG(INFO, "gdma=%d, tiu=%d, mcu=%d", enable_gdma, enable_bdc, enable_arm);
     }
     virtual bool enabled() = 0;
     virtual bool init() = 0;

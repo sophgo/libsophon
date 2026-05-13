@@ -38,6 +38,18 @@ struct tpu_cmd_info_t {
   /// byte size of cdma command
   uint64_t cdma_cmd_byte_size;
 };
+struct reloc_entry_t {
+  /// id of base-addrs(io-addrs).
+  uint32_t base_addr_id;
+  /// addr offset from the base-addr.
+  uint32_t addr_offset;
+};
+struct cmd_reloc_entry_t {
+  reloc_entry_t reloc_addr_info;
+  /// cmd offset (in Byte) from the tpu_single_core_cmd_t.gdma_cmd_addr.
+  uint64_t cmd_offset;
+};
+
 struct tpu_single_core_cmd_t {
   std::vector<tpu_cmd_info_t> cmd_info;
   /// global addr of bdc command
@@ -50,6 +62,8 @@ struct tpu_single_core_cmd_t {
   uint64_t hau_cmd_addr;
   //// global addr of sdma command
   uint64_t sdma_cmd_addr;
+  /// reloc entries for gdma command
+  std::vector<cmd_reloc_entry_t> gdma_reloc_entries;
 };
 
 typedef struct tpu_kernel_allreduce_1684x {
@@ -78,6 +92,7 @@ typedef struct tpu_kernel_global_move_1684x {
 typedef struct {
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
+  std::vector<u64> reloc_base_addrs;  // base io-addrs in io-reloc mode.
   std::vector<tpu_single_core_cmd_t> core_commands;
   std::vector<int32_t> core_list;
   /// kernel func id(used for dynamic loading)
@@ -348,61 +363,6 @@ class bmdnn_func_sgtpuv8 : public bmdnn_func {
     u32 MAX_API_MSG_SIZE;
 };
 
-class bmdnn_func_1684xe : public bmdnn_func {
-  public:
-
-    bmdnn_func_1684xe() {
-        BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
-        BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
-        BM_API_ID_SET_PROFILE_ENABLE  = 986;
-        BM_API_ID_GET_PROFILE_DATA    = 987;
-        MAX_API_MSG_SIZE              = 1016 * sizeof(u32);
-    };
-    virtual bm_status_t _bmdnn_multi_fullnet_(
-        bm_handle_t handle,
-        const tpu_net_info_t &net_info);
-    virtual void fill_api_info(
-        const tpu_net_info_t &net_info,
-        api_info_t &api_info);
-
-    bm_status_t _bmdnn_dynamic_fullnet_(
-        bm_handle_t handle,
-        tpu_kernel_function_t func_id,
-        unsigned long long compiled_ir_global_addr,
-        unsigned int compiled_ir_length, //unit dword
-        unsigned int input_num,
-        const unsigned long long *input_addrs,
-        const int * const * input_shapes,
-        const int * input_elem_nums,
-        const int * input_dtype_and_dims,
-        unsigned int output_num,
-        const unsigned long long *output_addrs,
-        unsigned long long apd_ctx_start,
-        std::vector<unsigned long long> apd_ctx_mem_borders,
-        std::vector<unsigned long long> apd_ctx_mem_offset,
-        unsigned long long apd_coeff_mem_offset,
-        unsigned long long apd_io_start,
-        unsigned long long apd_io_mem_offset,
-        bool get_output_shape,
-        unsigned long long output_shape_global_addr,
-        tpu_kernel_allreduce_1684x_t *p_allreduce_param);
-
-    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, tpu_kernel_function_t func_id, bool enable);
-    bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
-                                         tpu_kernel_function_t func_id,
-                                         unsigned long long output_global_addr,
-                                         unsigned int output_max_size,
-                                         unsigned int offset,
-                                         unsigned int data_category //0: profile time records, 1: extra data
-                                         );
-  private:
-    u32 BM_API_ID_MULTI_FULLNET;
-    u32 BM_API_ID_DYNAMIC_FULLNET;
-    u32 BM_API_ID_SET_PROFILE_ENABLE;
-    u32 BM_API_ID_GET_PROFILE_DATA;
-    u32 MAX_API_MSG_SIZE;
-};
-
 class bmdnn_func_1688 : public bmdnn_func {
   public:
 
@@ -505,10 +465,10 @@ class bmdnn_func_2260 : public bmdnn_func {
     u32 MAX_API_MSG_SIZE;
 };
 
-class bmdnn_func_mars3 : public bmdnn_func {
+class bmdnn_func_cv184x : public bmdnn_func {
   public:
 
-    bmdnn_func_mars3() {
+    bmdnn_func_cv184x() {
         BM_API_ID_MULTI_FULLNET       = 0x0ffffffb;
         BM_API_ID_DYNAMIC_FULLNET     = 0x0ffffffc;
         BM_API_ID_SET_PROFILE_ENABLE  = 986;
@@ -543,8 +503,11 @@ class bmdnn_func_mars3 : public bmdnn_func {
         unsigned long long output_shape_global_addr,
         const std::vector<int32_t> &core_list);
 
-    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, unsigned int enable);
+    bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, int engine_type, unsigned long long addr, unsigned long long size);
+    bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, int core, tpu_kernel_function_t func_id, unsigned int enable);
     bm_status_t _bmdnn_get_profile_data_(bm_handle_t handle,
+                                         int core,
+                                         tpu_kernel_function_t func_id,
                                          unsigned long long output_global_addr,
                                          unsigned int output_max_size,
                                          unsigned int offset,

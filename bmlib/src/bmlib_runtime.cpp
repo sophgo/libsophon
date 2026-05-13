@@ -335,6 +335,11 @@ bm_status_t bm_handle_sync(bm_handle_t handle) {
 #endif
 }
 
+bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id) {
+  (void)core_id;
+  return bm_handle_sync(handle);
+}
+
 u64 bm_get_version(bm_handle_t handle) {
 #ifdef USING_CMODEL
   UNUSED(handle);

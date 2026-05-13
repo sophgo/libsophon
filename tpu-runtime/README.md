@@ -153,5 +153,5 @@ cmodel_run_bmodel xxx.bmodel
 ## 其他
 ### BMRT_LOG控制：
 目前BMRT_LOG分为-1: DEBUG, 0: INFO, 1: WARNING, 2: WRONG, 3: FATAL几个等级;
-可以通过BMRT_LOG_VERION环境变量来控制，如`export BMRT_LOG_VERSION=-1`, 表示所有大于等于-1等级的日志都会打印;
+可以通过BMRT_LOG_VERION环境变量来控制，如`export BMRT_LOG_VERSION=-1`, 表示所有大于等于-1等级的日志都会打印; 
 默认是0, 只打印INFO,WARNING, WRONG, FATAL信息。

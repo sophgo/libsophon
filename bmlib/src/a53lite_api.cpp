@@ -398,6 +398,11 @@ tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *
 #endif
 }
 
+tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, const char *module_file, int core_id) {
+    (void)core_id;
+    return tpu_kernel_load_module_file(handle, module_file);
+}
+
 tpu_kernel_module_t tpu_kernel_load_module_file_key(bm_handle_t handle, const char *module_file, const char *key, int size)
 {
 #ifdef USING_CMODEL

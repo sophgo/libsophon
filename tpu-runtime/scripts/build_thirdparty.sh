@@ -103,7 +103,7 @@ fi
 
 if [ -d $LIBSOPHON_DIR/../TPU1686 ]; then
   pushd $LIBSOPHON_DIR/../TPU1686
-  CHIPS=(bm1684x bm1686 sg2260)
+  CHIPS=(bm1684x bm1686 sg2260 mars3)
   for chip in ${CHIPS[@]}; do
   source scripts/envsetup.sh ${chip}
   rm -rf build
