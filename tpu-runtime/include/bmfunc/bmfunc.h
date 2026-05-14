@@ -24,14 +24,11 @@ public:
   static bmdnn_func_1684x *bmdnn_1684x() {
     return (bmdnn_func_1684x *)(sta_bmfunc_ptr->bmdnn_fn);
   }
-  static bmdnn_func_1684xe *bmdnn_1684xe() {
-    return (bmdnn_func_1684xe *)(sta_bmfunc_ptr->bmdnn_fn);
-  }
   static bmdnn_func_1688 *bmdnn_1688() {
     return (bmdnn_func_1688 *)(sta_bmfunc_ptr->bmdnn_fn);
   }
-  static bmdnn_func_mars3 *bmdnn_mars3() {
-    return (bmdnn_func_mars3 *)(sta_bmfunc_ptr->bmdnn_fn);
+  static bmdnn_func_cv184x *bmdnn_cv184x() {
+    return (bmdnn_func_cv184x *)(sta_bmfunc_ptr->bmdnn_fn);
   }
   static bmdnn_func_sgtpuv8 *bmdnn_sgtpuv8() {
     return (bmdnn_func_sgtpuv8 *)(sta_bmfunc_ptr->bmdnn_fn);

@@ -6,7 +6,7 @@
 #else
 #define DLLEXPORT __attribute__((visibility("default")))
 #endif
-#define COMMIT_HASH "34085e9eea0076221a521a05e4d17502ec63ec18"
-#define BRANCH_NAME "main"
+#define COMMIT_HASH "54aee89411fb064556bbcc279adb36a90343e7b0"
+#define BRANCH_NAME "master"
 
 #endif

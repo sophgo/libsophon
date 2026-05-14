@@ -7,6 +7,7 @@
 #define CONSOLE_ENTER	'\r'
 #define CONSOLE_PROMPT '#'
 
+
 static int wait_prompt(struct console_ctx *ctx, int timeout)
 {
 	/* read out all input data */
@@ -54,7 +55,9 @@ static int send_single(struct console_ctx *ctx, char ch, int timeout)
 	struct timer_ctx timer;
 	int err;
 	struct uart_ctx *uart;
+	int i = 0;
 
+resend:
 	uart = &ctx->uart;
 	uart_putc(&ctx->uart, ch);
 	/* wait echo back */
@@ -68,6 +71,12 @@ static int send_single(struct console_ctx *ctx, char ch, int timeout)
 	err = 0;
 timeout:
 	bmdrv_timer_stop(uart->bmdi, &timer);
+
+	if (err != 0 && i < 5){
+		i++;
+		pr_info("%d th resend this char: %c\n", i,ch);
+		goto resend;
+	}
 	return err;
 }
 

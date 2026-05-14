@@ -163,8 +163,6 @@ static std::string chip_name_by_id(unsigned int chipid) {
     chip_name = "BM1684";
   } else if (chipid == 0x1686) {
     chip_name = "BM1684X";
-  } else if (chipid == 0x1686e) {
-    chip_name = "BM1684XE";
   } else if (chipid == 0x1686a200 || chipid == 0x1688) {
     chip_name = "BM1688";
   } else if (chipid == 0x1682) {
@@ -176,7 +174,7 @@ static std::string chip_name_by_id(unsigned int chipid) {
   } else if (chipid == 0x2380) {
     chip_name = "SG2380";
   } else if (chipid == 0x184) {
-    chip_name = "MARS3";
+    chip_name = "CV184X";
   } else if (chipid == 0x8000) {
     chip_name = "SGTPUV8";
   }
@@ -848,4 +846,12 @@ bool bmrt_memcpy_d2d_stride_ex_parallel(
         dst_tensors, dst_offsets, dst_strides,
         src_tensors, src_offsets, src_strides,
         shapes, tensor_num, device_num);
+}
+
+int bmrt_get_neuron_number(void *p_bmrt, const char* net_name) {
+  return ((Bmruntime*)p_bmrt)->get_inner_neuron_number(net_name);
+}
+
+bm_device_mem_t bmrt_get_neuron_memory(void *p_bmrt, const char* net_name, int mem_index, const int* core_list, int core_num) {
+  return ((Bmruntime*)p_bmrt)->get_inner_neuron_memory(net_name, mem_index, core_list, core_num);
 }

@@ -1122,6 +1122,7 @@ static void bmdrv_driver_status_update(struct bm_device_info *bmdi, int status)
 extern int sg_comm_init(struct pci_dev *pdev, struct bm_device_info *bmdi);
 extern void sg_comm_deinit(struct bm_device_info *bmdi);
 
+struct bm_device_info *bmdi_array[64];
 static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rc = 0x0;
@@ -1149,6 +1150,7 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	cinfo = &bmdi->cinfo;
 	bmdi->dev_index = dev_index;
+	bmdi_array[dev_index] = bmdi;
 
 	bmdrv_cinfo_init(bmdi, pdev);
 
@@ -1351,7 +1353,7 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 	bmdrv_software_deinit(bmdi);
 
 	/* set 0 to gp24 as driver not probe, bl2 start update data */
-	bmdrv_driver_status_update(bmdi,NOT_PROBE);
+	// bmdrv_driver_status_update(bmdi,NOT_PROBE);
 
 	bmdrv_pci_deinit(bmdi, pdev);
 
@@ -1418,7 +1420,7 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 
 	dev_info(bmdi->cinfo.device, "shutdown\n");
 	/* set 0 to gp24 as driver not probe, bl2 start update data */
-	bmdrv_driver_status_update(bmdi,NOT_PROBE);
+	// bmdrv_driver_status_update(bmdi,NOT_PROBE);
 	///TODO:
 
 }

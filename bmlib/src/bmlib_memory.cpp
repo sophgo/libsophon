@@ -4305,9 +4305,13 @@ bm_status_t bm_memcpy_c2c(bm_handle_t src_handle, bm_handle_t dst_handle,
            __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
+  int src_devid = bm_get_devid(src_handle);
+  int dst_devid = bm_get_devid(dst_handle);
   u32 size = bm_mem_get_size(src);
   u64 src_addr = bm_mem_get_device_addr(src);
   u64 dst_addr = bm_mem_get_device_addr(dst);
+
+  force_use_dst_cdma = src_devid < dst_devid ? true : false;
   if (BM_SUCCESS != bm_calculate_cdma_addr(src_handle, dst_handle, &src_addr,
                                            &dst_addr, force_use_dst_cdma))
     return BM_ERR_FAILURE;

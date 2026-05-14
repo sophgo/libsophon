@@ -217,6 +217,18 @@ typedef int tpu_kernel_function_t;
 tpu_kernel_module_t tpu_kernel_load_module_file(bm_handle_t handle, const char *module_file);
 
 /**
+ * @name    tpu_kernel_load_module_file_to_core
+ * @brief   To load dyn file
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @param [in]  module_file     dyn file
+ * @param [in]  core_id
+ * @retval  dyn lib ptr
+ */
+tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, const char *module_file, int core_id);
+
+/**
  * @name    tpu_kernel_load_module_file_key
  * @brief   To load dyn file with key
  * @ingroup bmlib_runtime
@@ -2123,6 +2135,19 @@ DECL_EXPORT bm_status_t bm_device_sync(bm_handle_t handle);
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bm_handle_sync(bm_handle_t handle);
+
+/**
+ * @name    bm_handle_sync_from_core
+ * @brief   To synchronize APIs of the handle. The thread will block
+ *          until all the outstanding APIs of the handle are finished.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in] handle   The device handle
+ * @param [in] core_id  The core id
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_handle_sync_from_core(bm_handle_t handle, int core_id);
 
 /**
  * @name    bm_thread_sync

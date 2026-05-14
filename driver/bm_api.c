@@ -505,7 +505,8 @@ int bmdrv_send_api_close(struct bm_device_info *bmdi, struct file *file, u8 *pro
 	api_entry->thd_api_seq = thd_info->last_api_seq;
 	api_entry->dev_api_seq = 0;
 	api_entry->api_id = bm_api.api_id;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) || (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18, 0) \
+	  && CENTOS_KERNEL_FIX >= 408))
 	api_entry->sent_time_us = ktime_get_boottime_ns() / 1000;
 #else
 	api_entry->sent_time_us = ktime_get_boot_ns() / 1000;
@@ -616,7 +617,7 @@ static int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned ch
 	api_entry->dev_api_seq = 0;
 	api_entry->api_id = bm_api.api_id;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) || (LINUX_VERSION_CODE == KERNEL_VERSION(4, 18, 0) \
-      && CENTOS_KERNEL_FIX == 408))
+      && CENTOS_KERNEL_FIX >= 408))
 	api_entry->sent_time_us = ktime_get_boottime_ns() / 1000;
 #else
 	api_entry->sent_time_us = ktime_get_boot_ns() / 1000;

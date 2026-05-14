@@ -21,10 +21,11 @@ static void bmdrv_gpio_irq(struct bm_device_info *bmdi)
 	int reg_val;
 
 	reg_val = gpio_reg_read(bmdi, GPIO_INT_STAUS);
-	if (reg_val & 0x80000000)
+	if (reg_val & 0x80000000) {
 		PR_TRACE("GPIO 31 interrupt\n");
-	else
+	} else {
 		PR_TRACE("GPIO unknown interrupt\n");
+	}
 	gpio_reg_write(bmdi, GPIO_PORTA_EOI, 0xffffffff);
 }
 

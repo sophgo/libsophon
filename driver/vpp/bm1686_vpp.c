@@ -399,7 +399,7 @@ static int vpp_handle_setup(struct bm_device_info *bmdi, struct vpp_batch_n *bat
 	int core_id = -1;
 
 	if (down_interruptible(&bmdi->vppdrvctx.vpp_core_sem)) {
-		pr_err("[1686VPPDRV]down_interruptible id interrupted, dev_index %d\n", bmdi->dev_index);
+		// pr_err("[1686VPPDRV]down_interruptible id interrupted, dev_index %d\n", bmdi->dev_index);
 		return VPP_ERESTARTSYS;
 	}
 	ret = vpp_get_core_id(bmdi, &core_id);

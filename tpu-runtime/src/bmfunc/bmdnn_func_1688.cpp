@@ -156,6 +156,7 @@ void bmdnn_func_1688::fill_api_info(const tpu_net_info_t &net_info,
   });
 
 }
+
 bm_status_t
 bmdnn_func_1688::_bmdnn_multi_fullnet_(bm_handle_t handle,
                                        const tpu_net_info_t &net_info) {
@@ -166,18 +167,61 @@ bmdnn_func_1688::_bmdnn_multi_fullnet_(bm_handle_t handle,
   BMRT_ASSERT_INFO(core_num == net_info.kernel_func_ids.size(), "core_num=%d, kernel_func_ids.size()=%d",
                    core_num, net_info.kernel_func_ids.size());
   fill_api_info(net_info, api_info);
-  std::vector<tpu_launch_param_t> launch_params(net_info.core_list.size());
-  for(size_t core_idx=0; core_idx<net_info.core_list.size(); core_idx++){
-    launch_params[core_idx].core_id = net_info.core_list[core_idx];
-    launch_params[core_idx].func_id = net_info.kernel_func_ids[core_idx];
-    launch_params[core_idx].param_data = api_info.api_data[core_idx].data();
-    launch_params[core_idx].param_size = api_info.api_data[core_idx].size();
+  bm_status_t status = BM_SUCCESS;
+  if (api_info.api_data[0].size()<MAX_API_MSG_SIZE) {
+    std::vector<tpu_launch_param_t> launch_params(net_info.core_list.size());
+    for(size_t core_idx=0; core_idx<net_info.core_list.size(); core_idx++) {
+      launch_params[core_idx].core_id = net_info.core_list[core_idx];
+      launch_params[core_idx].func_id = net_info.kernel_func_ids[core_idx];
+      launch_params[core_idx].param_data = api_info.api_data[core_idx].data();
+      launch_params[core_idx].param_size = api_info.api_data[core_idx].size();
+    }
+    status = tpu_kernel_launch_async_multicores(handle, launch_params.data(), launch_params.size());
+    if (BM_SUCCESS != status) {
+      BMRT_LOG(WRONG, "tpu_kernel_launch_async_multicores failed, status:%d", status);
+    }
+  } else {
+    std::vector<bm_device_mem_t> api_mems(core_num);
+    for (size_t core_idx=0; core_idx < core_num; core_idx++) {
+      auto api_mem = api_mems[core_idx];
+      #pragma pack(1)
+      typedef struct{
+          u32 input_num = 0;
+          u64 cmd_addr;
+          u64 cmd_size;
+      }long_cmd_param_t;
+      #pragma pack()
+      u32 malloc_size = api_info.api_data[core_idx].size();
+      bm_status_t mem_status = bm_malloc_device_byte(handle, &api_mem, malloc_size);
+      if (mem_status != BM_SUCCESS) {
+        status = (status == BM_SUCCESS) ? mem_status : status;
+        BMRT_LOG(WRONG, "bm_malloc_device_byte failed, malloc mem:%d", malloc_size);
+      }
+      long_cmd_param_t new_api;
+      auto data = api_info.api_data[core_idx].data();
+      bm_status_t s2d_status = bm_memcpy_s2d(handle, api_mem, (void*)data);
+      new_api.cmd_addr = api_mem.u.device.device_addr;
+      new_api.cmd_size = api_info.api_data[core_idx].size();
+      if (BM_SUCCESS != s2d_status) {
+        status = (status == BM_SUCCESS) ? s2d_status : status;
+        BMRT_LOG(WRONG, "bm_memcpy_s2d failed, ret = %d\n", s2d_status);
+      }
+      bm_status_t core_status;
+      core_status = tpu_kernel_launch_async_from_core(
+        handle, net_info.kernel_func_ids[core_idx],
+        (u8 *)(&new_api),
+        sizeof(new_api), core_idx);
+      if (BM_SUCCESS != core_status) {
+        status = (status == BM_SUCCESS) ? core_status : status;
+        BMRT_LOG(WRONG, "tpu_kernel_launch_async_from_core failed, core:%d, status:%d", core_idx, status);
+      }
+    }
+    for (size_t core_idx = 0; core_idx < core_num; core_idx++) {
+      if (api_mems[core_idx].u.device.device_addr != 0) {
+        bm_free_device(handle, api_mems[core_idx]);
+      }
+    }
   }
-  bm_status_t status = tpu_kernel_launch_async_multicores(handle, launch_params.data(), launch_params.size());
-  if (BM_SUCCESS != status) {
-    BMRT_LOG(WRONG, "tpu_kernel_launch_async_multicores failed, status:%d", status);
-  }
-
   return status;
 }
 

@@ -325,6 +325,8 @@ struct bm_device_info {
 #endif
 };
 
+extern struct bm_device_info *bmdi_array[64];
+
 struct bin_buffer {
 	unsigned char *buf;
 	unsigned int size;

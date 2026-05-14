@@ -1303,17 +1303,15 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
                       //     info.gdma_cmd_mem_size += cmd_group->gdma_num()*(1<<cmd_bit);
                       //   }
                       // }
-                      if (model()->chip()->str() == "SG2260") {
-                        for (unsigned int i = 0; i < subnet->core_commands()->size(); ++i) {
-                          auto core_cmd = subnet->core_commands()->Get(i);
-                          if (core_cmd->hau_commands()) {
-                            for (unsigned int j = 0; j < core_cmd->hau_commands()->size(); ++j)
-                              info.hau_cmd_mem_size += core_cmd->hau_commands()->Get(j)->size();
-                          }
-                          if (core_cmd->sdma_commands()) {
-                            for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
-                              info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
-                          }
+                      if ((model()->chip()->str() == "SG2260") || (model()->chip()->str() == "BM1690") || (model()->chip()->str() == "BM1690E")) {
+                        auto core_cmd = subnet->core_commands()->Get(core_idx);
+                        if (core_cmd->hau_commands()) {
+                          for (unsigned int j = 0; j < core_cmd->hau_commands()->size(); ++j)
+                            info.hau_cmd_mem_size += core_cmd->hau_commands()->Get(j)->size();
+                        }
+                        if (core_cmd->sdma_commands()) {
+                          for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
+                            info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
                         }
                       }
                     }
