@@ -217,6 +217,7 @@ $(BM_MODULE_NAME)-y += bm_drv.o bm_fops.o bm_irq.o i2c.o pwm.o  \
 	bm_msgfifo.o bm_thread.o bm_api.o \
 	bm_timer.o bm_io.o bm_trace.o bm_attr.o bm_gmem.o \
 	bm_bgm.o bm_genalloc.o gpio.o uart.o bm_debug.o bm_card.o bm_monitor.o \
+	bm_cooling.o \
 	bm_pm.o
 
 $(BM_MODULE_NAME)-y += $(BM1682_OBJ)

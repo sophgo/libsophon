@@ -1185,6 +1185,12 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		return -EINVAL;
 	}
 
+	if (bmdi->status_over_temp || bmdi->status_pcie) {
+		pr_err("bm-sophon%d %s, board abnormal before wait, core_id=%d\n",
+		       bmdi->dev_index, __func__, core_id);
+		return -ENODEV;
+	}
+
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
 		return -EINVAL;
@@ -1212,6 +1218,11 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 
 	pr_err("bm-sophon%d %s, wait api timeout, wait %dms, core_id=%d\n",
 		 bmdi->dev_index, __func__, timeout_ms, core_id);
+	if (bmdi->status_over_temp || bmdi->status_pcie) {
+		pr_err("bm-sophon%d %s, skip tpusys debug due to board abnormal\n",
+		       bmdi->dev_index, __func__);
+		return -ENODEV;
+	}
 	//bmdev_dump_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 	if (bmdev_debug_tpusys(bmdi, core_id))
 		return -EBUSY;
@@ -1250,11 +1261,19 @@ int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		timeout_ms *= PALLADIUM_CLK_RATIO;
 #endif
 
-	ret = wait_event_timeout(h_info->h_msg_done, (h_info->h_cpl_api_seq[core_id] >= handle_send_api_seq), msecs_to_jiffies(timeout_ms));
+	if (bmdi->status_over_temp || bmdi->status_pcie)
+		return -ENODEV;
+
+	ret = wait_event_timeout(h_info->h_msg_done,
+		(h_info->h_cpl_api_seq[core_id] >= handle_send_api_seq) ||
+		bmdi->status_over_temp || bmdi->status_pcie,
+		msecs_to_jiffies(timeout_ms));
 
 	if (ret)
 		return 0;
 	pr_err("bm-sophon%d %s, wait api timeout\n", bmdi->dev_index, __func__);
+	if (bmdi->status_over_temp || bmdi->status_pcie)
+		return -ENODEV;
 	//bmdev_dump_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 	bmdev_dump_reg(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 #ifdef PCIE_MODE_ENABLE_CPU
@@ -1281,11 +1300,22 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		return -EINVAL;
 	}
 
+	if (bmdi->status_over_temp || bmdi->status_pcie) {
+		pr_err("bm-sophon%d %s, board abnormal before polling, core_id=%d\n",
+		       bmdi->dev_index, __func__, core_id);
+		return -ENODEV;
+	}
+
 #ifndef SOC_MODE
 	if (bmdi->cinfo.platform == PALLADIUM)
 		polling_ms *= PALLADIUM_CLK_RATIO;
 #endif
 	while (gp_reg_read_idx(bmdi, GP_REG_MESSAGE_WP, core_id) != gp_reg_read_idx(bmdi, GP_REG_MESSAGE_RP, core_id)) {
+		if (bmdi->status_over_temp || bmdi->status_pcie) {
+			pr_err("bm-sophon%d %s, board abnormal during polling, core_id=%d\n",
+			       bmdi->dev_index, __func__, core_id);
+			return -ENODEV;
+		}
 		msleep(polling_ms);
 		cnt--;
 		pr_info("wait polling api done! %d \n", polling_ms);

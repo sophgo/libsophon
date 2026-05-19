@@ -265,6 +265,30 @@ typedef struct{
 	int param_num;
 } tpu_launch_async_param_t;
 
+#ifndef SOC_MODE
+enum bm_pcie_cooling_state {
+	BM_PCIE_COOLING_S0 = 0,
+	BM_PCIE_COOLING_S1,
+	BM_PCIE_COOLING_S2,
+	BM_PCIE_COOLING_S3_BLOCK,
+};
+
+struct bm_pcie_cooling_ctx {
+	int inited;
+	int state;
+	int last_applied_freq_mhz;
+	int trip_s1_mc;
+	int trip_s2_mc;
+	int trip_s3_mc;
+	int clear_s1_mc;
+	int clear_s2_mc;
+	int clear_s3_mc;
+	int freq_s0_mhz;
+	int freq_s1_mhz;
+	int freq_s2_mhz;
+};
+#endif
+
 struct bm_device_info {
 	int dev_index;
 	u64 bm_send_api_seq;
@@ -326,6 +350,7 @@ struct bm_device_info {
 	struct proc_dir_entry *proc_dir;
 	spinlock_t irq_lock;
 #ifndef SOC_MODE
+	struct bm_pcie_cooling_ctx cooling_ctx;
 	vpp_drv_context_t vppdrvctx;
 	vpu_drv_context_t vpudrvctx;
 	jpu_drv_context_t jpudrvctx;

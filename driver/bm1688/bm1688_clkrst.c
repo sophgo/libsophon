@@ -17,6 +17,21 @@
 #include <linux/clk.h>
 #endif
 
+#define BM1688_CLK_EN_0_OFF              0x2168
+#define BM1688_CLK_BYP_0_OFF             0x2198
+#define BM1688_DIV_TPU_CLK_TPU_OFF       0x202c
+#define BM1688_FPLL_CSR_OFF              0x2980
+#define BM1688_MIPIMPLL0_CSR_OFF         0x2480
+
+#define BM1688_TPU_CLK_GATE_BIT          16
+#define BM1688_TPU_CLK_BYP_BIT           16
+
+enum bm1688_tpu_clk_parent {
+	BM1688_TPU_PARENT_TPLL = 0,
+	BM1688_TPU_PARENT_FPLL = 1,
+	BM1688_TPU_PARENT_MIPIMPLL0 = 2,
+};
+
 static int bmdrv_1684_fvco_check(int fref, int fbdiv, int refdiv)
 {
 	int foutvco = (fref * fbdiv) / refdiv;
@@ -86,14 +101,97 @@ static int bmdrv_1684_cal_tpll_para(int target_freq, int* fbdiv, int* refdiv,
 	return success;
 }
 
+static u32 bm1688_get_poll_timeout_us(struct bm_device_info *bmdi)
+{
+	u32 timeout_us = bmdi->cinfo.delay_ms * 1000;
+
+	if (timeout_us < 1000)
+		timeout_us = 1000;
+	if (timeout_us > 500000)
+		timeout_us = 500000;
+
+	return timeout_us;
+}
+
+static u32 bm1688_pll_rate_calc(u32 csr)
+{
+	u32 predivsel;
+	u32 postdivsel;
+	u32 divsel;
+	u64 numerator;
+
+	predivsel = (csr >> 4) & 0x7f;
+	postdivsel = (csr >> 24) & 0x7f;
+	divsel = (csr >> 16) & 0x7f;
+	predivsel = predivsel ? predivsel : 1;
+	postdivsel = postdivsel ? postdivsel : 1;
+	numerator = (u64)BM1688_TPLL_FREF * 1000000ULL * divsel;
+	do_div(numerator, predivsel * postdivsel);
+
+	return (u32)numerator;
+}
+
+static u32 bm1688_get_parent_rate_hz(struct bm_device_info *bmdi, u32 src_sel)
+{
+	switch (src_sel) {
+	case BM1688_TPU_PARENT_TPLL:
+		return bm1688_pll_rate_calc(top_reg_read(bmdi, TOP_TPLL_CTL));
+	case BM1688_TPU_PARENT_FPLL:
+		return bm1688_pll_rate_calc(top_reg_read(bmdi, BM1688_FPLL_CSR_OFF));
+	case BM1688_TPU_PARENT_MIPIMPLL0:
+		return bm1688_pll_rate_calc(top_reg_read(bmdi, BM1688_MIPIMPLL0_CSR_OFF));
+	default:
+		return BM1688_TPLL_FREF * 1000000U;
+	}
+}
+
+static u32 bm1688_tpu_get_best_parent_div(struct bm_device_info *bmdi, u32 target_hz,
+					  u32 *best_src_sel, u32 *best_div, u32 *best_rate_hz)
+{
+	u32 src_sel;
+	u32 min_delta = UINT_MAX;
+
+	*best_src_sel = BM1688_TPU_PARENT_TPLL;
+	*best_div = 1;
+	*best_rate_hz = 0;
+
+	for (src_sel = BM1688_TPU_PARENT_TPLL; src_sel <= BM1688_TPU_PARENT_MIPIMPLL0; src_sel++) {
+		u32 parent_hz;
+		u32 div;
+		u32 rate_hz;
+		u32 delta;
+
+		parent_hz = bm1688_get_parent_rate_hz(bmdi, src_sel);
+		if (parent_hz == 0)
+			continue;
+		div = DIV_ROUND_CLOSEST(parent_hz, target_hz);
+		if (div == 0)
+			div = 1;
+		if (div > 0xffff)
+			div = 0xffff;
+		rate_hz = parent_hz / div;
+		delta = (rate_hz > target_hz) ? (rate_hz - target_hz) : (target_hz - rate_hz);
+		if (delta < min_delta) {
+			min_delta = delta;
+			*best_src_sel = src_sel;
+			*best_div = div;
+			*best_rate_hz = rate_hz;
+		}
+	}
+
+	return min_delta;
+}
+
 int bm1688_bmdev_clk_hwlock_lock(struct bm_device_info* bmdi)
 {
-	u32 timeout_count = bmdi->cinfo.delay_ms*1000;
+	u32 timeout_us = bm1688_get_poll_timeout_us(bmdi);
+	u32 elapsed_us = 0;
 
 	while (top_reg_read(bmdi, TOP_CLK_LOCK)) {
-		udelay(1);
-		if (--timeout_count == 0) {
-			pr_err("wait clk hwlock timeout\n");
+		usleep_range(50, 100);
+		elapsed_us += 100;
+		if (elapsed_us >= timeout_us) {
+			pr_err("wait clk hwlock timeout, elapsed=%u us\n", elapsed_us);
 			return -1;
 		}
 	}
@@ -109,11 +207,75 @@ void bm1688_bmdev_clk_hwlock_unlock(struct bm_device_info* bmdi)
 static int tpll_ctl_reg = 1 | 2<< 8 | 1 << 12 | 44<< 16;
 int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target)
 {
-	int fbdiv = 0;
-	int refdiv = 0;
-	int postdiv1 = 0;
-	int postdiv2 = 0;
-	int val = 0;
+	int prediv = 0;
+	int divsel = 0;
+	int postdiv = 0;
+	u32 old_tpll = 0;
+	u32 new_tpll = 0;
+	u32 val = 0;
+	u32 pll_status = 0;
+	u32 timeout_us = bm1688_get_poll_timeout_us(bmdi);
+	u32 elapsed_us = 0;
+	int actual_freq = 0;
+	int hwlock_acquired = 0;
+	int i;
+
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		u32 target_hz;
+		u32 best_src_sel;
+		u32 best_div;
+		u32 best_rate_hz;
+		u32 delta_hz;
+		u32 clk_byp;
+		u32 clk_en;
+		u32 div_reg;
+		u32 readback_div;
+		u32 readback_byp;
+		int actual_mhz;
+
+		if (bmdi->misc_info.pcie_soc_mode == 0) {
+			if (target < bmdi->boot_info.tpu_min_clk ||
+			    target > bmdi->boot_info.tpu_max_clk) {
+				pr_err("%s: freq %d is too small or large\n", __func__, target);
+				return -EINVAL;
+			}
+		}
+
+		target_hz = (u32)target * 1000000U;
+		delta_hz = bm1688_tpu_get_best_parent_div(bmdi, target_hz,
+			&best_src_sel, &best_div, &best_rate_hz);
+		if (best_rate_hz == 0) {
+			pr_err("bm-sophon%d no valid parent/div for %dMHz\n",
+			       bmdi->dev_index, target);
+			return -EINVAL;
+		}
+
+		clk_en = top_reg_read(bmdi, BM1688_CLK_EN_0_OFF);
+		clk_en |= BIT(BM1688_TPU_CLK_GATE_BIT);
+		top_reg_write(bmdi, BM1688_CLK_EN_0_OFF, clk_en);
+
+		clk_byp = top_reg_read(bmdi, BM1688_CLK_BYP_0_OFF);
+		top_reg_write(bmdi, BM1688_CLK_BYP_0_OFF, clk_byp | BIT(BM1688_TPU_CLK_BYP_BIT));
+
+		div_reg = top_reg_read(bmdi, BM1688_DIV_TPU_CLK_TPU_OFF);
+		div_reg &= ~((0xffffU << 16) | (0x3U << 8));
+		div_reg |= (best_div & 0xffffU) << 16;
+		div_reg |= (best_src_sel & 0x3U) << 8;
+		div_reg |= BIT(3);
+		top_reg_write(bmdi, BM1688_DIV_TPU_CLK_TPU_OFF, div_reg);
+
+		top_reg_write(bmdi, BM1688_CLK_BYP_0_OFF, clk_byp & ~BIT(BM1688_TPU_CLK_BYP_BIT));
+
+		readback_div = top_reg_read(bmdi, BM1688_DIV_TPU_CLK_TPU_OFF);
+		readback_byp = top_reg_read(bmdi, BM1688_CLK_BYP_0_OFF);
+		actual_mhz = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+		pr_info_ratelimited(
+			"bm-sophon%d set tpu clk req=%dMHz parent=%u div=%u target_rate=%uHz delta=%uHz div_reg=0x%08x byp=0x%08x actual=%dMHz\n",
+			bmdi->dev_index, target, best_src_sel, best_div, best_rate_hz,
+			delta_hz, readback_div, readback_byp, actual_mhz);
+
+		return 0;
+	}
 
 	if (bmdi->misc_info.pcie_soc_mode == 0) {
 		if(target<bmdi->boot_info.tpu_min_clk ||
@@ -123,9 +285,63 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 		}
 	}
 
-	if(!bmdrv_1684_cal_tpll_para(target, &fbdiv, &refdiv, &postdiv1, &postdiv2)) {
+	/* Prefer postdiv=2 (matches board-side devmem validation), fallback to generic search. */
+	postdiv = 2;
+	if (((target * postdiv) % BM1688_TPLL_FREF) == 0) {
+		divsel = (target * postdiv) / BM1688_TPLL_FREF;
+		if (divsel <= 0 || divsel > 0x7f)
+			divsel = 0;
+	}
+	if (divsel == 0) {
+		for (i = 1; i <= 0x7f; i++) {
+			if (((target * i) % BM1688_TPLL_FREF) != 0)
+				continue;
+			divsel = (target * i) / BM1688_TPLL_FREF;
+			if (divsel <= 0 || divsel > 0x7f)
+				continue;
+			postdiv = i;
+			break;
+		}
+	}
+	if (divsel == 0) {
 		pr_err("%s: not support freq %d\n", __func__, target);
-		return -1;
+		return -EINVAL;
+	}
+
+	old_tpll = top_reg_read(bmdi, TOP_TPLL_CTL);
+	new_tpll = old_tpll;
+	new_tpll &= ~((0x7f << 4) | (0x7f << 16) | (0x7f << 24));
+	new_tpll |= (prediv & 0x7f) << 4;
+	new_tpll |= (divsel & 0x7f) << 16;
+	new_tpll |= (postdiv & 0x7f) << 24;
+	new_tpll |= BIT(3);
+	pr_info_ratelimited(
+		"bm-sophon%d set tpu freq req=%dMHz, tpll old=0x%08x new=0x%08x prediv=%d divsel=%d postdiv=%d\n",
+		bmdi->dev_index, target, old_tpll, new_tpll, prediv, divsel, postdiv);
+
+	/*
+	 * BM1688 PCIe path: field validation shows direct TOP_TPLL_CTL update is sufficient.
+	 * Keep this path aligned with board-side devmem behavior and avoid stalling on
+	 * lock/poll registers that might not be writable/observable in current EP mode.
+	 */
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		u32 readback_tpll;
+		u32 chk_mask = (0x7f << 4) | (0x7f << 16) | (0x7f << 24) | BIT(3);
+
+		top_reg_write(bmdi, TOP_TPLL_CTL, new_tpll);
+		readback_tpll = top_reg_read(bmdi, TOP_TPLL_CTL);
+		actual_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+		pr_info_ratelimited(
+			"bm-sophon%d set tpu freq direct-write done, req=%dMHz actual=%dMHz tpll=0x%08x\n",
+			bmdi->dev_index, target, actual_freq, readback_tpll);
+
+		if ((readback_tpll & chk_mask) != (new_tpll & chk_mask)) {
+			pr_err(
+				"bm-sophon%d set tpu freq verify failed, req=%dMHz want=0x%08x got=0x%08x\n",
+				bmdi->dev_index, target, new_tpll, readback_tpll);
+			return -EIO;
+		}
+		return 0;
 	}
 
 	if (bmdi->cinfo.chip_id == 0x1686) {
@@ -139,6 +355,7 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 			pr_err("%s: get clk hwlock fail\n", __func__);
 			return -1;
 		}
+		hwlock_acquired = 1;
 
 		/* gate */
 		val = top_reg_read(bmdi, TOP_PLL_ENABLE);
@@ -147,28 +364,25 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 		udelay(1);
 	}
 
-	/* Modify TPLL Control Register */
-	val = top_reg_read(bmdi, TOP_TPLL_CTL);
+	top_reg_write(bmdi, TOP_TPLL_CTL, new_tpll);
 	if (bmdi->cinfo.platform == PALLADIUM) {
-		val = tpll_ctl_reg;
-	}
-	val &= 0xf << 28;
-	val |= refdiv & 0x1f;
-	val |= (postdiv1 & 0x7) << 8;
-	val |= (postdiv2 & 0x7) << 12;
-	val |= (fbdiv & 0xfff) << 16;
-	top_reg_write(bmdi, TOP_TPLL_CTL, val);
-	if (bmdi->cinfo.platform == PALLADIUM) {
-		tpll_ctl_reg = val;
+		tpll_ctl_reg = new_tpll;
 	}
 	udelay(1);
 
 	/* poll status until bit9=1 adn bit1=0 */
 	if (bmdi->cinfo.platform == DEVICE) {
-		val = top_reg_read(bmdi, TOP_PLL_STATUS);
-		while((val&0x202) != 0x200) {
-			udelay(1);
-			val = top_reg_read(bmdi, TOP_PLL_STATUS);
+		pll_status = top_reg_read(bmdi, TOP_PLL_STATUS);
+		while ((pll_status & 0x202) != 0x200) {
+			usleep_range(50, 100);
+			elapsed_us += 100;
+			pll_status = top_reg_read(bmdi, TOP_PLL_STATUS);
+			if (elapsed_us >= timeout_us) {
+				pr_err(
+					"bm-sophon%d set tpu freq timeout, req=%dMHz tpll_new=0x%08x pll_status=0x%08x elapsed=%u us\n",
+					bmdi->dev_index, target, new_tpll, pll_status, elapsed_us);
+				goto set_freq_out;
+			}
 		}
 	}
 
@@ -185,7 +399,21 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 		bm1688_bmdev_clk_hwlock_unlock(bmdi);
 	}
 
+	actual_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+	pr_info_ratelimited(
+		"bm-sophon%d set tpu freq done, req=%dMHz actual=%dMHz tpll=0x%08x\n",
+		bmdi->dev_index, target, actual_freq, top_reg_read(bmdi, TOP_TPLL_CTL));
+
 	return 0;
+
+set_freq_out:
+	if (hwlock_acquired) {
+		val = top_reg_read(bmdi, TOP_PLL_ENABLE);
+		val |= 1 << 1;
+		top_reg_write(bmdi, TOP_PLL_ENABLE, val);
+		bm1688_bmdev_clk_hwlock_unlock(bmdi);
+	}
+	return -ETIMEDOUT;
 }
 
 void bm1688_bmdrv_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int divider_factor)
@@ -270,6 +498,31 @@ int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi)
 	int divsel = 0;
 	int val = 0;
 	int fout = 0;
+
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		u32 clk_byp;
+		u32 div_reg;
+		u32 src_sel;
+		u32 div_val;
+		u32 parent_hz;
+		u32 rate_hz;
+
+		clk_byp = top_reg_read(bmdi, BM1688_CLK_BYP_0_OFF);
+		if (clk_byp & BIT(BM1688_TPU_CLK_BYP_BIT))
+			return BM1688_TPLL_FREF;
+
+		div_reg = top_reg_read(bmdi, BM1688_DIV_TPU_CLK_TPU_OFF);
+		src_sel = (div_reg >> 8) & 0x3;
+		if ((div_reg & BIT(3)) != 0)
+			div_val = (div_reg >> 16) & 0xffff;
+		else
+			div_val = 1;
+		div_val = div_val ? div_val : 1;
+		parent_hz = bm1688_get_parent_rate_hz(bmdi, src_sel);
+		rate_hz = parent_hz / div_val;
+
+		return rate_hz / 1000000U;
+	}
 
 	/* Modify TPLL Control Register */
 	val = top_reg_read(bmdi, TOP_TPLL_CTL);

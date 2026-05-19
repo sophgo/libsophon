@@ -12,6 +12,7 @@
 #include "spi.h"
 #include "pwm.h"
 #include "bm_attr.h"
+#include "bm_cooling.h"
 #include "bm_ctl.h"
 #include "bm_thermal.h"
 #include "bm_msgfifo.h"
@@ -298,6 +299,36 @@ static void calculate_board_status(struct bm_device_info *bmdi)
 		bmdi->status &= ~TPU_HANG_MASK;
 	}
 }
+
+#ifndef SOC_MODE
+static void bmdrv_update_1688_over_temp_state(struct bm_device_info *bmdi, int chip_temp)
+{
+	int target_freq = BM_COOLING_FREQ_NO_CHANGE;
+	int rc;
+
+	if (bmdi->cinfo.chip_id != 0x1686a200)
+		return;
+
+	bmdrv_cooling_update_1688(bmdi, chip_temp, &target_freq);
+	calculate_board_status(bmdi);
+
+	if (target_freq == BM_COOLING_FREQ_NO_CHANGE)
+		return;
+
+	mutex_lock(&bmdi->clk_reset_mutex);
+	rc = bm1688_bmdrv_clk_set_tpu_target_freq(bmdi, target_freq);
+	mutex_unlock(&bmdi->clk_reset_mutex);
+	if (rc) {
+		pr_warn_ratelimited(
+			"bm-sophon%d cooling set tpu freq failed, temp=%d mC target=%d MHz rc=%d\n",
+			bmdi->dev_index, chip_temp, target_freq, rc);
+		return;
+	}
+
+	bmdrv_cooling_mark_freq_applied(bmdi, target_freq);
+	bmdi->c_attr.tpu_current_clock = target_freq;
+}
+#endif
 
 static void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
 {
@@ -704,6 +735,10 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 
 	c_attr->bm_get_npu_util = bm_read_npu_util;
 	c_attr->bm_get_npu_util1 = bm_read_npu_util1;
+
+#ifndef SOC_MODE
+	bmdrv_cooling_init(bmdi);
+#endif
 
 	return ret;
 }
@@ -2519,6 +2554,7 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			mutex_unlock(&c_attr->attr_mutex);
 			goto err_fetch;
 		} else {
+			bmdrv_update_1688_over_temp_state(bmdi, c_attr->chip_temp);
 			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.chip_temp_reg, c_attr->chip_temp, sizeof(u8));//bm_smbus_update_dev_info
 		}
 
@@ -2542,9 +2578,24 @@ err_fetch:
 		delt = jiffies_to_msecs(end-start);
 		//PR_TRACE("dev_index=%d,bm_smbus_update_dev_info time is %d ms\n",bmdi->dev_index, delt);
 		msleep_interruptible(((10-delt)>0)? 10-delt : 0);
-	}
-	else
+	} else {
+#ifndef SOC_MODE
+		if (bmdi->cinfo.chip_id == 0x1686a200 &&
+		    bmdi->boot_info.temp_sensor_exist &&
+		    c_attr->bm_get_chip_temp != NULL) {
+			int fast_temp = 0;
+
+			mutex_lock(&c_attr->attr_mutex);
+			rc = c_attr->bm_get_chip_temp(bmdi, &fast_temp);
+			if (!rc) {
+				c_attr->chip_temp = fast_temp;
+				bmdrv_update_1688_over_temp_state(bmdi, fast_temp);
+			}
+			mutex_unlock(&c_attr->attr_mutex);
+		}
+#endif
 		msleep_interruptible(10);
+	}
 
 }
 

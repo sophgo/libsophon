@@ -14,6 +14,7 @@
 #include "bm1684/bm1684_jpu.h"
 #include "vpu/vpu.h"
 #include "bm1684_clkrst.h"
+#include "bm1688_clkrst.h"
 #include "bm_debug.h"
 #include "version.h"
 #ifndef SOC_MODE
@@ -1050,7 +1051,10 @@ static int bmdrv_tpu_freq_proc_show(struct seq_file *m, void *v)
 
 	c_attr = &bmdi->c_attr;
 	mutex_lock(&c_attr->attr_mutex);
-	vdd_tpu_freq = bmdrv_1684_clk_get_tpu_freq(bmdi);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		vdd_tpu_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+	else
+		vdd_tpu_freq = bmdrv_1684_clk_get_tpu_freq(bmdi);
 	mutex_unlock(&c_attr->attr_mutex);
 	seq_printf(m, "%d MHz\n",vdd_tpu_freq);
 	return 0;
@@ -1062,6 +1066,9 @@ static ssize_t bmdrv_tpu_freq_proc_write(struct file *file, const char __user *b
 	char *buf = kzalloc((count+1), GFP_KERNEL);
 	struct bm_device_info *bmdi = NULL;
 	struct seq_file *s = NULL;
+	int min_freq = 0;
+	int max_freq = 0;
+	int ret = 0;
 	int res;
 
 	s = file->private_data;
@@ -1075,15 +1082,37 @@ static ssize_t bmdrv_tpu_freq_proc_write(struct file *file, const char __user *b
 		kfree(buf);
 		return -EFAULT;
 	}
-	if ((res < 750) || (res > 1000)) {
-		pr_err("Error, valid value range is 750MHz ~ 1GHz\n");
+
+	min_freq = bmdi->boot_info.tpu_min_clk;
+	max_freq = bmdi->boot_info.tpu_max_clk;
+	if (min_freq <= 0 || max_freq <= 0 || min_freq > max_freq) {
+		pr_err("bm-sophon%d invalid tpu freq range from boot_info, min=%d max=%d\n",
+		       bmdi->dev_index, min_freq, max_freq);
 		kfree(buf);
-		return -1;
-	} else {
-		bmdrv_clk_set_tpu_target_freq(bmdi,res);
-		kfree(buf);
-		return count;
+		return -EINVAL;
 	}
+	if ((res < min_freq) || (res > max_freq)) {
+		pr_err("Error, valid value range is %dMHz ~ %dMHz\n",
+		       min_freq, max_freq);
+		kfree(buf);
+		return -EINVAL;
+	}
+
+	mutex_lock(&bmdi->clk_reset_mutex);
+	if (bmdi->cinfo.chip_id == 0x1686a200)
+		ret = bm1688_bmdrv_clk_set_tpu_target_freq(bmdi, res);
+	else
+		ret = bmdrv_clk_set_tpu_target_freq(bmdi, res);
+	mutex_unlock(&bmdi->clk_reset_mutex);
+	if (ret) {
+		pr_err("bm-sophon%d set tpu freq failed, target=%dMHz ret=%d\n",
+		       bmdi->dev_index, res, ret);
+		kfree(buf);
+		return ret;
+	}
+
+	kfree(buf);
+	return count;
 }
 
 static int bmdrv_tpu_freq_proc_open(struct inode *inode, struct file *file)
@@ -1805,7 +1834,19 @@ static int bmdrv_clk_proc_show(struct seq_file *m, void *v)
 	int dpll0 = 0;
 	int dpll1 = 0;
 
-	if (bmdi->cinfo.chip_id != 0x1682) {
+	if (bmdi->cinfo.chip_id == 0x1686a200) {
+		seq_printf(m, "mpll: N/A\n");
+		seq_printf(m, "tpll: N/A\n");
+		seq_printf(m, "fpll: N/A\n");
+		seq_printf(m, "vpll: N/A\n");
+		seq_printf(m, "dpll0: N/A\n");
+		seq_printf(m, "dpll1: N/A\n");
+		seq_printf(m, "vpu: N/A\n");
+		seq_printf(m, "jpu: N/A\n");
+		seq_printf(m, "vpp: N/A\n");
+		seq_printf(m, "tpu: %d MHz\n", bm1688_bmdrv_clk_get_tpu_freq(bmdi));
+		seq_printf(m, "ddr: N/A\n");
+	} else if (bmdi->cinfo.chip_id != 0x1682) {
 		mpll = top_reg_read(bmdi, 0xe8);
 		tpll = top_reg_read(bmdi, 0xec);
 		fpll = top_reg_read(bmdi, 0xf0);
@@ -2501,7 +2542,7 @@ int bmdrv_proc_file_init(struct bm_device_info *bmdi)
 		(void *)bmdi);
 	proc_create_data("tpu_volt", 0444, bmdi->proc_dir, &bmdrv_tpu_volt_file_ops,
 		(void *)bmdi);
-	proc_create_data("tpu_freq", 0444, bmdi->proc_dir, &bmdrv_tpu_freq_file_ops,
+	proc_create_data("tpu_freq", 0644, bmdi->proc_dir, &bmdrv_tpu_freq_file_ops,
 		(void *)bmdi);
 	proc_create_data("chip_temp", 0444, bmdi->proc_dir, &bmdrv_chip_temp_file_ops,
 		(void *)bmdi);
@@ -2877,6 +2918,11 @@ void bm_dump_arm9fw_log(struct bm_device_info *bmdi, int count)
 	long end =0;
 	int delt = 0;
 	int core_id=0;
+
+	if (bmdi->status_over_temp || bmdi->status_pcie || bmdi->status_sync_api) {
+		msleep_interruptible(20);
+		return;
+	}
 
 	start = jiffies;
 	bm_npu_utilization_stat(bmdi);
