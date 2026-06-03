@@ -1040,16 +1040,13 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_GET_IDLE_COREID:
 	{
-
+		int core_id = 0;
 #ifdef SOC_MODE
-		int core_id = bmdev_get_idle_coreid(bmdi);
-
-		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
-#else
-		ret = 0;
+		core_id = bmdev_get_idle_coreid(bmdi);
 #endif
-		break;
+		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
 
+		break;
 	}
 
 	case BMDEV_GET_BOARDT:
