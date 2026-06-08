@@ -208,14 +208,49 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static bool bmdev_ioctl_allow_in_degraded_state(unsigned int cmd)
+{
+	switch (cmd) {
+	case BMDEV_GET_STATUS:
+	case BMDEV_GET_BOARDP:
+	case BMDEV_GET_BOARDT:
+	case BMDEV_GET_CHIPT:
+	case BMDEV_GET_MAXP:
+	case BMDEV_GET_TPUC:
+	case BMDEV_GET_FAN:
+	case BMDEV_GET_CORRECTN:
+	case BMDEV_GET_12V_ATX:
+	case BMDEV_GET_SN:
+	case BMDEV_GET_TPU_MINCLK:
+	case BMDEV_GET_TPU_MAXCLK:
+	case BMDEV_GET_DRIVER_VERSION:
+	case BMDEV_GET_BOARD_TYPE:
+	case BMDEV_GET_TPU_P:
+	case BMDEV_GET_TPU_V:
+	case BMDEV_GET_CARD_ID:
+	case BMDEV_GET_DYNFREQ_STATUS:
+	case BMDEV_GET_VERSION:
+	case BMDEV_GET_SMI_ATTR:
+	case BMDEV_GET_MISC_INFO:
+	case BMDEV_GET_DEV_STAT:
+	case BMDEV_GET_PROFILE:
+	case BMDEV_GET_TPU_FREQ:
+	case BMDEV_GET_FW_VERSION:
+	case BMDEV_GET_IDLE_COREID:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct bm_device_info *bmdi = (struct bm_device_info *)file->private_data;
 	int ret = 0;
 
 	if (bmdi->status_over_temp || bmdi->status_pcie) {
-		pr_err("bmsophon %d the temperature is too high, bypass send ioctl cmd to chip\n", bmdi->dev_index);
-		if (cmd != BMDEV_GET_STATUS) {
+		if (!bmdev_ioctl_allow_in_degraded_state(cmd)) {
+			pr_err("bmsophon %d the temperature is too high, bypass send ioctl cmd to chip\n", bmdi->dev_index);
 			return -1;
 		}
 	}
@@ -1040,32 +1075,37 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_GET_IDLE_COREID:
 	{
-		int core_id = 0;
-#ifdef SOC_MODE
-		core_id = bmdev_get_idle_coreid(bmdi);
-#endif
-		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
+		int core_id = bmdev_get_idle_coreid(bmdi);
 
+		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
 		break;
 	}
 
 	case BMDEV_GET_BOARDT:
 	{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
+		u32 board_temp;
+
 		if (c_attr->bm_get_board_temp != NULL)
-		  ret = put_user(c_attr->board_temp, (u32 __user *)arg);
+			board_temp = c_attr->board_temp;
 		else
-		  ret = put_user(ATTR_NOTSUPPORTED_VALUE, (u32 __user *)arg);
+			board_temp = ATTR_NOTSUPPORTED_VALUE;
+
+		ret = copy_to_user((u32 __user *)arg, &board_temp, sizeof(u32));
 		break;
 	}
 
 	case BMDEV_GET_CHIPT:
 	{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
+		u32 chip_temp;
+
 		if (c_attr->bm_get_chip_temp != NULL)
-		  ret = put_user(c_attr->chip_temp, (u32 __user *)arg);
+			chip_temp = c_attr->chip_temp;
 		else
-		  return -EFAULT;
+			chip_temp = ATTR_NOTSUPPORTED_VALUE;
+
+		ret = copy_to_user((u32 __user *)arg, &chip_temp, sizeof(u32));
 		break;
 	}
 
@@ -1286,26 +1326,21 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         case BMDEV_GET_BOARDP:
                 {
-                       struct bm_device_info *c_bmdi;
-                       struct bm_chip_attr *c_attr;
+                       struct bm_device_info *c_bmdi = bmdi;
+                       struct bm_chip_attr *c_attr = &bmdi->c_attr;
+                       u32 board_power;
 
-                       if (bmdi->bmcd != NULL) {
-                         if (bmdi->bmcd->card_bmdi[0] != NULL) {
-                           c_bmdi = bmdi->bmcd->card_bmdi[0];
-                           c_attr = &c_bmdi->c_attr;
-                         } else {
-                           return -EFAULT;
-                         }
-                       } else {
-                         return -EFAULT;
+                       if (bmdi->bmcd != NULL && bmdi->bmcd->card_bmdi[0] != NULL) {
+                         c_bmdi = bmdi->bmcd->card_bmdi[0];
+                         c_attr = &c_bmdi->c_attr;
                        }
 
-                       if(c_attr->bm_get_board_power != NULL) {
-                         ret = copy_to_user((u32 __user *)arg, &c_attr->board_power, sizeof(u32));
-                       } else {
-                         u32 not_supported = ATTR_NOTSUPPORTED_VALUE;
-                         ret = copy_to_user((u32 __user *)arg, &not_supported, sizeof(u32));
-                       }
+                       if (c_attr->bm_get_board_power != NULL)
+                         board_power = c_attr->board_power;
+                       else
+                         board_power = ATTR_NOTSUPPORTED_VALUE;
+
+                       ret = copy_to_user((u32 __user *)arg, &board_power, sizeof(u32));
                        break;
                 }
 

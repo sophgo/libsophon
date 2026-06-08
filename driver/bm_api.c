@@ -18,6 +18,17 @@
 #define TPU0_CFG_PWR_CTRL_ADDR (0x26000100 + 0xc0)
 #define TPU1_CFG_PWR_CTRL_ADDR (0x26010100 + 0xc0)
 
+static int bmdrv_check_core_id(struct bm_device_info *bmdi, int core_id)
+{
+	if (core_id < 0 || core_id >= BM_MAX_CORE_NUM ||
+	    core_id >= bmdi->cinfo.tpu_core_num) {
+		pr_err("bm-sophon%d core id %d not valid, tpu_core_num=%d\n",
+			bmdi->dev_index, core_id, bmdi->cinfo.tpu_core_num);
+		return -EINVAL;
+	}
+	return 0;
+}
+
 cfg_pwr_ctrl_t g_cfg_pwr_param_default[2] = {
 	{
 		.cfg12 = {
@@ -665,6 +676,10 @@ static int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned ch
 	bm_api.api_handle = 0;
 	bm_api.core_id = core_id;
 
+	ret = bmdrv_check_core_id(bmdi, core_id);
+	if (ret)
+		return ret;
+
 	channel = BM_MSGFIFO_CHANNEL_XPU;
 	apinfo = &bmdi->api_info[core_id][BM_MSGFIFO_CHANNEL_XPU];
 
@@ -838,6 +853,7 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	bm_api_ext_t *bm_api_list = NULL;
 	int i;
 	int func_id;
+	u32 *api_addr_tmp;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -845,7 +861,6 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	}
 
 	if (api_from_userspace) {
-		/*copy user data to bm_api */
 		if (flag)
 			ret = copy_from_user(&bm_api, (bm_api_ext_t __user *)arg, sizeof(bm_api_ext_t));
 		else
@@ -861,10 +876,9 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 	if (!flag)
 		core_id = bm_api.core_id;
 
-	if (core_id >= BM_MAX_CORE_NUM) {
-		pr_err("bm-sophon%d core id %d not valid\n", bmdi->dev_index, core_id);
-		return -EINVAL;
-	}
+	ret = bmdrv_check_core_id(bmdi, core_id);
+	if (ret)
+		return ret;
 
 	if (flag) {
 #ifdef PCIE_MODE_ENABLE_CPU
@@ -935,7 +949,12 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 		//pr_debug("%s bm-sophon%d param_num =0x%x, param_list[0].param_size=0x%x\n",
 		//					__func__, bmdi->dev_index, param_num, param_list[0].param_size);
 		for(i=0; i<param_num; i++) {
-			u32 *api_addr_tmp = kmalloc(param_list[i].param_size + 8, GFP_KERNEL);
+			ret = bmdrv_check_core_id(bmdi, param_list[i].core_id);
+			if (ret) {
+				kfree(param_list);
+				return ret;
+			}
+			api_addr_tmp = kmalloc(param_list[i].param_size + 8, GFP_KERNEL);
 			*(api_addr_tmp + 0) = param_list[i].func_id;
 			*(api_addr_tmp + 1) = param_list[i].param_size;
 			ret = copy_from_user((api_addr_tmp + 2), (tpu_launch_param_t __user *)param_list[i].param_data, param_list[i].param_size);
@@ -1180,10 +1199,9 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		}
 	}
 
-	if (core_id >= BM_MAX_CORE_NUM) {
-		pr_err("bm-sophon%d core id %d not valid\n", bmdi->dev_index, core_id);
-		return -EINVAL;
-	}
+	ret = bmdrv_check_core_id(bmdi, core_id);
+	if (ret)
+		return ret;
 
 	if (bmdi->status_over_temp || bmdi->status_pcie) {
 		pr_err("bm-sophon%d %s, board abnormal before wait, core_id=%d\n",
@@ -1244,10 +1262,9 @@ int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		return ret;
 	}
 
-	if (core_id >= BM_MAX_CORE_NUM) {
-		pr_err("bm-sophon%d core id %d not valid\n", bmdi->dev_index, core_id);
-		return -EINVAL;
-	}
+	ret = bmdrv_check_core_id(bmdi, core_id);
+	if (ret)
+		return ret;
 
 	if (bmdev_gmem_get_handle_info(bmdi, file, &h_info)) {
 		pr_err("bm-sophon%d bmdrv: file list is not found!\n", bmdi->dev_index);
@@ -1295,10 +1312,9 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		return ret;
 	}
 
-	if (core_id >= BM_MAX_CORE_NUM) {
-		pr_err("bm-sophon%d core id %d not valid\n", bmdi->dev_index, core_id);
-		return -EINVAL;
-	}
+	ret = bmdrv_check_core_id(bmdi, core_id);
+	if (ret)
+		return ret;
 
 	if (bmdi->status_over_temp || bmdi->status_pcie) {
 		pr_err("bm-sophon%d %s, board abnormal before polling, core_id=%d\n",

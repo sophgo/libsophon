@@ -37,6 +37,7 @@ struct ion_allocation_data {
 #endif
 
 #define ION_MAX_HEAP_CNT    2
+#define BMLIB_ATTR_NOTSUPPORTED_VALUE 0xFFFFFC01u
 
 #define RDBUF_SIZE 672
 struct product_config {

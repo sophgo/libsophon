@@ -1922,6 +1922,8 @@ bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp)
 
 	ret = platform_ioctl(handle, BMDEV_GET_BOARDP, boardp);
 	if (ret == 0) {
+		if (*boardp == BMLIB_ATTR_NOTSUPPORTED_VALUE)
+			return BM_NOT_SUPPORTED;
 		return BM_SUCCESS;
 	} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2364,6 +2366,8 @@ bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp)
 
 	ret = platform_ioctl(handle, BMDEV_GET_BOARDT, board_temp);
 	if (ret == 0) {
+		if (*board_temp == BMLIB_ATTR_NOTSUPPORTED_VALUE)
+			return BM_NOT_SUPPORTED;
 		return BM_SUCCESS;
 	} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2722,6 +2726,14 @@ bm_status_t bmdev_get_idle_coreid(bm_handle_t handle, int* core_id)
 		return BM_ERR_DEVNOTREADY;
 	}
 
+	if (core_id == nullptr) {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+			"core_id is nullptr %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	*core_id = 0;
 	if (0 == platform_ioctl(handle, BMDEV_GET_IDLE_COREID, core_id)) {
 		return BM_SUCCESS;
 	} else {
