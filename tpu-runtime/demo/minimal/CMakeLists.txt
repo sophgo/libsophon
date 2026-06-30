@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.6)
 project(bmrt)
 
 set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR})

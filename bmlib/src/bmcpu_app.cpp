@@ -124,31 +124,31 @@ static int mmap_tpu_sys(int fd) {
   int result = 0;
 
   mmap_gdma = mmap_paddr_to_vaddr(0, TPU_GDMA_SIZE, fd);
-  if (mmap == NULL) {
+  if (mmap_gdma == NULL) {
     bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "GDMA mmap failed\n");
     return -1;
   }
 
   mmap_sys = mmap_paddr_to_vaddr(1, TPU_SYS_SIZE, fd);
-  if (mmap == NULL) {
+  if (mmap_sys == NULL) {
     bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "SYS mmap failed\n");
     return -1;
   }
 
   mmap_reg = mmap_paddr_to_vaddr(2, TPU_REG_SIZE, fd);
-  if (mmap == NULL) {
+  if (mmap_reg == NULL) {
     bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "REG mmap failed\n");
     return -1;
   }
 
   mmap_smem = mmap_paddr_to_vaddr(3, TPU_SMEM_SIZE, fd);
-  if (mmap == NULL) {
+  if (mmap_smem == NULL) {
     bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "SMEM mmap failed\n");
     return -1;
   }
 
   mmap_lmem = mmap_paddr_to_vaddr(4, TPU_LMEM_SIZE, fd);
-  if (mmap == NULL) {
+  if (mmap_lmem == NULL) {
     bmlib_log(BMLIB_bmcpu_LOG_TAG, BMLIB_LOG_ERROR, "LMEM mmap failed\n");
     return -1;
   }

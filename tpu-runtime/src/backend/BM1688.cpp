@@ -3,7 +3,7 @@
 
 namespace bmruntime {
 
-bool Backend_BM1688::convert_gdma(ConversionParams &params) const {
+bool Backend_BM1688::convert_gdma(ConversionParams &params) {
   uint32_t *dst_ptr = static_cast<uint32_t *>(params.dst_cmd);
   const uint32_t *src_ptr = static_cast<const uint32_t *>(params.src_cmd);
 
@@ -133,13 +133,14 @@ void Launcher_BM1688::fill_api_info(const tpu_net_info_t &net_info,
     // input global offset process
     *(int *)p_api = input_info.size();
     p_api = (int *)p_api + 1;
+    const auto tag = m_addr_layout.tag;
     for (size_t i = 0; i < input_info.size(); ++i) {
       const auto &info = input_info.at(i);
       api_info.input_addr_offset.at(i) =
           (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
       *(u64 *)p_api = info.user_global_addr;
       p_api = (u64 *)p_api + 1;
-      if (core_idx > 0 && ((info.compiled_global_addr >> 36) & 0x7) == 0) {
+      if (core_idx > 0 && ((info.compiled_global_addr >> tag.start) & tag.mask) == 0) {
         /// If the bmodel use multi core, we only move the user's input data to
         /// compiled ddr once.
         *(u64 *)p_api = info.user_global_addr;
@@ -161,7 +162,7 @@ void Launcher_BM1688::fill_api_info(const tpu_net_info_t &net_info,
           (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
       *(u64 *)p_api = info.user_global_addr;
       p_api = (u64 *)p_api + 1;
-      if (core_idx > 0 && ((info.compiled_global_addr >> 36) & 0x7) == 0) {
+      if (core_idx > 0 && ((info.compiled_global_addr >> tag.start) & tag.mask) == 0) {
         /// If the bmodel use multi core, we only move the user's input data to
         /// compiled ddr once.
         *(u64 *)p_api = info.user_global_addr;
@@ -276,7 +277,7 @@ bm_status_t Launcher_BM1688::static_subnet(bm_handle_t handle,
     for (size_t core_idx = 0; core_idx < core_num; core_idx++) {
       auto api_mem = api_mems[core_idx];
 #pragma pack(1)
-      typedef struct {
+      typedef struct long_cmd_param {
         u32 input_num = 0;
         u64 cmd_addr;
         u64 cmd_size;
@@ -474,7 +475,7 @@ bm_status_t Launcher_BM1688::dynamic_subnet(
 
         for (size_t i = 0; i < ctx_num; ++i) {
           BMRT_LOG(DEBUG, "ctx[%d]: border=0x%llx, offset=0x%llx", i,
-                   net_info.ctx_mem_borders, net_info.ctx_mem_offsets[i]);
+                   net_info.ctx_mem_borders[i], net_info.ctx_mem_offsets[i]);
         }
         BMRT_LOG(DEBUG, "core_index=%d, core_num=%d, base_msg_id=%d", core_idx,
                  net_info.core_ids.size(), group_msg_id);
@@ -551,7 +552,7 @@ bm_status_t Launcher_BM1688::_bmdnn_get_profile_data_(
 }
 
 #pragma pack(1)
-typedef struct {
+typedef struct bm_api_engine_profile_param {
   int engine;
   unsigned long long addr;
   unsigned long long size;

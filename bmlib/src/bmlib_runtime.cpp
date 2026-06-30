@@ -91,7 +91,7 @@ void bm_flush(bm_handle_t handle) {
 }
 
 u64 bm_gmem_arm_reserved_request(bm_handle_t handle) {
-  #if defined USING_CMODEL
+#if defined USING_CMODEL
   return handle->bm_dev->bm_device_arm_reserved_req();
   #else
   u64 val;
@@ -103,59 +103,24 @@ u64 bm_gmem_arm_reserved_request(bm_handle_t handle) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
               "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
   return BM_MEM_ADDR_NULL;
-  #endif
-  }
+#endif
+}
 
 void bm_gmem_arm_reserved_release(bm_handle_t handle) {
   #if defined USING_CMODEL
-  handle->bm_dev->bm_device_arm_reserved_rel();
-  #else
-  
+  handle->bm_dev->bm_device_arm_reserved_rel();s
   #endif
 }
 
 #ifndef USING_CMODEL
 bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
-  unsigned int chip_id = 0;
-  bm_status_t ret = BM_SUCCESS;
-  int ioclt_ret;
-
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-          "handle is nullptr %s: %s: %d\n",
-          __FILE__, __func__, __LINE__);
-    return BM_ERR_DEVNOTREADY;
-  }
-
-  if (pfw == nullptr) {
-    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-          "%s:%d param err\n", __func__, __LINE__);
-    return BM_ERR_PARAM;
-  }
-
-  ret = bm_get_chipid(handle, &chip_id);
-  if (ret != BM_SUCCESS)
-    return ret;
-
-  bool should_profile = handle->profile != nullptr;
-  if (should_profile) bm_profile_deinit(handle);
-
-  ioclt_ret = platform_ioctl(handle, BMDEV_UPDATE_FW_A9, pfw);
-  if (ioclt_ret == 0) {
-      if (should_profile) bm_profile_init(handle, true);
-      return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-              "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  }
+  return BM_NOT_SUPPORTED;
+}
 #endif
 
 void P(int semid) {
     struct sembuf sb = {0, -1, 0};
     int ret;
-    
     do {
         ret = semop(semid, &sb, 1);
         if (ret == -1) {
@@ -174,7 +139,6 @@ void P(int semid) {
 void V(int semid) {
     struct sembuf sb = {0, 1, 0};
     int ret;
-    
     do {
         ret = semop(semid, &sb, 1);
         if (ret == -1) {
@@ -1090,7 +1054,7 @@ bm_status_t bm_get_stat(bm_handle_t handle, bm_dev_stat_t *stat) {
 extern "C" {
   #endif
 
-  bm_status_t bm_trigger_spacc(bm_handle_t handle, struct spacc_batch* batch) {
+bm_status_t bm_trigger_spacc(bm_handle_t handle, struct spacc_batch* batch) {
   #ifdef USING_CMODEL
     UNUSED(handle);
     UNUSED(batch);
@@ -1103,145 +1067,59 @@ extern "C" {
         return BM_ERR_DEVNOTREADY;
   }
 
-  ret = platform_ioctl(handle, BMDEV_TRIGGER_SPACC, batch);
-  if (ret == 0) {
   return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
   #endif
   }
 
-  bm_status_t bm_is_seckey_valid(bm_handle_t handle, int* is_valid) {
-  #ifdef USING_CMODEL
+bm_status_t bm_is_seckey_valid(bm_handle_t handle, int* is_valid) {
   UNUSED(handle);
   UNUSED(is_valid);
   return BM_SUCCESS;
-  #else
-  int ret;
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
-        "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_DEVNOTREADY;
-  }
+}
 
-  ret = platform_ioctl(handle, BMDEV_SECKEY_VALID, is_valid);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
-
-  bm_status_t bm_efuse_write(bm_handle_t handle, struct bm_efuse_param *efuse_param) {
-  #ifdef USING_CMODEL
+bm_status_t bm_efuse_write(bm_handle_t handle, struct bm_efuse_param *efuse_param) {
   UNUSED(handle);
   UNUSED(efuse_param);
-  return BM_SUCCESS;
-  #else
-  int ret;
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
-        "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_DEVNOTREADY;
-  }
+  return BM_NOT_SUPPORTED;
+}
 
-  ret = platform_ioctl(handle, BMDEV_EFUSE_WRITE, efuse_param);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
-
-  bm_status_t bm_efuse_read(bm_handle_t handle, struct bm_efuse_param *efuse_param) {
-  #ifdef USING_CMODEL
+bm_status_t bm_efuse_read(bm_handle_t handle, struct bm_efuse_param *efuse_param) {
   UNUSED(handle);
   UNUSED(efuse_param);
-  return BM_SUCCESS;
-  #else
-  int ret;
-  if (handle == nullptr) {
-    bmlib_log(BMLIB_SPACC_TRIGGER_LOG_TAG, BMLIB_LOG_ERROR,
-        "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
-        return BM_ERR_DEVNOTREADY;
-  }
+  return BM_NOT_SUPPORTED;
+}
 
-  ret = platform_ioctl(handle, BMDEV_EFUSE_READ, efuse_param);
-  if (ret == 0) {
-  return BM_SUCCESS;
-  } else {
-  bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-            "%s:%d failed, ioclt ret = %d\n", __func__, __LINE__, ret);
-  return BM_ERR_FAILURE;
-  }
-  #endif
-  }
-
-
-
-  #if defined(__cplusplus)
-  }
+#if defined(__cplusplus)
+}
 #endif
 
 bm_status_t bm_get_tpu_current(bm_handle_t handle, unsigned int *tpuc) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(tpuc);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-
 }
 
 bm_status_t bm_get_board_max_power(bm_handle_t handle, unsigned int *maxp) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(maxp);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-
 }
 
 bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(boardp);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-  
 }
 
 bm_status_t bm_get_fan_speed(bm_handle_t handle, unsigned int *fan) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(fan);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_12v_atx(bm_handle_t handle, int *atx_12v) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(atx_12v);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
@@ -1285,12 +1163,12 @@ bm_status_t bm_get_product_sn(char *product_sn) {
 }
 
 bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(sn);
 
   return BM_NOT_SUPPORTED;
-  #endif
+#endif
   if (sn == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
               "sn is nullptr %s: %s: %d\n",
@@ -1341,16 +1219,16 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn) {
     snprintf(sn, 18, "%s", rd_header.sn);
     close(fd);
   }
-  return BM_SUCCESS;
+return BM_SUCCESS;
 }
 
 bm_status_t bm_get_status(bm_handle_t handle, int *status) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(status);
 
   return BM_NOT_SUPPORTED;
-  #else
+#else
   int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1375,16 +1253,15 @@ bm_status_t bm_get_status(bm_handle_t handle, int *status) {
           __func__, __LINE__, ret);
   return BM_ERR_FAILURE;
   }
-  #endif
-  }
+#endif
+}
 
 bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(tpu_minclk);
-
   return BM_NOT_SUPPORTED;
-  #else
+#else
   int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1409,16 +1286,15 @@ bm_status_t bm_get_tpu_minclk(bm_handle_t handle, unsigned int *tpu_minclk) {
             __func__, __LINE__, ret, __LINE__);
   return BM_ERR_FAILURE;
   }
-  #endif
-  }
+#endif
+}
 
 bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(tpu_maxclk);
-
   return BM_NOT_SUPPORTED;
-  #else
+#else
   int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1443,16 +1319,15 @@ bm_status_t bm_get_tpu_maxclk(bm_handle_t handle, unsigned int *tpu_maxclk) {
             __func__, __LINE__, ret);
   return BM_ERR_FAILURE;
   }
-  #endif
-  }
+#endif
+}
 
 bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(driver_version);
-
   return BM_NOT_SUPPORTED;
-  #else
+#else
   int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1478,16 +1353,15 @@ bm_status_t bm_get_driver_version(bm_handle_t handle, int *driver_version) {
   } else {
   return BM_SUCCESS;
   }
-  #endif
-  }
+#endif
+}
 
 bm_status_t bm_get_board_name(bm_handle_t handle, char *name) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(name);
-
   return BM_NOT_SUPPORTED;
-  #else
+#else
   int ret;
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1495,13 +1369,6 @@ bm_status_t bm_get_board_name(bm_handle_t handle, char *name) {
             __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-
-  //  if (name == nullptr) {
-  //    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
-  //          "name is nullptr %s: %s: %d\n",
-  //          __FILE__, __func__, __LINE__);
-  //    return BM_ERR_PARAM;
-  //  }
 
   ret = platform_ioctl(handle, BMDEV_GET_BOARD_TYPE, name);
   if (ret == 0) {
@@ -1512,115 +1379,77 @@ bm_status_t bm_get_board_name(bm_handle_t handle, char *name) {
             __func__, __LINE__, ret);
   return BM_ERR_FAILURE;
   }
-  #endif
-  }
+#endif
+}
 
 bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(board_temp);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-
 }
 
 bm_status_t bm_get_chip_temp(bm_handle_t handle, unsigned int *chip_temp) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(chip_temp);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_tpu_power(bm_handle_t handle, float *tpu_power) {
-#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(tpu_power);
-
-  return BM_NOT_SUPPORTED;
-#endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_tpu_volt(bm_handle_t handle, unsigned int *tpu_volt) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(tpu_volt);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-
 }
 
 bm_status_t bm_get_card_id(bm_handle_t handle, unsigned int *card_id) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(card_id);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_card_num(unsigned int *card_num) {
-  #ifdef USING_CMODEL
   UNUSED(card_num);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_chip_num_from_card(unsigned int card_id, unsigned int *chip_num, unsigned int *dev_start_index) {
-  #ifdef USING_CMODEL
   UNUSED(card_id);
   UNUSED(chip_num);
   UNUSED(dev_start_index);
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_dynfreq_status(bm_handle_t handle, int *dynfreq_status) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(dynfreq_status);
-
   return BM_NOT_SUPPORTED;
-  #endif
-  return BM_NOT_SUPPORTED;
-
 }
 
 bm_status_t bm_change_dynfreq_status(bm_handle_t handle, int new_status) {
-  #ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(new_status);
-
-  return BM_NOT_SUPPORTED;
-  #endif
   return BM_NOT_SUPPORTED;
 }
 
 bm_status_t bm_get_handle_fd(bm_handle_t handle, FD_ID id, int *fd) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   UNUSED(handle);
   UNUSED(id);
   UNUSED(fd);
   return BM_NOT_SUPPORTED;
-  #else
+#else
   if (handle == nullptr) {
     bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
             "handle is nullptr %s: %s: %d\n",
             __FILE__, __func__, __LINE__);
     return BM_ERR_DEVNOTREADY;
   }
-  #ifdef __linux__
+#ifdef __linux__
   if (fd != nullptr) {
     switch (id) {
       case 0:
@@ -1646,10 +1475,10 @@ bm_status_t bm_get_handle_fd(bm_handle_t handle, FD_ID id, int *fd) {
     return BM_ERR_PARAM;
   }
   return BM_SUCCESS;
-  #else
+#else
       return BM_NOT_SUPPORTED;
-  #endif
-  #endif
+#endif
+#endif
 }
 
 bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
@@ -1659,11 +1488,11 @@ bm_status_t bm_pwr_ctrl(bm_handle_t handle, void *bm_api_cfg_pwr_ctrl) {
 }
 
 DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {
-  #ifdef USING_CMODEL
+#ifdef USING_CMODEL
   int arch_code = handle->bm_dev->chip_id;
-  #else
+#else
   int arch_code = handle->misc_info.chipid;
-  #endif
+#endif
   return arch_code == 0x184;
 }
 
@@ -1758,8 +1587,6 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   int ret_ = 0;
   size_t mmap_sizes[5] = {0x10000, 0x30000, 0x10000, 0x1000, 0x80000}; // tup_sys size
   void *mapped_memory;
-
-
   __atomic_store_n(&bmcpu_app_live, 1, __ATOMIC_SEQ_CST);
   ret = bm_dev_request(&handle, 0);
   if ((ret != BM_SUCCESS) || (handle == NULL)) {
@@ -1827,6 +1654,5 @@ bm_status_t bm_memcpy_s2s_2d(sg_api_2d_memcpy_t *api_mem_param) {
   dlclose(handle_lib);
   return BM_SUCCESS;
 }
-
 
 #endif

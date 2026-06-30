@@ -88,7 +88,7 @@ typedef struct tpu_kernel_global_move_1684x {
   int type_size;
 } tpu_kernel_global_move_1684x_t;
 
-typedef struct {
+typedef struct tpu_net_info{
   std::vector<tpu_tensor_info_t> input_info;
   std::vector<tpu_tensor_info_t> output_info;
   std::vector<u64> reloc_base_addrs; // base io-addrs in io-reloc mode.
@@ -100,6 +100,7 @@ typedef struct {
   uint64_t coeff_start_addr = -1;
   /// neuron start addr
   std::vector<uint64_t> neuron_start_addr;
+  std::vector<uint64_t> neuron_size;
   int32_t do_allreduce = 0;
   tpu_kernel_allreduce_1684x_t allreduce_param;
   int32_t addr_mode;
@@ -136,9 +137,20 @@ struct tpu_dynamic_net_info_t {
   std::vector<int32_t> core_ids; // multi cores
   tpu_kernel_allreduce_1684x_t *all_reduce_param;
 };
+
+struct tag_t {
+  uint32_t start;
+  uint32_t len;
+  uint64_t mask;
+};
+struct addr_t {
+  tag_t offset;
+  tag_t tag;
+};
+
 class Launcher {
 public:
-  Launcher(){};
+  Launcher(addr_t addr_layout) : m_addr_layout(addr_layout) {};
   virtual ~Launcher(){};
 
   virtual bm_status_t static_subnet(bm_handle_t handle,
@@ -148,11 +160,13 @@ public:
   virtual bm_status_t
   dynamic_subnet(bm_handle_t handle,
                  const tpu_dynamic_net_info_t &net_info) = 0;
+
+  addr_t m_addr_layout;
 };
 
 class Launcher_BM1682 : public Launcher {
 public:
-  Launcher_BM1682() {
+  Launcher_BM1682(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 134;
     BM_API_ID_DYNAMIC_FULLNET = 135;
     BM_API_ID_MULTI_FULLNET_PROFILE = 137;
@@ -178,7 +192,7 @@ private:
 
 class Launcher_BM1684 : public Launcher {
 public:
-  Launcher_BM1684() {
+  Launcher_BM1684(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 110;
     BM_API_ID_DYNAMIC_FULLNET = 111;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -210,7 +224,7 @@ private:
 
 class Launcher_BM1684X : public Launcher {
 public:
-  Launcher_BM1684X() {
+  Launcher_BM1684X(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -246,7 +260,7 @@ private:
 
 class Launcher_SGTPUV8 : public Launcher {
 public:
-  Launcher_SGTPUV8() {
+  Launcher_SGTPUV8(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -280,7 +294,9 @@ private:
 
 class Launcher_BM1688 : public Launcher {
 public:
-  Launcher_BM1688() { MAX_API_MSG_SIZE = 1016 * sizeof(u32); };
+  Launcher_BM1688(addr_t addr_layout) : Launcher(addr_layout) {
+    MAX_API_MSG_SIZE = 1016 * sizeof(u32);
+  };
   virtual bm_status_t static_subnet(bm_handle_t handle,
                                     const tpu_net_info_t &net_info);
   virtual void fill_api_info(const tpu_net_info_t &net_info,
@@ -311,7 +327,7 @@ private:
 
 class Launcher_BM1690 : public Launcher {
 public:
-  Launcher_BM1690(std::string arch) : arch_(arch) {
+  Launcher_BM1690(std::string arch, addr_t addr_layout) : Launcher(addr_layout), arch_(arch) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -346,7 +362,7 @@ private:
 
 class Launcher_CV184X : public Launcher {
 public:
-  Launcher_CV184X() {
+  Launcher_CV184X(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -387,7 +403,7 @@ private:
 
 class Launcher_SG2380 : public Launcher {
 public:
-  Launcher_SG2380() {
+  Launcher_SG2380(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;
@@ -428,7 +444,7 @@ private:
 
 class Launcher_BM1684X2 : public Launcher {
 public:
-  Launcher_BM1684X2() {
+  Launcher_BM1684X2(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;

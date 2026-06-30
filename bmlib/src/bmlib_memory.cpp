@@ -25,10 +25,33 @@
 #define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
 #define KERNEL_MODULE_PATH "/lib/firmware/libbm1688_kernel_module.so"
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static std::unordered_map<__u32, std::pair<__u32, __u32>> ht_addr_fd = {};
 static std::unordered_map<uintptr_t, std::pair<__u32, __u32>> ht_addr_mapped_addr = {};
 static std::mutex ht_rw_mutex;
+
+static bool find_cached_mapping(void *vmem, uintptr_t *mapping_key,
+                                uint64_t *mapped_size) {
+  if (vmem == nullptr) {
+    return false;
+  }
+  std::unique_lock<std::mutex> lock(ht_rw_mutex);
+  const uintptr_t ptr = reinterpret_cast<uintptr_t>(vmem);
+  for (const auto &pair : ht_addr_mapped_addr) {
+    const auto &key = pair.first;
+    const auto &range = pair.second;
+    const uint64_t range_size = range.second - range.first;
+    if (ptr >= key && ptr < key + range_size) {
+      if (mapping_key != nullptr) {
+        *mapping_key = key;
+      }
+      if (mapped_size != nullptr) {
+        *mapped_size = range_size;
+      }
+      return true;
+    }
+  }
+  return false;
+}
 
 bm_basic_func_t g_basic_func[] = {
 {.func_name = (char*)"sg_api_memset", 0, 0},
@@ -556,6 +579,7 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 
 static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem) {
   int ret;
+  uintptr_t mapping_key_to_erase = (uintptr_t)(pmem->u.device.mapped_memory);
 
   if (pmem->u.device.mapped_memory){
     munmap(pmem->u.device.mapped_memory, pmem->size);
@@ -570,6 +594,7 @@ static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem) {
       if (pmem->u.device.device_addr >= range.first && pmem->u.device.device_addr < range.second) {
           map_memory_begin = (void *)key;
           size =  range.second - range.first;
+          mapping_key_to_erase = key;
           munmap(map_memory_begin, size);
           break;
       }
@@ -579,7 +604,7 @@ static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem) {
 
   std::unique_lock<std::mutex> lock(ht_rw_mutex);
   ht_addr_fd.erase(pmem->u.device.dmabuf_fd);
-  ht_addr_mapped_addr.erase((uintptr_t)(pmem->u.device.mapped_memory));
+  ht_addr_mapped_addr.erase(mapping_key_to_erase);
   lock.unlock();
   if (close(pmem->u.device.dmabuf_fd)) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
@@ -1232,11 +1257,6 @@ bm_status_t bm_mem_mmap_device_mem(bm_handle_t handle, bm_device_mem_t *dmem,
   #ifndef USING_CMODEL
   void *ret = 0;
 
-  if (handle->misc_info.pcie_soc_mode == 0) {
-    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-          "bmlib not support mmap in pcie mode\n");
-    return BM_ERR_FAILURE;
-  }
   if (!bm_device_mem_page_aligned(*dmem)) {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
             "bm_mem_mmap_device_mem device_mem_addr = 0x%llx is illegal\n",
@@ -1260,15 +1280,15 @@ bm_status_t bm_mem_mmap_device_mem(bm_handle_t handle, bm_device_mem_t *dmem,
   }
   lock.unlock();
 
-  unsigned int size = bm_mem_get_device_size(*dmem);
-  unsigned int aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "inner_offset=%d, size=%d\n", (int)inner_offset, size);
-  ret = mmap(NULL, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-              dmem->u.device.dmabuf_fd, inner_offset);
-  if (MAP_FAILED != ret) {
-    *vmem = (u64)ret;
+  if (dmem->u.device.mapped_memory != nullptr) {
+    *vmem = (u64)dmem->u.device.mapped_memory + inner_offset;
     return BM_SUCCESS;
   } else {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
+        "bm_mem_mmap_device_mem mmap failed, errno = %d (%s), device_addr=%x, fd=%d\n", 
+        errno, strerror(errno), 
+        bm_mem_get_device_addr(*dmem), 
+        dmem->u.device.dmabuf_fd);
     return BM_ERR_FAILURE;
   }
   #else
@@ -1317,7 +1337,7 @@ bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *
     return BM_SUCCESS;
   } else {
     bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-        "===bm_mem_mmap_device_mem_u64 mmap failed, errno = %d (%s), device_addr=%x, fd=%d\n", 
+        "bm_mem_mmap_device_mem_u64 mmap failed, errno = %d (%s), device_addr=%x, fd=%d\n", 
         errno, strerror(errno), 
         bm_mem_get_device_addr_u64(*dmem), 
         dmem->u.device.dmabuf_fd);
@@ -1439,11 +1459,11 @@ bm_status_t bm_mem_invalidate_partial_device_mem(bm_handle_t handle,
   arg.start = (void*)dmem->u.device.mapped_memory;
   arg.paddr = dmem->u.device.device_addr&0xFFFFFFFFULL;
   ion_data.arg = (unsigned long)&arg;
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "=====invalidate device mem, offset=%d, arg.paddr=0x%x, arg.size=%d\n", offset, arg.paddr, arg.size);
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "invalidate device mem, offset=%d, arg.paddr=0x%x, arg.size=%d\n", offset, arg.paddr, arg.size);
 
   ret = ioctl(handle->ion_fd, ION_IOC_CUSTOM, &ion_data);
   if (ret < 0) {
-      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "ION_IOC_CVITEK_FLUSH_RANGE failed, ret=%d\n", ret);
+      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "ion invalidate failed, ret=%d\n", ret);
       return BM_ERR_FAILURE;
   }
   bm_profile_record_mem_end(handle, bm_mem_op_type_t::INVALIDATE, dmem->u.device.device_addr+offset, len);
@@ -1549,9 +1569,9 @@ bm_status_t bm_mem_flush_partial_device_mem(bm_handle_t handle,
   ion_data.cmd = 4;
   arg.size = dmem->size;
   // arg.start = (void*)dmem->u.device.mapped_memory;
-  arg.paddr = dmem->u.device.device_addr&0xFFFFFFFFULL;
+  arg.paddr = dmem->u.device.device_addr & 0xFFFFFFFFULL;
   ion_data.arg = (unsigned long)&arg;
-  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "=====flush device mem, offset=%d, arg.paddr=%x, arg.size=%d\n", offset, arg.paddr, arg.size);
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "flush device mem, offset=%d, arg.paddr=%x, arg.size=%d\n", offset, arg.paddr, arg.size);
 
   ret = ioctl(handle->ion_fd, ION_IOC_CUSTOM, &ion_data);
   if (ret < 0) {
@@ -1577,7 +1597,7 @@ bm_status_t bm_mem_flush_partial_device_mem_u64(bm_handle_t handle,
   // if (!bm_device_mem_range_valid_u64(handle, *dmem)) {
   //   return BM_ERR_PARAM;
   // }
-  // bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "=====bm_mem_flush_partial_device_mem_u64, offset=%d, arg.paddr=%x\n", offset, dmem->u.device.device_addr);
+  bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_DEBUG, "bm_mem_flush_partial_device_mem_u64, offset=%d, arg.paddr=%x\n", offset, dmem->u.device.device_addr);
   bm_device_mem_t dmem_32;
   dmem_32.u.device.device_addr = (u64)bm_mem_get_device_addr_u64(*dmem);
   dmem_32.size = (u32)bm_mem_get_device_size_u64(*dmem);
@@ -1624,8 +1644,24 @@ bm_status_t bm_mem_unmap_device_mem(bm_handle_t handle, void *vmem, int size) {
           "bmlib not support unmap in pcie mode\n");
     return BM_ERR_FAILURE;
   }
+  uintptr_t mapping_key = 0;
+  uint64_t mapped_size = 0;
+  if (find_cached_mapping(vmem, &mapping_key, &mapped_size)) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_INFO,
+              "[bmlib][%s] skip munmap for cached mapping vmem=%p size=%d base=%p mapped_size=%llu\n",
+              __func__, vmem, size, (void *)mapping_key,
+              (unsigned long long)mapped_size);
+    return BM_SUCCESS;
+  }
   unsigned int aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-  (void)munmap(vmem, aligned_size);
+  errno = 0;
+  int munmap_ret = munmap(vmem, aligned_size);
+  int saved_errno = errno;
+  bmlib_log(BMLIB_MEMORY_LOG_TAG,
+            munmap_ret == 0 ? BMLIB_LOG_INFO : BMLIB_LOG_WARNING,
+            "[bmlib][%s] vmem=%p size=%d aligned_size=%u munmap_ret=%d errno=%d errstr=%s\n",
+            __func__, vmem, size, aligned_size, munmap_ret, saved_errno,
+            strerror(saved_errno));
 #else
   UNUSED(handle);
   UNUSED(vmem);
@@ -1642,8 +1678,24 @@ bm_status_t bm_mem_unmap_device_mem_u64(bm_handle_t handle, void *vmem, u64 size
           "bmlib not support unmap in pcie mode\n");
     return BM_ERR_FAILURE;
   }
+  uintptr_t mapping_key = 0;
+  uint64_t mapped_size = 0;
+  if (find_cached_mapping(vmem, &mapping_key, &mapped_size)) {
+    bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_INFO,
+              "[bmlib][%s] skip munmap for cached mapping vmem=%p size=%llu base=%p mapped_size=%llu\n",
+              __func__, vmem, (unsigned long long)size, (void *)mapping_key,
+              (unsigned long long)mapped_size);
+    return BM_SUCCESS;
+  }
   unsigned long long aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
-  (void)munmap(vmem, aligned_size);
+  errno = 0;
+  int munmap_ret = munmap(vmem, aligned_size);
+  int saved_errno = errno;
+  bmlib_log(BMLIB_MEMORY_LOG_TAG,
+            munmap_ret == 0 ? BMLIB_LOG_INFO : BMLIB_LOG_WARNING,
+            "[bmlib][%s] vmem=%p size=%llu aligned_size=%llu munmap_ret=%d errno=%d errstr=%s\n",
+            __func__, vmem, size, aligned_size, munmap_ret, saved_errno,
+            strerror(saved_errno));
   #else
   UNUSED(handle);
   UNUSED(vmem);
@@ -2918,4 +2970,18 @@ void* bm_get_ion_mem_vaddr(u64 device_addr)
       bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "Get ion mem virtual address failed, return NULL! device_add is %lu\n", device_addr);
       return NULL;
     }
+}
+
+bm_status_t bm_get_ion_head_info(bm_handle_t handle, struct bm_heap_info *heap_info)
+{
+  int ret;
+  struct bm_heap_info arg;
+
+  ret = ioctl(handle->dev_fd, BMDEV_GET_HEAP_INFO, &arg);
+  if (ret < 0) {
+      bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "bm_get_ion_head_info failed, ret=%d\n", ret);
+      return BM_ERR_FAILURE;
+  }
+  *heap_info = arg;
+  return BM_SUCCESS;
 }

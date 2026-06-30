@@ -50,22 +50,11 @@ static void fill_tensor_attr(
     attr->shape.dims[i] = tensor->shape()->Get(0)->dim()->Get(i);
   }
   u64 addr = tensor->device_addr();
-  if (io_mode == ADDR_MODE_IO_ALONE) {
+  attr->cmd_addr = addr;
+  uint32_t tag = (addr >> addr_traits.tag.start) & addr_traits.tag.mask;
+  if (tag <= kTagActivation) {
     addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
-  } else if (flags & BM_RUNTIME_SHARE_MEM) {
-      // TODO: refator
-      if (io_mode != ADDR_MODE_IO_TAG_FUSE && io_mode != ADDR_MODE_IO_TAG) {
-        addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
-        addr &= addr_traits.offset.mask;
-      }
-      // attr->dev_mem = bm_mem_from_device(addr, tensor->size());
-  } else {
-    /*
-      multi-core in load bmodel stage, use fake device_addr to record tensor_addr in bmodel
-      and assign real device_addr in launch tensor stage
-    */
-    // attr->dev_mem.u.device.device_addr = addr;
-    // attr->dev_mem.size = tensor->size();
+    addr &= addr_traits.offset.mask;
   }
   attr->dev_mem = bm_mem_from_device(addr, tensor->size());
   attr->st_mode = (bm_store_mode_t)tensor->gmem_stmode();
@@ -90,91 +79,6 @@ static void fill_tensor_attr(
     tensor_attr_t attr;
     fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, io_mode);
     tensor_v.push_back(attr);
-  }
-}
-
-static void upload_coeff_data(ModelCtx *model_ctx,
-                              const bmodel::CoeffMem *coeff_mem,
-                              bm_handle_t handle,
-                              bm_device_mem_u64_t &dev_mem) {
-  bm_status_t status = BM_SUCCESS;
-  u64 size = coeff_mem->binary_coeff()->size();
-#ifdef SOC_MODE
-  void *vmem = NULL;
-  status = bm_mem_mmap_device_mem_u64(handle, &dev_mem, (u64 *)&vmem);
-  CHECK_status(status);
-  model_ctx->read_binary(coeff_mem->binary_coeff(), (u8 *)vmem);
-  status = bm_mem_flush_device_mem_u64(handle, &dev_mem);
-  CHECK_status(status);
-  bm_mem_unmap_device_mem_u64(handle, vmem, size);
-#else
-  if (coeff_mem->encrypt_mode() == 0) {
-#define COEFF_BLK_SIZE 0x1000000
-    u8 *data = new u8[COEFF_BLK_SIZE];
-    auto data_sp = SP(data, u8);
-    u64 left_size = size;
-    u64 offset = 0;
-    u64 address = bm_mem_get_device_addr_u64(dev_mem);
-    while (left_size > 0) {
-      u64 data_size =
-          (left_size >= COEFF_BLK_SIZE ? COEFF_BLK_SIZE : left_size);
-      model_ctx->read_binary(coeff_mem->binary_coeff(), offset, data,
-                             data_size);
-      bm_device_mem_t pmem = bm_mem_from_device(address + offset, data_size);
-      status = bm_memcpy_s2d(handle, pmem, ((void *)data));
-      CHECK_status(status);
-      offset += data_size;
-      left_size -= data_size;
-    }
-  } else if (coeff_mem->encrypt_mode() == 1) {
-    // encrypted data
-    uint64_t out_size = 0;
-    auto decrypt_data = model_ctx->read_binary_with_decrypt(
-        coeff_mem->binary_coeff(), &out_size);
-    auto dev_size = bm_mem_get_device_size_u64(dev_mem);
-    BMRT_ASSERT_INFO((out_size == dev_size),
-                     "Error: device memory vs coeff size overflow");
-    status = bm_memcpy_s2d_u64(handle, dev_mem, ((void *)decrypt_data));
-    free(decrypt_data);
-    CHECK_status(status);
-  }
-#endif
-}
-
-static void update_coeff_data(ModelCtx *model_ctx,
-                              const bmodel::CoeffMem *coeff_mem,
-                              bm_device_mem_u64_t &dev_mem,
-                              const std::vector<int> &weight_idx,
-                              const std::vector<uint8_t> &file_data,
-                              long long &start_position,
-                              bm_handle_t handle) {
-  bm_status_t status = BM_SUCCESS;
-  auto location = coeff_mem->location();
-  u64 address = bm_mem_get_device_addr_u64(dev_mem);
-  auto dev_size = bm_mem_get_device_size_u64(dev_mem);
-
-  for (int k = 0; k < location->size(); k++) {
-    auto info = location->Get(k);
-    auto loc_size = info->size();
-    auto loc_offset = info->offset();
-    std::vector<uint8_t> buffer(loc_size, 0);
-
-    if (std::find(weight_idx.begin(), weight_idx.end(), k) != weight_idx.end() || weight_idx.size() == 0) {
-      // file_data.size() != 0 -> update
-      // file_data.size() == 0 -> empty
-      if (file_data.size() != 0) {
-        if (start_position + loc_size > file_data.size()) {
-          // out_of_range only for lora update
-          // if you want to throw exception, please use runtime_error, logic_error
-          throw std::out_of_range("File data does not contain enough data for the requested operation.");
-        }
-        buffer.assign(file_data.begin() + start_position, file_data.begin() + start_position + loc_size);
-        start_position += loc_size;
-      }
-      bm_device_mem_t pmem = bm_mem_from_device(address + loc_offset, loc_size);
-      status = bm_memcpy_s2d(handle, pmem, ((void *)buffer.data()));
-      CHECK_status(status);
-    }
   }
 }
 
@@ -205,6 +109,28 @@ void Bmruntime::cmd_convert_and_load(
   if (cmd_word_num == 0) {
     return;
   }
+  bool support_bd_share = false;
+  vector<u64> bdc_start;
+  if (engine == ENGINE_BD) {
+    // TODO: only bdc support share, from 1684x2, gdma should support share too
+    support_bd_share = (m_bdc_fixed) && (!m_profile->is_enabled());
+    if (support_bd_share) {
+      for (auto cmd_group : cmd_groups) {
+        if (0 == cmd_group->bdc_num()) {
+          continue;
+        }
+        bdc_start.push_back(cmd_group->binary_bdc()->start());
+      }
+      bm_device_mem_t pmem;
+      bool is_exist = get_bdc_mem(bdc_start, pmem);
+      if (is_exist) {
+        // use the existing bdc memory
+        memory->Init(descriptor, m_handles[devid], pmem);
+        return;
+      }
+    }
+  }
+
   bm_device_mem_t pmem;
   u64 cmd_buf_addr =
       alloc_device_mem(devid, pmem, cmd_word_num, descriptor + "_cmd_mem", 4);
@@ -257,6 +183,9 @@ void Bmruntime::cmd_convert_and_load(
   memory->Init(descriptor, m_handles[devid], pmem, p_cmd_buf,
                m_flags & BM_RUNTIME_CHECK_MEM,
                m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+  if (support_bd_share) {
+    m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
+  }
 }
 
 bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
@@ -268,51 +197,6 @@ bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
   return false;
 }
 
-void Bmruntime::convert_bdc(ModelCtx *model_ctx,
-                            u32 cmd_word_num,
-                            u32 devid,
-                            net_stage_t *stage,
-                            std::vector<const bmodel::CmdGroup *> &cmd_groups,
-                            u32 core_idx) {
-  if (cmd_word_num == 0) {
-    return;
-  }
-  vector<u64> bdc_start;
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    bdc_start.push_back(cmd_group->binary_bdc()->start());
-  }
-  bm_device_mem_t pmem;
-  bool is_exist = get_bdc_mem(bdc_start, pmem);
-  if (is_exist) {
-    // use the existing bdc memory
-    stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-    return;
-  }
-
-  u32 offset = 0;
-  u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    u64 start = cmd_group->binary_bdc()->start();
-    u32 bytes = cmd_group->binary_bdc()->size();
-    u8 *bdc_buffer = new u8[bytes];
-    model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
-    bm_memcpy_s2d_partial_offset(m_handles[devid], pmem,
-                                 (void *)bdc_buffer, bytes, offset);
-    if (bytes % 128 != 0) {
-      BMRT_LOG(WARNING, "bdc is not 128 bytes aligned");
-    }
-    offset += bytes;
-    delete[] bdc_buffer;
-  }
-  m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
-  stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-}
 
 bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
                                   const bmodel::NetParameter* param,
@@ -358,20 +242,15 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
       } else {
         cmd_word_num = bdc_total_id * backend_->aligned_cmd_words(ENGINE_BD);
       }
-      bool use_bdc_new = (m_bdc_fixed) && !(m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) && (!m_profile->is_enabled());
 
-      if (use_bdc_new) {
-        // in fact, bdc no need to convert, just copy to mem for 1684x/1688/...
-        convert_bdc(model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx);
-      } else {
-        cmd_convert_and_load(
+      // ENGINE_BDC
+      cmd_convert_and_load(
             model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx,
             ENGINE_BD, "bd",
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->binary_bdc(); },
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->bdc_num(); },
             [&](ConversionParams &params) { return backend_->convert_bdc(params); },
             &stage->core_commands[core_idx].bdc_mem);
-      }
 
       // ENGINE_GDMA
       if (gdma_total_cmd_byte > 0) {
@@ -431,7 +310,7 @@ void Bmruntime::trace()
   fprintf(stderr, "*** bmruntime trace: ***\n");
   fprintf(stderr, "============ check coeff =============\n");
   for (int i = 0; i < m_device_num; i++) {
-    err_count += m_local_coeffs[i]->Check();
+    err_count += MemoryManager::Instance(i)->coeffMemory()->Check();
   }
   int net_num = m_net_ctx_v.size();
   for (int i = 0; i < net_num; i++) {
@@ -539,29 +418,24 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
     /* device memory offset from bmcompiler */
     if (tensor->size() > 0) {
       bm_device_mem_t dev_mem;
-      if (m_flags & BM_RUNTIME_SHARE_MEM) {
-        // NOTE: bellow codes have a bug in io-ALONE mode for 84x.
-        // correct_addr_for_ioalone = fix_gdma_addr(net_stage, tensor->device_addr(), is_input);
-        if (tensor->device_addr() < net_stage->ctx_start) {
-          // subnet input may share mem with coeff mem
-          dev_mem = bm_mem_from_device(
-              (tensor->device_addr() & backend_->addr_layout().offset.mask) + net_stage->coeff_offset, tensor->size());
-        } else {
-          // rellocate
-          u64 addr = tensor->device_addr();
+      // NOTE: bellow codes have a bug in io-ALONE mode for 84x.
+      // correct_addr_for_ioalone = fix_gdma_addr(net_stage, tensor->device_addr(), is_input);
+      if (tensor->device_addr() < net_stage->ctx_start) {
+        // subnet input may share mem with coeff mem
+        dev_mem = bm_mem_from_device(
+            (tensor->device_addr() & backend_->addr_layout().offset.mask) + net_stage->coeff_offset, tensor->size());
+      } else {
+        // rellocate
+        u64 addr = tensor->device_addr();
+        uint32_t tag = backend_->tag(addr);
+        if (tag <= kTagActivation) {
           u32 idx = get_mem_index(net_stage->ctx_borders, net_stage->ctx_start, addr);
           addr += net_stage->ctx_offset[idx];
           addr &= backend_->addr_layout().offset.mask;
-          dev_mem = bm_mem_from_device(addr, tensor->size());
         }
-      } else {
-        /*
-          multi-core arch in load bmodel stage, use fake device_addr to record tensor_addr in bmodel
-          and assign real device_addr in launch tensor stage
-        */
-        dev_mem.u.device.device_addr = tensor->device_addr();
-        dev_mem.size = tensor->size();
+        dev_mem = bm_mem_from_device(addr, tensor->size());
       }
+      bm_tensor_ext.cmd_addr = tensor->device_addr();
       bm_tensor_ext.tensor_info.device_mem = dev_mem;
       bm_tensor_ext.mem_type |= MEM_TYPE_TPU;
     }
@@ -573,33 +447,19 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
       /* fix : pure cpu net input tensor_size = 0 */
       float* host_mem = NULL;
       u64    mem_size = bmrt_shape_count(&max_shape_reg);
-      if (m_flags & BM_RUNTIME_SHARE_MEM) {
-        if (b_enable_mmap && tensor->size() > 0) {
-          // [NEED FIX] subnet i/o tensor might share a large device memory as compiler using compatc alloc,
-          // here, the tensor size is not accomdate with tensor shape.
-          //BMRT_ASSERT(mem_size * bmrt_data_type_size(bm_tensor_ext.tensor_info.dtype) ==
-          //            bm_mem_get_device_size(bm_tensor_ext.tensor_info.device_mem));
-  #ifndef SOC_MODE
-          BMRT_LOG(FATAL, "Only soc mode run here");
-  #else
-          bm_status_t ret = bm_mem_mmap_device_mem(m_handles[net_ctx->device_id], &bm_tensor_ext.tensor_info.device_mem, (u64 *)&host_mem);
-          if (ret == BM_SUCCESS) {
-            bm_tensor_ext.host_mem.type = HOST_MEM_MMAP;
-          } else {
-              BMRT_LOG(WRONG, "mmap failed, malloc host memory");
-            if (!net_stage->cpu_addr && net_stage->cpu_mem_size > 0) {
-              net_stage->cpu_addr = new float[net_stage->cpu_mem_size];
-            }
-            // To be compatible with the bmodel at low version
-            if (net_stage->cpu_addr) {
-              host_mem = tensor->cpu_addr() + net_stage->cpu_addr;
-            } else {
-              host_mem = new float[mem_size];
-            }
-            bm_tensor_ext.host_mem.type = HOST_MEM_ALLOC;
-          }
-  #endif
+      if (b_enable_mmap && tensor->size() > 0) {
+        // [NEED FIX] subnet i/o tensor might share a large device memory as compiler using compatc alloc,
+        // here, the tensor size is not accomdate with tensor shape.
+        //BMRT_ASSERT(mem_size * bmrt_data_type_size(bm_tensor_ext.tensor_info.dtype) ==
+        //            bm_mem_get_device_size(bm_tensor_ext.tensor_info.device_mem));
+#ifndef SOC_MODE
+        BMRT_LOG(FATAL, "Only soc mode run here");
+#else
+        bm_status_t ret = bm_mem_mmap_device_mem(m_handles[net_ctx->device_id], &bm_tensor_ext.tensor_info.device_mem, (u64 *)&host_mem);
+        if (ret == BM_SUCCESS) {
+          bm_tensor_ext.host_mem.type = HOST_MEM_MMAP;
         } else {
+            BMRT_LOG(WRONG, "mmap failed, malloc host memory");
           if (!net_stage->cpu_addr && net_stage->cpu_mem_size > 0) {
             net_stage->cpu_addr = new float[net_stage->cpu_mem_size];
           }
@@ -611,17 +471,18 @@ void Bmruntime::fill_subnet_tensor_map(net_ctx_t* net_ctx, net_stage_t* net_stag
           }
           bm_tensor_ext.host_mem.type = HOST_MEM_ALLOC;
         }
+#endif
       } else {
-        /*
-          multi-core arch in load bmodel stage, use fake host_mem to record cpu_addr and if use_mmap
-          and malloc/assign real host_mem in launch tensor stage
-        */
-        bm_tensor_ext.host_mem.tensor_cpu_addr = tensor->cpu_addr();
-        if (b_enable_mmap && tensor->size() > 0) {
-          bm_tensor_ext.host_mem.type = HOST_MEM_MMAP;
-        } else {
-          bm_tensor_ext.host_mem.type = HOST_MEM_ALLOC;
+        if (!net_stage->cpu_addr && net_stage->cpu_mem_size > 0) {
+          net_stage->cpu_addr = new float[net_stage->cpu_mem_size];
         }
+        // To be compatible with the bmodel at low version
+        if (net_stage->cpu_addr) {
+          host_mem = tensor->cpu_addr() + net_stage->cpu_addr;
+        } else {
+          host_mem = new float[mem_size];
+        }
+        bm_tensor_ext.host_mem.type = HOST_MEM_ALLOC;
       }
       bm_tensor_ext.host_mem.addr = host_mem;
       bm_tensor_ext.host_mem.size = mem_size;
@@ -756,7 +617,7 @@ void Bmruntime::fill_sub_net(ModelCtx* model_ctx, const Vector<Offset<bmodel::Su
         subnet->tpu_info.core_commands[0].ir_offset = sub_net->ir_offset();
         subnet->tpu_info.core_commands[0].ir_len = sub_net->ir_len();
         // compatible: for old bmodel, run_core is 0, run as 1 core
-        subnet->tpu_info.run_core = std::max(sub_net->run_core(), 1u);
+        subnet->tpu_info.run_core = std::max<u32>(sub_net->run_core(), 1u);
       } else {
         auto core_num = sub_net->core_commands() ? sub_net->core_commands()->size() : 1;
         subnet->tpu_info.run_core = core_num;
@@ -938,9 +799,18 @@ bool Bmruntime::fill_net_ctx(
     net_ctx->output_hidden_v.push_back(tensor->hidden());
     net_ctx->output_index_v.push_back(tensor->index());
   }
+  bm_device_mem_u64_t model_neuron_mem = {0};
+  if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
+    // allocate memory for core 0, all net use the same memory, and the size is the max neuron size of all stages
+    auto dev_id = net_ctx->device_id;
+    auto mem = MemoryManager::Instance(dev_id)->computeMemory();
+    auto name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
+    auto compute_context =
+      mem->Create(name, model_neuron_size, 1, true);
+    model_neuron_mem = compute_context->Mem();
+  }
 
   // alloc ctx memory
-  std::vector<u64> max_ctx_sizes(1, model_neuron_size);
   bool multi_subnet = false;
   for (u32 stage_idx = 0; stage_idx < params->size(); stage_idx++) {
     auto stage = params->Get(stage_idx);
@@ -951,51 +821,38 @@ bool Bmruntime::fill_net_ctx(
     } else if(stage->ctx_size() > 0) {
       stage_sizes = std::vector<u64>(1, stage->ctx_size());
     }
-    size_t size_min = std::min<size_t>(stage_sizes.size(), max_ctx_sizes.size()), i;
-    for (i = 0; i < size_min; ++i) {
-      if (stage_sizes[i] > max_ctx_sizes[i]) {
-        max_ctx_sizes[i] = stage_sizes[i];
-      }
+
+    stages[stage_idx].neuron_size = stage_sizes;
+    stage_ctx_sizes.push_back(std::move(stage_sizes));
+    stages[stage_idx].io_start = stage->io_addr();
+    stages[stage_idx].io_size = stage->io_size();
+    stages[stage_idx].core_num = std::max<u32>(stage->core_num(), 1u);
+    auto subnet = params->Get(stage_idx)->sub_net();
+    stages[stage_idx].subnet_num = subnet ? subnet->size() : 0;
+    uint32_t core_mask = 0;
+    for (int i = 0; i < stages[stage_idx].core_num; i++) {
+      core_mask |= (1 << i);
     }
-    for (; i < stage_sizes.size(); ++i) {
-      max_ctx_sizes.push_back(stage_sizes[i]);
+    if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
+      stages[stage_idx].neuron_mem = {model_neuron_mem};
+      stages[stage_idx].neuron_size = {model_neuron_size};
+    } else {
+      malloc_net_memory(net_ctx, &stages[stage_idx], core_mask);
     }
 
-    auto subnet = params->Get(stage_idx)->sub_net();
-    if (subnet != NULL && subnet->size() > 1) {
-      multi_subnet = true;
-    }
     if (in_device) {
       // as bmodel in device, no need to upload coeffs
       stages[stage_idx].coeff_offset = get_coeff_in_device(model_ctx, stage->coeff_mem());
-    } else if (alloc_mem == false) {
-      auto iter = find(dmem_info.begin(), dmem_info.end(), "coeff_mem");
-      if (iter != dmem_info.end()) {
-        auto coeff_addr = iter->addr + iter->offset;
-        if (m_local_coeffs[devid]->GetCoeffAddr(param->coeff_mem()) != -1 && param->coeff_mem() != NULL) {
-          iter->offset += param->coeff_mem()->binary_coeff()->size();
-        }
-        BMRT_ASSERT_INFO((iter->offset <= iter->size), "Error: device memory: coeff_mem overflow");
-        stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, param->coeff_mem(), coeff_addr, (void*)this, backend_->addr_layout());
-      } else {
-        BMRT_LOG(WRONG, "Error: device memory: coeff_mem don't alloc");
-      }
     } else {
-      stages[stage_idx].coeff_offset = m_local_coeffs[devid]->Register(model_ctx, stage->coeff_mem(), (void*)this, backend_->addr_layout());
+      std::string net_name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
+      stages[stage_idx].coeff_offset = MemoryManager::Instance(devid)->coeffMemory()
+            ->Register(model_ctx, stage->coeff_mem(), net_name, backend_->addr_layout());
     }
 
     stages[stage_idx].dynamic_coeff_offset = stages[stage_idx].coeff_offset;
     if (param->dynamic_combined_coeff_offset()) {
         stages[stage_idx].dynamic_coeff_offset += param->dynamic_combined_coeff_offset() - param->dynamic_coeff_offset();
     }
-    if (!(m_flags & BM_RUNTIME_SHARE_MEM)) {
-      stages[stage_idx].neuron_size.resize(stage_sizes.size());
-      stages[stage_idx].neuron_size = stage_sizes;
-    }
-    stage_ctx_sizes.push_back(std::move(stage_sizes));
-    stages[stage_idx].io_start = stage->io_addr();
-    stages[stage_idx].io_size = stage->io_size();
-    stages[stage_idx].core_num = std::max(stage->core_num(), 1u);
     // fill coeff info
     if (stage->coeff_mem() != NULL && stage->coeff_mem()->location() != NULL) {
       u64 coeff_start = stage->coeff_mem()->address();
@@ -1009,55 +866,6 @@ bool Bmruntime::fill_net_ctx(
         uint64_t loc_addr = stages[stage_idx].coeff_offset + coeff_start + loc->offset();
         coeff_info.device_mem = bm_mem_from_device(loc_addr, loc->size());
         stages[stage_idx].coeff_info_v.push_back(coeff_info);
-      }
-    }
-  }
-
-  if ("BM1682" == backend_->name() &&
-      max_ctx_sizes.size() != 1)
-  {
-    BMRT_LOG(INFO, "BM1682 does not support multi-bulk memory feature");
-    // Models using more than 4GB might compile,
-    // but it shall not run on BM1682.
-    BMRT_ASSERT(0);
-  }
-
-  if (!max_ctx_sizes.empty()) {
-    if (m_flags & BM_RUNTIME_SHARE_MEM) {
-      if (multi_subnet && !(m_flags & BM_RUNTIME_SHARE_DYNMEM)) {
-        // Own an neuron memory if subnet number > 1
-        net_ctx->neuron_mem.resize(max_ctx_sizes.size());
-        for (u32 i = 0; i < max_ctx_sizes.size(); ++i)
-        {
-          auto &mem = net_ctx->neuron_mem[i];
-          alloc_device_mem_u64(devid, mem, max_ctx_sizes[i], "neuron_mem");
-        }
-      } else {
-        // Update max_neuron_mem_size
-        update_max_neuron_mem(devid, max_ctx_sizes);
-        net_ctx->neuron_mem = max_neuron_mem[devid];
-      }
-      for (size_t stage_idx = 0; stage_idx < params->size(); stage_idx++) {
-        stages[stage_idx].neuron_mem = net_ctx->neuron_mem;
-      }
-    } else {
-      if (multi_subnet) {
-        net_ctx->neuron_size.resize(max_ctx_sizes.size());
-        for (u32 i = 0; i < max_ctx_sizes.size(); ++i)
-        {
-          net_ctx->neuron_size[i] = max_ctx_sizes[i];
-        }
-      } else {
-        size_t size_min = std::min<size_t>(max_ctx_sizes.size(), max_neuron_mem_size[devid].size()), i;
-        for (i = 0; i < size_min; ++i) {
-          if (max_ctx_sizes[i] > max_neuron_mem_size[devid][i]) {
-            max_neuron_mem_size[devid][i] = max_ctx_sizes[i];
-          }
-        }
-        for (; i < max_ctx_sizes.size(); ++i) {
-          max_neuron_mem_size[devid].push_back(max_ctx_sizes[i]);
-        }
-        net_ctx->neuron_size = max_neuron_mem_size[devid];
       }
     }
   }
@@ -1484,25 +1292,19 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
       {
         net_stage->ctx_borders[i] = net_stage->ctx_borders[i - 1] + ctx_sizes[i];
       }
-      /*
-        Multi-core runtime not set ctx_offset in load bmodel stage,
-        set ctx_offset in launch tensor stage
-      */
-      if (m_flags & BM_RUNTIME_SHARE_MEM) {
-        for (size_t i = 0; i < ctx_sizes.size(); ++i)
-        {
-          if (net_stage->neuron_mem[i].size > 0) {
-            u64 ctx_addr = bm_mem_get_device_addr_u64(net_stage->neuron_mem[i]);
-            net_stage->ctx_offset[i] = ctx_addr - ctx_start;
-            net_stage->dynamic_ctx_offset[i] = ctx_addr - dynamic_ctx_start;
-          } else {
-            net_stage->ctx_offset[i] = 0;
-            net_stage->dynamic_ctx_offset[i] = 0;
-          }
-          if (i > 0)  {
-            net_stage->ctx_offset[i] -= net_stage->ctx_borders[i - 1];
-            net_stage->dynamic_ctx_offset[i] -= net_stage->ctx_borders[i - 1];
-          }
+      for (size_t i = 0; i < ctx_sizes.size(); ++i)
+      {
+        if (net_stage->neuron_mem[i].size > 0) {
+          u64 ctx_addr = bm_mem_get_device_addr_u64(net_stage->neuron_mem[i]);
+          net_stage->ctx_offset[i] = ctx_addr - ctx_start;
+          net_stage->dynamic_ctx_offset[i] = ctx_addr - dynamic_ctx_start;
+        } else {
+          net_stage->ctx_offset[i] = 0;
+          net_stage->dynamic_ctx_offset[i] = 0;
+        }
+        if (i > 0)  {
+          net_stage->ctx_offset[i] -= net_stage->ctx_borders[i - 1];
+          net_stage->dynamic_ctx_offset[i] -= net_stage->ctx_borders[i - 1];
         }
       }
     } else {
@@ -1516,9 +1318,10 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     net_stage->cpu_mem_size = param->cpu_mem_size();
     net_stage->cpu_addr = nullptr;
 
+    auto coeff_mem = MemoryManager::Instance(devid)->coeffMemory();
     mem_pair_t mem_pair = {
-        bm_mem_get_device_addr_u64(m_local_coeffs[devid]->GetCoeffDeviceMem()),
-        bm_mem_get_device_size_u64(m_local_coeffs[devid]->GetCoeffDeviceMem())};
+        bm_mem_get_device_addr_u64(coeff_mem->GetCoeffDeviceMem()),
+        bm_mem_get_device_size_u64(coeff_mem->GetCoeffDeviceMem())};
     m_profile->record_alloc_device_mem(mem_pair, "coeff");
 
     // setup input and output tensor info
@@ -1538,7 +1341,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
                      (addr_mode_t)net_ctx->addr_mode);
 
     // setup subnet
-    u32 core_num = std::max(param->core_num(), 1u);
+    u32 core_num = std::max<u32>(param->core_num(), 1u);
     net_stage->core_commands.resize(core_num);
     fill_sub_net(model_ctx, param->sub_net(), net_ctx, net_stage);
 
@@ -1569,7 +1372,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
   return true;
 }
 
-bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, bool in_device)
+bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, bool in_device, const mem_info_t *mem_info)
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
   for (auto each_net : m_net_ctx_v) {
@@ -1578,6 +1381,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, bool in_device
       return true;
     }
   }
+  set_device_mem_info(model_ctx, mem_info, net->name()->str());
   net_ctx_t* net_ctx = new net_ctx_t();
   net_ctx->net_name = net->name()->str();
 
@@ -1620,8 +1424,8 @@ static void fill_middlebuff_size(const vector<tensor_attr_t>& attr_v,
 
 void Bmruntime::update_max_middlebuf_size(net_ctx_t* net_ctx) {
   auto devid = net_ctx->device_id;
-  u32 input_num = net_ctx->input_name_v.size();
-  u32 output_num = net_ctx->output_name_v.size();
+  u32 input_num = static_cast<u32>(net_ctx->input_name_v.size());
+  u32 output_num = static_cast<u32>(net_ctx->output_name_v.size());
   vector<u64> input_size_v(input_num, 0);
   vector<u64> output_size_v(output_num, 0);
   for (auto& stage : net_ctx->stage_v) {
@@ -1644,8 +1448,8 @@ void Bmruntime::update_net_middlebuf(net_ctx_t* net_ctx)
 {
   auto devid = net_ctx->device_id;
   bm_device_mem_t mem;
-  u32 input_num = net_ctx->input_name_v.size();
-  u32 output_num = net_ctx->output_name_v.size();
+  u32 input_num = static_cast<u32>(net_ctx->input_name_v.size());
+  u32 output_num = static_cast<u32>(net_ctx->output_name_v.size());
   vector<u64> input_size_v(input_num, 0);
   vector<u64> output_size_v(output_num, 0);
   for (auto& stage : net_ctx->stage_v) {
@@ -1670,27 +1474,6 @@ void Bmruntime::update_net_middlebuf(net_ctx_t* net_ctx)
     }
     net_ctx->middlebuff_output.push_back(mem);
     addr += output_size_v[i];
-  }
-}
-
-void Bmruntime::update_max_neuron_mem(uint32_t devid, const std::vector<u64> &sizes)
-{
-  size_t size_min = std::min<size_t>(sizes.size(), max_neuron_mem[devid].size()), i;
-  for (i = 0; i < size_min; ++i)
-  {
-    auto &mem = max_neuron_mem[devid][i];
-    if (sizes[i] > bm_mem_get_device_size_u64(mem)) {
-      // DON'T free old memory.
-      // In case any previously loaded model have already been bound with them.
-      // TODO: if using prealloc neuron memory. alloc may be failed.
-      alloc_device_mem_u64(devid, mem, sizes[i], "neuron_mem");
-    }
-  }
-  for (; i < sizes.size(); ++i)
-  {
-    bm_device_mem_u64_t mem;
-    alloc_device_mem_u64(devid, mem, sizes[i], "neuron_mem");
-    max_neuron_mem[devid].push_back(mem);
   }
 }
 
@@ -1784,26 +1567,6 @@ void Bmruntime::free_net_info(net_ctx_t* net_ctx)
   free(net_info.stages);
 }
 
-void Bmruntime::free_dyn_neuron(net_ctx_t *net_ctx) {
-  if (!alloc_mem) {
-    return;
-  }
-  BMRT_DEBUG("im free_dyn_neuron\n");
-
-  if (net_ctx->dyn_neuron_stage_dict.empty()) {
-    return;
-  }
-
-  ContextManager::Instance()->DestroyContext(
-      m_handles[net_ctx->device_id],
-      net_ctx->net_name + "_" + std::to_string((uint64_t)this),
-      net_ctx->dyn_neuron_stage_dict.begin()->second->neuron_mem[0].size);
-
-  for (auto &dyn_mem_pair : net_ctx->dyn_neuron_stage_dict) {
-    delete dyn_mem_pair.second;
-  }
-}
-
 void Bmruntime::cascade_fill_net_info(net_cascade_t * net_cascade) {
   auto &net_info = net_cascade->net_info;
   net_info.name = net_cascade->main_name.c_str();
@@ -1867,7 +1630,7 @@ void Bmruntime::cascade_free_net_info(net_cascade_t * net_cascade) {
   free(net_info.stages);
 }
 
-bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device)
+bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device, const mem_info_t *mem_info)
 {
   bool ret = true;
   string model_chip = model_ctx->model()->chip()->str();
@@ -1894,9 +1657,13 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device)
   load_tpu_module(model_ctx);
   load_cpu_module(model_ctx);
 
+  if (mem_info) {
+    dmem_info.clear();
+  }
+
   u32 cur_net_idx = m_net_ctx_v.size();
   for (u32 net_idx = 0; net_idx < load_net_num; net_idx++) {
-    ret = load_bmodel_net(model_ctx, net_idx, in_device);
+    ret = load_bmodel_net(model_ctx, net_idx, in_device, mem_info);
     if (!ret) {
       break;
     }
@@ -1938,7 +1705,7 @@ bool Bmruntime::update_net_coeff(
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
   auto param = net->parameter()->Get(0); // only update stage 0
-  m_local_coeffs[0]->Update( //default for soc device, only device 0
+  MemoryManager::Instance(0)->coeffMemory()->Update( //default for soc device, only device 0
       model_ctx, param->coeff_mem(), mem_idx, weight_idx, file_data, start_position);
   return true;
 }
@@ -2329,9 +2096,8 @@ bool Bmruntime::load_bmodel_with_mem(const string& filepath, mem_info_t* mem_inf
       BMRT_LOG(WRONG, "Load model failed.");
       return false;
   }
-  set_device_mem_info(&model_ctx, mem_info);
   std::lock_guard<std::mutex> guard(m_load_mutex);
-  return load_bmodel(&model_ctx);
+  return load_bmodel(&model_ctx, false, mem_info);
 }
 
 /* Load bmodel file, which is pre-compiled by bmcompiler */
@@ -2343,9 +2109,8 @@ bool Bmruntime::load_bmodel_with_mem(const void* bmodel_data, size_t size, mem_i
       BMRT_LOG(WRONG, "Load model failed.");
       return false;
   }
-  set_device_mem_info(&model_ctx, mem_info);
   std::lock_guard<std::mutex> guard(m_load_mutex);
-  return load_bmodel(&model_ctx);
+  return load_bmodel(&model_ctx, false, mem_info);
 }
 
 bool Bmruntime::load_bmodel_in_device(void *p_bmodel, uint64_t dev_addr, size_t size)
@@ -2414,6 +2179,17 @@ bool Bmruntime::load_context(const string& ctx_dir)
 
 void Bmruntime::fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc) {
   if (addr != -1 || size == 0) {
+    auto iter = find(dmem_info.begin(), dmem_info.end(), desc);
+    if (iter != dmem_info.end()) {
+      BMRT_ASSERT_INFO(iter->addr == static_cast<uint64_t>(addr) && iter->size == size,
+                       "Error: device memory: %s changed across nets, addr=0x%llx size=0x%llx, prev_addr=0x%llx prev_size=0x%llx",
+                       desc.c_str(),
+                       static_cast<unsigned long long>(addr),
+                       static_cast<unsigned long long>(size),
+                       static_cast<unsigned long long>(iter->addr),
+                       static_cast<unsigned long long>(iter->size));
+      return;
+    }
     device_mem_info_t dmem;
     dmem.addr = addr;
     dmem.desc = desc;
@@ -2423,12 +2199,17 @@ void Bmruntime::fill_dmem_info(int64_t addr, uint64_t size, const std::string &d
   }
 }
 
-void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info)
+void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, const mem_info_t* mem_info, const std::string &net_name)
 {
+  if (!mem_info) {
+    return;
+  }
+  // TODO: refactor
+  auto inst = MemoryManager::Instance(0);
+  std::string name = net_name + "_" + std::to_string((uint64_t)this);
   // init basic info
   alloc_mem = false;
   bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
-  dmem_info.clear();
   if (mem_info->instruction_mem.addr != -1) {
     // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
     BMRT_ASSERT(mem_info->instruction_mem.number == 1);
@@ -2463,6 +2244,7 @@ void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info)
     BMRT_ASSERT(mem_info->instruction_mem.number == 1);
     BMRT_ASSERT_INFO(bmem_info.coeff_mem_size <= mem_info->coeff_mem.size, "");
     fill_dmem_info(mem_info->coeff_mem.addr, bmem_info.coeff_mem_size, "coeff_mem");
+    inst->coeffMemory()->RegisterCustomer(mem_info->coeff_mem.addr, bmem_info.coeff_mem_size, name);
   }
   if (mem_info->neuron_mem.addr != -1 || mem_info->neuron_mem.size == 0) {
     // neuron_mem: neuron + middle_buffer_size + dynamic_output + io_mem
@@ -2475,6 +2257,7 @@ void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info)
       int64_t base_addr = mem_info->neuron_mem.addr;
       BMRT_ASSERT_INFO(offset + bmem_info.neuron_mem_size <= mem_info->neuron_mem.size, "");
       fill_dmem_info(base_addr, bmem_info.neuron_mem_size, "neuron_mem" + suffix);
+      inst->computeMemory()->RegisterCustomer(base_addr, bmem_info.neuron_mem_size, name);
       offset += ALIGN(bmem_info.neuron_mem_size, 128);
       BMRT_ASSERT_INFO(offset + bmem_info.middle_buffer_size <= mem_info->neuron_mem.size, "");
       fill_dmem_info(base_addr + offset, bmem_info.middle_buffer_size, "middle_buffer" + suffix);
@@ -2499,207 +2282,6 @@ void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, mem_info_t* mem_info)
       std::string suffix = "";
       BMRT_ASSERT_INFO(io_mem_size <= mem_info->io_mem.size, "");
       fill_dmem_info(mem_info->io_mem.addr, io_mem_size, "io_mem" + suffix);
-  }
-}
-
-// BmCoeff should not use the handle outside which may be released ahead in some cases.
-BmCoeff::BmCoeff(int devid)
-{
-  if(!m_handle){
-    bm_status_t status = bm_dev_request(&m_handle, devid);
-    if (BM_SUCCESS != status) {
-      BMRT_LOG(FATAL, "bm_dev_request failed:[%d]", status);
-    }
-    m_devid = devid;
-  }
-}
-
-BmCoeff::~BmCoeff()
-{
-    for(auto &mem: m_mem_need_free) {
-      BMRT_LOG_RUN(DEBUG, {
-        u64 mem_addr = bm_mem_get_device_addr_u64(mem);
-        u64 mem_size = bm_mem_get_device_size_u64(mem);
-        BMRT_LOG(DEBUG, "free mem : [0x%llx, 0x%llx), size=%lld[0x%x]", mem_addr, mem_addr+mem_size, mem_size, mem_size);
-      });
-      bm_free_device_u64(m_handle, mem);
-    }
-    bm_dev_free(m_handle);
-}
-
-u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, void* bmrt_ptr, addr_t addr_traits) {
-  return Register(model_ctx, coeff_mem, -1, bmrt_ptr, addr_traits);
-}
-
-int64_t BmCoeff::GetCoeffAddr(const CoeffMem* coeff_mem) {
-  if (coeff_mem == NULL) {
-    return 0;
-  }
-  u64 coeff_size = coeff_mem->binary_coeff()->size();
-  u8* coeff_size_ptr = (u8*)&coeff_size;
-  vector<u8> check_code = {coeff_mem->check_code()->begin(), coeff_mem->check_code()->end()};
-  check_code.insert(check_code.end(), coeff_size_ptr, coeff_size_ptr + sizeof(u64));
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-  auto iter = m_coeff_map.find(check_code);
-  if (iter != m_coeff_map.end()) {
-    return bm_mem_get_device_addr_u64(iter->second);
-  }
-  return -1;
-}
-
-u64 BmCoeff::Register(ModelCtx* model_ctx, const CoeffMem* coeff_mem, int64_t addr, void* bmrt_ptr, addr_t addr_traits)
-{
-  if (coeff_mem == NULL || model_ctx == NULL) {
-    return 0;
-  }
-  u64 coeff_start = coeff_mem->address();
-  coeff_start &= addr_traits.offset.mask;
-  u64 coeff_size = coeff_mem->encrypt_mode() == 0
-                       ? coeff_mem->binary_coeff()->size()
-                       : coeff_mem->decrypt_size();
-  u8* coeff_size_ptr = (u8*)&coeff_size;
-
-  vector<u8> check_code = {coeff_mem->check_code()->begin(), coeff_mem->check_code()->end()};
-  check_code.insert(check_code.end(), coeff_size_ptr, coeff_size_ptr + sizeof(u64));
-  register_coeff_user(check_code, bmrt_ptr);
-
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-  auto iter = m_coeff_map.find(check_code);
-
-  if (iter != m_coeff_map.end()) {
-    BMRT_LOG(DEBUG, "coeff already exists");
-    return bm_mem_get_device_addr_u64(iter->second) - coeff_start;
-  }
-
-  bm_device_mem_u64_t pmem;
-  if (addr == -1) {
-    if (BM_SUCCESS != bm_malloc_device_byte_heap_mask_u64(m_handle, &pmem, 7, coeff_size)) {
-      BMRT_LOG(FATAL, "coeff alloc failed, size[0x%llx]", coeff_size);
-    }
-    m_mem_need_free.push_back(pmem);
-  } else {
-    bm_set_device_mem_u64(&pmem, coeff_size, addr);
-  }
-
-  BMRT_LOG_RUN(DEBUG, {
-    u64 mem_addr = bm_mem_get_device_addr_u64(pmem);
-    u64 mem_size = bm_mem_get_device_size_u64(pmem);
-    if (addr != -1) {
-      BMRT_LOG(DEBUG, "using prealloc coeff mem: [0x%llx, 0x%llx), size=%lld[0x%x]",
-               mem_addr, mem_addr+mem_size, mem_size, mem_size);
-    } else {
-      BMRT_LOG(DEBUG, "alloc mem : [0x%llx, 0x%llx), size=%lld[0x%x]",
-               mem_addr, mem_addr+mem_size, mem_size, mem_size);
-    }
-  });
-
-  m_latest_device_mem = pmem;
-  upload_coeff_data(model_ctx, coeff_mem, m_handle, pmem);
-
-  m_coeff_map.insert({check_code, pmem});
-
-  return bm_mem_get_device_addr_u64(pmem) - coeff_start;
-}
-
-u64 BmCoeff::Update(ModelCtx* model_ctx,
-                    const CoeffMem* coeff_mem,
-                    int mem_idx,
-                    const std::vector<int> &weight_idx,
-                    const std::vector<uint8_t> &file_data,
-                    long long &start_position) {
-  if (coeff_mem == NULL || model_ctx == NULL) {
-    return 0;
-  }
-  // u64 coeff_start = coeff_mem->address();
-  // // Use relative address since 1688.
-  // coeff_start &= bmrt_arch_info::addr_mask();
-  // u64 coeff_size = coeff_mem->encrypt_mode() == 0
-  //                      ? coeff_mem->binary_coeff()->size()
-  //                      : coeff_mem->decrypt_size();
-
-  // check whether the same
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-
-  auto dev_mem = m_mem_need_free[mem_idx];
-  update_coeff_data(model_ctx, coeff_mem, dev_mem, weight_idx, file_data, start_position, m_handle);
-  return 0;
-}
-
-int BmCoeff::Check()
-{
-  int err_count = 0;
-  uint8_t crc32[bmodel::SHA256_LEN];
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-  for (auto& coeff : m_coeff_map) {
-    auto &sha = coeff.first;
-    auto &mem = coeff.second;
-    u64 size = bm_mem_get_device_size_u64(mem);
-    if(size > 0x40000000) {
-      fprintf(stderr, "Coeff size[0x%llx] is greater than 1GB, ignore the SHA check\n", size);
-      continue;
-    }
-    uint8_t* buffer = new uint8_t[size];
-    auto buffer_sp = SP(buffer, uint8_t);
-    bm_status_t status = bm_memcpy_d2s_u64(m_handle, buffer, coeff.second);
-    CHECK_status(status);
-    bmodel::CalcSha256(buffer, size, crc32);
-    u64 addr = bm_mem_get_device_addr_u64(mem);
-    fprintf(stderr, "Coeff, chip[%d], SHA[%02X%02X%02X%02X], addr[0x%llx], size[0x%x]",
-            m_devid, sha[0], sha[1], sha[2], sha[3], addr, (u32)size);
-    if (0 != memcmp(crc32, coeff.first.data(), bmodel::SHA256_LEN)) {
-      fprintf(stderr, ", Check:**FAILED**\n");
-      err_count++;
-    } else {
-      fprintf(stderr, "\n");
-    }
-  }
-  return err_count;
-}
-
-void BmCoeff::register_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr)
-{
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-
-  if (m_check_code_user_list.find(check_code) == m_check_code_user_list.end()) {
-    m_check_code_user_list[check_code] = std::set<void*>();
-  }
-
-  m_check_code_user_list[check_code].insert(bmruntime_ptr);
-}
-
-std::vector<std::vector<u8>> BmCoeff::get_all_check_codes() {
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-
-  std::vector<std::vector<u8>> codes;
-  for (const auto& entry : m_check_code_user_list) {
-    codes.push_back(entry.first);
-  }
-  return codes;
-}
-
-void BmCoeff::unregister_coeff_user(const vector<u8>& check_code, void* bmruntime_ptr, bool free_unused_mem)
-{
-  std::lock_guard<std::mutex> guard(m_coeff_mutex);
-
-  auto iter = m_check_code_user_list.find(check_code);
-  if (iter != m_check_code_user_list.end()) {
-    iter->second.erase(bmruntime_ptr);
-
-    if (free_unused_mem && iter->second.empty()) {
-      m_check_code_user_list.erase(iter);
-      auto coeff_iter = m_coeff_map.find(check_code);
-      if (coeff_iter != m_coeff_map.end()) {
-        bm_device_mem_u64_t mem = coeff_iter->second;
-        u64 mem_addr = bm_mem_get_device_addr_u64(mem);
-        u64 mem_size = bm_mem_get_device_size_u64(mem);
-
-        BMRT_LOG(DEBUG, "[BmCoeff] Device %d: Freeing coeff memory addr[0x%llx], size[0x%llx]",
-                  m_devid, mem_addr, mem_size);
-
-        bm_free_device_u64(m_handle, mem);
-        m_coeff_map.erase(coeff_iter);
-      }
-    }
   }
 }
 
@@ -2814,7 +2396,7 @@ void KernelModule::preload_funcs(int core_id, const std::string &backend) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-  if(backend == "BM1688" || backend == "SG2380"){
+  if(backend == "BM1688" || backend == "SG2380" || backend == "BM1684X2"){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }

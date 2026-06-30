@@ -138,7 +138,7 @@ bm_status_t Launcher_BM1690::static_subnet(bm_handle_t handle,
   } else {
     std::vector<bm_device_mem_t> api_mem(net_info.core_list.size());
 #pragma pack(1)
-    typedef struct {
+    typedef struct long_cmd_param {
       u32 input_num = 0;
       u64 cmd_addr;
       u64 cmd_size;

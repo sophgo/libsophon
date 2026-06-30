@@ -6,7 +6,6 @@
 #include <linux/device.h>
 #include <linux/types.h>
 
-#define ATTR_FAULT_VALUE		(int)(0xFFFFFC00)
 #define ATTR_NOTSUPPORTED_VALUE		(int)(0xFFFFFC01)
 
 struct bm_dev_list {
@@ -32,5 +31,4 @@ int bmdrv_ctrl_add_dev(struct bm_ctrl_info *bmci, struct bm_device_info *bmdi);
 int bmdrv_ctrl_del_dev(struct bm_ctrl_info *bmci, struct bm_device_info *bmdi);
 struct bm_device_info *bmctl_get_bmdi(struct bm_ctrl_info *bmci, int dev_id);
 
-int bmctl_ioctl_recovery(struct bm_ctrl_info *bmci, unsigned long arg);
 #endif

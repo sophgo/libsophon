@@ -21,9 +21,14 @@
 
 RUNTIME_DIR=$(realpath `dirname ${BASH_SOURCE}`/..)
 THIRDPARTY_DIR=$RUNTIME_DIR/build_thirdparty
-LIBSOPHON_DIR=$(realpath $RUNTIME_DIR/..)
 
-PREBUILT_DIR=`cd $RUNTIME_DIR/../../bm_prebuilt_toolchains && pwd`
+if [ -d "$RUNTIME_DIR/../../bm_prebuilt_toolchains" ];then
+    PREBUILT_DIR=$(realpath $RUNTIME_DIR/../../bm_prebuilt_toolchains)
+    LIBSOPHON_DIR=$(realpath $RUNTIME_DIR/..)
+else
+    PREBUILT_DIR=$(realpath $RUNTIME_DIR/../bm_prebuilt_toolchains)
+    LIBSOPHON_DIR=$(realpath $RUNTIME_DIR/../libsophon)
+fi
 CROSS_TOOLCHAIN=$PREBUILT_DIR/gcc-linaro-6.3.1-2017.05-x86_64_aarch64-linux-gnu/
 C_COMPILER=$CROSS_TOOLCHAIN/bin/aarch64-linux-gnu-gcc
 CXX_COMPILER=$CROSS_TOOLCHAIN/bin/aarch64-linux-gnu-g++

@@ -1,8 +1,6 @@
 #include "bm_common.h"
 #include "bm_drv.h"
 
-
-
 /* be carefull with global variables, keep multi-card support in mind */
 dev_t bm_devno_base;
 dev_t bm_ctl_devno_base;
@@ -28,8 +26,6 @@ static char *bmdrv_class_devnode(struct device *dev, umode_t *mode)
 
 static void bmdrv_sw_register_init(struct bm_device_info *bmdi)
 {
-	bmdi->c_attr.bm_card_attr_init = bmdrv_card_attr_init;
-
 	bmdi->gmem_info.bm_gmem_init = bmdrv_gmem_init;
 	bmdi->gmem_info.bm_gmem_deinit = bmdrv_gmem_deinit;
 }
@@ -52,27 +48,22 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 			bmdi->c_attr.bm_card_attr_init(bmdi))
 		return -EFAULT;
 
-
 	bmdi->parent = cinfo->device;
-
 	bmdrv_print_cardinfo(cinfo);
-
 	bmdi->enable_dyn_freq = 1;
-
 	return ret;
 }
 
 void bmdrv_software_deinit(struct bm_device_info *bmdi)
 {
-
 	if (bmdi->gmem_info.bm_gmem_deinit)
 		bmdi->gmem_info.bm_gmem_deinit(bmdi);
 }
 
 struct class bmdev_class = {
-		.name = BM_CLASS_NAME,
-		.owner = THIS_MODULE,
-		.devnode = bmdrv_class_devnode,
+	.name = BM_CLASS_NAME,
+	.owner = THIS_MODULE,
+	.devnode = bmdrv_class_devnode,
 };
 
 int bmdrv_class_create(void)

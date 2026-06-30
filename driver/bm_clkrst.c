@@ -43,15 +43,15 @@ void SGTPUV8_modules_reset(struct bm_device_info *bmdi)
 	if (bmdi->cinfo.tpu && bmdi->cinfo.gdma) {
 		PR_TRACE("SGTPUV8 reset\n");
 		reset_control_assert(bmdi->cinfo.tpu);
-		udelay(1000);
+		usleep_range(100, 110);
 		reset_control_deassert(bmdi->cinfo.tpu);
 
 		reset_control_assert(bmdi->cinfo.gdma);
-		udelay(1000);
+		usleep_range(100, 110);
 		reset_control_deassert(bmdi->cinfo.gdma);
 
 		reset_control_assert(bmdi->cinfo.tpusys);
-		udelay(1000);
+		usleep_range(100, 110);
 		reset_control_deassert(bmdi->cinfo.tpusys);
 	}
 }
@@ -91,7 +91,6 @@ void SGTPUV8_modules_clk_deinit(struct bm_device_info *bmdi)
 	struct device *dev = &bmdi->cinfo.pdev->dev;
 	devm_clk_put(dev, bmdi->cinfo.tpu_clk);
 	devm_clk_put(dev, bmdi->cinfo.tpu_sys_clk);
-	// devm_clk_put(dev, cinfo->timer_clk);
 	devm_clk_put(dev, bmdi->cinfo.gdma_clk);
 }
 

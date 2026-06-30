@@ -231,7 +231,7 @@ bm_status_t Launcher_SG2380::_bmdnn_get_profile_data_(
 }
 
 #pragma pack(1)
-typedef struct {
+typedef struct bm_api_engine_profile_param {
   int engine;
   unsigned long long addr;
   unsigned long long size;

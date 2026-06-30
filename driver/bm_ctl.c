@@ -59,13 +59,6 @@ int bmdrv_ctrl_del_dev(struct bm_ctrl_info *bmci, struct bm_device_info *bmdi)
 	return 0;
 }
 
-static int bmctl_get_bus_id(struct bm_device_info *bmdi)
-{
-
-	return 0;
-
-}
-
 struct bm_device_info *bmctl_get_bmdi(struct bm_ctrl_info *bmci, int dev_id)
 {
 	struct bm_dev_list *pos, *tmp;
@@ -92,7 +85,6 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	struct chip_info *cinfo;
 	struct bm_chip_attr *c_attr;
 
-#define P_SHOW 0
 	bmdi = bmctl_get_bmdi(bmci, pattr->dev_id);
 	if (!bmdi)
 		return -1;
@@ -102,7 +94,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 
 	pattr->chip_mode = bmdi->misc_info.pcie_soc_mode;
 	if (pattr->chip_mode == 0)
-		pattr->domain_bdf = bmctl_get_bus_id(bmdi);
+		pattr->domain_bdf = 1;
 	else
 		pattr->domain_bdf = ATTR_NOTSUPPORTED_VALUE;
 	pattr->chip_id = bmdi->cinfo.chip_id;
@@ -116,20 +108,13 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		pattr->chip_temp = c_attr->chip_temp;
 	else
 		pattr->chip_temp = ATTR_NOTSUPPORTED_VALUE;
-	if (P_SHOW)
-		pr_err("pattr->chip_temp = 0x%x\n", pattr->chip_temp);
 	if (c_attr->bm_get_board_temp != NULL)
 		pattr->board_temp = c_attr->board_temp;
 	else
 		pattr->board_temp = ATTR_NOTSUPPORTED_VALUE;
-	if (P_SHOW)
-		pr_err("pattr->board_temp = 0x%x\n", pattr->board_temp);
 	if (c_attr->bm_get_tpu_power != NULL)
 	{
-
 		pattr->tpu_power = c_attr->tpu_power;
-		if (P_SHOW)
-			pr_err("pattr->tpu_power = %d\n", pattr->tpu_power);
 	}
 	else
 	{
@@ -137,33 +122,19 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		pattr->vdd_tpu_volt = ATTR_NOTSUPPORTED_VALUE;
 		pattr->vdd_tpu_curr = ATTR_NOTSUPPORTED_VALUE;
 	}
-	if (c_attr->bm_get_board_power != NULL)
-	{
-
-	}
-	else
+	if (c_attr->bm_get_board_power == NULL)
 	{
 		pattr->board_power = ATTR_NOTSUPPORTED_VALUE;
 		pattr->atx12v_curr = ATTR_NOTSUPPORTED_VALUE;
 	}
-	if (P_SHOW)
-		pr_err("pattr->board_power = 0x%x\n", pattr->board_power);
-	if (P_SHOW)
-		pr_err("pattr->atx12v_curr = 0x%x\n", pattr->atx12v_curr);
 
 	memcpy(pattr->sn, "    N/A         ", 17);
-
-	if (P_SHOW)
-		pr_err("pattr->sn = %s\n", pattr->sn == NULL ? "no val" : pattr->sn);
-
 	strncpy(pattr->board_type, "SOC", 3);
 
 	pattr->card_index = 0x0;
 	pattr->chip_index_of_card = 0x0;
 	pattr->fan_speed = ATTR_NOTSUPPORTED_VALUE;
 
-	if (P_SHOW)
-		pr_err("pattr->fan_speed = 0x%x\n", pattr->fan_speed);
 	switch (pattr->chip_id)
 	{
 	case CHIP_ID:
@@ -182,8 +153,6 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		{
 			pattr->tpu_current_clock = (int)0xFFFFFC00;
 		}
-		if (P_SHOW)
-			pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
 	default:
 		break;
@@ -192,9 +161,6 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		pattr->board_max_power = bmdi->boot_info.max_board_power;
 	else
 		pattr->board_max_power = ATTR_NOTSUPPORTED_VALUE;
-	if (P_SHOW)
-		pr_err("pattr->board_max_power = 0x%x\n", pattr->board_max_power);
-
 	return 0;
 }
 

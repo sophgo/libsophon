@@ -279,13 +279,11 @@ unsigned long bm_gen_pool_alloc_algo(struct bm_gen_pool *pool, size_t size,
 	int order = pool->min_alloc_order;
 	int nbits, start_bit, end_bit, remain;
 
-#ifndef CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG
 	if (unlikely((in_nmi()) != 0))
 	{
 		WARN_ON(1);
 		return 0;
 	}
-#endif
 
 	if (size == 0)
 		return 0;

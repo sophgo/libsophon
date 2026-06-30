@@ -24,20 +24,14 @@ struct bm_handle_info {
 };
 
 struct reserved_mem_info {
-
 	u64 eutable_addr;
 	u64 eutable_size;
-
 	u64 armreserved_addr;
 	u64 armreserved_size;
-
 	u64 warpaffine_addr;
 	u64 warpaffine_size;
-
 	u64 npureserved_addr[MAX_HEAP_CNT];
 	u64 npureserved_size[MAX_HEAP_CNT];
-
-
 };
 
 struct bm_gmem_info {
@@ -70,4 +64,6 @@ int bmdrv_gmem_ioctl_alloc_mem_ion(struct bm_device_info *bmdi, struct file *fil
 		unsigned long arg);
 int bmdrv_gmem_ioctl_free_mem(struct bm_device_info *bmdi, struct file *file,
 		unsigned long arg);
+
+int bmdrv_get_heap_info(struct bm_device_info *bmdi, unsigned long arg);
 #endif

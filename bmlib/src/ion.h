@@ -57,7 +57,9 @@ enum ion_heap_type {
  * mappings of this buffer should be cached, ion will do cache maintenance
  * when the buffer is mapped for dma
  */
+#define ION_FLAG_NO_CACHED 0
 #define ION_FLAG_CACHED 1
+#define ION_IOC_CVITEK_GET_HEAP_INFO		2
 
 /**
  * DOC: Ion Userspace API
@@ -151,6 +153,11 @@ struct bitmain_heap_info {
   unsigned int id;
   unsigned long total_size;
   unsigned long avail_size;
+};
+struct bm_heap_info {
+	unsigned int heap_id;
+	unsigned long long mem_start_addr;
+	unsigned long long mem_size;
 };
 
 #define ION_IOC_BITMAIN_FLUSH_RANGE    1

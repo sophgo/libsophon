@@ -7,13 +7,103 @@
 #include <linux/types.h>
 #include <linux/platform_device.h>
 
-#include "bm_attr.h"
 #include "bm_gmem.h"
-#include "bm_io.h"
-
 #include "bm_uapi.h"
 #include "version.h"
 
+#define BM_THERMAL_WINDOW_WIDTH 5
+
+enum bm_vfs_status {
+	VFS_ORIGIN_MODE = 0,
+	VFS_INIT_MODE,
+	VFS_MISSION_MODE,
+	VFS_STATUS_BUTT
+};
+
+enum bm_freq_scaling_caller {
+	FREQ_CALLER_TEMP = 0,
+	FREQ_CALLER_VFS,
+	FREQ_CALLER_BUTT
+};
+
+struct bm_thermal_info {
+	int elapsed_temp[BM_THERMAL_WINDOW_WIDTH];
+	int idx;
+	int max_clk_tmp;
+	int half_clk_tmp;
+	int min_clk_tmp;
+	int tmp;
+	int index;
+	int is_off;
+	int extreme_tmp;
+};
+
+struct bm_chip_attr {
+	u16 fan_speed;
+	u16 fan_rev_read;
+	atomic_t npu_utilization;
+	int npu_cnt;
+	int npu_busy_cnt;
+	int npu_timer_interval;
+	u64 npu_busy_time_sum_ms;
+	u64 npu_start_probe_time;
+#define NPU_STAT_WINDOW_WIDTH 50
+	int npu_status[NPU_STAT_WINDOW_WIDTH];
+	int npu_status_idx;
+	atomic_t npu_utilization1;
+	u64 npu_busy_time_sum_ms1;
+	u64 npu_start_probe_time1;
+	int npu_status1[NPU_STAT_WINDOW_WIDTH];
+	int npu_status_idx1;
+	struct mutex attr_mutex;
+	atomic_t timer_on;
+	bool fan_control;
+	int led_status;
+	struct bm_thermal_info thermal_info;
+
+	int (*bm_card_attr_init)(struct bm_device_info *);
+	void (*bm_card_attr_deinit)(struct bm_device_info *);
+	int (*bm_get_chip_temp)(struct bm_device_info *, int *);
+	int (*bm_get_board_temp)(struct bm_device_info *, int *);
+	int (*bm_get_tpu_power)(struct bm_device_info *, u32 *);
+	int (*bm_get_vddc_power)(struct bm_device_info *, u32 *);
+	int (*bm_get_vddphy_power)(struct bm_device_info *, u32 *);
+	int (*bm_get_board_power)(struct bm_device_info *, u32 *);
+	int (*bm_get_fan_speed)(struct bm_device_info *);
+	int (*bm_get_npu_util)(struct bm_device_info *);
+	int (*bm_set_led_status)(struct bm_device_info *, int);
+	int last_valid_tpu_power;
+	int last_valid_vddc_power;
+	int last_valid_vddphy_power;
+	int last_valid_tpu_volt;
+	int last_valid_tpu_curr;
+	int board_temp;
+	int chip_temp;
+	int board_power;
+	int tpu_power;
+	int vddc_power;
+	int vddphy_power;
+	int vdd_tpu_volt;
+	int vdd_tpu_curr;
+	int atx12v_curr;
+	int tpu_current_clock;
+};
+
+#define REG_COUNT 5
+typedef enum {
+	MODE_CHOSE_LAYOUT = 0,
+	SETUP_BAR_DEV_LAYOUT = 1
+} BAR_LAYOUT_TYPE;
+
+
+#define OTP_SHADOW_SYS_SIZE 0x100
+
+struct bm_bar_info {
+	u64 bar_start[REG_COUNT];                     // address in host I/O memory layout
+	u64 bar_dev_start[REG_COUNT];                 // address in device memory layout
+	u64 bar_len[REG_COUNT];
+	void __iomem *bar_vaddr[REG_COUNT];
+};
 
 struct smbus_devinfo {
 	u8 chip_temp_reg;
@@ -36,14 +126,6 @@ typedef enum {
 	FPGA
 } PLATFORM;
 
-struct bootloader_version {
-	char *bl1_version;
-	char *bl2_version;
-	char *bl31_version;
-	char *uboot_version;
-	char *chip_version;
-};
-
 
 struct irq_name_to_id {
 	u32 irq_id_gdma_intr;
@@ -55,9 +137,7 @@ struct irq_name_to_id {
 	u32 irq_id_tpu_intr_pio_one_empty;
 };
 
-
 struct chip_info {
-	const struct bm_card_reg *bm_reg;
 	struct smbus_devinfo dev_info;
 	struct device *device;
 	const char *chip_type;
@@ -69,9 +149,7 @@ struct chip_info {
 	u32 polling_ms;
 	unsigned int chip_id;
 	int chip_index;
-	struct bootloader_version version;
 	int tpu_core_num;
-
 	struct irq_name_to_id irq_id;
 	struct platform_device *pdev;
 	struct reset_control *tpu;
@@ -85,7 +163,6 @@ struct chip_info {
 	struct clk *timer_clk;
 
 	int (*bmdrv_setup_bar_dev_layout)(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
-
 	u32 (*bmdrv_pending_msgirq_cnt)(struct bm_device_info *bmdi);
 };
 
@@ -104,7 +181,11 @@ struct bm_device_info {
 	spinlock_t close_lock;
 	int use_count;
 	struct completion gdma_done;
-
+	int tpu_intr_irq;
+	int tpu_event_flag;
+	spinlock_t tpu_event_lock;
+	void __iomem *tpu_reg_base;
+	wait_queue_head_t tpu_event_waitq;
 	struct mutex device_mutex;
 	struct chip_info cinfo;
 	struct bm_chip_attr c_attr;
@@ -116,35 +197,19 @@ struct bm_device_info {
 	int status_over_temp;
 	int status_sync_api;
 	u64 dev_refcount;
-
 	struct bm_gmem_info gmem_info;
-
 	struct list_head handle_list;
-
 	struct mutex clk_reset_mutex;
-
 	struct bm_misc_info misc_info;
-
 	struct bm_boot_info boot_info;
-
 	struct bm_profile profile;
-
 	struct proc_dir_entry *proc_dir;
-
 };
 
 
 char *base_get_chip_id(struct bm_device_info *bmdi);
-static long get_phys_addr(unsigned long arg);
-static inline bool is_user_address(unsigned long addr);
 char *bmdrv_get_error_string(int error);
 
-#ifndef __maybe_unused
-#define __maybe_unused __attribute__((unused))
-#endif
-
-#define TASK_LIST_MAX 100
-#define DONE_LIST_MAX 1000
 
 #define BM_CHIP_VERSION PROJECT_VER_MAJOR
 #define BM_MAJOR_VERSION PROJECT_VER_MINOR
@@ -168,43 +233,11 @@ char *bmdrv_get_error_string(int error);
 
 #define BM_CLASS_NAME "bm-tpu"
 #define BM_CDEV_NAME "bm-tpu"
-
-#define CHIP_ID 0x184
 #define BMDEV_CTL_NAME "bmdev-ctl"
-
-#define A53_RESET_STATUS_TRUE 1
-#define A53_RESET_STATUS_FALSE 0
-
-#define TOP_REG_CTRL_BASE_ADDR         (0x50010000)
-
-
-#define NV_TIMER_BASE_ADDR        0x50010180
-
-/*top register*/
-#define TOP_CLK_LOCK           0x104
-#define TOP_PLL_STATUS         0x0c0
-#define TOP_PLL_ENABLE         0x0c4
-#define TOP_TPLL_CTL           0x29a0
-#define TOP_SW_RESET0          0x3000
-/*
- * memory policy
- * define it to use dma_xxx series APIs, which provide write-back
- * memory type, otherwise use kmalloc+set_memory_uc to get uncached-
- * minus memory type.
- */
-#define USE_DMA_COHERENT
-
-/* specify if platform is palladium */
-#define PALLADIUM_CLK_RATIO 4000
+#define CHIP_ID 0x184
 #define DELAY_MS 20000
 #define POLLING_MS 1
-
-#define CHIP_VERSION_BASE 0x27102014
-#define CHIP_VERSION_SIZE 0x4
-
-
 #define BM_MAX_CARD_NUM	                1
-#define BM_MAX_CHIP_NUM                 1
 
 
 struct bm_card {
@@ -219,14 +252,9 @@ struct bm_card {
 	char sn[18];
 	void *vfs_db;
 	struct bm_device_info *sc5p_mcu_bmdi;
-	struct bm_device_info *card_bmdi[BM_MAX_CHIP_NUM_PER_CARD];
+	struct bm_device_info *card_bmdi[1];
 	struct bm_device_info *first_probe_bmdi;
 };
-
-
-int bm_get_card_info(struct bm_card *bmcd);
-
-typedef int tpu_kernel_function_t;
 
 typedef enum {
 	MMAP_GDMA = 0,

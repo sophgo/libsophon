@@ -67,11 +67,11 @@ BMProfile::BMProfile(Bmruntime* p_bmrt): p_bmrt(p_bmrt), enabled(false) {
     } else if (arch == "CV184X") {
       device = decltype(device)(new cv184x_profile::BMProfileDevice(this));
     } else {
-      BMRT_LOG(WARNING, "Not support profile for arch=%d",  arch);
+      BMRT_LOG(WARNING, "Not support profile for arch=%s",  arch.c_str());
     }
     enabled = device && device->enabled();
     if (enabled){
-        BMRT_LOG(INFO, "Profile For arch=%d", arch);
+        BMRT_LOG(INFO, "Profile For arch=%s", arch.c_str());
     }
 }
 
@@ -248,7 +248,7 @@ void BMProfile::init(const string& net_name, const vector<u8>& data, const vecto
     }
 }
 
-void BMProfile::alloc_buffer(buffer_pair *bp, size_t size, const string& desc)
+void BMProfile::alloc_buffer(buffer_pair_t *bp, size_t size, const string& desc)
 {
     if(bp->size != size || !bp->ptr){
         free_buffer(bp);
@@ -263,7 +263,7 @@ void BMProfile::alloc_buffer(buffer_pair *bp, size_t size, const string& desc)
     }
 }
 
-void BMProfile::free_buffer(buffer_pair *bp)
+void BMProfile::free_buffer(buffer_pair_t *bp)
 {
     if(bp->ptr){
         delete [] bp->ptr;

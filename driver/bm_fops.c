@@ -13,7 +13,6 @@
 
 extern dev_t bm_devno_base;
 extern dev_t bm_ctl_devno_base;
-extern int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
 
 static int bmdev_open(struct inode *inode, struct file *file)
 {
@@ -129,7 +128,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct bm_device_info *bmdi = (struct bm_device_info *)file->private_data;
 	int ret = 0;
-	void __iomem *reg_addr = NULL;
 
 	if (bmdi->status_over_temp)
 	{
@@ -142,13 +140,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	switch (cmd)
 	{
-	case BMDEV_READL:
-		printk("readl reg addr=%lx\n", (u_long)arg);
-		reg_addr = ioremap(arg, 4);
-		printk("reg addr=%lx, value=%x\n", (u_long)arg, readl(reg_addr));
-		iounmap(reg_addr);
-		break;
-
 	case BMDEV_ALLOC_GMEM:
 		ret = bmdrv_gmem_ioctl_alloc_mem(bmdi, file, arg);
 		break;
@@ -315,17 +306,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		struct bm_device_info *c_bmdi;
 		struct bm_chip_attr *c_attr;
 
-		if (bmdi->bmcd != NULL)
+		if (bmdi->bmcd->card_bmdi[0] != NULL)
 		{
-			if (bmdi->bmcd->card_bmdi[0] != NULL)
-			{
-				c_bmdi = bmdi->bmcd->card_bmdi[0];
-				c_attr = &c_bmdi->c_attr;
-			}
-			else
-			{
-				return -EFAULT;
-			}
+			c_bmdi = bmdi->bmcd->card_bmdi[0];
+			c_attr = &c_bmdi->c_attr;
 		}
 		else
 		{
@@ -343,35 +327,12 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	}
 
-	case BMDEV_GET_FAN:
-	{
-		struct bm_chip_attr *c_attr = &bmdi->c_attr;
-
-		if (c_attr->bm_get_fan_speed != NULL)
-		{
-			ret = copy_to_user((u16 __user *)arg, &c_attr->fan_speed, sizeof(u16));
-		}
-		else
-		{
-			return -EFAULT;
-		}
-		break;
-	}
-
 	case BMDEV_SET_TPU_DIVIDER:
-			mutex_lock(&bmdi->clk_reset_mutex);
-			// ret = bmdev_clk_ioctl_set_tpu_divider(bmdi, arg);
-			mutex_unlock(&bmdi->clk_reset_mutex);
 		break;
 
 	case BMDEV_SET_MODULE_RESET:
 		break;
 
-	case BMDEV_INVALIDATE_GMEM:
-		break;
-
-	case BMDEV_FLUSH_GMEM:
-		break;
 	case BMDEV_GMEM_ADDR:
 	{
 		struct bm_gmem_addr addr;
@@ -388,7 +349,11 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		break;
 	}
-
+	case BMDEV_GET_HEAP_INFO:
+	{
+		ret = bmdrv_get_heap_info(bmdi, arg);
+		break;
+	}
 
 	default:
 		dev_err(bmdi->dev, "*************Invalid ioctl parameter************\n");
@@ -448,11 +413,6 @@ static long bmdev_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		ret = bmctl_ioctl_get_proc_gmem(bmci, arg);
 		break;
 
-	case BMCTL_DEV_RECOVERY:
-		ret = -EPERM;
-
-		break;
-
 	case BMCTL_GET_DRIVER_VERSION:
 		ret = put_user(BM_DRIVER_VERSION, (int __user *)arg);
 		break;
@@ -462,22 +422,6 @@ static long bmdev_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long a
 		int card_num = 0;
 		card_num = 1;
 		ret = put_user(card_num, (int __user *)arg);
-		break;
-	}
-
-	case BMCTL_GET_CARD_INFO:
-	{
-		struct bm_card bmcd;
-		if (copy_from_user(&bmcd, (struct bm_card __user *)arg, sizeof(struct bm_card)))
-		{
-			return -EINVAL;
-		}
-		ret = bm_get_card_info(&bmcd);
-		if (ret != 0)
-		{
-			return -ENODEV;
-		}
-		ret = copy_to_user((struct bm_card __user *)arg, &bmcd, sizeof(struct bm_card));
 		break;
 	}
 

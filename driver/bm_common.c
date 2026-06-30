@@ -2,73 +2,13 @@
 
 char *base_get_chip_id(struct bm_device_info *bmdi)
 {
-	uint32_t val = 0;
+	// uint32_t val = 0;
 	char *ret = NULL;
-
-	val = (otp_reg_read(bmdi, 0x00000014) & 0x7);
-	if (val == 0 || val == 7)
-	{
-		ret = "MARS3-SOC";
-	}
-	else
-	{
-		ret = "MARS3-SOC";
-	}
+	// val = (ioread32(ioremap(0x03000000, OTP_SHADOW_SYS_SIZE) + 0x00000014) & 0x7);
+	ret = "MARS3-SOC";
 
 	return ret;
 }
-
-/**
- * Convert a user-space virtual address to a physical address.
- * @param addr: The user-space virtual address to convert.
- * @return: The corresponding physical address, or 0 if conversion fails.
- */
-unsigned long user_virtual_to_physical(unsigned long addr)
-{
-    struct mm_struct *mm = current->mm;
-    struct page *page = NULL;
-    unsigned long phys_addr = 0;
-    unsigned long pfn;
-    unsigned int offset;
-    int ret;
-
-
-    if (!is_user_address(addr)) {
-        pr_err("Address is not in user space\n");
-        return 0;
-    }
-
-
-    if (!mm) {
-        pr_err("Current process memory descriptor is NULL\n");
-        return 0;
-    }
-
-
-    ret = get_user_pages(addr, 1, FOLL_WRITE, &page, NULL);
-    if (ret < 1) {
-        pr_err("Failed to get user pages: %d\n", ret);
-        return 0;
-    }
-
-
-    offset = addr & (PAGE_SIZE - 1);
-    pfn = page_to_pfn(page);
-    phys_addr = (pfn << PAGE_SHIFT) | offset;
-
-    put_page(page);
-
-    return phys_addr;
-}
-
-/**
- * Check if the address is a valid user-space address.
- */
-static inline bool is_user_address(unsigned long addr)
-{
-    return addr < TASK_SIZE;
-}
-
 
 char *bmdrv_get_error_string(int error)
 {
@@ -341,22 +281,41 @@ char *bmdrv_get_error_string(int error)
 	return "Unknown Error Dash!";
 }
 
-
-static struct bm_card *g_bmcd[BM_MAX_CARD_NUM] = {NULL};
-
-
-int bm_get_card_info(struct bm_card *bmcd)
+int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 {
-	int i = 0;
 	int ret = 0;
-	for (i = 0; i < BM_MAX_CARD_NUM; i++)
+	int i = 0;
+	struct bm_chip_attr *c_attr = &bmdi->c_attr;
+	c_attr->fan_speed = 100;
+	c_attr->fan_rev_read = 0;
+	c_attr->npu_cnt = 0;
+	c_attr->npu_busy_cnt = 0;
+	atomic_set(&c_attr->npu_utilization, 0);
+	c_attr->npu_timer_interval = 500;
+	c_attr->npu_busy_time_sum_ms = 0ULL;
+	c_attr->npu_start_probe_time = 0ULL;
+	c_attr->npu_status_idx = 0;
+	c_attr->tpu_current_clock = 500;
+	for (i = 0; i < NPU_STAT_WINDOW_WIDTH; i++)
 	{
-		if (bmcd->card_index == g_bmcd[i]->card_index)
-		{
-			bmcd->chip_num = g_bmcd[i]->chip_num;
-			bmcd->dev_start_index = g_bmcd[i]->dev_start_index;
-			return ret;
-		}
+		c_attr->npu_status[i] = 0;
+		c_attr->npu_status1[i] = 0;
 	}
-	return 1;
+	atomic_set(&c_attr->timer_on, 0);
+	mutex_init(&c_attr->attr_mutex);
+
+	switch (bmdi->cinfo.chip_id) {
+	case CHIP_ID:
+		c_attr->bm_get_tpu_power = NULL;
+		c_attr->bm_get_vddc_power = NULL;
+		c_attr->bm_get_vddphy_power = NULL;
+		c_attr->bm_get_board_power = NULL;
+		c_attr->fan_control = false;
+		c_attr->bm_get_chip_temp = NULL;
+		c_attr->bm_get_board_temp = NULL;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return ret;
 }

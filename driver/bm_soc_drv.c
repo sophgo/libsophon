@@ -7,10 +7,11 @@
 #include <linux/delay.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/irqflags.h>
+#include <linux/types.h>
+#include <linux/interrupt.h>
 #include "bm_common.h"
 #include "bm_drv.h"
-#include "bm_io.h"
-#include "bm_irq.h"
 #include "bm_clkrst.h"
 #include "bm_gmem.h"
 
@@ -61,7 +62,6 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct platform_device 
 
 	switch (cinfo->chip_id) {
 	case CHIP_ID:
-		cinfo->bm_reg = &bm_reg_SGTPUV8;
 		cinfo->share_mem_size = 1 << 12;
 		cinfo->chip_type = "MARS3";
 		cinfo->platform = DEVICE;
@@ -106,14 +106,11 @@ static int bmdrv_platform_init(struct bm_device_info *bmdi, struct platform_devi
 {
 	int rc = 0;
 	struct chip_info *cinfo = &bmdi->cinfo;
-	pr_info("42 bit mask\n");
 	rc = platform_init_bar_address(pdev, cinfo);
 	if (rc) {
 		dev_err(&pdev->dev, "alloc bar address error\n");
 		return rc;
 	}
-
-	io_init(bmdi);
 
 	cinfo->tpu_core_num = 1;
 	cinfo->device->dma_mask = &dummy_dma_mask;
@@ -172,14 +169,6 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 }
 
 
-static void bmdrv_free_boot_loader_version(struct bm_device_info *bmdi)
-{
-	kfree(bmdi->cinfo.version.bl1_version);
-	kfree(bmdi->cinfo.version.bl2_version);
-	kfree(bmdi->cinfo.version.bl31_version);
-	kfree(bmdi->cinfo.version.uboot_version);
-	kfree(bmdi->cinfo.version.chip_version);
-}
 
 static int bmdrv_probe(struct platform_device *pdev)
 {
@@ -236,16 +225,6 @@ static int bmdrv_probe(struct platform_device *pdev)
 		goto err_hardware_init;
 	}
 
-	// rc = bmdrv_init_irq(pdev);
-	// if (rc) {
-	// 	dev_err(cinfo->device, "device irq init fail %d\n", rc);
-	// 	goto err_irq;
-	// }
-
-	rc = bmdrv_enable_attr(bmdi);
-	if (rc)
-		goto err_enable_attr;
-
 	rc = bmdrv_chip_specific_init(bmdi);
 	if (rc)
 		goto err_chip_specific;
@@ -258,7 +237,7 @@ static int bmdrv_probe(struct platform_device *pdev)
 
 	rc = bmdrv_ctrl_add_dev(bmci, bmdi);
 	if (rc)
-		goto err_ctrl_add_dev;
+		goto err_chip_specific;
 
 	bmdev_register_device(bmdi);
 
@@ -266,15 +245,8 @@ static int bmdrv_probe(struct platform_device *pdev)
 			cinfo->chip_type);
 	return 0;
 
-err_ctrl_add_dev:
-	bmdrv_remove_bmci();
 err_chip_specific:
-	bmdrv_disable_attr(bmdi);
-err_enable_attr:
-	bmdrv_free_irq(pdev);
-// err_irq:
-//	bmdrv_free_irq(pdev);
-//	bmdrv_hardware_deinit(bmdi);
+	bmdrv_remove_bmci();
 err_hardware_init:
 	bmdrv_hardware_deinit(bmdi);
 	bmdrv_software_deinit(bmdi);
@@ -295,12 +267,8 @@ static int bmdrv_remove(struct platform_device *pdev)
 		return 0;
 	dev_info(bmdi->cinfo.device, "remove\n");
 
-	bmdrv_free_boot_loader_version(bmdi);
 	bmdev_unregister_device(bmdi);
 	bmdrv_ctrl_del_dev(bmci, bmdi);
-	bmdrv_disable_attr(bmdi);
-
-	// bmdrv_free_irq(pdev);
 	bmdrv_hardware_deinit(bmdi);
 	bmdrv_software_deinit(bmdi);
 	bmdrv_platform_deinit(bmdi, pdev);

@@ -3,10 +3,10 @@
 #include <linux/sizes.h>
 #include <linux/delay.h>
 #include <linux/vmalloc.h>
-#include <linux/dma-mapping.h>
-#include <linux/dma-buf.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include "bm_common.h"
 #include "bm_gmem.h"
 #include "bm_genalloc.h"
@@ -14,6 +14,38 @@
 
 int heap_id;
 
+
+int bmdrv_get_heap_info(struct bm_device_info *bmdi, unsigned long arg){
+	struct device_node *np;
+	const __be32 *reg;
+	int len;
+	struct bm_heap_info heap_info;
+
+	if (copy_from_user(&heap_info, (struct bm_heap_info __user *)arg, sizeof(struct bm_heap_info)))
+	{
+		return -EFAULT;
+	}
+	np = of_find_node_by_path("/reserved-memory/ion");
+	if (!np) {
+		pr_err("Cannot find ION node\n");
+		return -ENODEV;
+	}
+	reg = of_get_property(np, "alloc-ranges", &len);
+	if (!reg || len < 16) {
+		pr_err("Invalid reg property\n");
+		of_node_put(np);
+		return -EINVAL;
+	}
+	heap_info.mem_start_addr = of_read_number(reg, 2);
+	heap_info.mem_size = of_read_number(reg + 2, 2);
+	pr_debug("ION reserved memory: addr=0x%llx, size=0x%llx\n", heap_info.mem_start_addr, heap_info.mem_size);
+	of_node_put(np);
+	if (copy_to_user((struct bm_heap_info __user *)arg, &heap_info, sizeof(struct bm_heap_info)))
+	{
+		return -EFAULT;
+	}
+	return 0;
+}
 
 int bmdrv_gmem_init(struct bm_device_info *bmdi)
 {

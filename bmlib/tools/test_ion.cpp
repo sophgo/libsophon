@@ -10,6 +10,7 @@
 #include "bmlib_ioctl.h"
 #include "bmlib_runtime.h"
 #include "bmlib_memory.h"
+#include "ion.h"
 
 
 void *map_physical_memory(uint64_t phys_addr, size_t length) {
@@ -71,29 +72,18 @@ struct sys_ion_data {
 	__u64 addr_p;
 	__u8 name[32];
 };
-#define IOCTL_BASE_MAGIC	'b'
-#define BASE_ION_ALLOC		_IOWR(IOCTL_BASE_MAGIC, 0x04, struct sys_ion_data)
-void test_ion_base_ko(){
-    int fd=open("/dev/cv184x_base", O_RDWR);
-    if(fd<0){
-        printf("open /dev/cv184x_base failed\n");
-    }
-    struct sys_ion_data stIonDate;
-    stIonDate.cached=1;
-    stIonDate.size=128;
-    stIonDate.addr_p=0x12345678;
-    stIonDate.name[0]='t';
-    stIonDate.name[1]='e';
-    stIonDate.name[2]='s';
-    stIonDate.name[3]='t';
-    ioctl(fd, BASE_ION_ALLOC, &stIonDate);
 
+void test_get_ion_heap_info(bm_handle_t handle, struct bm_heap_info *heap_info){
+    bm_get_ion_head_info(handle, heap_info);
+    printf("ION heap info: start_addr=0x%llx, size=0x%llx\n", heap_info->mem_start_addr, heap_info->mem_size);
 }
 
 
 int main() {
     bm_handle_t handle;
     bm_dev_request(&handle, 0);
+    struct bm_heap_info heap_info;
+    test_get_ion_heap_info(handle, &heap_info);
     bm_device_mem_t ion_mem;
     size_t sg_dtype_len = sizeof(uint8_t);
     size_t shape_cnt = 256;

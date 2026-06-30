@@ -35,8 +35,6 @@
 
 #define BUFFER_LEN 120  // columns of the text
 
-#define MAX_NUM_VPU_CORE                5               /* four wave cores */
-#define MAX_NUM_VPU_CORE_BM1686         3               /* four wave cores */
 #define MAX_NUM_JPU_CORE                4
 #define VPP_CORE_MAX                    2
 

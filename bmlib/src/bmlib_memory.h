@@ -126,6 +126,7 @@ bm_status_t bm_mem_read_data_from_ion(
     uint64_t         offset=0);
 bm_status_t bm_get_carveout_heap_id(bm_handle_t ctx);
 void* bm_get_ion_mem_vaddr(u64 device_addr);
+bm_status_t bm_get_ion_head_info(bm_handle_t handle, struct bm_heap_info *heap_info);
 #ifdef __cplusplus
 }
 #endif

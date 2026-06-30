@@ -36,6 +36,7 @@ void Launcher_CV184X::fill_api_info(const tpu_net_info_t &net_info,
     api_info.output_addr_offset.assign(output_info.size(), 0);
     api_info.api_id.emplace_back(net_info.kernel_func_ids[0]);
 
+    const auto &tag = m_addr_layout.tag;
     void *p_api = api_info.api_data[core_idx].data();
     // input global offset process
     *(int *)p_api = input_info.size();
@@ -46,7 +47,7 @@ void Launcher_CV184X::fill_api_info(const tpu_net_info_t &net_info,
           (uint8_t *)p_api - (uint8_t *)(api_info.api_data.data());
       *(u64 *)p_api = info.user_global_addr;
       p_api = (u64 *)p_api + 1;
-      if (core_idx > 0 && ((info.compiled_global_addr >> 40) & 0x7) == 0) {
+      if (core_idx > 0 && ((info.compiled_global_addr >> tag.start) & tag.mask) == 0) {
         /// If the bmodel use multi core, we only move the user's input data to
         /// compiled ddr once.
         *(u64 *)p_api = info.user_global_addr;
@@ -305,7 +306,7 @@ bm_status_t Launcher_CV184X::_bmdnn_get_profile_data_(
 }
 
 #pragma pack(1)
-typedef struct {
+typedef struct bm_api_engine_profile_param {
   int engine;
   unsigned long long addr;
   unsigned long long size;
