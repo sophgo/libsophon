@@ -72,6 +72,13 @@ struct bm_mem_paddr {
   bm_device_mem_u64_t *dev_buffer;
 };
 
+struct bm_mmap_record {
+  struct rb_node node;
+  unsigned long long vmem_base;
+  unsigned long long vmem_size;
+  bm_device_mem_u64_t orig_dmem;
+};
+
 bm_status_t bm_init_basic_func_id(bm_handle_t handle);
 bm_status_t bm_total_gmem(bm_handle_t ctx, u64 *total);
 bm_status_t bm_avail_gmem(bm_handle_t ctx, u64 *avail);

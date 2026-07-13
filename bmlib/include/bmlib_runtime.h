@@ -1986,6 +1986,22 @@ DECL_EXPORT bm_status_t bm_mem_mmap_device_mem_no_cache_u64(bm_handle_t handle, 
  */
 DECL_EXPORT bm_status_t bm_mem_vir_to_phy(bm_handle_t handle, unsigned long long vmem,
         unsigned long long *device_mem);
+
+/**
+ * @name    bm_mem_vmem_to_device_mem_u64
+ * @brief   To get device memory descriptor through the mapped virtual address.
+ *          (only valid in SoC mode; Not supported in PCIE mode).
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle  The device handle
+ * @param [in]  vmem    The virtual address of the mapped device memory
+ * @param [out] dmem    The device memory descriptor
+ *
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_mem_vmem_to_device_mem_u64(bm_handle_t handle,
+        unsigned long long *vmem, bm_device_mem_u64_t *dmem);
 /**
  * @name    bm_mem_invalidate_device_mem
  * @brief   To invalidate a piece of mapped device memory to maintain
