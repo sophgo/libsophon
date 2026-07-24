@@ -1724,10 +1724,12 @@ bm_status_t bm_get_gmem_heap_stat_byte_by_id(bm_handle_t handle, bm_heap_stat_by
 	return BM_SUCCESS;
 }
 #ifdef __linux__
-static bm_status_t mmap_record_add_locked(bm_handle_t handle,
-		struct bm_mmap_record *record)
+static struct rb_root g_mmap_root = RB_ROOT;
+static pthread_mutex_t g_mmap_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static bm_status_t mmap_record_add_locked(struct bm_mmap_record *record)
 {
-	struct rb_node **p = &(handle->mmap_root.rb_node);
+	struct rb_node **p = &(g_mmap_root.rb_node);
 	struct rb_node *parent = NULL;
 	struct bm_mmap_record *entry;
 	long long result;
@@ -1745,13 +1747,13 @@ static bm_status_t mmap_record_add_locked(bm_handle_t handle,
 	}
 
 	rb_link_node(&record->node, parent, p);
-	rb_insert_color(&record->node, &handle->mmap_root);
+	rb_insert_color(&record->node, &g_mmap_root);
 	return BM_SUCCESS;
 }
 
-static void mmap_record_remove_locked(bm_handle_t handle, u64 vmem_base)
+static void mmap_record_remove_locked(u64 vmem_base)
 {
-	struct rb_node *node = handle->mmap_root.rb_node;
+	struct rb_node *node = g_mmap_root.rb_node;
 	long long result;
 
 	while (node) {
@@ -1763,16 +1765,16 @@ static void mmap_record_remove_locked(bm_handle_t handle, u64 vmem_base)
 		else if (result > 0)
 			node = node->rb_right;
 		else {
-			rb_erase(&data->node, &handle->mmap_root);
+			rb_erase(&data->node, &g_mmap_root);
 			free(data);
 			return;
 		}
 	}
 }
 
-static struct bm_mmap_record *mmap_record_search_locked(bm_handle_t handle, u64 vmem)
+static struct bm_mmap_record *mmap_record_search_locked(u64 vmem)
 {
-	struct rb_node *node = handle->mmap_root.rb_node;
+	struct rb_node *node = g_mmap_root.rb_node;
 
 	while (node) {
 		struct bm_mmap_record *data = container_of(node, struct bm_mmap_record, node);
@@ -1787,8 +1789,8 @@ static struct bm_mmap_record *mmap_record_search_locked(bm_handle_t handle, u64 
 	return NULL;
 }
 
-static bm_status_t mmap_record_track(bm_handle_t handle, u64 vmem_base,
-		u64 vmem_size, bm_device_mem_u64_t *dmem)
+static bm_status_t mmap_record_track(u64 vmem_base, u64 vmem_size,
+		bm_device_mem_u64_t *dmem)
 {
 	struct bm_mmap_record *record =
 		(struct bm_mmap_record *)malloc(sizeof(struct bm_mmap_record));
@@ -1801,16 +1803,16 @@ static bm_status_t mmap_record_track(bm_handle_t handle, u64 vmem_base,
 	record->vmem_size = vmem_size;
 	record->orig_dmem = *dmem;
 
-	pthread_mutex_lock(&handle->mem_mutex);
-	ret = mmap_record_add_locked(handle, record);
-	pthread_mutex_unlock(&handle->mem_mutex);
+	pthread_mutex_lock(&g_mmap_mutex);
+	ret = mmap_record_add_locked(record);
+	pthread_mutex_unlock(&g_mmap_mutex);
 	if (ret != BM_SUCCESS)
 		free(record);
 	return ret;
 }
 
-static bm_status_t mmap_record_track_device_mem(bm_handle_t handle, u64 vmem_base,
-		u64 vmem_size, bm_device_mem_t *dmem)
+static bm_status_t mmap_record_track_device_mem(u64 vmem_base, u64 vmem_size,
+		bm_device_mem_t *dmem)
 {
 	bm_device_mem_u64_t dmem_u64;
 
@@ -1820,14 +1822,14 @@ static bm_status_t mmap_record_track_device_mem(bm_handle_t handle, u64 vmem_bas
 	dmem_u64.u.device.dmabuf_fd = dmem->u.device.dmabuf_fd;
 	dmem_u64.flags = dmem->flags;
 	dmem_u64.size = dmem->size;
-	return mmap_record_track(handle, vmem_base, vmem_size, &dmem_u64);
+	return mmap_record_track(vmem_base, vmem_size, &dmem_u64);
 }
 
-static void mmap_record_untrack(bm_handle_t handle, u64 vmem_base)
+static void mmap_record_untrack(u64 vmem_base)
 {
-	pthread_mutex_lock(&handle->mem_mutex);
-	mmap_record_remove_locked(handle, vmem_base);
-	pthread_mutex_unlock(&handle->mem_mutex);
+	pthread_mutex_lock(&g_mmap_mutex);
+	mmap_record_remove_locked(vmem_base);
+	pthread_mutex_unlock(&g_mmap_mutex);
 }
 #endif
 /*
@@ -1865,7 +1867,7 @@ bm_status_t bm_mem_mmap_device_mem(bm_handle_t handle, bm_device_mem_t *dmem,
 				handle->dev_fd, bm_mem_get_device_addr(*dmem));
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
-		if (mmap_record_track_device_mem(handle, *vmem, aligned_size, dmem) != BM_SUCCESS) {
+		if (mmap_record_track_device_mem(*vmem, aligned_size, dmem) != BM_SUCCESS) {
 			(void)munmap(ret, aligned_size);
 			return BM_ERR_FAILURE;
 		}
@@ -1884,7 +1886,7 @@ bm_status_t bm_mem_mmap_device_mem(bm_handle_t handle, bm_device_mem_t *dmem,
 		unsigned int aligned_size =
 			(bm_mem_get_device_size(*dmem) + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-		if (mmap_record_track_device_mem(handle, *vmem, aligned_size, dmem) != BM_SUCCESS)
+		if (mmap_record_track_device_mem(*vmem, aligned_size, dmem) != BM_SUCCESS)
 			return BM_ERR_FAILURE;
 	}
 #endif
@@ -1966,7 +1968,7 @@ bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *
 				handle->dev_fd, bm_mem_get_device_addr_u64(*dmem));
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
-		if (mmap_record_track(handle, *vmem, aligned_size, dmem) != BM_SUCCESS) {
+		if (mmap_record_track(*vmem, aligned_size, dmem) != BM_SUCCESS) {
 			(void)munmap(ret, aligned_size);
 			return BM_ERR_FAILURE;
 		}
@@ -1984,7 +1986,7 @@ bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *
 		unsigned long long aligned_size =
 			(bm_mem_get_device_size_u64(*dmem) + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-		if (mmap_record_track(handle, *vmem, aligned_size, dmem) != BM_SUCCESS)
+		if (mmap_record_track(*vmem, aligned_size, dmem) != BM_SUCCESS)
 			return BM_ERR_FAILURE;
 	}
 #endif
@@ -2026,7 +2028,7 @@ bm_status_t bm_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
-		if (mmap_record_track_device_mem(handle, *vmem, aligned_size, dmem) != BM_SUCCESS) {
+		if (mmap_record_track_device_mem(*vmem, aligned_size, dmem) != BM_SUCCESS) {
 			(void)munmap(ret, aligned_size);
 			return BM_ERR_FAILURE;
 		}
@@ -2046,7 +2048,7 @@ bm_status_t bm_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 		unsigned int aligned_size =
 			(bm_mem_get_device_size(*dmem) + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-		if (mmap_record_track_device_mem(handle, *vmem, aligned_size, dmem) != BM_SUCCESS)
+		if (mmap_record_track_device_mem(*vmem, aligned_size, dmem) != BM_SUCCESS)
 			return BM_ERR_FAILURE;
 	}
 #endif
@@ -2137,7 +2139,7 @@ bm_status_t bm_mem_mmap_device_mem_no_cache_u64(bm_handle_t handle,
 
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
-		if (mmap_record_track(handle, *vmem, aligned_size, dmem) != BM_SUCCESS) {
+		if (mmap_record_track(*vmem, aligned_size, dmem) != BM_SUCCESS) {
 			(void)munmap(ret, aligned_size);
 			return BM_ERR_FAILURE;
 		}
@@ -2156,7 +2158,7 @@ bm_status_t bm_mem_mmap_device_mem_no_cache_u64(bm_handle_t handle,
 		unsigned long long aligned_size =
 			(bm_mem_get_device_size_u64(*dmem) + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-		if (mmap_record_track(handle, *vmem, aligned_size, dmem) != BM_SUCCESS)
+		if (mmap_record_track(*vmem, aligned_size, dmem) != BM_SUCCESS)
 			return BM_ERR_FAILURE;
 	}
 #endif
@@ -2327,17 +2329,17 @@ bm_status_t bm_mem_vmem_to_device_mem_u64(bm_handle_t handle, unsigned long long
 #endif
 
 #ifdef __linux__
-	pthread_mutex_lock(&handle->mem_mutex);
-	record = mmap_record_search_locked(handle, *vmem);
+	pthread_mutex_lock(&g_mmap_mutex);
+	record = mmap_record_search_locked(*vmem);
 	if (!record) {
-		pthread_mutex_unlock(&handle->mem_mutex);
+		pthread_mutex_unlock(&g_mmap_mutex);
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
 			"bm_mem_vmem_to_device_mem_u64 fail vmem = 0x%llx\n", *vmem);
 		return BM_ERR_PARAM;
 	}
 	vmem_base = record->vmem_base;
 	orig_dmem = record->orig_dmem;
-	pthread_mutex_unlock(&handle->mem_mutex);
+	pthread_mutex_unlock(&g_mmap_mutex);
 
 	offset = *vmem - vmem_base;
 	if (offset >= orig_dmem.size) {
@@ -2573,12 +2575,12 @@ bm_status_t bm_mem_unmap_device_mem(bm_handle_t handle, void *vmem, int size)
 #ifdef __linux__
 	unsigned int aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-	mmap_record_untrack(handle, (u64)vmem);
+	mmap_record_untrack((u64)vmem);
 	(void)munmap(vmem, aligned_size);
 #endif
 #else
 #ifdef __linux__
-	mmap_record_untrack(handle, (u64)vmem);
+	mmap_record_untrack((u64)vmem);
 #else
 	UNUSED(handle);
 	UNUSED(vmem);
@@ -2619,12 +2621,12 @@ bm_status_t bm_mem_unmap_device_mem_u64(bm_handle_t handle, void *vmem, u64 size
 #ifdef __linux__
 	unsigned long long aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-	mmap_record_untrack(handle, (u64)vmem);
+	mmap_record_untrack((u64)vmem);
 	(void)munmap(vmem, aligned_size);
 #endif
 #else
 #ifdef __linux__
-	mmap_record_untrack(handle, (u64)vmem);
+	mmap_record_untrack((u64)vmem);
 #else
 	UNUSED(handle);
 	UNUSED(vmem);

@@ -218,6 +218,86 @@ exit:
 	return fail;
 }
 
+static int test_cross_handle(int devid, unsigned long long mem_size, unsigned long long offset)
+{
+	bm_handle_t handle_a = NULL;
+	bm_handle_t handle_b = NULL;
+	bm_status_t ret;
+	bm_device_mem_u64_t dev_buffer;
+	bm_device_mem_u64_t dev_from_offset;
+	unsigned long long vmem = 0;
+	unsigned long long offset_vmem = 0;
+	unsigned long long base_addr;
+	int fail = 0;
+
+	memset(&dev_buffer, 0, sizeof(dev_buffer));
+	memset(&dev_from_offset, 0, sizeof(dev_from_offset));
+
+	if (offset >= mem_size) {
+		printf("cross-handle invalid param, offset(%llu) >= mem_size(%llu)\n",
+		       offset, mem_size);
+		return -1;
+	}
+
+	printf("\n==== test cross handle lookup ====\n");
+
+	ret = bm_dev_request(&handle_a, devid);
+	if (ret != BM_SUCCESS || handle_a == NULL) {
+		printf("bm_dev_request handle_a failed, ret=%d\n", ret);
+		return -1;
+	}
+	ret = bm_dev_request(&handle_b, devid);
+	if (ret != BM_SUCCESS || handle_b == NULL) {
+		printf("bm_dev_request handle_b failed, ret=%d\n", ret);
+		bm_dev_free(handle_a);
+		return -1;
+	}
+
+	ret = bm_malloc_device_byte_u64(handle_a, &dev_buffer, mem_size);
+	if (ret != BM_SUCCESS) {
+		printf("malloc on handle_a failed, ret=%d\n", ret);
+		fail = -1;
+		goto free_handle;
+	}
+	base_addr = bm_mem_get_device_addr_u64(dev_buffer);
+
+	ret = bm_mem_mmap_device_mem_u64(handle_a, &dev_buffer, &vmem);
+	if (ret != BM_SUCCESS) {
+		printf("mmap on handle_a failed, ret=%d\n", ret);
+		fail = -1;
+		goto free_dev;
+	}
+
+	offset_vmem = vmem + offset;
+	ret = bm_mem_vmem_to_device_mem_u64(handle_b, &offset_vmem, &dev_from_offset);
+	if (ret != BM_SUCCESS) {
+		printf("lookup on handle_b failed, ret=%d\n", ret);
+		fail = -1;
+		goto unmap;
+	}
+	if (bm_mem_get_device_addr_u64(dev_from_offset) != base_addr + offset ||
+	    bm_mem_get_device_size_u64(dev_from_offset) != mem_size - offset) {
+		printf("cross-handle convert mismatch, got addr=0x%llx size=%llu\n",
+		       bm_mem_get_device_addr_u64(dev_from_offset),
+		       bm_mem_get_device_size_u64(dev_from_offset));
+		fail = -1;
+		goto unmap;
+	}
+	printf("cross-handle lookup ok, mmap(handle_a) -> lookup(handle_b), addr=0x%llx size=%llu\n",
+	       bm_mem_get_device_addr_u64(dev_from_offset),
+	       bm_mem_get_device_size_u64(dev_from_offset));
+	printf("[cross handle] PASS\n");
+
+unmap:
+	bm_mem_unmap_device_mem_u64(handle_a, (void *)(uintptr_t)vmem, mem_size);
+free_dev:
+	bm_free_device_u64(handle_a, dev_buffer);
+free_handle:
+	bm_dev_free(handle_b);
+	bm_dev_free(handle_a);
+	return fail;
+}
+
 int main(int argc, char *argv[])
 {
 	bm_handle_t handle = NULL;
@@ -251,11 +331,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	bm_dev_free(handle);
+
+	if (rc == 0)
+		rc = test_cross_handle(devid, mem_size, offset);
+
 	if (rc == 0)
 		printf("\nALL TEST PASS\n");
 	else
 		printf("\nTEST FAIL\n");
 
-	bm_dev_free(handle);
 	return rc;
 }

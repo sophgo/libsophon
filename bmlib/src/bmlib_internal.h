@@ -126,7 +126,6 @@ typedef struct bm_context {
     bmlib_profile_t *profile;
     int enable_mem_guard;
 	struct rb_root root;
-	struct rb_root mmap_root;
 	pthread_mutex_t mem_mutex;
 } bm_context_t, *bm_handle_t;
 
