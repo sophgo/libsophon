@@ -1729,11 +1729,14 @@ static pthread_mutex_t g_mmap_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static bm_status_t mmap_record_add_locked(struct bm_mmap_record *record)
 {
-	struct rb_node **p = &(g_mmap_root.rb_node);
-	struct rb_node *parent = NULL;
+	struct rb_node **p;
+	struct rb_node *parent;
 	struct bm_mmap_record *entry;
 	long long result;
 
+again:
+	p = &(g_mmap_root.rb_node);
+	parent = NULL;
 	while (*p) {
 		entry = container_of(*p, struct bm_mmap_record, node);
 		result = (long long)record->vmem_base - (long long)entry->vmem_base;
@@ -1742,14 +1745,22 @@ static bm_status_t mmap_record_add_locked(struct bm_mmap_record *record)
 			p = &((*p)->rb_left);
 		else if (result > 0)
 			p = &((*p)->rb_right);
-		else
-			return BM_ERR_FAILURE;
+		else {
+			/* a stale record with the same vmem_base exists (the previous
+			   mapping was unmapped without going through the untrack path).
+			   remove and free the old entry, then re-search from the root to
+			   find the correct insertion point for the new record. */
+			rb_erase(&entry->node, &g_mmap_root);
+			free(entry);
+			goto again;
+		}
 	}
 
 	rb_link_node(&record->node, parent, p);
 	rb_insert_color(&record->node, &g_mmap_root);
 	return BM_SUCCESS;
 }
+
 
 static void mmap_record_remove_locked(u64 vmem_base)
 {
