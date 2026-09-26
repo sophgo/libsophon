@@ -12,6 +12,7 @@
 #include "spi.h"
 #include "pwm.h"
 #include "bm_attr.h"
+#include "bm_cooling.h"
 #include "bm_ctl.h"
 #include "bm_thermal.h"
 #include "bm_msgfifo.h"
@@ -19,6 +20,9 @@
 #include "bm1688/bm1688_clkrst.h"
 #include "bm1684/bm1684_card.h"
 #include "bm1688/bm1688_base64.h"
+#include "84x6/84x6_clkrst.h"
+#include "84x6/84x6_base64.h"
+#include "84x6/84x6_debug.h"
 #ifndef SOC_MODE
 #include "bm_pcie.h"
 #include "console.h"
@@ -49,15 +53,43 @@ static ssize_t npu_usage_show(struct device *d, struct device_attribute *attr, c
 		return sprintf(buf, "Please, set [Usage enable] to 1\n");
 
 	usage = (int)atomic_read(&cattr->npu_utilization);
-	usage_all = cattr->npu_busy_time_sum_ms * 100/cattr->npu_start_probe_time;
+	if (cattr->npu_start_probe_time)
+		usage_all = cattr->npu_busy_time_sum_ms * 100 / cattr->npu_start_probe_time;
+	else
+		usage_all = 0;
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		int core;
+		int core_num = bmdi->cinfo.tpu_core_num;
+		int len = 0;
+
+		if (core_num > BM_MAX_TPU_CORE_NUM)
+			core_num = BM_MAX_TPU_CORE_NUM;
+
+		len += sprintf(buf + len, "usage:%d avusage:%d\n", usage, usage_all);
+		for (core = 0; core < core_num; core++) {
+			int core_usage = (int)atomic_read(&cattr->npu_util_core[core]);
+			int core_avusage = 0;
+
+			if (cattr->npu_start_probe_time_core)
+				core_avusage = cattr->npu_busy_time_sum_core[core] * 100 /
+					cattr->npu_start_probe_time_core;
+			len += sprintf(buf + len, "core%d npu usage : %d        average: %d\n",
+				       core, core_usage, core_avusage);
+		}
+		return len;
+	}
 
 	// bm1688 core 1
-	if (bmdi->cinfo.chip_id == 0x1686a200) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		char *name;
 
 		name = base_get_chip_id(bmdi);
 		usage1 = (int)atomic_read(&cattr->npu_utilization1);
-		usage_all1 = cattr->npu_busy_time_sum_ms1 * 100/cattr->npu_start_probe_time1;
+		if (cattr->npu_start_probe_time1)
+			usage_all1 = cattr->npu_busy_time_sum_ms1 * 100 / cattr->npu_start_probe_time1;
+		else
+			usage_all1 = 0;
 		if (!strcmp(name, "BM1688-SOC"))
 			return sprintf(buf, "core 0 usage:%d avusage:%d\ncore 1 usage:%d avusage:%d\n",
 			usage, usage_all, usage1, usage_all1);
@@ -261,7 +293,9 @@ static int bmdrv_thermal_get_temp(struct bm_device_info *bmdi, int *temperature)
 {
 	int			     result, r1, r2, r3;
 
-	/* read temperature */
+	if (!bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr)
+		return -ENODEV;
+
 	r1 = tempsen_get(bmdi, tempsen_top_sta_tempsen_ch0_result,
 							tempsen_top_sta_tempsen_ch0_result_MASK,
 							tempsen_top_sta_tempsen_ch0_result_OFFSET);
@@ -298,6 +332,36 @@ static void calculate_board_status(struct bm_device_info *bmdi)
 		bmdi->status &= ~TPU_HANG_MASK;
 	}
 }
+
+#ifndef SOC_MODE
+static void bmdrv_update_1688_over_temp_state(struct bm_device_info *bmdi, int chip_temp)
+{
+	int target_freq = BM_COOLING_FREQ_NO_CHANGE;
+	int rc;
+
+	if (bmdi->cinfo.chip_id != BM_CHIP_ID_1688)
+		return;
+
+	bmdrv_cooling_update_1688(bmdi, chip_temp, &target_freq);
+	calculate_board_status(bmdi);
+
+	if (target_freq == BM_COOLING_FREQ_NO_CHANGE)
+		return;
+
+	mutex_lock(&bmdi->clk_reset_mutex);
+	rc = bm1688_clk_set_tpu_target_freq(bmdi, target_freq);
+	mutex_unlock(&bmdi->clk_reset_mutex);
+	if (rc) {
+		pr_warn_ratelimited(
+			"bm-sophon%d cooling set tpu freq failed, temp=%d mC target=%d MHz rc=%d\n",
+			bmdi->dev_index, chip_temp, target_freq, rc);
+		return;
+	}
+
+	bmdrv_cooling_mark_freq_applied(bmdi, target_freq);
+	bmdi->c_attr.tpu_current_clock = target_freq;
+}
+#endif
 
 static void board_status_update(struct bm_device_info *bmdi, int cur_tmp, int cur_tpu_clk)
 {
@@ -539,6 +603,16 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 		c_attr->npu_status[i] = 0;
 		c_attr->npu_status1[i] = 0;
 	}
+	for (i = 0; i < BM_MAX_TPU_CORE_NUM; i++) {
+		int j;
+
+		atomic_set(&c_attr->npu_util_core[i], 0);
+		c_attr->npu_status_idx_core[i] = 0;
+		c_attr->npu_busy_time_sum_core[i] = 0ULL;
+		for (j = 0; j < NPU_STAT_WINDOW_WIDTH; j++)
+			c_attr->npu_status_core[i][j] = 0;
+	}
+	c_attr->npu_start_probe_time_core = 0ULL;
 	atomic_set(&c_attr->timer_on, 0);
 	mutex_init(&c_attr->attr_mutex);
 
@@ -675,7 +749,8 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 		c_attr->bm_get_board_temp = NULL;
 #endif
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_84X6:
+	case BM_CHIP_ID_1688:
 #ifndef SOC_MODE
 		// TODO:
 		c_attr->bm_get_tpu_power = NULL;
@@ -705,6 +780,10 @@ int bmdrv_card_attr_init(struct bm_device_info *bmdi)
 	c_attr->bm_get_npu_util = bm_read_npu_util;
 	c_attr->bm_get_npu_util1 = bm_read_npu_util1;
 
+#ifndef SOC_MODE
+	bmdrv_cooling_init(bmdi);
+#endif
+
 	return ret;
 }
 
@@ -713,6 +792,42 @@ void bm_npu_utilization_stat(struct bm_device_info *bmdi)
 	struct bm_chip_attr *c_attr = &bmdi->c_attr;
 	int i = 0;
 	int npu_status_stat = 0;
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		int core;
+		int core_num = bmdi->cinfo.tpu_core_num;
+		int avg = 0;
+		int sample_ms = c_attr->npu_timer_interval / NPU_STAT_WINDOW_WIDTH;
+		int busy_cores = 0;
+
+		if (core_num > BM_MAX_TPU_CORE_NUM)
+			core_num = BM_MAX_TPU_CORE_NUM;
+
+		for (core = 0; core < core_num; core++) {
+			int busy = (bmdev_get_scaler_using_flag(core) == TPU_USING_FLAG) ? 1 : 0;
+			int idx = c_attr->npu_status_idx_core[core];
+			int sum = 0;
+
+			c_attr->npu_status_core[core][idx] = busy;
+			c_attr->npu_status_idx_core[core] =
+				(idx + 1) % NPU_STAT_WINDOW_WIDTH;
+			for (i = 0; i < NPU_STAT_WINDOW_WIDTH; i++)
+				sum += c_attr->npu_status_core[core][i];
+			atomic_set(&c_attr->npu_util_core[core], sum << 1);
+			avg += sum << 1;
+			if (busy) {
+				busy_cores++;
+				c_attr->npu_busy_time_sum_core[core] += sample_ms;
+			}
+		}
+		c_attr->npu_start_probe_time_core += sample_ms;
+		if (busy_cores)
+			c_attr->npu_busy_time_sum_ms += sample_ms * busy_cores / core_num;
+		c_attr->npu_start_probe_time += sample_ms;
+		if (core_num)
+			atomic_set(&c_attr->npu_utilization, avg / core_num);
+		return;
+	}
 
 	if (!bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_XPU, 0)) {
 		c_attr->npu_status[c_attr->npu_status_idx] = 1;
@@ -734,6 +849,9 @@ void bm_npu_utilization_stat1(struct bm_device_info *bmdi)
 	struct bm_chip_attr *c_attr = &bmdi->c_attr;
 	int i = 0;
 	int npu_status_stat = 0;
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return;
 
 	if (!bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_XPU, 1)) {
 		c_attr->npu_status1[c_attr->npu_status_idx1] = 1;
@@ -2170,7 +2288,9 @@ int bm_get_sn(struct bm_device_info *bmdi, char *sn)
 		memcpy(sn, temp_sn, 17);
 		return 0;
 	}
-	if (bmdi->cinfo.chip_id == 0x1686a200) {
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6
+	|| bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		strncpy(sn, "N/A", 3);
 		return 0;
 	}
@@ -2445,12 +2565,22 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 
 	if(count == 17) {
 		mutex_lock(&c_attr->attr_mutex);
-		if (bmdi->cinfo.chip_id == 0x1686a200)
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 #ifdef SOC_MODE
-			c_attr->tpu_current_clock = (clk_get_rate(bmdi->cinfo.tpu_clk)/1000000);
+			if (bmdi->cinfo.tpu_clk && !IS_ERR(bmdi->cinfo.tpu_clk))
+				c_attr->tpu_current_clock = (clk_get_rate(bmdi->cinfo.tpu_clk)/1000000);
 #else
-			c_attr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+			c_attr->tpu_current_clock = bm1688_clk_get_tpu_freq(bmdi);
 #endif
+		}
+		else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+#ifdef SOC_MODE
+			if (bmdi->cinfo.tpu_clk && !IS_ERR(bmdi->cinfo.tpu_clk))
+				c_attr->tpu_current_clock = (clk_get_rate(bmdi->cinfo.tpu_clk)/1000000);
+#else
+			c_attr->tpu_current_clock = bm84x6_clk_get_tpu_freq(bmdi);
+#endif
+		}
 		else
 			c_attr->tpu_current_clock = bmdrv_1684_clk_get_tpu_freq(bmdi);
 		mutex_unlock(&c_attr->attr_mutex);
@@ -2519,7 +2649,8 @@ void bmdrv_fetch_attr(struct bm_device_info *bmdi, int count, int is_setspeed)
 			mutex_unlock(&c_attr->attr_mutex);
 			goto err_fetch;
 		} else {
-			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.chip_temp_reg, c_attr->chip_temp, sizeof(u8));//bm_smbus_update_dev_info
+			bmdrv_update_1688_over_temp_state(bmdi, c_attr->chip_temp);
+			dev_info_reg_write(bmdi, bmdi->cinfo.dev_info.chip_temp_reg, c_attr->chip_temp, sizeof(u8));
 		}
 
 		mutex_unlock(&c_attr->attr_mutex);
@@ -2542,9 +2673,24 @@ err_fetch:
 		delt = jiffies_to_msecs(end-start);
 		//PR_TRACE("dev_index=%d,bm_smbus_update_dev_info time is %d ms\n",bmdi->dev_index, delt);
 		msleep_interruptible(((10-delt)>0)? 10-delt : 0);
-	}
-	else
+	} else {
+#ifndef SOC_MODE
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688 &&
+		    bmdi->boot_info.temp_sensor_exist &&
+		    c_attr->bm_get_chip_temp != NULL) {
+			int fast_temp = 0;
+
+			mutex_lock(&c_attr->attr_mutex);
+			rc = c_attr->bm_get_chip_temp(bmdi, &fast_temp);
+			if (!rc) {
+				c_attr->chip_temp = fast_temp;
+				bmdrv_update_1688_over_temp_state(bmdi, fast_temp);
+			}
+			mutex_unlock(&c_attr->attr_mutex);
+		}
+#endif
 		msleep_interruptible(10);
+	}
 
 }
 

@@ -33,23 +33,31 @@ set(SRCS
 )
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/debian-lib")
-set(DEB_SCRIPT_TARGET "postinst")
+set(DEB_SCRIPT_DIR "${CMAKE_CURRENT_BINARY_DIR}/debian-lib")
+set(DEB_SCRIPT_TARGET "${DEB_SCRIPT_DIR}/postinst")
 add_custom_command(OUTPUT ${DEB_SCRIPT_TARGET}
-    # post-install
-    COMMAND echo "rm -f /opt/sophon/libsophon-current" > postinst
+    COMMAND echo "#!/bin/sh" > postinst
+    COMMAND echo "rm -f /opt/sophon/libsophon-current" >> postinst
     COMMAND echo "ln -s ${CPACK_PACKAGING_INSTALL_PREFIX} /opt/sophon/libsophon-current" >> postinst
     COMMAND echo >> postinst
     COMMAND echo "cp /opt/sophon/libsophon-current/data/libsophon.conf /etc/ld.so.conf.d/" >> postinst
     COMMAND echo "ldconfig" >> postinst
     COMMAND echo "cp /opt/sophon/libsophon-current/data/libsophon-bin-path.sh /etc/profile.d/" >> postinst
-    # pre-remove
-    COMMAND echo "rm -f /etc/ld.so.conf.d/libsophon.conf" > prerm
+    COMMAND echo "mkdir -p /etc/sophon" >> postinst
+    COMMAND echo "ln -sfn /opt/sophon/libsophon-current/data/c2c /etc/sophon/c2c" >> postinst
+    COMMAND echo "#!/bin/sh" > prerm
+    COMMAND echo "rm -f /etc/sophon/c2c" >> prerm
+    COMMAND echo "rm -f /etc/ld.so.conf.d/libsophon.conf" >> prerm
     COMMAND echo "ldconfig" >> prerm
     COMMAND echo "rm -f /etc/profile.d/libsophon-bin-path.sh" >> prerm
-    # post-remove
-    COMMAND echo "rm -f /opt/sophon/libsophon-current" > postrm
+    COMMAND echo "#!/bin/sh" > postrm
+    COMMAND echo "rm -f /opt/sophon/libsophon-current" >> postrm
     COMMAND echo "rm -rf /opt/sophon/libsophon-0.4.11" >> postrm
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/debian-lib
+    WORKING_DIRECTORY ${DEB_SCRIPT_DIR}
+    BYPRODUCTS
+        ${DEB_SCRIPT_DIR}/prerm
+        ${DEB_SCRIPT_DIR}/postrm
+    VERBATIM
 )
 add_custom_target(libsophon_deb_script ALL DEPENDS ${DEB_SCRIPT_TARGET})
 
@@ -98,6 +106,26 @@ install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../libsophav/3rdparty/tpu_kernel_modul
         DESTINATION lib/tpu_module/
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         COMPONENT libsophon)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../driver/libfirmware_core.so
+        DESTINATION lib/tpu_module/
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        COMPONENT libsophon)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/example/c2c_topology/chip0.ini
+        DESTINATION data/c2c
+        COMPONENT libsophon
+        RENAME chip0.ini)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/example/c2c_topology/chip1.ini
+        DESTINATION data/c2c
+        COMPONENT libsophon
+        RENAME chip1.ini)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/example/c2c_topology/chip2.ini
+        DESTINATION data/c2c
+        COMPONENT libsophon
+        RENAME chip2.ini)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/example/c2c_topology/chip3.ini
+        DESTINATION data/c2c
+        COMPONENT libsophon
+        RENAME chip3.ini)
 
 if(BUILD_STATIC_LIB)
     set(STATIC_LIB_NAME ${TARGET_NAME}-static)

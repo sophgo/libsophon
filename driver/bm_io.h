@@ -6,6 +6,9 @@ typedef enum {
 	SETUP_BAR_DEV_LAYOUT = 1
 } BAR_LAYOUT_TYPE;
 
+#define TPU_84X6_SHMEM_BASE_ADDR 0x24000000
+
+
 #define REG_WRITE8(base, off, val)	iowrite8((val), (u8 *)(base + off))
 #define REG_WRITE16(base, off, val) iowrite16((val), (u16 *)(base + off))
 //#define REG_WRITE32(base, off, val) iowrite32((val), (u32 *)(base + off))
@@ -56,6 +59,13 @@ typedef enum {
 #define BD_ENGINE_TPU1_OFFSET		0x10000UL
 #define GDMA_ENGINE_TPU1_OFFSET		0x10000UL
 #define SHMEM_TPU1_OFFSET		    0x10000UL
+
+
+#define GP_REG_84X6_FW_STATUS     0
+#define GP_REG_84X6_FW_MODE       1
+
+#define GP_REG_84X6_MAX_COUNT     5
+
 
 struct bm_io_bar_vaddr {
 	void __iomem *mcu_info_bar_vaddr;
@@ -304,16 +314,52 @@ static const struct bm_card_reg bm_reg_bm1688 = {
 	.hwthermal_base_addr = 0x05025000,
 };
 
+
+static const struct bm_card_reg bm_reg_bm84x6 = {
+	.mcu_info_base_addr  = 0x05026800,
+	.dev_info_base_addr  = 0x05026f00,
+	.shmem_base_addr  = TPU_84X6_SHMEM_BASE_ADDR, // TPU0
+	.ddr_base_addr  = 0x70000000,
+	.top_base_addr  = 0x28100000,
+	.gp_base_addr  = 0x28100080,
+	.i2c_base_addr  = 0x29000000, // i2c0
+	.intc_base_addr  = 0x27110000,  // PERI_INTC0
+	.gpio_base_addr  = 0x27010000, // GPIO0
+	.nv_timer_base_addr  = 0x27090000, //
+	.cfg_base_addr  = 0x36000000, //AP_GIC?
+	.pwm_base_addr  = 0x27050000, // PWM0
+	.bdc_base_addr = 0x26050000,   //??
+	.cdma_base_addr  = 0x21000000, //cdma0_cfg
+	.smmu_base_addr  = 0,
+	.spi_base_addr = 0x05400000,
+	.vpp0_base_addr  = 0,
+	.vpp1_base_addr  = 0,
+	.uart_base_addr  = 0x29180000, // UART0
+	.wdt_base_addr  = 0x27000000,
+	.tpu_base_addr  = 0x24000000,  //TPU_MSG ??
+	.gdma_base_addr  = 0x24510000,
+	.hau_base_addr = 0x26d10000,
+	.spacc_base_addr = 0x34000000,
+	.pka_base_addr = 0x34010000,
+	.efuse_base_addr = 0x34060000,
+	.otp_base_addr = 0x27100000,
+	.thermal_base_addr = 0x270d0000,
+	.rtc_base_addr = 0x05026000,
+	.hwthermal_base_addr = 0x05025000,  //rtc_ctrl?
+};
+
+
+
 struct bm_device_info;
-void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address);
-u32 bm_read32(struct bm_device_info *bmdi, u32 address);
-u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data);
-u8 bm_read8(struct bm_device_info *bmdi, u32 address);
-u32 bm_write8(struct bm_device_info *bmdi, u32 address, u8 data);
-u16 bm_read16(struct bm_device_info *bmdi, u32 address);
-u32 bm_write16(struct bm_device_info *bmdi, u32 address, u16 data);
-u64 bm_read64(struct bm_device_info *bmdi, u32 address);
-u64 bm_write64(struct bm_device_info *bmdi, u32 address, u64 data);
+void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u64 address);
+u32 bm_read32(struct bm_device_info *bmdi, u64 address);
+u32 bm_write32(struct bm_device_info *bmdi, u64 address, u32 data);
+u8 bm_read8(struct bm_device_info *bmdi, u64 address);
+u32 bm_write8(struct bm_device_info *bmdi, u64 address, u8 data);
+u16 bm_read16(struct bm_device_info *bmdi, u64 address);
+u32 bm_write16(struct bm_device_info *bmdi, u64 address, u16 data);
+u64 bm_read64(struct bm_device_info *bmdi, u64 address);
+u64 bm_write64(struct bm_device_info *bmdi, u64 address, u64 data);
 
 void mcu_info_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 mcu_info_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
@@ -383,15 +429,9 @@ void efuse_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val);
 u32 efuse_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 u32 otp_reg_read(struct bm_device_info *bmdi, u32 reg_offset);
 
-static inline void gp_reg_write_idx(struct bm_device_info *bmdi, u32 idx, u32 data, int core_id)
-{
-	gp_reg_write(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4, data);
-}
+void gp_reg_write_idx(struct bm_device_info *bmdi, u32 idx, u32 data, int core_id);
 
-static inline u32 gp_reg_read_idx(struct bm_device_info *bmdi, u32 idx, int core_id)
-{
-	return gp_reg_read(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4);
-}
+u32 gp_reg_read_idx(struct bm_device_info *bmdi, u32 idx, int core_id);
 
 static inline void gp_reg_write_enh(struct bm_device_info *bmdi, u32 idx, u32 data)
 {

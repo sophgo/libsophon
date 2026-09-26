@@ -2,11 +2,25 @@
 #include "bmlib_runtime.h"
 #include "bmruntime.h"
 #include <iostream>
+#include "string.h"
 
 namespace bmruntime {
-extern "C" bm_status_t bm_send_api_to_core(bm_handle_t handle, int api_id,
-                                           const u8 *api, u32 size,
-                                           int core_id);
+extern "C" bm_status_t tpu_kernel_launch_from_multi_cores(
+  bm_handle_t handle,
+  tpu_kernel_function_t function,
+  void *args,
+  size_t size,
+  int group_num,
+  int block_num) BMRT_WEAK;
+
+#ifdef _WIN32
+// Windows/MSVC has no weak symbols: provide a stub so linking succeeds.
+// Behaves like the "feature not available" fallback used on Linux.
+extern "C" bm_status_t tpu_kernel_launch_from_multi_cores(
+  bm_handle_t, tpu_kernel_function_t, void *, size_t, int, int) {
+  return BM_ERR_NOFEATURE;
+}
+#endif
 
 void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
                                       api_info_t &api_info) {
@@ -19,6 +33,13 @@ void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
   for (auto core_id : net_info.core_list) {
     base_message_id |= (1 << core_id);
   }
+  // Check kernel_func_ids for dynamic loading support
+  bool use_dynamic_loading = (net_info.kernel_func_ids.size() > 0);
+  if (use_dynamic_loading) {
+    BMRT_ASSERT_INFO(net_info.core_list.size() == net_info.kernel_func_ids.size(),
+                     "core_num=%d, kernel_func_ids.size()=%d",
+                     net_info.core_list.size(), net_info.kernel_func_ids.size());
+  }
   for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
     const std::vector<tpu_cmd_info_t> &cmd_info =
         net_info.core_commands[core_idx].cmd_info;
@@ -30,8 +51,14 @@ void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
         (output_info.size() * (sizeof(u64) * 2 + sizeof(u32))) + // output
         sizeof(u64) * 2 +
         (sizeof(int) * 2 + sizeof(u32) * 2) * cmd_info.size() + sizeof(int) +
-        2 * sizeof(u64) + sizeof(int); // base message id
-    api_info.api_id.push_back(BM_API_ID_MULTI_FULLNET);
+        4 * sizeof(u64) + sizeof(int); // base message id
+    // Use dynamic kernel function ID if available, otherwise fallback to static API ID
+    if (use_dynamic_loading) {
+      api_info.api_id.push_back(net_info.kernel_func_ids[core_idx]);
+    } else {
+      api_info.api_id.push_back(BM_API_ID_MULTI_FULLNET);
+    }
+
     api_info.api_data[core_idx].assign(api_buffer_size, 0);
     api_info.input_addr_offset.assign(input_info.size(), 0);
     api_info.output_addr_offset.assign(output_info.size(), 0);
@@ -105,6 +132,11 @@ void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
     p_api = ((u64 *)p_api) + 1;
     *((u64 *)p_api) = net_info.neuron_start_addr[0];
     p_api = ((u64 *)p_api) + 1;
+    *(u64 *)p_api = net_info.io_start_addr;
+    p_api = (u64 *)p_api + 1;
+    *(u64 *)p_api = net_info.io_mem_offset;
+    p_api = (u64 *)p_api + 1;
+
     *((int *)p_api) = base_message_id;
     p_api = ((u32 *)p_api) + 1;
   }
@@ -145,24 +177,90 @@ void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
   });
 }
 
-bm_status_t Launcher_BM1684X2::static_subnet(bm_handle_t handle,
-                                             const tpu_net_info_t &net_info) {
+
+bm_status_t Launcher_BM1684X2::static_subnet(
+    bm_handle_t handle, const tpu_net_info_t &net_info) {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
   api_info_t api_info;
   fill_api_info(net_info, api_info);
-  bm_status_t status = BM_SUCCESS;
-  for (size_t core_idx = 0; core_idx < net_info.core_list.size(); core_idx++) {
-    bm_status_t core_status = bm_send_api_to_core(
-        handle, (bm_api_id_t)api_info.api_id[0],
-        api_info.api_data[core_idx].data(), api_info.api_data[core_idx].size(),
-        net_info.core_list.at(core_idx));
-    if (BM_SUCCESS != core_status) {
-      status = (status == BM_SUCCESS) ? core_status : status;
-      BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
-               BM_API_ID_MULTI_FULLNET, core_status);
+
+  size_t block_num = net_info.core_list.size();
+  size_t total_size = 0;
+  std::vector<u32> block_sizes(block_num);
+
+  for (size_t core_idx = 0; core_idx < block_num; core_idx++) {
+    block_sizes[core_idx] = (u32)api_info.api_data[core_idx].size();
+    total_size += block_sizes[core_idx];
+  }
+
+  // unit test for multi-group
+  const char *enable_dp = getenv("BMRT_DP_NUM");
+  int dp_num = 1;
+  if (enable_dp) {
+    dp_num = std::stoi(enable_dp);
+  }
+
+  std::vector<u8> merged_api_data(total_size * dp_num, 0);
+  u8* p_merged = merged_api_data.data();
+
+  for (size_t core_idx = 0; core_idx < block_num; core_idx++) {
+    memcpy(p_merged, api_info.api_data[core_idx].data(), block_sizes[core_idx]);
+    p_merged += block_sizes[core_idx];
+  }
+
+  if (enable_dp) {
+    auto fix_io = [&net_info](std::vector<tpu_tensor_info_t> &io_infos,
+                              tpu_net_info_t &group_net) {
+      for (size_t k = 0; k < io_infos.size(); k++) {
+        auto &info = io_infos.at(k);
+        if (((info.compiled_global_addr >> 40) & 0x1f) == 0) {
+          uint64_t offset =
+              info.compiled_global_addr - net_info.neuron_start_addr[0];
+          info.compiled_global_addr = group_net.neuron_start_addr[0] + offset;
+        }
+      }
+    };
+
+    uint64_t neuron_size_per_dp = net_info.neuron_size[0] / dp_num;
+    for (int i = 1; i < dp_num; i++) {
+      api_info_t group_api;
+      tpu_net_info_t group_net = net_info;
+      // fix neuron addr
+      group_net.neuron_start_addr[0] =
+          net_info.neuron_start_addr[0] + i * neuron_size_per_dp;
+      // fix io addr
+      fix_io(group_net.input_info, group_net);
+      fix_io(group_net.output_info, group_net);
+      fill_api_info(group_net, group_api);
+      for (size_t core_idx = 0; core_idx < block_num; core_idx++) {
+        memcpy(p_merged, group_api.api_data[core_idx].data(),
+               group_api.api_data[core_idx].size());
+        p_merged += group_api.api_data[core_idx].size();
+      }
     }
   }
+
+  int group_num = dp_num;
+  bm_status_t status;
+  if (tpu_kernel_launch_from_multi_cores) {
+    status = tpu_kernel_launch_from_multi_cores(
+        handle,
+        (bm_api_id_t)api_info.api_id[0],
+        merged_api_data.data(),
+        merged_api_data.size(),
+        group_num,
+        (int)block_num);
+  } else {
+    status = BM_ERR_NOFEATURE;
+    BMRT_LOG(WRONG, "tpu_kernel_launch_from_multi_cores not found, api id:%d, status:%d",
+             api_info.api_id[0], status);
+  }
+  if (BM_SUCCESS != status) {
+    BMRT_LOG(WRONG, "tpu_kernel_launch_from_multi_cores failed, api id:%d, status:%d",
+             api_info.api_id[0], status);
+  }
+
   return status;
 }
 
@@ -172,8 +270,6 @@ bm_status_t Launcher_BM1684X2::dynamic_subnet(
   const auto &inputs = net_info.inputs;
   const auto &outputs = net_info.outputs;
   const bool get_output_shape = true;
-  BMRT_ASSERT_INFO(net_info.core_ids.size() == 1,
-                   "Dynamic compile do not support tensor parallel\n");
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
   BMRT_ASSERT_INFO(net_info.ctx_mem_borders.size() == net_info.ctx_mem_offsets.size(),
                    "ctx borders and offset should have same size");
@@ -271,18 +367,35 @@ bm_status_t Launcher_BM1684X2::dynamic_subnet(
   *(u64 *)p_api = net_info.io_mem_offset;
   p_api = (u64 *)p_api + 1;
 
-  bm_status_t status =
-      bm_send_api(handle, (bm_api_id_t)BM_API_ID_DYNAMIC_FULLNET, api_buffer,
-                  api_buffer_size);
-  if (BM_SUCCESS != status) {
-    BMRT_LOG(WRONG, "bm_send_api failed, api id:%d, status:%d",
-             BM_API_ID_DYNAMIC_FULLNET, status);
-  } else {
-    status = bm_sync_api(handle);
+  // merge api data for tpu_kernel_launch_from_multi_cores (single core/group for dynamic)
+  size_t block_num = net_info.core_ids.size();
+  int group_num = 1;
+  std::vector<u8> merged_api_data(api_buffer_size * block_num, 0);
+  u8 *p_merged = merged_api_data.data();
+  for (size_t core_idx = 0; core_idx < block_num; core_idx++) {
+    memcpy(p_merged, api_buffer, api_buffer_size);
+    p_merged += api_buffer_size;
+  }
+
+  bm_api_id_t api_id = (bm_api_id_t)net_info.kernel_func_ids[0];
+
+  bm_status_t status;
+  if (tpu_kernel_launch_from_multi_cores) {
+    status = tpu_kernel_launch_from_multi_cores(
+        handle,
+        api_id,
+        merged_api_data.data(),
+        merged_api_data.size(),
+        group_num,
+        (int)block_num);
     if (BM_SUCCESS != status) {
-      BMRT_LOG(WRONG, "bm_sync_api failed, api id:%d, status:%d",
-               BM_API_ID_DYNAMIC_FULLNET, status);
+      BMRT_LOG(WRONG, "tpu_kernel_launch_from_multi_cores failed, api id:%d, status:%d",
+               api_id, status);
     }
+  } else {
+    status = BM_ERR_NOFEATURE;
+    BMRT_LOG(WRONG, "tpu_kernel_launch_from_multi_cores not found, api id:%d, status:%d",
+             api_id, status);
   }
 
   delete[] api_buffer;
@@ -290,17 +403,18 @@ bm_status_t Launcher_BM1684X2::dynamic_subnet(
 }
 
 bm_status_t
-Launcher_BM1684X2::_bmdnn_set_profile_enable_(bm_handle_t handle, int core,
+Launcher_BM1684X2::_bmdnn_set_profile_enable_(bm_handle_t handle,
                                               tpu_kernel_function_t func_id,
                                               unsigned int enable_bits) {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
-  u32 api_buffer_size = sizeof(u32);
+  // Broadcast once to all 4 cores via tpu_kernel_launch_from_multi_cores
+  // (mirrors tpuv7 setProfile: tpuRtKernelLaunchAsync(...,1,mCoreNum,...)).
   u32 profile_enable = enable_bits;
-  bm_status_t status = tpu_kernel_launch_async_from_core(
-      handle, func_id, (u8 *)&profile_enable, api_buffer_size, core);
+  bm_status_t status = tpu_kernel_launch_from_multi_cores(
+      handle, func_id, (u8 *)&profile_enable, sizeof(u32), 1, 4);
   if (BM_SUCCESS != status) {
-    BMRT_LOG(WRONG, "launch kernel failed: core_id:%d, func id:%d, status:%d",
-             core, func_id, status);
+    BMRT_LOG(WRONG, "launch kernel failed: func id:%d, status:%d",
+             func_id, status);
   }
   return status;
 }
@@ -311,6 +425,11 @@ bm_status_t Launcher_BM1684X2::_bmdnn_get_profile_data_(
     unsigned int byte_offset,
     unsigned int data_category // 0: profile time records, 1: extra data
 ) {
+  // On 84x6 tpu_kernel_launch_async_from_core hardcodes a 1,4 broadcast
+  // (ignores `core`), so all 4 cores run sg_api_get_profile_data.  The firmware
+  // self-indexes by CORE_ID (each core writes to output + CORE_ID*output_size),
+  // so one broadcast collects all cores' slices.  Sync every physical core.
+  (void)core; // ignored on 84x6; kept for ABI compatibility
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 #pragma pack(1)
   struct {
@@ -330,41 +449,34 @@ bm_status_t Launcher_BM1684X2::_bmdnn_get_profile_data_(
   api_data.byte_offset = byte_offset;
   api_data.data_category = data_category;
 
-  bm_status_t status = tpu_kernel_launch_async_from_core(
-      handle, func_id, (u8 *)&api_data, api_buffer_size, core);
+  bm_status_t status = tpu_kernel_launch_from_multi_cores(
+      handle, func_id, (u8 *)&api_data, api_buffer_size, 1, 4);
   if (BM_SUCCESS != status) {
     BMRT_LOG(WRONG,
-             "tpu_kernel_launch_async_from_core failed, cor_id:%d, api id:%d, "
-             "status:%d",
-             core, func_id, status);
-  } else {
-    status = bm_thread_sync_from_core(handle, core);
+             "tpu_kernel_launch_from_multi_cores failed, api id:%d, status:%d",
+             func_id, status);
+    return status;
+  }
+  unsigned int core_num = 0;
+  bm_get_tpu_core_num(handle, &core_num);
+  for (unsigned int i = 0; i < core_num; i++) {
+    status = bm_thread_sync_from_core(handle, i);
     if (BM_SUCCESS != status) {
-      BMRT_LOG(WRONG, "bm_sync_api failed, core_id:%d, api id:%d, status:%d",
-               core, func_id, status);
+      BMRT_LOG(WRONG, "bm_thread_sync_from_core failed, core_id:%d, api id:%d, "
+               "status:%d", i, func_id, status);
+      return status;
     }
   }
   return status;
 }
 
-#pragma pack(1)
-typedef struct bm_api_engine_profile_param {
-  int engine;
-  unsigned long long addr;
-  unsigned long long size;
-} bm_api_engine_profile_param_t;
-#pragma pack()
-
 bm_status_t Launcher_BM1684X2::_bmdnn_set_engine_profile_param_(
-    bm_handle_t handle, int core, tpu_kernel_function_t func_id,
-    int engine_type, unsigned long long addr, unsigned long long size) {
-  bm_api_engine_profile_param_t param;
-  param.engine = engine_type;
-  param.addr = addr;
-  param.size = size;
-  bm_status_t core_status = tpu_kernel_launch_async_from_core(
-      handle, func_id, (u8 *)&param, sizeof(param), core);
-  return core_status;
+    bm_handle_t handle, tpu_kernel_function_t func_id,
+    const void* args, size_t size) {
+  // Pass through the whole packed vParams buffer; broadcast once to all 4
+  // cores (mirrors tpuv7 setPmuParam: tpuRtKernelLaunchAsync(...,1,mCoreNum)).
+  return tpu_kernel_launch_from_multi_cores(
+      handle, func_id, (void*)args, size, 1, 4);
 }
 
 } // namespace bmruntime

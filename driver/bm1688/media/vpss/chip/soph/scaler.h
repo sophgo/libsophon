@@ -185,6 +185,7 @@ enum sclr_algorithm {
 	SCL_COEF_BILINEAR,
 	SCL_COEF_NEAREST,
 	SCL_COEF_BICUBIC_OPENCV,
+	SCL_COEF_AREA,
 	SCL_COEF_MAX
 };
 
@@ -704,6 +705,7 @@ struct sclr_core_cfg {
 	struct sclr_scale_cfg sc;
 	struct sclr_tile_cfg tile;
 	enum sclr_algorithm coef;
+	struct sclr_fac_cfg fac;
 	struct sclr_cover_cfg cover_cfg[SCL_MAX_COVER_INST];
 };
 

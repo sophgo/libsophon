@@ -109,22 +109,14 @@ static int _sys_proc_open(struct inode *inode, struct file *file)
 	return single_open(file, _sys_proc_show, NULL);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops _sys_proc_fops = {
-	.proc_open = _sys_proc_open,
-	.proc_read = seq_read,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS _sys_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = _sys_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations _sys_proc_fops = {
-	.owner = THIS_MODULE,
-	.open = _sys_proc_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-#endif
+
 
 int sys_proc_init(struct proc_dir_entry *_proc_dir, void *shm)
 {

@@ -22,6 +22,7 @@ bool bmdev_msgfifo_empty(struct bm_device_info *bmdi, u32 channel, int core_id);
 void bmdev_dump_msgfifo(struct bm_device_info *bmdi, u32 channel, int core_id);
 int bmdev_wait_msgfifo(struct bm_device_info *bmdi, u32 slot_number, u32 ms, u32 channel, int core_id);
 int bmdev_msgfifo_get_api_data(struct bm_device_info *bmdi, u32 channel, u64 api_handle, u64 *data, s32 timeout);
+int bmdev_get_idle_coreid(struct bm_device_info *bmdi);
 
 #ifndef SOC_MODE
 void bm_msg_request_irq(struct bm_device_info *bmdi);
@@ -30,6 +31,5 @@ void bm_msg_free_irq(struct bm_device_info *bmdi);
 #include <linux/irqreturn.h>
 irqreturn_t bmdrv_irq_handler_msg0(int irq, void *data);
 irqreturn_t bmdrv_irq_handler_msg1(int irq, void *data);
-int bmdev_get_idle_coreid(struct bm_device_info *bmdi);
 #endif
 #endif

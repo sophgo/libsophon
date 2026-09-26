@@ -30,6 +30,26 @@
 #define CDMA1_XFER_EN BIT(17)
 #define CDMA_SEL_OFFSET 0x1000
 
+/* reg_top_fab_ctrl (0x20be0040) bit0 [chip_id]: when set, cdma src/dst
+ * addresses must carry bit44 so the fabric routes the transaction correctly. */
+#define BM1688_TOP_FAB_CTRL_REG   0x20be0040
+#define BM1688_CDMA_ADDR_FAB_BIT  (1ULL << 44)
+
+static inline void bm1688_cdma_fab_addr_remap(struct bm_device_info *bmdi,
+					       u64 *src, u64 *dst)
+{
+#ifdef SOC_MODE
+	if (bm_read32(bmdi, BM1688_TOP_FAB_CTRL_REG) & BIT(0)) {
+		*src |= BM1688_CDMA_ADDR_FAB_BIT;
+		*dst |= BM1688_CDMA_ADDR_FAB_BIT;
+	}
+#else
+	(void)bmdi;
+	(void)src;
+	(void)dst;
+#endif
+}
+
 struct xfer_info {
 	u64 cdma_xfer_status;
 	u64 cdma0_xfer_sz;
@@ -199,6 +219,7 @@ u32 bm1688_cdma_transfer(struct bm_device_info* bmdi, struct file* file, pbm_cdm
 		}
 	}
 #endif
+	bm1688_cdma_fab_addr_remap(bmdi, &src, &dst);
 	src_addr_hi = src >> 32;
 	src_addr_lo = src & 0xffffffff;
 	dst_addr_hi = dst >> 32;
@@ -530,6 +551,7 @@ static void cdma_setting_apply_for_test(struct bm_device_info *bmdi, pbm_cdma_ar
 		}
 	}
 #endif
+	bm1688_cdma_fab_addr_remap(bmdi, &src, &dst);
 	src_addr_hi = src >> 32;
 	src_addr_lo = src & 0xffffffff;
 	dst_addr_hi = dst >> 32;
@@ -632,6 +654,7 @@ static int cdma_setting_apply(struct bm_device_info *bmdi, pbm_cdma_arg parg, u3
 		}
 	}
 #endif
+	bm1688_cdma_fab_addr_remap(bmdi, &src, &dst);
 	src_addr_hi = src >> 32;
 	src_addr_lo = src & 0xffffffff;
 	dst_addr_hi = dst >> 32;

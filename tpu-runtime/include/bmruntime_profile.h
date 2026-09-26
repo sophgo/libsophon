@@ -40,6 +40,14 @@ typedef enum {
     BLOCK_FIRMWARE_LOG = 7,
     BLOCK_CMD          = 8,
     BLOCK_BMLIB        = 9,
+    BLOCK_CDMLIB_EXTRA = 10,
+    BLOCK_MONITOR_SDMA = 11,
+    BLOCK_MONITOR_CDMA = 12,
+    BLOCK_DES_BDC = 13,
+    BLOCK_DES_GDMA = 14,
+    BLOCK_DES_SDMA = 15,
+    BLOCK_DES_CDMA = 16,
+    BLOCK_DES_KV = 17,
 } profile_block_type_t;
 
 typedef enum {
@@ -130,6 +138,16 @@ public:
         return this->core_list;
     }
 
+    // Accessors used by the AKSV-style device profile (bm1684x2) to emit the
+    // instruction-descriptor (BLOCK_DES_*) blocks. record_subnet_cmd_info keeps
+    // the per-core command base addresses; record_cmd_data caches the command
+    // binary keyed by (device addr, core, engine).
+    const profile_cmd_info_t* get_cmd_info(int core_idx) {
+        if (core_idx < 0 || core_idx >= (int)cmd_infos.size()) return nullptr;
+        return cmd_infos[core_idx];
+    }
+    const std::vector<char>* get_cmd_data(u64 addr, int core_idx, int engine);
+
 private:
     profile_subnet_summary_t summary;
     int current_enabled=false;
@@ -158,6 +176,7 @@ private:
 private:
     Bmruntime* p_bmrt = nullptr;
     std::vector<profile_cmd_info_t*> cmd_infos;
+    std::map<std::string, std::vector<char>> cmd_data_map; // key: addr,core,engine -> cmd binary
     int devid = -1;
     bool enabled = false;
 

@@ -270,6 +270,12 @@ struct net_ctx_t {
   std::unordered_map<string, uint64_t> mem_info_dict;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
+  // Per-core-mask lock: different cores hold different mutexes and run in
+  // parallel; the same core_mask shares the same per-core neuron buffer and is
+  // serialized. Paired with a per-launch local copy of net_stage_t so that a
+  // concurrent cross-core update_net_context no longer races the shared stage.
+  std::map<uint32_t, std::mutex> neuron_mutex_by_core;
+  std::mutex neuron_mutex_map_guard;          // guards lazy insertion into neuron_mutex_by_core
   bool is_dynamic = 0;
   int n_can_change = 0;                           // for dynamic
   int h_w_can_change = 0;                         // for dynamic
@@ -532,12 +538,6 @@ class Bmruntime {
                             std::string descriptor, BinaryFunc get_binary,
                             NumFunc get_num, ConversionFunc convert,
                             BmMemory *memory);
-  void convert_bdc(ModelCtx *model_ctx,
-                   u32 cmd_word_num,
-                   u32 devid,
-                   net_stage_t *stage,
-                   std::vector<const bmodel::CmdGroup *> &cmd_groups,
-                   u32 core_idx);
   const std::shared_ptr<Backend> &backend() const { return backend_; }
 
 protected:

@@ -99,7 +99,33 @@ DevMemPtr ComputeMemory::Get(const std::string &net_name, uint64_t size,
   {
     std::unique_lock<std::mutex> lock(m_mtx);
     if (m_memory.count(core_mask) && m_memory[core_mask].count(net_name)) {
-      return m_memory[core_mask][net_name];
+      auto cached = m_memory[core_mask][net_name];
+      if (cached->Size() >= size) {
+        return cached;
+      }
+      // Cached block is too small — likely from a different stage of the
+      // same combine_model that shares (net_name, core_mask) as the cache key.
+      // Invalidate the stale entry and fall through to Create() for a proper
+      // allocation of the requested size.
+      BMRT_LOG(WARNING,
+               "Cached memory for %s is too small (0x%lx < 0x%lx), "
+               "invalidating and reallocating",
+               net_name.c_str(), cached->Size(), size);
+      // Ensure the core is idle before we touch its memory pool.
+      Sync(core_mask);
+      // Remove the stale entry from m_memory and m_users, mirroring
+      // the cleanup logic of Destroy().  If the inner map becomes empty,
+      // erase the outer entry so that Create() sees m_memory.count(core_mask)==0
+      // and takes the fresh-allocation path instead of dereferencing an empty map.
+      m_memory[core_mask].erase(net_name);
+      m_users[core_mask][cached->Size()].remove(net_name);
+      if (m_users[core_mask][cached->Size()].empty()) {
+        m_users[core_mask].erase(cached->Size());
+      }
+      if (m_memory[core_mask].empty()) {
+        m_memory.erase(core_mask);
+        m_users.erase(core_mask);
+      }
     }
   }
 

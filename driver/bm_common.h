@@ -30,6 +30,7 @@
 #include "bm_debug.h"
 #include "bm_monitor.h"
 #include "bm_pm.h"
+#include "bm_fw.h"
 #include "version.h"
 
 #ifndef __maybe_unused
@@ -71,19 +72,29 @@ extern uint32_t tpu_log_lv;
  */
 #define USE_DMA_COHERENT
 
+#define BM_CHIP_ID_1688   0x1686a200
+#define BM_CHIP_ID_84X6   0x1694
+#define BM_CHIP_ID_1684   0x1684
+#define BM_CHIP_ID_1684X  0x1686
+#define BM_CHIP_ID_1686   0x1686
+
 /* specify if platform is palladium */
 #define PALLADIUM_CLK_RATIO 4000
 #define DELAY_MS 120000
 #define POLLING_MS 1
 
-#define BL1_VERSION_BASE		0x25050100
 #define BL1_VERSION_SIZE		0x40
-#define BL2_VERSION_BASE		(BL1_VERSION_BASE + BL1_VERSION_SIZE) // 0x101fb240
 #define BL2_VERSION_SIZE		0x40
-#define BL31_VERSION_BASE		(BL2_VERSION_BASE + BL2_VERSION_SIZE) // 0x101fb280
 #define BL31_VERSION_SIZE		0x40
-#define UBOOT_VERSION_BASE		(BL31_VERSION_BASE + BL31_VERSION_SIZE) // 0x101fb2c0
 #define UBOOT_VERSION_SIZE		0x50
+#define BM1688_BL1_VERSION_BASE		0x25050100
+#define BM1688_BL2_VERSION_BASE		(BM1688_BL1_VERSION_BASE + BL1_VERSION_SIZE)
+#define BM1688_BL31_VERSION_BASE	(BM1688_BL2_VERSION_BASE + BL2_VERSION_SIZE)
+#define BM1688_UBOOT_VERSION_BASE	(BM1688_BL31_VERSION_BASE + BL31_VERSION_SIZE)
+#define BM84X6_BL1_VERSION_BASE		0x2FFFF100
+#define BM84X6_BL2_VERSION_BASE		(BM84X6_BL1_VERSION_BASE + BL1_VERSION_SIZE)
+#define BM84X6_BL31_VERSION_BASE	(BM84X6_BL2_VERSION_BASE + BL2_VERSION_SIZE)
+#define BM84X6_UBOOT_VERSION_BASE	(BM84X6_BL31_VERSION_BASE + BL31_VERSION_SIZE)
 #define CHIP_VERSION_BASE		0x27102014
 #define CHIP_VERSION_SIZE		0x4
 
@@ -166,6 +177,7 @@ struct chip_info {
 	u32 irq_id_msg;
 	u32 irq_id_msg0;
 	u32 irq_id_msg1;
+	u32 irq_id_tsh;
 	struct platform_device *pdev;
 	struct reset_control *arm9;
 	struct reset_control *tpu;
@@ -210,7 +222,7 @@ struct chip_info {
 	int boot_loader_num;
 	bmdrv_submodule_irq_handler bmdrv_module_irq_handler[192];
 	void (*bmdrv_map_bar)(struct bm_device_info *, struct pci_dev *);
-	void (*bmdrv_unmap_bar)(struct bm_bar_info *);
+	void (*bmdrv_unmap_bar)(struct bm_device_info *);
 	void (*bmdrv_pcie_calculate_cdma_max_payload)(struct bm_device_info *);
 	void (*bmdrv_enable_irq)(struct bm_device_info *bmdi,
 			int irq_num, bool irq_enable);
@@ -264,6 +276,30 @@ typedef struct{
 	tpu_launch_param_t *param_list;
 	int param_num;
 } tpu_launch_async_param_t;
+
+#ifndef SOC_MODE
+enum bm_pcie_cooling_state {
+	BM_PCIE_COOLING_S0 = 0,
+	BM_PCIE_COOLING_S1,
+	BM_PCIE_COOLING_S2,
+	BM_PCIE_COOLING_S3_BLOCK,
+};
+
+struct bm_pcie_cooling_ctx {
+	int inited;
+	int state;
+	int last_applied_freq_mhz;
+	int trip_s1_mc;
+	int trip_s2_mc;
+	int trip_s3_mc;
+	int clear_s1_mc;
+	int clear_s2_mc;
+	int clear_s3_mc;
+	int freq_s0_mhz;
+	int freq_s1_mhz;
+	int freq_s2_mhz;
+};
+#endif
 
 struct bm_device_info {
 	int dev_index;
@@ -324,8 +360,15 @@ struct bm_device_info {
 	struct proc_dir_entry *card_proc_dir;
 
 	struct proc_dir_entry *proc_dir;
+	struct proc_dir_entry *tsh_proc_dir;  /* 84x6 test/debug proc root, per-chip */
+	bool tsh_proc_dir_owned;
 	spinlock_t irq_lock;
+	void *pstBmKernelInfo;
+	void *pvShmemInfo;
+	struct chip_fw_map *bm_fw_info;
+	u32 fw_oneshot_mask;
 #ifndef SOC_MODE
+	struct bm_pcie_cooling_ctx cooling_ctx;
 	vpp_drv_context_t vppdrvctx;
 	vpu_drv_context_t vpudrvctx;
 	jpu_drv_context_t jpudrvctx;

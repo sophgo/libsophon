@@ -1,2 +1,7 @@
+#!/bin/sh
 mkdir -p /usr/lib/cmake/libsophon
-cp /opt/sophon/libsophon-current/data/libsophon-config.cmake /usr/lib/cmake/libsophon/
+if [ -f /opt/sophon/libsophon-current/data/libsophon-config.cmake ]; then
+  cp /opt/sophon/libsophon-current/data/libsophon-config.cmake /usr/lib/cmake/libsophon/
+else
+  cp /opt/sophon/libsophon-*/data/libsophon-config.cmake /usr/lib/cmake/libsophon/
+fi

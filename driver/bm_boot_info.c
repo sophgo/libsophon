@@ -50,6 +50,9 @@ int bmdrv_misc_info_init(struct pci_dev *pdev, struct bm_device_info *bmdi)
 	case 0x1686a200:
 		misc_info->chipid_bit_mask = BM1688_CHIPID_BIT_MASK;
 		break;
+	case BM_CHIP_ID_84X6:
+		misc_info->chipid_bit_mask = BM84X6_CHIPID_BIT_MASK;
+		break;
 	default:
 		return -1;
 	}
@@ -479,7 +482,8 @@ int bmdrv_boot_info_init(struct bm_device_info *bmdi)
 		return rc;
 	}
 
-	if (cinfo->chip_id == 0x1686a200) {
+	if (cinfo->chip_id == 0x1686a200
+	|| cinfo->chip_id == BM_CHIP_ID_84X6) {
 		bmdrv_set_bm1688_default_boot_info(bmdi);
 		pr_info("bm1688 bmdrv_boot_info_init\n");
 	}

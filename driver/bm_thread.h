@@ -5,6 +5,7 @@
 #include <linux/hashtable.h>
 
 #include "bm_uapi.h"
+#include "bm_card.h"
 
 struct bm_thread_info {
 	struct hlist_node node;
@@ -14,6 +15,7 @@ struct bm_thread_info {
 	struct completion msg_done;
 	u64 last_api_seq[BM_MAX_CORE_NUM];
 	u64 cpl_api_seq[BM_MAX_CORE_NUM];
+	u64 last_hwq_seq[BM_MAX_CORE_NUM];
 
 	/* profile trace information */
 	bm_profile_t profile;
@@ -21,11 +23,11 @@ struct bm_thread_info {
 	struct list_head trace_list;
 	bool trace_enable;
 	u64 trace_item_num;
+	u32 q_idx;
 };
 
 struct bm_handle_info;
 struct bm_thread_info *bmdrv_find_thread_info(struct bm_handle_info *h_info, pid_t pid);
 struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, pid_t pid);
-void bmdrv_delete_thread_info(struct bm_handle_info *h_info);
-
+void bmdrv_delete_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info);
 #endif

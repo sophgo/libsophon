@@ -38,6 +38,14 @@ struct api_queue_entry {
 	u32 dev_seq;
 };
 
+typedef struct {
+	u32 physical_core_id;
+	u32 group_num;
+	u32 workitem_num;
+	u32 group_id;
+	u32 workitem_id;
+} tpu_groupset_info_t;
+
 class bm_device {
 public:
 	bm_device(int _dev_id);
@@ -45,6 +53,7 @@ public:
 	int bm_device_id(void) { return dev_id; }
 	int bm_core_num(void) { return core_num; }
 	bm_status_t bm_device_send_api(int api_id, const u8 *api, u32 size, int core_idx = 0);
+	bm_status_t bm_device_send_api_to_multi_core(int api_id, const u8 *api, const u32 *sizes, int group_num, int block_num);
 	bm_status_t bm_device_sync(void);
 	bm_status_t bm_device_thread_sync_from_core(int core_idx);
 	u64 bm_device_alloc_mem(u64 size);
@@ -77,9 +86,13 @@ public:
 	typedef void (*t_cmodel_wait_share_reg_equal)(u32, int, int, int, int);
 	typedef int (*t_cmodel_get_total_nodechip_num)(void);
 	typedef u64 (*t_cmodel_get_gmem_start_addr)(void);
+	typedef u64 (*t_cmodel_get_global_mem_size)(int);
+	typedef u64 (*t_cmodel_get_config_gmem_size)(void);
 	typedef int (*t_cmodel_get_last_func_id)(int);
 
 	t_cmodel_get_gmem_start_addr cmodel_get_gmem_start_addr_;
+	t_cmodel_get_global_mem_size cmodel_get_global_mem_size_;
+	t_cmodel_get_config_gmem_size cmodel_get_config_gmem_size_;
 	t_get_global_memaddr get_global_memaddr_;
 	t_cmodel_init cmodel_init_;
 	t_set_cur_nodechip_idx set_cur_nodechip_idx_;

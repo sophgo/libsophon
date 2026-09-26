@@ -20,6 +20,8 @@
 #define STAGEMEM_SLOT_SIZE (CONFIG_HOST_REALMEM_SIZE / STAGEMEM_SLOT_NUM)
 #endif
 
+
+
 struct bm_stagemem {
 	void *v_addr;
 	u64 p_addr;

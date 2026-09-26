@@ -13,14 +13,14 @@ function test_bmrt_api() {
 }
 
 function main(){
+  # test soc build
+  EXTRA_CONFIG="-DSOC_MODE=ON -DUSING_SRCMAP=OFF -DUSING_OMP=OFF" rebuild_tpu_runtime; ret=$?
+  if [ $ret -ne 0 ]; then echo "build soc runtime failed"; return $ret; fi
+
   rebuild_tpu_runtime; ret=$?
   if [ $ret -ne 0 ]; then echo "rebuild_tpu_runtime failed"; return $ret; fi
   test_bmrt_api; ret=$?
   if [ $ret -ne 0 ]; then echo "test_bmrt_api regression failed"; return $ret; fi
-
-  # test soc build
-  EXTRA_CONFIG="-DSOC_MODE=ON" rebuild_tpu_runtime; ret=$?
-  if [ $ret -ne 0 ]; then echo "build soc runtime failed"; return $ret; fi
 }
 
 main

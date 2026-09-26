@@ -31,8 +31,10 @@ static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 #include "rbtree.h"
 
 #define BMLIB_MEMORY_LOG_TAG "bmlib_memory"
-#define KERNEL_MODULE_NAME "libbm1688_kernel_module.so"
-#define KERNEL_MODULE_PATH "/lib/firmware/libbm1688_kernel_module.so"
+#define KERNEL_MODULE_NAME_1688 "libbm1688_kernel_module.so"
+#define KERNEL_MODULE_PATH_1688 "/lib/firmware/libbm1688_kernel_module.so"
+#define KERNEL_MODULE_NAME_84X6 "libfirmware_core.so"
+#define KERNEL_MODULE_PATH_84X6 "/lib/firmware/libfirmware_core.so"
 typedef struct {
 	char *func_name;
 	tpu_kernel_function_t f_id_core0;
@@ -90,7 +92,9 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	tpu_kernel_module_t bm_module1 = NULL;
 
 	unsigned int core_num;
+	unsigned int chipid = 0;
 	bm_get_tpu_scalar_num(handle, &core_num);
+	bm_get_chipid(handle, &chipid);
 	pthread_mutex_lock(&mutex);
 
 	if (handle->g_init_basic_func_flag == 0x5a) {
@@ -102,13 +106,24 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 	#ifdef __linux__
 	char key[64] = {0};
 	char lib_path[512] = {0};
+	char rel_path[80] = {0};
+	char default_lib_path[80] = {0};
 	Dl_info dl_info;
 	int ret;
 	char* ptr;
-	const char rel_path[64] = "tpu_module/libbm1688_kernel_module.so";
-	char default_lib_path[80];
-	strcpy(default_lib_path, KERNEL_MODULE_PATH);
-	strcpy(key, KERNEL_MODULE_NAME);
+
+	if (chipid == BM_CHIP_ID_84X6) {
+		strcpy(key, KERNEL_MODULE_NAME_84X6);
+		strcpy(default_lib_path, KERNEL_MODULE_PATH_84X6);
+		strcpy(rel_path, "tpu_module/");
+		strcat(rel_path, KERNEL_MODULE_NAME_84X6);
+	} else {
+		strcpy(key, KERNEL_MODULE_NAME_1688);
+		strcpy(default_lib_path, KERNEL_MODULE_PATH_1688);
+		strcpy(rel_path, "tpu_module/");
+		strcat(rel_path, KERNEL_MODULE_NAME_1688);
+	}
+
 	ret = dladdr((void *)bm_init_basic_func_id, &dl_info);
 	if (ret != 0 && dl_info.dli_fname != NULL) {
 		ptr = (char *)strrchr(dl_info.dli_fname, '/');
@@ -120,22 +135,31 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 		}
 		ret = access(lib_path, F_OK);
 	} else {
-		strcpy(lib_path, KERNEL_MODULE_PATH);
+		strcpy(lib_path, default_lib_path);
+		ret = access(lib_path, F_OK);
+	}
+	if (ret != 0) {
+		strcpy(lib_path, default_lib_path);
 		ret = access(lib_path, F_OK);
 	}
 	if (ret != 0) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG,
 					BMLIB_LOG_ERROR,
-						"failed to find libbm1688_kernel_module.so\n");
+						"failed to find %s\n", key);
 		pthread_mutex_unlock(&mutex);
 
 		return BM_ERR_FAILURE;
 	}
 	#else
 	static char lib_path[512] = {0};
-	const char key[64] = KERNEL_MODULE_NAME;
+	char key[64] = {0};
+	if (chipid == BM_CHIP_ID_84X6) {
+		strcpy(key, KERNEL_MODULE_NAME_84X6);
+	} else {
+		strcpy(key, KERNEL_MODULE_NAME_1688);
+	}
 	if (0 != find_tpufirmware_path(lib_path, key)) {
-		printf("%s does not exist\n", KERNEL_MODULE_NAME);
+		printf("%s does not exist\n", key);
 		pthread_mutex_unlock(&mutex);
 		return BM_ERR_FAILURE;
 	}
@@ -150,7 +174,7 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 			pthread_mutex_unlock(&mutex);
 			return BM_ERR_FAILURE;
 		}
-		if (core_num != 1) {
+		if (chipid != BM_CHIP_ID_84X6 && core_num != 1) {
 		bm_module1 = tpu_kernel_load_module_file_key_to_core(handle, lib_path, key, key_size, 1);
 		if(bm_module1 == NULL) {
 			printf("bm_module1 is null!\n");
@@ -160,12 +184,15 @@ bm_status_t bm_init_basic_func_id(bm_handle_t handle)
 		}
 		for (int i=0; i < sizeof(g_basic_func) / sizeof(g_basic_func[0]); i++) {
 		g_basic_func[i].f_id_core0 = tpu_kernel_get_function_from_core(handle, bm_module0, g_basic_func[i].func_name, 0);
-		if (core_num != 1)
+		if (chipid == BM_CHIP_ID_84X6) {
+			g_basic_func[i].f_id_core1 = g_basic_func[i].f_id_core0;
+		} else if (core_num != 1) {
 			g_basic_func[i].f_id_core1 = tpu_kernel_get_function_from_core(handle, bm_module1, g_basic_func[i].func_name, 1);
+		}
 		}
 		free(bm_module0);
 		bm_module0 = NULL;
-		if (core_num != 1)
+		if (chipid != BM_CHIP_ID_84X6 && core_num != 1)
 		free(bm_module1);
 		bm_module1 = NULL;
 	}
@@ -569,7 +596,9 @@ static int bm_alloc_gmem(bm_handle_t ctx, bm_device_mem_t *pmem, int heap_id_mas
 	struct ion_allocation_data alloc_data;
 
 	// When the chip is CV186AH/BM1688, map heap 3 to heap 2
-	if (((heap_id_mask >> 2) & 0x1)) {
+	if ((ctx->misc_info.chipid == BM_CHIP_ID_1688 ||
+	     ctx->misc_info.chipid == BM_CHIP_ID_84X6) &&
+	    ((heap_id_mask >> 2) & 0x1)) {
 		heap_id_mask = (heap_id_mask | 0x2) & 0x3;
 	}
 
@@ -619,7 +648,9 @@ static int sg_alloc_gmem(bm_handle_t ctx, sg_device_mem_t *pmem, int heap_id_mas
 	struct ion_allocation_data alloc_data;
 
 	// When the chip is CV186AH/BM1688, map heap 3 to heap 2
-	if (((heap_id_mask >> 2) & 0x1)) {
+	if ((ctx->misc_info.chipid == BM_CHIP_ID_1688 ||
+	     ctx->misc_info.chipid == BM_CHIP_ID_84X6) &&
+	    ((heap_id_mask >> 2) & 0x1)) {
 		heap_id_mask = (heap_id_mask | 0x2) & 0x3;
 	}
 
@@ -669,7 +700,9 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 	struct ion_allocation_data alloc_data;
 
 	// When the chip is CV186AH/BM1688, map heap 3 to heap 2
-	if (((heap_id_mask >> 2) & 0x1)) {
+	if ((ctx->misc_info.chipid == BM_CHIP_ID_1688 ||
+	     ctx->misc_info.chipid == BM_CHIP_ID_84X6) &&
+	    ((heap_id_mask >> 2) & 0x1)) {
 		heap_id_mask = (heap_id_mask | 0x2) & 0x3;
 	}
 
@@ -711,10 +744,12 @@ static int bm_alloc_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem, int hea
 	return BM_SUCCESS;
 }
 
+static bool bm_gmem_chip_addr_valid(unsigned int chipid, u64 saddr, u64 eaddr);
+
 static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem)
 {
 	int ret;
-    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000) {
+    if (!bm_gmem_chip_addr_valid(ctx->misc_info.chipid, pmem->u.device.device_addr, pmem->u.device.device_addr + pmem->size)) {
         bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
         return BM_ERR_FAILURE;
     }
@@ -738,7 +773,7 @@ static bm_status_t bm_free_gmem(bm_handle_t ctx, bm_device_mem_t *pmem)
 
 static bm_status_t sg_free_gmem(bm_handle_t ctx, sg_device_mem_t *pmem) {
 	int ret;
-    if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
+    if (!bm_gmem_chip_addr_valid(ctx->misc_info.chipid, pmem->u.device.device_addr, pmem->u.device.device_addr + pmem->size)) {
         bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
         return BM_ERR_FAILURE;
     }
@@ -762,7 +797,7 @@ static bm_status_t sg_free_gmem(bm_handle_t ctx, sg_device_mem_t *pmem) {
 
 static bm_status_t bm_free_gmem_u64(bm_handle_t ctx, bm_device_mem_u64_t *pmem) {
 	int ret;
-	if (pmem->u.device.device_addr < 0x100000000 || pmem->u.device.device_addr > 0x500000000){
+	if (!bm_gmem_chip_addr_valid(ctx->misc_info.chipid, pmem->u.device.device_addr, pmem->u.device.device_addr + pmem->size)) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR, "free gmem addr 0x%llx is invalide!\n",pmem->u.device.device_addr);
 		return BM_ERR_FAILURE;
 	}
@@ -1448,6 +1483,40 @@ static bool bm_device_mem_page_aligned_u64(bm_device_mem_u64_t mem)
 	}
 }
 
+static bool bm_gmem_chip_addr_valid(unsigned int chipid, u64 saddr, u64 eaddr)
+{
+	if (eaddr < saddr)
+		return false;
+
+	if (chipid == 0x1684 || chipid == 0x1686) {
+		if (((saddr >= 0x100000000 && saddr <= 0x4ffffffff) || (saddr >= 0x0 && saddr <= 0x103fffff))
+			&& ((eaddr >= 0x100000000 && eaddr <= 0x500000000) || (eaddr >= 0x0 && eaddr <= 0x10400000)))
+			return true;
+		return false;
+	}
+
+	if (chipid == 0x1682) {
+		if (saddr >= 0x100000000 && saddr <= 0x2ffffffff
+			&& eaddr >= 0x100000000 && eaddr <= 0x300000000)
+			return true;
+		return false;
+	}
+
+	if (chipid == BM_CHIP_ID_1688) {
+		if (saddr >= 0x100000000ULL && eaddr <= 0x500000000ULL)
+			return true;
+		return false;
+	}
+
+	if (chipid == BM_CHIP_ID_84X6) {
+		if (saddr >= 0x1000000000ULL && eaddr <= 0x2000000000ULL)
+			return true;
+		return false;
+	}
+
+	return true;
+}
+
 static bool bm_device_mem_range_valid(bm_handle_t handle, bm_device_mem_t mem)
 {
 #ifdef USING_CMODEL
@@ -1457,26 +1526,11 @@ static bool bm_device_mem_range_valid(bm_handle_t handle, bm_device_mem_t mem)
 	u64 saddr = bm_mem_get_device_addr(mem);
 	u64 eaddr = bm_mem_get_size(mem) + saddr;
 
-	if (handle->misc_info.chipid == 0x1684 || handle->misc_info.chipid == 0x1686) {
-		if (((saddr >= 0x100000000 && saddr <= 0x4ffffffff) || (saddr >= 0x0 && saddr <= 0x103fffff))
-			&& ((eaddr >= 0x100000000 && eaddr <= 0x500000000) || (eaddr >= 0x0 && eaddr <= 0x10400000))) {
-		return true;
-		} else {
+	if (!bm_gmem_chip_addr_valid(handle->misc_info.chipid, saddr, eaddr)) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
+		"%s chipid=0x%x saddr=0x%016llx eaddr=0x%016llx out of range\n",
+		__func__, handle->misc_info.chipid, saddr, eaddr);
 		return false;
-		}
-	}
-
-	if (handle->misc_info.chipid == 0x1682) {
-		if (saddr >= 0x100000000 && saddr <= 0x2ffffffff
-			&& eaddr >= 0x100000000 && eaddr <= 0x300000000) {
-		return true;
-		} else {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
-		return false;
-		}
 	}
 #endif
 	return true;
@@ -1491,26 +1545,11 @@ static bool sg_device_mem_range_valid(bm_handle_t handle, sg_device_mem_t mem)
 	u64 saddr = sg_mem_get_device_addr(mem);
 	u64 eaddr = sg_mem_get_size(mem) + saddr;
 
-	if (handle->misc_info.chipid == 0x1684 || handle->misc_info.chipid == 0x1686) {
-		if (((saddr >= 0x100000000 && saddr <= 0x4ffffffff) || (saddr >= 0x0 && saddr <= 0x103fffff))
-			&& ((eaddr >= 0x100000000 && eaddr <= 0x500000000) || (eaddr >= 0x0 && eaddr <= 0x10400000))) {
-		return true;
-		} else {
+	if (!bm_gmem_chip_addr_valid(handle->misc_info.chipid, saddr, eaddr)) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
+		"%s chipid=0x%x saddr=0x%016llx eaddr=0x%016llx out of range\n",
+		__func__, handle->misc_info.chipid, saddr, eaddr);
 		return false;
-		}
-	}
-
-	if (handle->misc_info.chipid == 0x1682) {
-		if (saddr >= 0x100000000 && saddr <= 0x2ffffffff
-			&& eaddr >= 0x100000000 && eaddr <= 0x300000000) {
-		return true;
-		} else {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
-		return false;
-		}
 	}
 #endif
 	return true;
@@ -1525,26 +1564,11 @@ static bool bm_device_mem_range_valid_u64(bm_handle_t handle, bm_device_mem_u64_
 	u64 saddr = bm_mem_get_device_addr_u64(mem);
 	u64 eaddr = bm_mem_get_size_u64(mem) + saddr;
 
-	if (handle->misc_info.chipid == 0x1684 || handle->misc_info.chipid == 0x1686) {
-		if (((saddr >= 0x100000000 && saddr <= 0x4ffffffff) || (saddr >= 0x0 && saddr <= 0x103fffff))
-			&& ((eaddr >= 0x100000000 && eaddr <= 0x500000000) || (eaddr >= 0x0 && eaddr <= 0x10400000))) {
-		return true;
-		} else {
+	if (!bm_gmem_chip_addr_valid(handle->misc_info.chipid, saddr, eaddr)) {
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
+		"%s chipid=0x%x saddr=0x%016llx eaddr=0x%016llx out of range\n",
+		__func__, handle->misc_info.chipid, saddr, eaddr);
 		return false;
-		}
-	}
-
-	if (handle->misc_info.chipid == 0x1682) {
-		if (saddr >= 0x100000000 && saddr <= 0x2ffffffff
-			&& eaddr >= 0x100000000 && eaddr <= 0x300000000) {
-		return true;
-		} else {
-		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
-		"%s saddr=0x%llx eaddr=0x%llx out of range\n", __func__, saddr, eaddr);
-		return false;
-		}
 	}
 #endif
 	return true;
@@ -1764,10 +1788,9 @@ bm_status_t bm_mem_mmap_device_mem(bm_handle_t handle, bm_device_mem_t *dmem,
 	}
 #endif
 #else
-	#define GLOBAL_MEM_START_ADDR 0x100000000
 	//handle->bm_dev->get_global_memaddr_(handle->dev_id);
 	*vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
-		bm_mem_get_device_addr(*dmem) - GLOBAL_MEM_START_ADDR);
+		bm_mem_get_device_addr(*dmem) - handle->bm_dev->cmodel_get_gmem_start_addr_());
 #endif
 	return BM_SUCCESS;
 }
@@ -1808,10 +1831,9 @@ bm_status_t sg_mem_mmap_device_mem(bm_handle_t handle, sg_device_mem_t *dmem,
 	}
 #endif
 #else
-	#define GLOBAL_MEM_START_ADDR 0x100000000
 	//handle->bm_dev->get_global_memaddr_(handle->dev_id);
 	*vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
-		sg_mem_get_device_addr(*dmem) - GLOBAL_MEM_START_ADDR);
+		sg_mem_get_device_addr(*dmem) - handle->bm_dev->cmodel_get_gmem_start_addr_());
 #endif
 	return BM_SUCCESS;
 }
@@ -1859,6 +1881,15 @@ bm_status_t bm_mem_mmap_device_mem_u64(bm_handle_t handle, bm_device_mem_u64_t *
 	return BM_SUCCESS;
 }
 
+static inline u64 bm_mmap_nocache_flag(bm_handle_t handle)
+{
+	unsigned int chipid = 0;
+        bm_get_chipid(handle, &chipid);
+	if (chipid == BM_CHIP_ID_84X6)
+		return 0x10000000000ULL;
+	return 0x1000000000ULL;
+}
+
 bm_status_t bm_mem_mmap_device_mem_no_cache(bm_handle_t handle,
                                    bm_device_mem_t *dmem,
                                    u64 *vmem)
@@ -1886,10 +1917,9 @@ bm_status_t bm_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 	unsigned int size = bm_mem_get_device_size(*dmem);
 	unsigned int aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-	/*0x1000000000 is used to set the flag
-	in driver bmdev_mmap function to open the mmap with no cache*/
 	ret = mmap(0, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-				handle->dev_fd, bm_mem_get_device_addr(*dmem) | 0x1000000000);
+				handle->dev_fd,
+				bm_mem_get_device_addr(*dmem) | bm_mmap_nocache_flag(handle));
 
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
@@ -1900,10 +1930,9 @@ bm_status_t bm_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 
 #endif
 #else
-	#define GLOBAL_MEM_START_ADDR 0x100000000
 	//handle->bm_dev->get_global_memaddr_(handle->dev_id);
 	*vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
-		bm_mem_get_device_addr(*dmem) - GLOBAL_MEM_START_ADDR);
+		bm_mem_get_device_addr(*dmem) - handle->bm_dev->cmodel_get_gmem_start_addr_());
 #endif
 	return BM_SUCCESS;
 }
@@ -1935,10 +1964,9 @@ bm_status_t sg_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 	unsigned long long size = sg_mem_get_device_size(*dmem);
 	unsigned long long aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-	/*0x1000000000 is used to set the flag
-	in driver bmdev_mmap function to open the mmap with no cache*/
 	ret = mmap(0, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-				handle->dev_fd, sg_mem_get_device_addr(*dmem) | 0x1000000000);
+				handle->dev_fd,
+				sg_mem_get_device_addr(*dmem) | bm_mmap_nocache_flag(handle));
 
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
@@ -1949,10 +1977,9 @@ bm_status_t sg_mem_mmap_device_mem_no_cache(bm_handle_t handle,
 
 #endif
 #else
-	#define GLOBAL_MEM_START_ADDR 0x100000000
 	//handle->bm_dev->get_global_memaddr_(handle->dev_id);
 	*vmem = (u64)((u8*)handle->bm_dev->get_global_memaddr_(handle->dev_id) +
-		sg_mem_get_device_addr(*dmem) - GLOBAL_MEM_START_ADDR);
+		sg_mem_get_device_addr(*dmem) - handle->bm_dev->cmodel_get_gmem_start_addr_());
 #endif
 	return BM_SUCCESS;
 }
@@ -1984,10 +2011,9 @@ bm_status_t bm_mem_mmap_device_mem_no_cache_u64(bm_handle_t handle,
 	unsigned long long size = bm_mem_get_device_size_u64(*dmem);
 	unsigned long long aligned_size = (size + PAGE_SIZE - 1) & (~(PAGE_SIZE - 1));
 
-	/*0x1000000000 is used to set the flag
-	in driver bmdev_mmap function to open the mmap with no cache*/
 	ret = mmap(0, aligned_size, PROT_READ | PROT_WRITE, MAP_SHARED,
-				handle->dev_fd, bm_mem_get_device_addr_u64(*dmem) | 0x1000000000);
+				handle->dev_fd,
+				bm_mem_get_device_addr_u64(*dmem) | bm_mmap_nocache_flag(handle));
 
 	if (MAP_FAILED != ret) {
 		*vmem = (u64)ret;
@@ -3639,22 +3665,21 @@ static int find_tpufirmware_path(char fw_path[512], const char* path)
 	int dirname_len;
 	int ret = 0;
 
-	strcpy(fw_path, ".\\libbm1688_kernel_module.so");
+	strcpy(fw_path, ".\\");
+	strcat(fw_path, path);
 
-	// test ./libbm1688_kernel_module.so
 	ret = _access(fw_path,0);
 	if (ret == 0) {
 		return ret;
 	}
 
-	// test ./tpu_module/libbm1688_kernel_module.so
 	LPTSTR strDLLPath1 = (char*)malloc(512);
 	GetModuleFileName((HINSTANCE)&__ImageBase, strDLLPath1, _MAX_PATH);
 
 	ptr = strrchr(strDLLPath1, '\\');
 
 	if (!ptr) {
-		printf("Invalid absolute path name of libbm1688_kernel_module.so\n");
+		printf("Invalid absolute path name of %s\n", path);
 		return -1;
 	}
 
@@ -3714,7 +3739,16 @@ bm_status_t bm_memset_device_ext_to_core(bm_handle_t handle, void* value, int mo
 							bm_mem_get_size(mem),
 							mode,
 							tmp};
-	if (bm_is_dynamic_loading(handle)) {
+	unsigned int chipid = 0;
+	bm_get_chipid(handle, &chipid);
+	if (chipid == BM_CHIP_ID_84X6) {
+		bm_init_basic_func_id(handle);
+		f_id = bm_get_basic_func_id(handle, "sg_api_memset", core_id);
+		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memset_t), 1, 1);
+		if (BM_SUCCESS == ret) {
+			ret = bm_sync_api_from_core(handle, core_id);
+		}
+	} else if (bm_is_dynamic_loading(handle)) {
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memset", core_id);
 		ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memset_t), core_id);
@@ -3771,7 +3805,16 @@ bm_status_t bm_memcpy_d2d_with_core(bm_handle_t handle, bm_device_mem_t dst,
 							src_nstride,
 							dst_nstride,
 							len};
-	if (bm_is_dynamic_loading(handle)) {
+	unsigned int chipid = 0;
+	bm_get_chipid(handle, &chipid);
+	if (chipid == BM_CHIP_ID_84X6) {
+		bm_init_basic_func_id(handle);
+		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy", core_id);
+		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_t), 1, 1);
+		if (BM_SUCCESS == ret) {
+			ret = bm_sync_api_from_core(handle, core_id);
+		}
+	} else if (bm_is_dynamic_loading(handle)) {
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy", core_id);
 		ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_t), core_id);
@@ -3858,7 +3901,16 @@ bm_status_t bm_memcpy_d2d_stride_with_core(bm_handle_t     handle,
 									dst_stride,
 									count,
 									format_size};
-	if (bm_is_dynamic_loading(handle)) {
+	unsigned int chipid = 0;
+	bm_get_chipid(handle, &chipid);
+	if (chipid == BM_CHIP_ID_84X6) {
+		bm_init_basic_func_id(handle);
+		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_wstride", core_id);
+		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_wstride_t), 1, 1);
+		if (BM_SUCCESS == ret) {
+			ret = bm_sync_api_from_core(handle, core_id);
+		}
+	} else if (bm_is_dynamic_loading(handle)) {
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_wstride", core_id);
 		ret = tpu_kernel_launch_from_core(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_wstride_t), core_id);
@@ -3901,7 +3953,19 @@ bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst
 
 	bm_api_memcpy_byte_t api = {bm_mem_get_device_addr(src) + src_offset,
 								bm_mem_get_device_addr(dst) + dst_offset, size};
-	if (bm_is_dynamic_loading(handle)) {
+	unsigned int chipid = 0;
+	bm_get_chipid(handle, &chipid);
+	if (chipid == BM_CHIP_ID_84X6) {
+		ret = bm_init_basic_func_id(handle);
+		if (ret != BM_SUCCESS) {
+			return ret;
+		}
+		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_byte", core_id);
+		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_byte_t), 1, 1);
+		if (BM_SUCCESS == ret) {
+			ret = bm_sync_api_from_core(handle, core_id);
+		}
+	} else if (bm_is_dynamic_loading(handle)) {
 		ret = bm_init_basic_func_id(handle);
 		if (ret != BM_SUCCESS) {
 			return ret;
@@ -4072,7 +4136,7 @@ bm_status_t bm_calculate_cdma_addr(bm_handle_t src_handle,
 		bmlib_log(BMLIB_MEMORY_LOG_TAG, BMLIB_LOG_ERROR,
 				"dst get misc info failed, ioclt ret = %d:%d\n", ret, __LINE__);
 
-	if (src_info.chipid == 0x1686a200) {
+	if (src_info.chipid == BM_CHIP_ID_1688 || src_info.chipid == BM_CHIP_ID_84X6) {
 		if ((src_info.domain_bdf & 0x7) == 0x1)
 		*src |= 0x1000ULL << 32;
 		if ((dst_info.domain_bdf & 0x7) == 0x1)

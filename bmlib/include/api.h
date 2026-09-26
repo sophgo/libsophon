@@ -32,6 +32,7 @@ typedef enum {
   BM_API_ID_TPUSCALER_GET_FUNC               = BM_API_ID_A53LITE_GET_FUNC,
   BM_API_ID_TPUSCALER_LAUNCH_FUNC            = BM_API_ID_A53LITE_LAUNCH_FUNC,
   BM_API_ID_TPUSCALER_UNLOAD_LIB             = BM_API_ID_A53LITE_UNLOAD_LIB,
+  BM_API_ID_TPUSCALER_SET_INFO               = 0x90000005,
   BM_API_ID_CPU_MAX,
 } sglib_api_id_t;
 #pragma pack(push, 1)

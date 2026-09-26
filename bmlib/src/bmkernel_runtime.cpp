@@ -199,7 +199,7 @@ bm_status_t tpu_kernel_launch_sync(bm_handle_t handle, const char *func_name, co
 	strcpy(buf, func_name);
 	memcpy(buf + MAX_FUNC_NAME_LENGTH + 4, args, size);
 	bm_get_chipid(handle, &chip_id);
-	if(chip_id == 0x1686 || chip_id == 0x1686a200) {
+	if(chip_id == 0x1686 || chip_id == BM_CHIP_ID_1688 || chip_id == BM_CHIP_ID_84X6) {
 		ret = bm_send_api(handle, (sglib_api_id_t)BM_API_BMKERNEL_PLUS_1684X,
 					reinterpret_cast< const u8 *>(buf),
 					MAX_FUNC_NAME_LENGTH + 4 + (nullptr == args ? 0 : size));
@@ -231,10 +231,10 @@ bm_status_t tpu_kernel_launch_sync_by_core(bm_handle_t handle, const char *func_
 	strcpy(buf, func_name);
 	memcpy(buf + MAX_FUNC_NAME_LENGTH + 4, args, size);
 	bm_get_chipid(handle, &chip_id);
-	if(chip_id != 0x1686a200 && core_id >= 2)
+	if(chip_id != BM_CHIP_ID_1688 && chip_id != BM_CHIP_ID_84X6 && core_id >= 2)
 		return BM_ERR_PARAM;
 
-	if(chip_id == 0x1686 || chip_id == 0x1686a200) {
+	if(chip_id == 0x1686 || chip_id == BM_CHIP_ID_1688 || chip_id == BM_CHIP_ID_84X6) {
 		ret = bm_send_api_to_core(handle, (sglib_api_id_t)BM_API_BMKERNEL_PLUS_1684X,
 					reinterpret_cast< const u8 *>(buf),
 					MAX_FUNC_NAME_LENGTH + 4 + (nullptr == args ? 0 : size),

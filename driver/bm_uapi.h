@@ -9,13 +9,17 @@ typedef struct bm_api {
 	bm_api_id_t    api_id;
 	u8 *api_addr;
 	u32 api_size;
+	int group_num;
+	int block_num;
 } bm_api_t;
 
 typedef struct bm_api_ext {
-	int core_id;
+	int core_id;  //ignore core_id if 84x6,always 0
 	bm_api_id_t    api_id;
 	u8 *api_addr;
 	u32 api_size;
+	int group_num;
+	int block_num;
 	u64 api_handle;
 } bm_api_ext_t;
 
@@ -77,6 +81,7 @@ struct bm_misc_info {
 #define BM1684_CHIPID_BIT_MASK	(0X1 << 1)
 #define BM1684X_CHIPID_BIT_MASK	(0X1 << 2)
 #define BM1688_CHIPID_BIT_MASK	(0X1 << 3)
+#define BM84X6_CHIPID_BIT_MASK	(0X1 << 3)
 	unsigned long chipid_bit_mask;
 	unsigned int driver_version;
 	int domain_bdf; /*[31:16]-domin,[15:8]-bus_id,[7:3]-device_id,[2:0]-func_num*/
@@ -258,6 +263,11 @@ struct bm_reg {
 #define BMDEV_PWR_CTRL                  _IOR('p', 0x97, unsigned long)
 #define BMDEV_GET_LIB_INFO             _IOWR('p', 0x98, unsigned long)
 
+/* C2C topology (source/ABI compatible with tpuv7-runtime tpuRt* APIs) */
+#define BMDEV_SETUP_C2C                _IOWR('p', 0x99, unsigned long)
+#define BMDEV_SETUP_TOPOLOGY           _IOWR('p', 0x9A, unsigned long)
+#define BMDEV_GET_TOPOLOGY             _IOWR('p', 0x9B, unsigned long)
+
 #define BMDEV_GET_IDLE_COREID          _IOR('p', 0xB0, unsigned long)
 #define BMDEV_GET_FW_VERSION           _IOR('p', 0xB1, unsigned long)
 
@@ -309,6 +319,8 @@ struct bm_smi_attr {
 	int tpu_util;
 	int tpu_util0;
 	int tpu_util1;
+	int tpu_util2;
+	int tpu_util3;
 
 	int board_temp;
 	int chip_temp;

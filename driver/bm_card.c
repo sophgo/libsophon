@@ -1,6 +1,7 @@
 #include "bm_card.h"
 #include "bm1684_card.h"
 #include "bm1688_card.h"
+#include "84x6_card.h"
 #include "bm_common.h"
 
 #ifndef SOC_MODE
@@ -19,8 +20,10 @@ static int bm_card_get_chip_num(struct bm_device_info *bmdi)
 		return 1;
 	if ((bmdi->cinfo.chip_id == 0x1684) || (bmdi->cinfo.chip_id == 0x1686))
 		return bm1684_card_get_chip_num(bmdi);
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		return bm1688_card_get_chip_num(bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return bm84x6_card_get_chip_num(bmdi);
 	else
 		return 1;
 #endif
@@ -55,6 +58,26 @@ struct bm_card *bmdrv_card_get_bm_card(struct bm_device_info *bmdi)
 				return g_bmcd[i];
 		} else {
 			return NULL;
+		}
+	}
+	return NULL;
+}
+
+/* Look up a chip by its global device index (0..chip_num-1) across all cards. */
+struct bm_device_info *bmdrv_get_bmdi_by_devid(int dev_index)
+{
+	int i, j;
+
+	for (i = 0; i < BM_MAX_CARD_NUM; i++) {
+		struct bm_card *bmcd = g_bmcd[i];
+
+		if (bmcd == NULL)
+			continue;
+		for (j = 0; j < BM_MAX_CHIP_NUM_PER_CARD; j++) {
+			struct bm_device_info *bmdi = bmcd->card_bmdi[j];
+
+			if (bmdi != NULL && bmdi->dev_index == dev_index)
+				return bmdi;
 		}
 	}
 	return NULL;
@@ -98,8 +121,10 @@ static int bm_add_chip_to_card(struct bm_device_info *bmdi)
 	struct bm_card *bmcd = NULL;
 
 #ifndef SOC_MODE
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		bm1688_card_get_chip_index(bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_card_get_chip_index(bmdi);
 	else
 		bm1684_card_get_chip_index(bmdi);
 #else
@@ -190,7 +215,8 @@ int bmdrv_card_init(struct bm_device_info *bmdi)
 		return ret;
 	}
 
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688
+	|| bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
 		return ret;
 
 
@@ -214,6 +240,16 @@ int bmdrv_card_deinit(struct bm_device_info *bmdi)
 	}
 
 	return ret;
+}
+
+int bm_get_available_card_index(void)
+{
+	int i;
+	for (i = 0; i < BM_MAX_CARD_NUM; i++) {
+		if (g_bmcd[i] == NULL)
+			return i;
+	}
+	return -1;
 }
 
 int bm_get_card_num_from_system(void) {

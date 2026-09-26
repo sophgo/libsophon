@@ -37,6 +37,10 @@ struct ion_allocation_data {
 #endif
 
 #define ION_MAX_HEAP_CNT    2
+#define BMLIB_ATTR_NOTSUPPORTED_VALUE 0xFFFFFC01u
+
+#define BM_CHIP_ID_1688   0x1686a200
+#define BM_CHIP_ID_84X6   0x1694
 
 #define RDBUF_SIZE 672
 struct product_config {
@@ -100,7 +104,9 @@ typedef struct bm_context {
   bm_device_mem_t    warp_affine_constant_mem;
   /* reserved memory table for blas */
   bm_device_mem_t    index_table_dev_mem;
-
+  pthread_mutex_t tpu_kernel_task_mtx;
+  pthread_cond_t tpu_kernel_task_cv;
+  int tpu_kernel_task_pending;
 	#ifdef USING_CMODEL
 	  bm_device *bm_dev;
 	#else
@@ -141,6 +147,13 @@ DECL_EXPORT bm_status_t bm_send_api_to_core(
   const u8     *api,
   u32          size,
   int          core_id);
+DECL_EXPORT bm_status_t bm_send_api_to_multi_core(
+    bm_handle_t  handle,
+    int          api_id,
+    const u8     *api,
+    const u32    *sizes,
+    int          group_num,
+    int          block_num);
 
 bm_status_t bm_send_api_multicores(
   bm_handle_t handle,
@@ -151,6 +164,14 @@ bm_status_t bm_send_api_multicores(
 DECL_EXPORT bm_status_t bm_send_api_to_core_sync(
   bm_handle_t  handle,
   tpu_launch_async_param_t *param);
+
+DECL_EXPORT bm_status_t bm_send_api_to_multi_cores(
+  bm_handle_t  handle,
+  int          api_id,
+  const u8     *api,
+  const u32    *sizes,
+  int          group_num,
+  int          block_num);
 
 DECL_EXPORT bm_status_t bm_send_api_ext(
   bm_handle_t  handle,

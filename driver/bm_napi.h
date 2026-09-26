@@ -64,6 +64,20 @@ struct eth_dev_info {
     struct eth_reg_phy reg_phy;
 };
 struct bm_device_info;
+struct chip_eth_cfg {
+	u32 chip_id;
+	u32 shm_addr;
+	u32 gp_irq_sts;
+	u32 gp_irq_clr;
+	u32 gp_tx_set;
+	u32 gp_tx_clr;
+	u32 irq_bit;
+	u32 tx_bit;
+	u32 irq_id;
+};
+
+const struct chip_eth_cfg *eth_get_cfg(struct bm_device_info *bmdi);
+u32 eth_shm_addr(struct bm_device_info *bmdi);
 int  eth_register_napi(struct eth_dev_info *info);
 void eth_unregister_napi(struct eth_dev_info *info);
 void bm_eth_request_irq(struct bm_device_info *bmdi);

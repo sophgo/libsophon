@@ -36,13 +36,13 @@
 #define BM1688_PCIE_DDR_INITIALIZED	(0x1 << 17)
 
 void bm1688_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev);
-void bm1688_unmap_bar(struct bm_bar_info *bari);
+void bm1688_unmap_bar(struct bm_device_info *bmdi);
 int bm1688_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
 void bm1688_pcie_calculate_cdma_max_payload(struct bm_device_info *bmdi);
 void bm1688_pci_slider_bar4_config_device_addr(struct bm_bar_info *bari, u32 addr);
-int bm1688_bmdrv_pcie_get_mode(struct bm_device_info *bmdi);
+int bm1688_pcie_get_mode(struct bm_device_info *bmdi);
 int bm1688_get_chip_index(struct bm_device_info *bmdi);
-int bm1688_bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int max_fun_num);
+int bm1688_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int max_fun_num);
 int bm1688_config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari);
 
 #define BM1688_PCIE_DEVICE_ID 0x1686a200

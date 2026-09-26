@@ -17,7 +17,7 @@ char *base_get_chip_id(struct bm_device_info *bmdi)
 	return ret;
 }
 
-int base_get_core_num(struct bm_device_info *bmdi)
+int bm1688_base_get_core_num(struct bm_device_info *bmdi)
 {
 	uint32_t val = 0;
 	int ret = 0;

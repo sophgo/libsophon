@@ -7,6 +7,7 @@
 #include "bm_uapi.h"
 #include "bm1684_perf.h"
 #include "bm1688_perf.h"
+#include "84x6_perf.h"
 
 int bmdrv_init_trace_pool(struct bm_device_info *bmdi)
 {
@@ -199,7 +200,7 @@ int bmdev_enable_perf_monitor(struct bm_device_info *bmdi, struct bm_perf_monito
 					perf_monitor->monitor_id);
 			return -1;
 		}
-	// } else if (bmdi->cinfo.chip_id == 0x1686a200) {
+	// } else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 	// 	if (perf_monitor->monitor_id == PERF_MONITOR_TPU) {
 	// 		bm1688_enable_tpu_perf_monitor(bmdi, perf_monitor);
 	// 	} else if (perf_monitor->monitor_id == PERF_MONITOR_GDMA) {

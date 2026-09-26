@@ -26,6 +26,15 @@
 	#endif
 #endif
 
+typedef struct bm_api {
+    int core_id;
+	int api_id;
+	const u8* api_addr;
+	u32 api_size;
+	int group_num;
+	int block_num;
+} bm_api_t;
+
 #define BMLIB_RUNTIME_LOG_TAG "bmlib_runtime"
 static bmlib_api_dbg_callback api_debug_callback = NULL;
 
@@ -262,6 +271,55 @@ bm_status_t bm_update_firmware_a9(bm_handle_t handle, pbm_fw_desc pfw) {
 }
 #endif
 
+bm_status_t bm_send_api_to_multi_core(
+    bm_handle_t  handle,
+    int          api_id,
+    const u8     *api,
+    const u32    *sizes,
+    int          group_num,
+    int          block_num)
+{
+    int ret;
+    if (handle == nullptr) {
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+            "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+        return BM_ERR_DEVNOTREADY;
+    }
+
+    if (*sizes % sizeof(u32) != 0) {
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+            "invalid size = 0x%x!\n", *sizes);
+        return BM_ERR_PARAM;
+    }
+
+#ifdef USING_CMODEL
+  return handle->bm_dev->bm_device_send_api_to_multi_core(api_id, api, sizes, group_num, block_num);
+#else
+    bm_api_t bm_api;
+    memset(&bm_api, 0, sizeof(bm_api));
+
+    bm_api.block_num = block_num;
+    bm_api.group_num = group_num;
+
+    bm_api.api_id = api_id;
+    bm_api.api_addr = api;
+    bm_api.api_size = *sizes;
+
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_DEBUG,
+            "%s: %s: %d, group=%d block=%d\n",
+            __FILE__, __func__, __LINE__, group_num, block_num);
+
+    ret = platform_ioctl(handle, BMDEV_SEND_API, &bm_api);
+    if (ret == 0) {
+        return BM_SUCCESS;
+    } else {
+        bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+                    "bmdev send api failed, ioctl ret = %d %d\n", ret, __LINE__);
+        return BM_ERR_FAILURE;
+    }
+#endif
+}
+
 bm_status_t bm_send_api_to_core(
 bm_handle_t handle,
 int api_id,
@@ -315,6 +373,26 @@ int core_id) {
 		return BM_ERR_FAILURE;
 	}
 #endif
+}
+
+bm_status_t bm_send_api_to_multi_cores(
+  bm_handle_t  handle,
+  int          api_id,
+  const u8     *api,
+  const u32    *sizes,
+  int          group_num,
+  int          block_num) {
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_FAILURE;
+  }
+  if (group_num <= 0 || block_num <= 0) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+          "invalid group_num = %d or block_num = %d!\n", group_num, block_num);
+    return BM_ERR_PARAM;
+  }
+  return BM_ERR_DEVNOTREADY;
 }
 
 bm_status_t bm_send_api_multicores( bm_handle_t handle, int api_id, tpu_launch_param_t *param_list, int param_num)
@@ -706,6 +784,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
 	ctx->dev_id = devid;
 
 #ifdef __linux__
+    pthread_mutex_init(&ctx->tpu_kernel_task_mtx, NULL);
+    pthread_cond_init(&ctx->tpu_kernel_task_cv, NULL);
 #ifdef USING_CMODEL
 	// ctx->device_mem_size = cmodel_get_global_mem_size(devid);
 	bm_device_manager *bm_dev_mgr = bm_device_manager::get_dev_mgr();
@@ -729,9 +809,13 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
 				"the chip id is BM1684X, pcie_soc_mode is %s\n",
 				(ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
-		} else if (0x1686a200 == ctx->misc_info.chipid) {
+		} else if (BM_CHIP_ID_1688 == ctx->misc_info.chipid) {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
 				"the chip id is bm1688, pcie_soc_mode is %s\n",
+				(ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
+		} else if (BM_CHIP_ID_84X6 == ctx->misc_info.chipid) {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
+				"the chip id is 84x6, pcie_soc_mode is %s\n",
 				(ctx->misc_info.pcie_soc_mode == 0) ? "PCIE" : "SOC");
 		} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_INFO,
@@ -754,7 +838,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
 		case 0x1686:
 		// do something here.
 		break;
-		case 0x1686a200:
+		case BM_CHIP_ID_1688:
+		case BM_CHIP_ID_84X6:
 		// do something here.
 		break;
 		default:
@@ -811,7 +896,8 @@ bm_status_t bm_dev_request(bm_handle_t *handle, int devid) {
 		case 0x1686:
 			// do something here.
 			break;
-		case 0x1686a200:
+		case BM_CHIP_ID_1688:
+		case BM_CHIP_ID_84X6:
 			// do something here.
 			break;
 		default:
@@ -860,7 +946,8 @@ void bm_dev_free(bm_handle_t handle) {
 		case 0x1686:
 		// do something here
 		break;
-		case 0x1686a200:
+		case BM_CHIP_ID_1688:
+		case BM_CHIP_ID_84X6:
 		// do something here
 		break;
 		default:
@@ -870,6 +957,8 @@ void bm_dev_free(bm_handle_t handle) {
 	}
 	bm_destroy_ctx(handle);
 #endif
+    pthread_mutex_destroy(&handle->tpu_kernel_task_mtx);
+    pthread_cond_destroy(&handle->tpu_kernel_task_cv);
 	delete handle;
 #else
 	if (handle->pDeviceInterfaceDetail) {
@@ -1922,6 +2011,8 @@ bm_status_t bm_get_board_power(bm_handle_t handle, unsigned int *boardp)
 
 	ret = platform_ioctl(handle, BMDEV_GET_BOARDP, boardp);
 	if (ret == 0) {
+		if (*boardp == BMLIB_ATTR_NOTSUPPORTED_VALUE)
+			return BM_NOT_SUPPORTED;
 		return BM_SUCCESS;
 	} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2104,7 +2195,7 @@ bm_status_t bm_get_sn(bm_handle_t handle, char *sn)
 	if (ret != BM_SUCCESS)
 		return ret;
 
-	if (chip_id == 0x1686a200) {
+	if (chip_id == BM_CHIP_ID_1688 || chip_id == BM_CHIP_ID_84X6) {
 		fd = open("/dev/mmcblk0boot1", O_RDONLY);
 		if (fd < 0) {
 			printf("open /dev/mmcblk0boot1 failed!\n");
@@ -2364,6 +2455,8 @@ bm_status_t bm_get_board_temp(bm_handle_t handle, unsigned int *board_temp)
 
 	ret = platform_ioctl(handle, BMDEV_GET_BOARDT, board_temp);
 	if (ret == 0) {
+		if (*board_temp == BMLIB_ATTR_NOTSUPPORTED_VALUE)
+			return BM_NOT_SUPPORTED;
 		return BM_SUCCESS;
 	} else {
 		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
@@ -2722,6 +2815,14 @@ bm_status_t bmdev_get_idle_coreid(bm_handle_t handle, int* core_id)
 		return BM_ERR_DEVNOTREADY;
 	}
 
+	if (core_id == nullptr) {
+		bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+			"core_id is nullptr %s: %s: %d\n",
+			__FILE__, __func__, __LINE__);
+		return BM_ERR_PARAM;
+	}
+
+	*core_id = 0;
 	if (0 == platform_ioctl(handle, BMDEV_GET_IDLE_COREID, core_id)) {
 		return BM_SUCCESS;
 	} else {
@@ -2781,5 +2882,52 @@ DECL_EXPORT int bm_is_dynamic_loading(bm_handle_t handle) {
 #else
 		int arch_code = handle->misc_info.chipid;
 #endif
-		return arch_code == 0x1686 || arch_code == 0x1686a200;
+		return arch_code == 0x1686 || arch_code == BM_CHIP_ID_1688 || arch_code == BM_CHIP_ID_84X6;
+}
+
+bm_status_t bm_tpu_kernel_task_begin(bm_handle_t handle) {
+#ifdef __linux__
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_PARAM;
+  }
+  pthread_mutex_lock(&handle->tpu_kernel_task_mtx);
+  handle->tpu_kernel_task_pending++;
+  pthread_mutex_unlock(&handle->tpu_kernel_task_mtx);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_tpu_kernel_task_end(bm_handle_t handle) {
+#ifdef __linux__
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_PARAM;
+  }
+  pthread_mutex_lock(&handle->tpu_kernel_task_mtx);
+  if (handle->tpu_kernel_task_pending > 0) {
+    handle->tpu_kernel_task_pending--;
+  }
+  pthread_cond_broadcast(&handle->tpu_kernel_task_cv);
+  pthread_mutex_unlock(&handle->tpu_kernel_task_mtx);
+#endif
+  return BM_SUCCESS;
+}
+
+bm_status_t bm_tpu_kernel_task_wait_done(bm_handle_t handle) {
+#ifdef __linux__
+  if (handle == nullptr) {
+    bmlib_log(BMLIB_RUNTIME_LOG_TAG, BMLIB_LOG_ERROR,
+           "handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
+    return BM_ERR_PARAM;
+  }
+  pthread_mutex_lock(&handle->tpu_kernel_task_mtx);
+  while (handle->tpu_kernel_task_pending > 0) {
+    pthread_cond_wait(&handle->tpu_kernel_task_cv, &handle->tpu_kernel_task_mtx);
+  }
+  pthread_mutex_unlock(&handle->tpu_kernel_task_mtx);
+#endif
+  return BM_SUCCESS;
 }

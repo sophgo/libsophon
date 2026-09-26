@@ -73,6 +73,7 @@ cp -v tpu-cpuop/build/*.so* $THIRDPARTY_DIR/lib/
 cp -v tpu-bmodel/build/*.a $THIRDPARTY_DIR/lib/
 cp -v tpu-bmodel/build/tpu_model $THIRDPARTY_DIR/bin
 cp -v bmlib/include/bmlib_runtime.h $THIRDPARTY_DIR/include
+cp -v bmlib/include/bmlib_type.h $THIRDPARTY_DIR/include
 cp -v bmlib/src/*.h $THIRDPARTY_DIR/include
 cp -v tpu-common/base/* $THIRDPARTY_DIR/include
 cp -r tpu-bmodel/include/* $THIRDPARTY_DIR/include
@@ -103,7 +104,7 @@ fi
 
 if [ -d $LIBSOPHON_DIR/../TPU1686 ]; then
   pushd $LIBSOPHON_DIR/../TPU1686
-  CHIPS=(bm1684x bm1686 sg2260 mars3 sg2260e)
+  CHIPS=(bm1684x bm1686 sg2260 bm1684x2)
   for chip in ${CHIPS[@]}; do
   source scripts/envsetup.sh ${chip}
   rm -rf build

@@ -11,7 +11,10 @@
 #include "bm_drv.h"
 #include "bm_thread.h"
 #include "bm_debug.h"
+#include "84x6_debug.h"
 #include "bm_thermal.h"
+#include "84x6_task.h"
+#include "84x6_tsh.h"
 #include <linux/version.h>
 
 /* be carefull with global variables, keep multi-card support in mind */
@@ -194,12 +197,15 @@ static void bmdrv_sw_register_init(struct bm_device_info *bmdi)
 	int core = 0;
 	int core_num = bmdi->cinfo.tpu_core_num;
 
+	if(bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		core_num = 1;
 	for (core = 0; core < core_num; core++) {
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
 			bmdi->api_info[core][channel].bm_api_init = bmdrv_api_init;
 			bmdi->api_info[core][channel].bm_api_deinit = bmdrv_api_deinit;
 		}
 	}
+
 	bmdi->c_attr.bm_card_attr_init = bmdrv_card_attr_init;
 	bmdi->memcpy_info.bm_memcpy_init = bmdrv_memcpy_init;
 	bmdi->memcpy_info.bm_memcpy_deinit = bmdrv_memcpy_deinit;
@@ -223,15 +229,23 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	mutex_init(&bmdi->device_mutex);
 
 	if (bmdi->gmem_info.bm_gmem_init &&
-		bmdi->gmem_info.bm_gmem_init(bmdi))
+		bmdi->gmem_info.bm_gmem_init(bmdi)) {
+		pr_err("bm_gmem_init failed\n");
 		return -EFAULT;
+	}
+
+	if(bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		core_num = 1;
+
 	for (core = 0; core < core_num; core++) {
-		
+
 		mutex_init(&bmdi->fifo_msg_mutex[core]);
 		for (channel = 0; channel < BM_MSGFIFO_CHANNEL_NUM; channel++) {
 			if (bmdi->api_info[core][channel].bm_api_init &&
-				bmdi->api_info[core][channel].bm_api_init(bmdi, core, channel))
-				return -EFAULT;
+				bmdi->api_info[core][channel].bm_api_init(bmdi, core, channel)) {
+				pr_err("bm_api_init failed\n");
+				//return -EFAULT;
+			}
 		}
 	}
 
@@ -288,6 +302,9 @@ void bmdrv_software_deinit(struct bm_device_info *bmdi)
 
 	if (bmdi->trace_info.bm_trace_deinit)
 		bmdi->trace_info.bm_trace_deinit(bmdi);
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_task_deinit(bmdi);
 
 #ifndef SOC_MODE
 	bm_thermal_uninit(bmdi);

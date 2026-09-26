@@ -49,6 +49,10 @@ public:
         .tag = tag_t{0, 0, 0},
     };
   }
+  virtual uint32_t tag_reserved_limit() {
+    // kTagWeight/KTagActivation/kTagIoAlone are reserved for special use, user tag should be less than kTagIoAlone
+    return kTagIoAlone;
+  }
   uint32_t tag(uint64_t addr) const {
     return static_cast<uint32_t>((addr >> addr_layout().tag.start) & addr_layout().tag.mask);
   }
@@ -215,7 +219,10 @@ public:
                       tag_t{.start = 0, .len = 35, .mask = (1ull << 35) - 1},
                   .tag = tag_t{.start = 36, .len = 3, .mask = 0x7}};
   }
-
+  virtual uint32_t tag_reserved_limit() {
+    // ioalone in 1688 not use a tag, so the reserved tag only has activation/weight tag
+    return kTagActivation;
+  }
   virtual std::string name() const override { return "BM1688"; }
   virtual bool name_verify(const std::string &model_name) const override {
     return model_name == name() || model_name == "CV186X" ||
@@ -312,6 +319,10 @@ public:
   }
 
   virtual std::string name() const override { return "BM1684X2"; }
+
+  virtual uint32_t core_num() const { return 4; }
+
+  virtual bool support_dynamic_loading() const override { return true; }
 };
 
 class Backend_SGTPUV8 : public Backend {
@@ -344,7 +355,7 @@ static std::shared_ptr<Backend> register_backend(uint32_t chipip) {
     return std::make_shared<Backend_BM1688>();
   } else if (chipip == 0x184) {
     return std::make_shared<Backend_CV184X>();
-  } else if (chipip == 0x16862) {
+  } else if (chipip == 0x1694 || chipip == 0x16940000 || chipip == 0x16862) {
     return std::make_shared<Backend_BM1684X2>();
   } else if (chipip == 0x2260) {
     return std::make_shared<Backend_BM1690>();

@@ -4,6 +4,7 @@
 #include "bm1682_profile.h"
 #include "bm1684_profile.h"
 #include "bm1684x_profile.h"
+#include "bm1684x2_profile.h"
 #include "bm1688_profile.h"
 #include "cv184x_profile.h"
 #ifndef __linux__
@@ -64,6 +65,8 @@ BMProfile::BMProfile(Bmruntime* p_bmrt): p_bmrt(p_bmrt), enabled(false) {
       device = decltype(device)(new bm1684x_profile::BMProfileDevice(this));
     } else if (arch == "BM1688") {
       device = decltype(device)(new bm1688_profile::BMProfileDevice(this));
+    } else if (arch == "BM1684X2") {
+      device = decltype(device)(new bm1684x2_profile::BMProfileDevice(this));
     } else if (arch == "CV184X") {
       device = decltype(device)(new cv184x_profile::BMProfileDevice(this));
     } else {
@@ -134,6 +137,8 @@ void BMProfile::record_free_device_mem(u64 mem_addr){
 profile_cmd_num_t *BMProfile::record_subnet_cmd_info(int core_idx, u64 gdma_addr, u64 gdma_offset, u64 bdc_addr, u64 bdc_offset, u32 group_num)
 {
     if(!current_enabled) return nullptr;
+    BMRT_LOG(INFO, "[prof] record_subnet_cmd_info core=%d gdma_addr=0x%llx bdc_addr=0x%llx group=%u",
+             core_idx, (unsigned long long)gdma_addr, (unsigned long long)bdc_addr, group_num);
     BMRT_ASSERT_INFO(core_idx<(int)core_list.size(), "core_idx=%d, core_list.size()=%d", core_idx, (int)core_list.size());
     BMRT_ASSERT(cmd_infos[core_idx] == nullptr);
     auto& cmd_info = cmd_infos[core_idx];
@@ -164,6 +169,23 @@ void BMProfile::set_core_list(const vector<int>& core_list) {
 void BMProfile::record_cmd_data(int core_idx, ENGINE_ID engine, const void *cmd_ptr, u32 cmd_len, u64 store_addr)
 {
     if(!enabled) return;
+    BMRT_LOG(INFO, "[prof] record_cmd_data core=%d engine=%d store_addr=0x%llx len=%u",
+             core_idx, (int)engine, (unsigned long long)store_addr, cmd_len);
+    // Cache the command binary in memory keyed by (addr, core, engine) so the
+    // AKSV-style device profile (bm1684x2) can emit BLOCK_DES_* blocks without
+    // re-reading it from device.
+    {
+        char key[128] = {0};
+        snprintf(key, sizeof(key), "%llx,%d,%d", (unsigned long long)store_addr, core_idx, (int)engine);
+        auto& slot = cmd_data_map[key];
+        auto p = reinterpret_cast<const char*>(cmd_ptr);
+        slot.insert(slot.end(), p, p + cmd_len);
+        BMRT_LOG(INFO, "[prof] cmd_data_map now has %zu entries (key=%s -> %zu bytes)",
+                 cmd_data_map.size(), key, slot.size());
+    }
+    // The bm1684x2 profile uses the tpuv7 AKSV output layout and does not
+    // consume these per-command .dat files; skip them for that arch.
+    if (p_bmrt->backend()->name() == "BM1684X2") return;
     char filename[256] = {0};
     sprintf(filename, "cmd_%llx_%d_%d.dat", store_addr, core_idx, engine);
     auto path = get_save_dir();
@@ -173,6 +195,19 @@ void BMProfile::record_cmd_data(int core_idx, ENGINE_ID engine, const void *cmd_
     BMRT_ASSERT_INFO(fp != nullptr, "fp shouldn't be nullptr");
     fwrite(cmd_ptr, 1, cmd_len, fp);
     fclose(fp);
+}
+
+const std::vector<char>* BMProfile::get_cmd_data(u64 addr, int core_idx, int engine)
+{
+    char key[128] = {0};
+    snprintf(key, sizeof(key), "%llx,%d,%d", (unsigned long long)addr, core_idx, engine);
+    auto it = cmd_data_map.find(key);
+    if (it == cmd_data_map.end()) {
+        BMRT_LOG(INFO, "[prof] get_cmd_data MISS key=%s (map size=%zu)", key, cmd_data_map.size());
+        return nullptr;
+    }
+    BMRT_LOG(INFO, "[prof] get_cmd_data HIT key=%s size=%zu", key, it->second.size());
+    return &it->second;
 }
 
 void BMProfile::record_cpu_mem(const void *ptr, u32 len, const std::string &desc)
@@ -393,6 +428,12 @@ void BMProfile::end_profile(net_ctx_t* net_ctx)
         auto& v_log = bm1682_profile::get_log();
         write_block(BLOCK_FIRMWARE_LOG, v_log.size(), v_log.data());
         v_log.clear();
+    } else if (p_bmrt->backend()->name() == "BM1684X2") {
+        // tpuv7 AKSV layout: the device profile emits BLOCK_DES_* (13/14) from
+        // cmd_infos, so they must survive until device->end() runs.  Skip the
+        // legacy BLOCK_CMD (8) write+free, then release cmd_infos afterwards.
+        if (device) device->end(net_ctx);
+        for (auto& ci : cmd_infos) { delete[]((u8*)ci); ci = nullptr; }
     } else {
         save_cmd_profile();
         if(device) device->end(net_ctx);

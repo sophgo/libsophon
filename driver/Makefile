@@ -3,7 +3,7 @@ PLATFORM ?= asic
 PCIE_MODE_ENABLE_CPU ?= 1
 CLEAN_BUILD ?= 0
 MEDIA_ENABLE ?= 1
-
+#DEBUG_ON_PLD_FPGA ?= 1
 ifeq ($(PLATFORM), palladium)
 ccflags-y += -DPLATFORM_PALLADIUM
 else ifeq ($(PLATFORM), fpga)
@@ -16,6 +16,10 @@ ifneq ($(SOC_MODE), 1)
 ifeq ($(PCIE_MODE_ENABLE_CPU), 1)
 ccflags-y += -DPCIE_MODE_ENABLE_CPU
 endif
+endif
+
+ifeq ($(DEBUG_ON_PLD_FPGA), 1)
+ccflags-y += -DDEBUG_ON_PLD_FPGA
 endif
 
 PWD := $(shell pwd)
@@ -47,6 +51,14 @@ BM1688_OBJ += bm1688_gmem.o bm1688_cdma.o bm1688_clkrst.o bm1688_card.o \
 			  bm1688_msgfifo.o bm1688_perf.o bm1688_flash.o bm1688_timer.o bm1688_base64.o
 BM1688_OBJ := $(addprefix $(BM1688_DIR)/, $(BM1688_OBJ))
 
+84X6_DIR ?= 84x6
+ifeq ($(SOC_MODE), 1)
+else
+84X6_OBJ += 84x6_pcie.o 84x6_irq.o 84x6_smbus.o 84x6_topology.o
+endif
+84X6_OBJ += 84x6_gmem.o 84x6_cdma.o 84x6_clkrst.o 84x6_card.o  84x6_base64.o 84x6_task.o \
+		84x6_shmem.o 84x6_tsh.o	84x6_msgfifo.o 84x6_perf.o 84x6_flash.o 84x6_timer.o 84x6_debug.o
+84X6_OBJ := $(addprefix $(84X6_DIR)/, $(84X6_OBJ))
 VPP_DIR ?= vpp
 ifeq ($(SOC_MODE), 0)
 ifeq ($(MEDIA_ENABLE), 1)
@@ -178,19 +190,40 @@ endif
 
 ccflags-y += -O3
 ccflags-y += -Werror -Wall -Wno-implicit-fallthrough -Wno-unused-function -fdata-sections -Wl,-gc-sections
-ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations
-ifeq ($(PLATFORM), pcie_arm64)
+ccflags-y += -Wno-missing-prototypes -Wno-missing-declarations -Wno-declaration-after-statement
+
+ifeq ("$(shell uname -m)", "aarch64")
 ccflags-y += -mno-outline-atomics
 endif
+
 ifeq ("$(shell uname -m)", "loongarch64")
 ccflags-y += -Wno-implicit-function-declaration
 endif
-ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684 -I$(src)/bm1688
+
+#ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684 -I$(src)/bm1688
+ccflags-y += -I$(src) -I$(src)/bm1682 -I$(src)/bm1684 -I$(src)/bm1688  -I$(src)/84x6
 
 ifeq ($(SOC_MODE), 1)
   ccflags-y += -I$(src)/../../osdrv/interdrv/v2/include/common/kapi/
   ccflags-y += -DSOC_MODE
   cflags-y += -DSOC_MODE
+  ifeq ($(CHIP_TYPE),84x6)
+    ccflags-y += -DBM_DRIVER_CHIP_84X6
+  else ifeq ($(CHIP_TYPE),1688)
+    ccflags-y += -DBM_DRIVER_CHIP_1688
+  else ifneq ($(SOC_LINUX_DIR),)
+    ifneq ($(wildcard $(SOC_LINUX_DIR)/include/generated/autoconf.h),)
+      ifneq ($(shell grep -q 'CONFIG_CHIP_CPU_CV84X6 1' $(SOC_LINUX_DIR)/include/generated/autoconf.h && echo y),)
+        ccflags-y += -DBM_DRIVER_CHIP_84X6
+      else
+        ccflags-y += -DBM_DRIVER_CHIP_1688
+      endif
+    else
+      ccflags-y += -DBM_DRIVER_CHIP_1688
+    endif
+  else
+    ccflags-y += -DBM_DRIVER_CHIP_1688
+  endif
 endif
 
 FW_SIMPLE ?= 0
@@ -217,12 +250,14 @@ $(BM_MODULE_NAME)-y += bm_drv.o bm_fops.o bm_irq.o i2c.o pwm.o  \
 	bm_msgfifo.o bm_thread.o bm_api.o \
 	bm_timer.o bm_io.o bm_trace.o bm_attr.o bm_gmem.o \
 	bm_bgm.o bm_genalloc.o gpio.o uart.o bm_debug.o bm_card.o bm_monitor.o \
+	bm_cooling.o \
 	bm_pm.o
 
 $(BM_MODULE_NAME)-y += $(BM1682_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1684_OBJ)
 $(BM_MODULE_NAME)-y += $(BM1688_OBJ)
 $(BM_MODULE_NAME)-y += $(VPP_OBJ)
+$(BM_MODULE_NAME)-y += $(84X6_OBJ)
 ifeq ($(SOC_MODE), 0)
 $(BM_MODULE_NAME)-y += $(BASE_OBJ)
 $(BM_MODULE_NAME)-y += $(VPU_OBJ)
@@ -286,7 +321,7 @@ ifeq ($(SOC_MODE), 1)
 	@make -C $(LINUX_SRC) M=$(PWD) clean
 else
 ifndef CROSS_COMPILE
-	make -C $(LINUX_SRC) M=$(PWD) modules
+	make $(if $(ARCH),ARCH=$(ARCH)) -C $(LINUX_SRC) M=$(PWD) modules
 else
 	make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C $(LINUX_SRC) M=$(PWD) modules
 endif
@@ -303,9 +338,9 @@ endif
 
 clean:
 ifeq ($(SOC_MODE), 1)
-	make -C $(LINUX_SRC) M=$(PWD) clean
+	make $(if $(ARCH),ARCH=$(ARCH)) -C $(LINUX_SRC) M=$(PWD) clean
 else
-	make -C $(LINUX_SRC) M=$(PWD) clean
+	make $(if $(ARCH),ARCH=$(ARCH)) -C $(LINUX_SRC) M=$(PWD) clean
 endif
 
 install:

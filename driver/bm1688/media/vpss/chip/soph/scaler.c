@@ -613,6 +613,130 @@ void sclr_update_coef(struct scaler *scaler, u8 inst, enum sclr_algorithm coef)
 	scaler->g_sc_cfg[inst].coef = coef;
 }
 
+static void sclr_update_area_coef_unidir(struct scaler *scaler, u8 inst, u8 is_hor)
+{
+	u8 i = 0;
+	u32 fac_13bit = 0, mask = 0x1, current_fac = scaler->g_sc_cfg[inst].fac.h_fac >> 10;
+	u32 stride = 0;
+
+	if (is_hor)
+		fac_13bit = (scaler->g_sc_cfg[inst].sc.crop.w << 13) / scaler->g_sc_cfg[inst].sc.dst.w;
+	else {
+		fac_13bit = (scaler->g_sc_cfg[inst].sc.crop.h << 13) / scaler->g_sc_cfg[inst].sc.dst.h;
+		current_fac = scaler->g_sc_cfg[inst].fac.v_fac >> 10;
+		mask = 0x4;
+	}
+
+	if (scaler->g_sc_cfg[inst].coef == SCL_COEF_AREA) {
+		if (current_fac == fac_13bit)
+			return;
+		if ((current_fac <= (1 << 13)) && (fac_13bit <= (1 << 13)))
+			return;
+		if ((current_fac >= (4 << 13)) && (fac_13bit >= (4 << 13)))
+			return;
+	} else if ((scaler->g_sc_cfg[inst].coef == SCL_COEF_BILINEAR) && (fac_13bit <= (1 << 13)))
+		return;
+
+	stride = 8192*32/fac_13bit;
+
+	if (fac_13bit <= (1 << 13)) {
+		int bilinear_coef[4] = {0, 1024, 0, 0};
+
+		for (i = 0; i < 128; ++i) {
+			bilinear_coef[1] -= 4;
+			bilinear_coef[2] += 4;
+
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
+				   (bilinear_coef[1] << 16) |
+				   (bilinear_coef[0] & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
+				   (bilinear_coef[3] << 16) |
+				   (bilinear_coef[2] & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (mask << 8) | i);
+		}
+	} else if (fac_13bit <= (2 << 13)) {
+		int area_coef[4] = {(8192-(8192<<13)/fac_13bit)/2, (8192<<13)/fac_13bit,
+			(8192-(8192<<13)/fac_13bit)/2, 0};
+		for (i = 0; i < 128; ++i) {
+			area_coef[2] += stride;
+			if (area_coef[0] >= stride)
+				area_coef[0] -= stride;
+			else
+				area_coef[1] -= stride;
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
+				   ((area_coef[1] >> 3) << 16) |
+				   ((area_coef[0] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
+				   ((area_coef[3] >> 3) << 16) |
+				   ((area_coef[2] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (mask << 8) | i);
+		}
+	} else if (fac_13bit <= (3 << 13)) {
+		int area_coef[4] = {(8192-(8192<<13)/fac_13bit)/2, (8192<<13)/fac_13bit,
+			(8192-(8192<<13)/fac_13bit)/2, 0};
+		for (i = 0; i < 128; ++i) {
+			area_coef[0] -= stride;
+			if (area_coef[2] <= ((8192<<13)/fac_13bit - stride))
+				area_coef[2] += stride;
+			else
+				area_coef[3] += stride;
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
+				   ((area_coef[1] >> 3) << 16) |
+				   ((area_coef[0] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
+				   ((area_coef[3] >> 3) << 16) |
+				   ((area_coef[2] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (mask << 8) | i);
+		}
+	} else if (fac_13bit < (4 << 13)) {
+		int area_coef[4] = {((fac_13bit-(2<<13))<<13)/2/fac_13bit, (8192<<13)/fac_13bit,
+			(8192<<13)/fac_13bit, ((fac_13bit-(2<<13))<<13)/2/fac_13bit};
+		for (i = 127; i > 0; --i) {
+			if (area_coef[0] <= ((8192<<13)/fac_13bit - stride)) {
+				area_coef[0] += stride;
+				area_coef[3] -= stride;
+			}
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
+				   ((area_coef[1] >> 3) << 16) |
+				   ((area_coef[0] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
+				   ((area_coef[3] >> 3) << 16) |
+				   ((area_coef[2] >> 3) & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (mask << 8) | i);
+		}
+	} else {
+		int area_coef[4] = {256, 256, 256, 256};
+
+		for (i = 0; i < 128; ++i) {
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF1(inst),
+				   (area_coef[1] << 16) |
+				   (area_coef[0] & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF2(inst),
+				   (area_coef[3] << 16) |
+				   (area_coef[2] & 0x0fff));
+			vpss_reg_write(scaler->bmdi, reg_base + REG_SCL_COEF0(inst), (mask << 8) | i);
+		}
+	}
+}
+
+/**
+ * sclr_update_area_coef - setup sclr's scaling coef
+ *
+ * @param inst: (0~3), the instance of scaler which want to be configured.
+ */
+static void sclr_update_area_coef(struct scaler *scaler, u8 inst)
+{
+	if (inst >= SCL_MAX_INST) {
+		TRACE_VPSS(DBG_ERR, "inst=%d err.\n", inst);
+		return;
+	}
+
+	sclr_update_area_coef_unidir(scaler, inst, 1);
+	sclr_update_area_coef_unidir(scaler, inst, 0);
+
+	scaler->g_sc_cfg[inst].coef = SCL_COEF_AREA;
+}
+
 /**
  * sclr_set_cfg - set scl's configurations.
  *
@@ -807,8 +931,10 @@ void sclr_set_scale(struct scaler *scaler, u8 inst)
 		sclr_set_scale_mode(scaler, inst, true, false, true);
 		_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), 0xc00, 0xc00);
 		if(scaler->g_sc_cfg[inst].sc.algorithm != SCL_COEF_NEAREST){
-			fac.h_pos = (fac.h_fac >= (1 << 23)) ? ((fac.h_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.h_fac) >> 1);
-			fac.v_pos = (fac.v_fac >= (1 << 23)) ? ((fac.v_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.v_fac) >> 1);
+			fac.h_pos = (fac.h_fac >= (1 << 23)) ?
+				((fac.h_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.h_fac) >> 1);
+			fac.v_pos = (fac.v_fac >= (1 << 23)) ?
+				((fac.v_fac - (1 << 23)) >> 1) : (((1 << 23) - fac.v_fac) >> 1);
 			if(fac.h_fac < (1 << 23)){
 				_reg_write_mask(scaler, reg_base + REG_SCL_SC_CFG(inst), BIT(6), BIT(6));
 				fac.h_pos |= BIT(31);
@@ -1616,7 +1742,11 @@ void sclr_get_csc(struct scaler *scaler, u8 inst, struct sclr_csc_matrix *cfg)
 void sclr_core_set_cfg(struct scaler *scaler, u8 inst, struct sclr_core_cfg *cfg)
 {
 	sclr_ctrl_set_scale(scaler, inst, &cfg->sc);
-	sclr_update_coef(scaler, inst, cfg->sc.algorithm);
+	if (cfg->sc.algorithm == SCL_COEF_AREA)
+		sclr_update_area_coef(scaler, inst);
+	else
+		sclr_update_coef(scaler, inst, cfg->sc.algorithm);
+	scaler->g_sc_cfg[inst].fac = cfg->sc.fac;
 }
 
 void sclr_core_checksum_en(struct scaler *scaler, u8 inst, bool enable)
@@ -2273,7 +2403,9 @@ u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 	u64 L_last_phase = 0, R_first_phase = 0;
 	u16 L_last_pixel = 0, R_first_pixel = 0;
 	u8 mode = SCL_TILE_BOTH;
-	if(cfg->algorithm != SCL_COEF_BICUBIC && cfg->algorithm != SCL_COEF_NEAREST && (crop_size.w < out_size.w))
+	if(cfg->algorithm != SCL_COEF_BICUBIC &&
+		cfg->algorithm != SCL_COEF_NEAREST &&
+		(crop_size.w < out_size.w))
 		h_pos = (((1 << 23) - h_sc_fac) >> 1);
 	else if (cfg->algorithm == SCL_COEF_NEAREST)
 		h_pos = 1 << 22;
@@ -2305,7 +2437,8 @@ u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 			cfg->tile.src_r_width = 0;
 			mode = SCL_TILE_LEFT;
 		} else {
-			u64 src_l = VPSS_MAX((u64)src_l_last_pixel_max - cfg->crop.x - ((cfg->mir_enable) ? 0 : 1), VPSS_MAX((2*h_sc_fac)>>fix, 2));
+			u64 src_l = VPSS_MAX((u64)src_l_last_pixel_max - cfg->crop.x -
+				((cfg->mir_enable) ? 0 : 1), VPSS_MAX((2*h_sc_fac)>>fix, 2));
 			if(cfg->crop.w - src_l < 2)
 				src_l = cfg->crop.w - 2;
 			if(((cfg->crop.w - src_l) << fix) / h_sc_fac < 2)
@@ -2319,7 +2452,8 @@ u8 sclr_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 			// right tile no mirror
 			R_first_phase = L_last_phase;
 			R_first_pixel = (R_first_phase >> fix) + ((cfg->mir_enable) ? 0 : 1);
-			cfg->tile.r_ini_phase = R_first_phase - (((R_first_pixel - 2) & ~0x1) << fix) + h_pos * ((crop_size.w < out_size.w || cfg->algorithm == SCL_COEF_NEAREST) ? -1 : 1);
+			cfg->tile.r_ini_phase = R_first_phase - (((R_first_pixel - 2) & ~0x1) << fix) +
+				h_pos * ((crop_size.w < out_size.w || cfg->algorithm == SCL_COEF_NEAREST) ? -1 : 1);
 			cfg->tile.src_r_offset = (R_first_pixel - 2) & ~0x1;
 			cfg->tile.src_r_width = crop_size.w - cfg->tile.src_r_offset;
 			if (!out_l_width)
@@ -2393,7 +2527,9 @@ u8 sclr_v_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 	u64 L_last_phase = 0, R_first_phase = 0;
 	u16 L_last_pixel = 0, R_first_pixel = 0;
 	u8 mode = SCL_TILE_BOTH;
-	if(cfg->algorithm != SCL_COEF_BICUBIC && cfg->algorithm != SCL_COEF_NEAREST && (crop_size.h < out_size.h))
+	if(cfg->algorithm != SCL_COEF_BICUBIC &&
+		cfg->algorithm != SCL_COEF_NEAREST &&
+		(crop_size.h < out_size.h))
 		v_pos = (((1 << 23) - v_sc_fac) >> 1);
 	else if (cfg->algorithm == SCL_COEF_NEAREST)
 		v_pos = 1 << 22;
@@ -2438,7 +2574,8 @@ u8 sclr_v_tile_cal_size(struct scaler *scaler, u8 inst, u16 out_l_end)
 			// right tile no mirror
 			R_first_phase = L_last_phase;
 			R_first_pixel = (R_first_phase >> fix);
-			cfg->v_tile.r_ini_phase = R_first_phase - (((R_first_pixel - 2) & ~0x1) << fix) + v_pos * ((crop_size.h < out_size.h || cfg->algorithm == SCL_COEF_NEAREST) ? -1 : 1);
+			cfg->v_tile.r_ini_phase = R_first_phase - (((R_first_pixel - 2) & ~0x1) << fix) +
+				v_pos * ((crop_size.h < out_size.h || cfg->algorithm == SCL_COEF_NEAREST) ? -1 : 1);
 			cfg->v_tile.src_r_offset = (R_first_pixel - 2) & ~0x1;
 			cfg->v_tile.src_r_width = crop_size.h - cfg->v_tile.src_r_offset;
 			mode = SCL_TILE_BOTH;

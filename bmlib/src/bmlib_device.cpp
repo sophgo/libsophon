@@ -25,12 +25,15 @@ unsigned long long get_global_mem_size()
 	{
 		unsigned long long v;
 		try {
-			v = std::stoll(env);
+			v = std::stoull(env, nullptr, 0);
 		} catch (std::invalid_argument &) {
 			printf("invalid CMODEL_GLOBAL_MEM_SIZE \"%s\"\n", env);
 			throw;
+		} catch (std::out_of_range &) {
+			printf("CMODEL_GLOBAL_MEM_SIZE \"%s\" out of range\n", env);
+			throw;
 		}
-		printf("global mem size from env %lld\n", v);
+		printf("global mem size from env %llu\n", v);
 		return v;
 	} else {
 		return 0x100000000;
@@ -64,6 +67,8 @@ void bm_device::cmodel_setup(void)
 	cmodel_get_chip_id_ = (t_cmodel_get_chip_id)dlsym(NULL, "get_chip_id");
 	cmodel_get_total_nodechip_num_ = (t_cmodel_get_total_nodechip_num)dlsym(NULL, "get_total_nodechip_num");
 	cmodel_get_gmem_start_addr_ = (t_cmodel_get_gmem_start_addr)dlsym(NULL, "cmodel_get_gmem_start_addr");
+	cmodel_get_global_mem_size_ = (t_cmodel_get_global_mem_size)dlsym(NULL, "cmodel_get_global_mem_size");
+	cmodel_get_config_gmem_size_ = (t_cmodel_get_config_gmem_size)dlsym(NULL, "cmodel_get_config_gmem_size");
 	cmodel_get_last_func_id = (t_cmodel_get_last_func_id)dlsym(NULL, "cmodel_get_last_func_id");
 
 	if (cmodel_deinit_ == NULL) {
@@ -97,6 +102,8 @@ void bm_device::cmodel_setup(void)
 		cmodel_get_chip_id_ = (t_cmodel_get_chip_id)dlsym(cmodel_so_handle_, "get_chip_id");
 		cmodel_get_total_nodechip_num_ = (t_cmodel_get_total_nodechip_num)dlsym(cmodel_so_handle_, "get_total_nodechip_num");
 		cmodel_get_gmem_start_addr_ = (t_cmodel_get_gmem_start_addr)dlsym(cmodel_so_handle_, "cmodel_get_gmem_start_addr");
+		cmodel_get_global_mem_size_ = (t_cmodel_get_global_mem_size)dlsym(cmodel_so_handle_, "cmodel_get_global_mem_size");
+		cmodel_get_config_gmem_size_ = (t_cmodel_get_config_gmem_size)dlsym(cmodel_so_handle_, "cmodel_get_config_gmem_size");
 		cmodel_get_last_func_id = (t_cmodel_get_last_func_id)dlsym(cmodel_so_handle_, "cmodel_get_last_func_id");
 	}
 	return;
@@ -114,8 +121,12 @@ bm_device::bm_device(int _dev_id)
 
 	printf("begin to cmodel init...\n");
 
+	unsigned long long global_mem_size =
+		cmodel_get_config_gmem_size_ != NULL ?
+		cmodel_get_config_gmem_size_() : get_global_mem_size();
+
 	for (int core_idx = 0; core_idx < core_num; ++core_idx) {
-		if (cmodel_init_(core_idx, get_global_mem_size()) != BM_SUCCESS) {
+		if (cmodel_init_(core_idx, global_mem_size) != BM_SUCCESS) {
 		printf("BM: cmodel_init (core_idx=%d) failed\n", core_idx);
 		exit(-1);
 		}
@@ -123,6 +134,10 @@ bm_device::bm_device(int _dev_id)
 	set_cur_nodechip_idx_(0);
 
 	chip_id = cmodel_get_chip_id_();
+	if (cmodel_get_global_mem_size_ != NULL)
+		device_mem_pool.set_total_size(cmodel_get_global_mem_size_(0));
+	if (cmodel_get_gmem_start_addr_ != NULL)
+		device_mem_pool.set_gmem_start_addr(cmodel_get_gmem_start_addr_());
 	for (int core_idx = 0; core_idx < core_num; ++core_idx) {
 		cmodel_nodechip_runtime_init_(core_idx);
 	}
@@ -316,6 +331,24 @@ bm_status_t bm_device::bm_device_send_api(int api_id, const u8 *api, u32 size, i
 	if (cmodel_api_signal_) cmodel_api_signal_(core_idx);
 
 	pthread_mutex_unlock(&api_locks[core_idx]);
+	return BM_SUCCESS;
+}
+
+bm_status_t bm_device::bm_device_send_api_to_multi_core(int api_id, const u8 *api, const u32 *sizes, int group_num, int block_num)
+{
+	for (int core_idx = 0; core_idx < group_num * block_num; core_idx++) {
+		if (api_id == BM_API_ID_TPUSCALER_SET_INFO) {
+			tpu_groupset_info_t gs {};
+			gs.physical_core_id = (u32)core_idx;
+			gs.group_num        = (u32)group_num;
+			gs.workitem_num     = (u32)block_num;
+			gs.group_id         = (u32)(core_idx / block_num);
+			gs.workitem_id      = (u32)(core_idx % block_num);
+			BM_CHECK_RET(bm_device_send_api(api_id, (u8 *)&gs, sizeof(tpu_groupset_info_t), core_idx));
+			continue;
+		}
+		BM_CHECK_RET(bm_device_send_api(api_id, (u8 *)api, sizes[0], core_idx));
+	}
 	return BM_SUCCESS;
 }
 
@@ -629,7 +662,7 @@ void bm_device_manager::destroy_dev_mgr()
 {
 	// std::cout << "bm_dev_mgr "<<bm_dev_mgr <<std::endl;
 	if (bm_dev_mgr) {
-		delete bm_dev_mgr;
+		//delete bm_dev_mgr;
 		bm_dev_mgr = nullptr;
 	}
 }

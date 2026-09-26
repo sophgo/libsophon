@@ -36,31 +36,31 @@ typedef enum {
 #define BIT_SW_RESET_TC906B1	28
 #define BIT_SW_RESET_HAU	29
 
-void bm1688_bmdrv_clk_set_tpu_divider(struct bm_device_info *bmdi, int devider_factor);
-void bm1688_bmdrv_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int devider_factor);
-void bm1688_bmdrv_clk_set_close(struct bm_device_info *bmdi);
-int bm1688_bmdrv_clk_get_tpu_divider(struct bm_device_info *bmdi);
-int bm1688_bmdev_clk_ioctl_set_tpu_divider(struct bm_device_info* bmdi, unsigned long arg);
-int bm1688_bmdev_clk_ioctl_set_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
-int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi);
-int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target);
-int bm1688_bmdev_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
-int bm1688_bmdev_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigned long arg);
+void bm1688_clk_set_tpu_divider(struct bm_device_info *bmdi, int devider_factor);
+void bm1688_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int devider_factor);
+void bm1688_clk_set_close(struct bm_device_info *bmdi);
+int bm1688_clk_get_tpu_divider(struct bm_device_info *bmdi);
+int bm1688_clk_ioctl_set_tpu_divider(struct bm_device_info* bmdi, unsigned long arg);
+int bm1688_clk_ioctl_set_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
+int bm1688_clk_get_tpu_freq(struct bm_device_info *bmdi);
+int bm1688_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target);
+int bm1688_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned long arg);
+int bm1688_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigned long arg);
 
-void bm1688_bmdrv_clk_enable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi);
-void bm1688_bmdrv_clk_disable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi);
-void bm1688_bmdrv_clk_enable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
-void bm1688_bmdrv_clk_disable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
-void bm1688_bmdrv_clk_enable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
-void bm1688_bmdrv_clk_disable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_enable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_disable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_enable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_disable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_enable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
+void bm1688_clk_disable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi);
 
-int bm1688_bmdev_clk_hwlock_lock(struct bm_device_info* bmdi);
-void bm1688_bmdev_clk_hwlock_unlock(struct bm_device_info* bmdi);
+int bm1688_clk_hwlock_lock(struct bm_device_info* bmdi);
+void bm1688_clk_hwlock_unlock(struct bm_device_info* bmdi);
 
-void bm1688_bmdrv_sw_reset_tpu(struct bm_device_info *bmdi);
-void bm1688_bmdrv_sw_reset_gdma(struct bm_device_info *bmdi);
-void bm1688_bmdrv_sw_reset_tc906b(struct bm_device_info *bmdi);
-void bm1688_bmdrv_sw_reset_hau(struct bm_device_info *bmdi);
+void bm1688_sw_reset_tpu(struct bm_device_info *bmdi);
+void bm1688_sw_reset_gdma(struct bm_device_info *bmdi);
+void bm1688_sw_reset_tc906b(struct bm_device_info *bmdi);
+void bm1688_sw_reset_hau(struct bm_device_info *bmdi);
 #ifdef SOC_MODE
 void bm1688_modules_reset(struct bm_device_info* bmdi);
 int bm1688_modules_reset_init(struct bm_device_info* bmdi);

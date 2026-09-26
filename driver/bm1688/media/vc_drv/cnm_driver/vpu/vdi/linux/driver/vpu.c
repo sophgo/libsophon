@@ -26,6 +26,8 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+struct bm_device_info;
+#include "bm_debug.h"
 #include <linux/kfifo.h>
 #include <linux/kthread.h>
 #include <linux/of.h>
@@ -1566,22 +1568,14 @@ static int vpuinfo_open(struct inode *inode, struct file *file) {
     return single_open(file, vpuinfo_show, NULL);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops venc_proc_fops = {
-    .proc_open = vpuinfo_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS venc_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = vpuinfo_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations venc_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = vpuinfo_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 #define MAX_INTERRUPT_QUEUE (16*MAX_NUM_INSTANCE)
 int vpu_drv_platform_init(struct platform_device *pdev)

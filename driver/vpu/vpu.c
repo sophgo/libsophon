@@ -34,6 +34,10 @@
 #include "../bm1684/bm1684_reg.h"
 #include "bm_debug.h"
 
+#ifndef VM_RESERVED
+#define VM_RESERVED (VM_DONTEXPAND | VM_DONTDUMP)
+#endif
+
 #ifdef ENABLE_DEBUG_MSG
 #define DPRINTK(args...)	pr_info(args)
 #else
@@ -2227,7 +2231,7 @@ static int bm_vpu_map_to_register(struct file *filp, struct vm_area_struct *vm, 
 {
 	unsigned long pfn;
 	struct bm_device_info *bmdi = (struct bm_device_info *)filp->private_data;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 	vm_flags_set(vm, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
 #else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
@@ -2240,7 +2244,7 @@ static int bm_vpu_map_to_register(struct file *filp, struct vm_area_struct *vm, 
 
 static int bm_vpu_map_to_physical_memory(struct file *filp, struct vm_area_struct *vm)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 	vm_flags_set(vm, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
 #else
 	vm->vm_flags |= VM_IO | VM_RESERVED;
@@ -2259,7 +2263,7 @@ static int bm_vpu_map_to_instance_pool_memory(struct file *fp, struct vm_area_st
 	char *vmalloc_area_ptr = (char *)bmdi->vpudrvctx.instance_pool[core_idx].base;
 	unsigned long pfn;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 	vm_flags_set(vm, VM_DONTEXPAND | VM_DONTDUMP);
 #else
 	vm->vm_flags |= VM_RESERVED;
@@ -2286,7 +2290,7 @@ static int vpu_map_vmalloc(struct file *fp, struct vm_area_struct *vm, char *vma
 	unsigned long start = vm->vm_start;
 	unsigned long pfn;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 	vm_flags_set(vm, VM_DONTEXPAND | VM_DONTDUMP);
 #else
 	vm->vm_flags |= VM_RESERVED;

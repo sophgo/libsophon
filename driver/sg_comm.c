@@ -4,7 +4,7 @@
 
 #define PT_ALIGN 8
 
-extern void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
+extern void bm_get_bar_offset(struct bm_bar_info *pbar_info, u64 address,
 		void __iomem **bar_vaddr, u32 *offset);
 
 void sg_comm_clear_queue(struct bm_device_info *bmdi)

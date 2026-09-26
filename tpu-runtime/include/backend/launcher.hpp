@@ -96,10 +96,14 @@ typedef struct tpu_net_info{
   std::vector<int32_t> core_list;
   /// kernel func id(used for dynamic loading)
   std::vector<tpu_kernel_function_t> kernel_func_ids;
+  /// io start addr
+  uint64_t io_start_addr;
+  uint64_t io_mem_offset;
   /// coeff start addr
   uint64_t coeff_start_addr = -1;
   /// neuron start addr
   std::vector<uint64_t> neuron_start_addr;
+  std::vector<uint64_t> neuron_size;
   int32_t do_allreduce = 0;
   tpu_kernel_allreduce_1684x_t allreduce_param;
   int32_t addr_mode;
@@ -459,12 +463,14 @@ public:
   dynamic_subnet(bm_handle_t handle,
                  const tpu_dynamic_net_info_t &net_info) override;
 
-  bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle, int core,
+  // set_param: pass through the whole packed vParams buffer; broadcast once
+  // via tpu_kernel_launch_from_multi_cores(...,1,4) (mirrors tpuv7
+  // tpuRtKernelLaunchAsync(...,1,mCoreNum,...)). No per-core arg.
+  bm_status_t _bmdnn_set_engine_profile_param_(bm_handle_t handle,
                                                tpu_kernel_function_t func_id,
-                                               int engine_type,
-                                               unsigned long long addr,
-                                               unsigned long long size);
-  bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle, int core,
+                                               const void* args, size_t size);
+  // enable/disable: pack u32 enable_bits, broadcast once the same way.
+  bm_status_t _bmdnn_set_profile_enable_(bm_handle_t handle,
                                          tpu_kernel_function_t func_id,
                                          unsigned int enable);
   bm_status_t _bmdnn_get_profile_data_(

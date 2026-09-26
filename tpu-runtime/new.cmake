@@ -26,6 +26,11 @@ file(GLOB srcs CONFIGURE_DEPENDS
 add_library(bmrt SHARED ${srcs})
 add_library(bmrt_static STATIC ${srcs})
 target_compile_options(bmrt_static PRIVATE -fPIC)
+# Security hardening flags for Linux (skipped in Debug builds to keep symbols for debugging)
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT WIN32)
+	target_compile_options(bmrt PRIVATE -fstack-protector-strong)
+	set_target_properties(bmrt PROPERTIES LINK_FLAGS "-Wl,-z,relro,-z,now -s -Wl,-z,noexecstack")
+endif()
 
 if(LITE_BUILD)
     target_compile_options(bmrt PRIVATE -Os -fno-omit-frame-pointer -ffunction-sections -fdata-sections -fno-exceptions -fmerge-all-constants -fexceptions)

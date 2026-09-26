@@ -250,8 +250,9 @@ void bm1688_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	}
 }
 
-void bm1688_unmap_bar(struct bm_bar_info *bari) {
+void bm1688_unmap_bar(struct bm_device_info *bmdi) {
 	void __iomem *atu_base_addr;
+	struct bm_bar_info *bari = &bmdi->cinfo.bar_info;
 	int i = 0;
 	atu_base_addr = bari->bar0_vaddr + BM1688_OFFSET_PCIE_iATU;
 	for (i = 0; i < 31; i++) {
@@ -353,7 +354,7 @@ int bm1688_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE typ
 	return -1;
 }
 
-void bm1688_bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
+void bm1688_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	struct bm_bar_info *bar_info = &bmdi->cinfo.bar_info;
 	void __iomem *cfg_base_addr = bar_info->bar0_vaddr;
@@ -392,7 +393,7 @@ void bm1688_bmdrv_init_for_mode_chose(struct bm_device_info *bmdi, struct pci_de
 		bar4_start = 0x8b000000;
 	}
 
-	bm1688_unmap_bar(bari);
+	bm1688_unmap_bar(bmdi);
 	bmdi->cinfo.bmdrv_setup_bar_dev_layout(bmdi, MODE_CHOSE_LAYOUT);
 	atu_base_addr = bari->bar0_vaddr + BM1688_OFFSET_PCIE_iATU;
 
@@ -442,7 +443,7 @@ static void bm1688_pcie_fix_ep_sel(struct bm_device_info *bmdi)
        bmdi->cinfo.mode = (bmdi->cinfo.mode & ~BM1688_PCIE_EP_SEL_MASK) | sel;
 }
 
-int bm1688_bmdrv_pcie_get_mode(struct bm_device_info *bmdi)
+int bm1688_pcie_get_mode(struct bm_device_info *bmdi)
 {
 	u32 mode = 0x0;
 
@@ -460,7 +461,7 @@ int bm1688_bmdrv_pcie_get_mode(struct bm_device_info *bmdi)
 	return 0;
 }
 
-void bm1688_bmdrv_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
+void bm1688_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm_device_info *bmdi)
 {
 	void __iomem *atu_base_addr;
 	int value = 0x0;
@@ -571,7 +572,7 @@ void bm1688_bmdrv_pcie_set_function1_iatu_config(struct pci_dev *pdev, struct bm
 	REG_READ32(atu_base_addr, 0x50);
 }
 
-uint32_t bm1688_bmdrv_get_chip_num(struct bm_device_info *bmdi)
+uint32_t bm1688_get_chip_num(struct bm_device_info *bmdi)
 {
 	struct bm_bar_info *bari = &bmdi->cinfo.bar_info;
 	void __iomem *top_apb_addr = bari->bar1_vaddr + bari->bar1_part_info[3].offset + 0x20000;
@@ -582,7 +583,7 @@ uint32_t bm1688_bmdrv_get_chip_num(struct bm_device_info *bmdi)
 	return value & 0x1;
 }
 
-void bm1688_bmdrv_pcie_perst(struct bm_device_info *bmdi)
+void bm1688_pcie_perst(struct bm_device_info *bmdi)
 {
 	int value = 0;
 
@@ -597,7 +598,7 @@ void bm1688_bmdrv_pcie_perst(struct bm_device_info *bmdi)
 	mdelay(300);
 }
 
-int bm1688_bmdrv_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info *bari)
+int bm1688_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	int loop = 200;
 	int ret = 0;
@@ -619,7 +620,7 @@ int bm1688_bmdrv_pcie_polling_rc_perst(struct pci_dev *pdev, struct bm_bar_info 
 	return ret;
 }
 
-int bm1688_bmdrv_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_info *bari)
+int bm1688_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_info *bari)
 {
 	int loop = 200;
 	int ret = 0;
@@ -639,7 +640,7 @@ int bm1688_bmdrv_pcie_polling_rc_core_rst(struct pci_dev *pdev, struct bm_bar_in
 	return ret;
 }
 
-void bm1688_bmdrv_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen_speed)
+void bm1688_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen_speed)
 {
 	int value = 0;
 	void __iomem *base = bari->bar1_vaddr + bari->bar1_part_info[9].offset;
@@ -674,7 +675,7 @@ void bm1688_bmdrv_pcie_set_rc_link_speed_gen_x(struct bm_bar_info *bari, int gen
 	REG_WRITE32(base, 0x8bc, REG_READ32(base, 0x8bc) & (~0x1));
 }
 
-void bm1688_bmdrv_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
+void bm1688_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
 {
 	int value = 0;
 	void __iomem *base = bari->bar1_vaddr + bari->bar1_part_info[9].offset;
@@ -689,13 +690,13 @@ void bm1688_bmdrv_pcie_set_rc_max_payload_setting(struct bm_bar_info *bari)
 	REG_WRITE32(base, 0x8bc, REG_READ32(base, 0x8bc) & (~0x1));
 }
 
-void bm1688_bmdrv_pcie_enable_rc(struct bm_bar_info *bari)
+void bm1688_pcie_enable_rc(struct bm_bar_info *bari)
 {
 	void __iomem *sii_base = bari->bar1_vaddr + bari->bar1_part_info[8].offset;
 	REG_WRITE32(sii_base, 0x58, REG_READ32(sii_base, 0x58) | 0x1); // enable ltssm
 }
 
-int bm1688_bmdrv_pcie_polling_rc_link_state(struct bm_bar_info *bari)
+int bm1688_pcie_polling_rc_link_state(struct bm_bar_info *bari)
 {
 	int value = 0x0;
 	int count = 0x20;
@@ -729,13 +730,13 @@ int bm1688_try_to_link_as_gen1_speed(struct pci_dev *pdev, struct bm_device_info
 {
 	int ret = 0;
 
-	bm1688_bmdrv_pcie_perst(bmdi);
-	bm1688_bmdrv_pcie_polling_rc_perst(pdev, bari);
-	bm1688_bmdrv_pcie_polling_rc_core_rst(pdev, bari);
-	bm1688_bmdrv_pcie_set_rc_link_speed_gen_x(bari, 0x1);
-	bm1688_bmdrv_pcie_enable_rc(bari);
+	bm1688_pcie_perst(bmdi);
+	bm1688_pcie_polling_rc_perst(pdev, bari);
+	bm1688_pcie_polling_rc_core_rst(pdev, bari);
+	bm1688_pcie_set_rc_link_speed_gen_x(bari, 0x1);
+	bm1688_pcie_enable_rc(bari);
 
-	if (bm1688_bmdrv_pcie_polling_rc_link_state(bari) < 0) {
+	if (bm1688_pcie_polling_rc_link_state(bari) < 0) {
 		ret = -1;
 		pr_info("bm1688_try_to_link_as_gen1_speed still fail \n");
 	}
@@ -743,7 +744,7 @@ int bm1688_try_to_link_as_gen1_speed(struct pci_dev *pdev, struct bm_device_info
 	return ret;
 }
 
-int bm1688_bmdrv_pcie_rc_init(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
+int bm1688_pcie_rc_init(struct pci_dev *pdev, struct bm_device_info *bmdi, struct bm_bar_info *bari)
 {
 	void __iomem *top_apb_base;
 	void __iomem *ssperi_base;
@@ -783,13 +784,13 @@ int bm1688_bmdrv_pcie_rc_init(struct pci_dev *pdev, struct bm_device_info *bmdi,
 	REG_WRITE32(top_apb_base, 0x4b4, REG_READ32(top_apb_base, 0x4b4) | (0x1 << 5));
 
 retry:
-	bm1688_bmdrv_pcie_perst(bmdi);
-	bm1688_bmdrv_pcie_polling_rc_perst(pdev, bari);
-	bm1688_bmdrv_pcie_polling_rc_core_rst(pdev, bari);
-	bm1688_bmdrv_pcie_set_rc_link_speed_gen_x(bari, 0x3);
-	bm1688_bmdrv_pcie_enable_rc(bari);
+	bm1688_pcie_perst(bmdi);
+	bm1688_pcie_polling_rc_perst(pdev, bari);
+	bm1688_pcie_polling_rc_core_rst(pdev, bari);
+	bm1688_pcie_set_rc_link_speed_gen_x(bari, 0x3);
+	bm1688_pcie_enable_rc(bari);
 
-	if (bm1688_bmdrv_pcie_polling_rc_link_state(bari) < 0) {
+	if (bm1688_pcie_polling_rc_link_state(bari) < 0) {
 		if (count-- > 0) {
 			pr_info("rc link fail, retry %d\n", count);
 			goto retry;
@@ -804,7 +805,7 @@ retry:
 		ret = bm1688_try_to_link_as_gen1_speed(pdev, bmdi, bari);
 	}
 
-	bm1688_bmdrv_pcie_set_rc_max_payload_setting(bari);
+	bm1688_pcie_set_rc_max_payload_setting(bari);
 
 	return ret;
 }
@@ -816,9 +817,9 @@ int bm1688_config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_inf
 
 	bmdi->cinfo.pcie_func_index = (pdev->devfn & 0x7);
 
-	bm1688_bmdrv_init_for_mode_chose(bmdi, pdev, bari);
+	bm1688_init_for_mode_chose(bmdi, pdev, bari);
 
-	ret = bm1688_bmdrv_pcie_get_mode(bmdi);
+	ret = bm1688_pcie_get_mode(bmdi);
 	if (ret < 0) {
 		return -1;
 	}
@@ -830,38 +831,38 @@ int bm1688_config_iatu_for_function_x(struct pci_dev *pdev, struct bm_device_inf
 		return 0;
 	}
 
-	bm1688_bmdrv_pcie_rc_init(pdev, bmdi, bari);
+	bm1688_pcie_rc_init(pdev, bmdi, bari);
 
-	bm1688_bmdrv_pcie_set_function1_iatu_config(pdev, bmdi);
-	return bm1688_bmdrv_pci_bus_scan(pdev, bmdi, max_function_num);
+	bm1688_pcie_set_function1_iatu_config(pdev, bmdi);
+	return bm1688_pci_bus_scan(pdev, bmdi, max_function_num);
 }
 
-u32 bm1688_bmdrv_read_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
+u32 bm1688_read_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
 {
 	return bm_read32(bmdi, cfg_base_addr + offset);
 }
 
-void bm1688_bmdrv_write_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset, u32 value, u32 mask)
+void bm1688_write_config(struct bm_device_info *bmdi, int cfg_base_addr, int offset, u32 value, u32 mask)
 {
 	u32 val = 0;
-	val = bm1688_bmdrv_read_config(bmdi, cfg_base_addr, offset);
+	val = bm1688_read_config(bmdi, cfg_base_addr, offset);
 	val = val | (value & mask);
 	bm_write32(bmdi, cfg_base_addr + offset, val);
 }
 
-void bm1688_bmdrv_pci_busmaster_memory_enable(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
+void bm1688_pci_busmaster_memory_enable(struct bm_device_info *bmdi, int cfg_base_addr, int offset)
 {
-	bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x4, 0x7, 0x7);
+	bm1688_write_config(bmdi, cfg_base_addr, 0x4, 0x7, 0x7);
 }
 
-void bm1688_bmdrv_pci_msi_enable(struct bm_device_info *bmdi, int cfg_base_addr)
+void bm1688_pci_msi_enable(struct bm_device_info *bmdi, int cfg_base_addr)
 {
-	bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x50, 0x1 << 16, 0x1 << 16);
+	bm1688_write_config(bmdi, cfg_base_addr, 0x50, 0x1 << 16, 0x1 << 16);
 }
 
-void bm1688_bmdrv_pci_max_payload_setting(struct bm_device_info *bmdi, int cfg_base_addr)
+void bm1688_pci_max_payload_setting(struct bm_device_info *bmdi, int cfg_base_addr)
 {
-	bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x78, 0x1 << 5, (0x7 << 5));
+	bm1688_write_config(bmdi, cfg_base_addr, 0x78, 0x1 << 5, (0x7 << 5));
 }
 
 /*
@@ -871,7 +872,7 @@ void bm1688_bmdrv_pci_max_payload_setting(struct bm_device_info *bmdi, int cfg_b
 * Addr[14:12] = function number
 * Addr[11: 0] = register offset
 */
-int bm1688_bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int max_fun_num)
+int bm1688_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int max_fun_num)
 {
 	int bus_num = 1;
 	int cfg_base_addr = 0;
@@ -891,7 +892,7 @@ int bm1688_bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi,
 		cfg_base_addr = (bus_num << 20) | (device_num << 15) | (function_num << 12);
 		cfg_base_addr += 0x80000000;
 		while ((vendor_id != 0x1e30) && (vendor_id != 0x1f1c)) {
-			vendor_id = bm1688_bmdrv_read_config(bmdi, cfg_base_addr, 0) & 0xffff;
+			vendor_id = bm1688_read_config(bmdi, cfg_base_addr, 0) & 0xffff;
 			msleep(10);
 			if (--count == 0) {
 				pr_err("bus num = %d, device = %d, function = %d,   not find, vendor_id = 0x%x \n", bus_num, device_num, function_num, vendor_id);
@@ -902,14 +903,14 @@ int bm1688_bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi,
 		pr_info("bus num = %d, device = %d, function = %d, vendor_id = 0x%x \n", bus_num, device_num, function_num, vendor_id);
 		msleep(2000);
 		if((function_num == 0x0) && ((vendor_id == 0x1e30) || (vendor_id == 0x1f1c))) {
-			bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x10, 0x88000000, 0xfffffff0);
-			bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x14, 0x89000000, 0xfffffff0);
-			bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x18, 0x0, 0xfffffff0);
-			bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x1c, 0x1000, 0xfffffff0);
-			bm1688_bmdrv_write_config(bmdi, cfg_base_addr, 0x20, 0x8b000000, 0xfffffff0);
-			bm1688_bmdrv_pci_busmaster_memory_enable(bmdi, cfg_base_addr, 0x4);
-			bm1688_bmdrv_pci_msi_enable(bmdi, cfg_base_addr);
-			bm1688_bmdrv_pci_max_payload_setting(bmdi, cfg_base_addr);
+			bm1688_write_config(bmdi, cfg_base_addr, 0x10, 0x88000000, 0xfffffff0);
+			bm1688_write_config(bmdi, cfg_base_addr, 0x14, 0x89000000, 0xfffffff0);
+			bm1688_write_config(bmdi, cfg_base_addr, 0x18, 0x0, 0xfffffff0);
+			bm1688_write_config(bmdi, cfg_base_addr, 0x1c, 0x1000, 0xfffffff0);
+			bm1688_write_config(bmdi, cfg_base_addr, 0x20, 0x8b000000, 0xfffffff0);
+			bm1688_pci_busmaster_memory_enable(bmdi, cfg_base_addr, 0x4);
+			bm1688_pci_msi_enable(bmdi, cfg_base_addr);
+			bm1688_pci_max_payload_setting(bmdi, cfg_base_addr);
 			pr_info("find 1 bus num = %d, device = %d, function = %d, vendor_id = 0x%x \n", bus_num, device_num, function_num, vendor_id);
 			if (max_fun_num == 0x1)
 				return 0;

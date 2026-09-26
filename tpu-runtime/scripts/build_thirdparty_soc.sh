@@ -81,6 +81,7 @@ cp -v tpu-cpuop/build/*.so* $THIRDPARTY_DIR/lib/
 cp -v tpu-bmodel/build/*.a $THIRDPARTY_DIR/lib/
 cp -v tpu-bmodel/build/tpu_model $THIRDPARTY_DIR/bin
 cp -v bmlib/include/bmlib_runtime.h $THIRDPARTY_DIR/include
+cp -v bmlib/include/bmlib_type.h $THIRDPARTY_DIR/include
 cp -v bmlib/src/*.h $THIRDPARTY_DIR/include
 cp -v tpu-common/base/* $THIRDPARTY_DIR/include
 cp -r tpu-bmodel/include/* $THIRDPARTY_DIR/include

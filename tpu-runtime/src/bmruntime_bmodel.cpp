@@ -43,7 +43,7 @@ static void fill_tensor_attr(
     const std::vector<u64> &ctx_offset,
     uint32_t flags,
     addr_t addr_traits,
-    addr_mode_t io_mode)
+    uint32_t tag_limit)
 {
   attr->shape.num_dims = tensor->shape()->Get(0)->dim()->size();
   for (int i = 0; i < attr->shape.num_dims; i++) {
@@ -52,7 +52,7 @@ static void fill_tensor_attr(
   u64 addr = tensor->device_addr();
   attr->cmd_addr = addr;
   uint32_t tag = (addr >> addr_traits.tag.start) & addr_traits.tag.mask;
-  if (tag <= kTagActivation) {
+  if (tag <= tag_limit) {
     addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
     addr &= addr_traits.offset.mask;
   }
@@ -69,7 +69,7 @@ static void fill_tensor_attr(
     const std::vector<u64> &ctx_offset,
     uint32_t flags,
     addr_t addr_traits,
-    addr_mode_t io_mode)
+    uint32_t tag_limit)
 {
   for (u32 i = 0; i < tensors->size(); i++) {
     auto tensor = tensors->Get(i);
@@ -77,7 +77,7 @@ static void fill_tensor_attr(
       continue;
     }
     tensor_attr_t attr;
-    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, io_mode);
+    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, tag_limit);
     tensor_v.push_back(attr);
   }
 }
@@ -109,6 +109,28 @@ void Bmruntime::cmd_convert_and_load(
   if (cmd_word_num == 0) {
     return;
   }
+  bool support_bd_share = false;
+  vector<u64> bdc_start;
+  if (engine == ENGINE_BD) {
+    // TODO: only bdc support share, from 1684x2, gdma should support share too
+    support_bd_share = (m_bdc_fixed) && (!m_profile->is_enabled());
+    if (support_bd_share) {
+      for (auto cmd_group : cmd_groups) {
+        if (0 == cmd_group->bdc_num()) {
+          continue;
+        }
+        bdc_start.push_back(cmd_group->binary_bdc()->start());
+      }
+      bm_device_mem_t pmem;
+      bool is_exist = get_bdc_mem(bdc_start, pmem);
+      if (is_exist) {
+        // use the existing bdc memory
+        memory->Init(descriptor, m_handles[devid], pmem);
+        return;
+      }
+    }
+  }
+
   bm_device_mem_t pmem;
   u64 cmd_buf_addr =
       alloc_device_mem(devid, pmem, cmd_word_num, descriptor + "_cmd_mem", 4);
@@ -161,6 +183,9 @@ void Bmruntime::cmd_convert_and_load(
   memory->Init(descriptor, m_handles[devid], pmem, p_cmd_buf,
                m_flags & BM_RUNTIME_CHECK_MEM,
                m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+  if (support_bd_share) {
+    m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
+  }
 }
 
 bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
@@ -172,51 +197,6 @@ bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
   return false;
 }
 
-void Bmruntime::convert_bdc(ModelCtx *model_ctx,
-                            u32 cmd_word_num,
-                            u32 devid,
-                            net_stage_t *stage,
-                            std::vector<const bmodel::CmdGroup *> &cmd_groups,
-                            u32 core_idx) {
-  if (cmd_word_num == 0) {
-    return;
-  }
-  vector<u64> bdc_start;
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    bdc_start.push_back(cmd_group->binary_bdc()->start());
-  }
-  bm_device_mem_t pmem;
-  bool is_exist = get_bdc_mem(bdc_start, pmem);
-  if (is_exist) {
-    // use the existing bdc memory
-    stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-    return;
-  }
-
-  u32 offset = 0;
-  u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    u64 start = cmd_group->binary_bdc()->start();
-    u32 bytes = cmd_group->binary_bdc()->size();
-    u8 *bdc_buffer = new u8[bytes];
-    model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
-    bm_memcpy_s2d_partial_offset(m_handles[devid], pmem,
-                                 (void *)bdc_buffer, bytes, offset);
-    if (bytes % 128 != 0) {
-      BMRT_LOG(WARNING, "bdc is not 128 bytes aligned");
-    }
-    offset += bytes;
-    delete[] bdc_buffer;
-  }
-  m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
-  stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-}
 
 bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
                                   const bmodel::NetParameter* param,
@@ -262,22 +242,15 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
       } else {
         cmd_word_num = bdc_total_id * backend_->aligned_cmd_words(ENGINE_BD);
       }
-      bool use_bdc_new = (m_bdc_fixed) && !(m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) && (!m_profile->is_enabled());
 
-      // fix: support check bdc_instruction when use_bdc_new
-      use_bdc_new = false;
-      if (use_bdc_new) {
-        // in fact, bdc no need to convert, just copy to mem for 1684x/1688/...
-        convert_bdc(model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx);
-      } else {
-        cmd_convert_and_load(
+      // ENGINE_BDC
+      cmd_convert_and_load(
             model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx,
             ENGINE_BD, "bd",
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->binary_bdc(); },
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->bdc_num(); },
             [&](ConversionParams &params) { return backend_->convert_bdc(params); },
             &stage->core_commands[core_idx].bdc_mem);
-      }
 
       // ENGINE_GDMA
       if (gdma_total_cmd_byte > 0) {
@@ -851,7 +824,8 @@ bool Bmruntime::fill_net_ctx(
 
     stages[stage_idx].neuron_size = stage_sizes;
     stage_ctx_sizes.push_back(std::move(stage_sizes));
-    stages[stage_idx].io_start = stage->io_addr();
+    stages[stage_idx].io_start = stage->io_addr() & backend_->addr_layout().offset.mask;
+    stages[stage_idx].io_offset = 0;
     stages[stage_idx].io_size = stage->io_size();
     stages[stage_idx].core_num = std::max<u32>(stage->core_num(), 1u);
     auto subnet = params->Get(stage_idx)->sub_net();
@@ -863,6 +837,9 @@ bool Bmruntime::fill_net_ctx(
     if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
       stages[stage_idx].neuron_mem = {model_neuron_mem};
       stages[stage_idx].neuron_size = {model_neuron_size};
+    } else if (m_flags & BM_RUNTIME_NEURON_MEM_IN_PRE_ALLOC) {
+      // delayed alloc: skip neuron_mem DDR allocation in load stage
+      // neuron_mem stays empty, will be allocated in pre_alloc or launch
     } else {
       malloc_net_memory(net_ctx, &stages[stage_idx], core_mask);
     }
@@ -1321,7 +1298,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
       }
       for (size_t i = 0; i < ctx_sizes.size(); ++i)
       {
-        if (net_stage->neuron_mem[i].size > 0) {
+        if (!net_stage->neuron_mem.empty() && net_stage->neuron_mem[i].size > 0) {
           u64 ctx_addr = bm_mem_get_device_addr_u64(net_stage->neuron_mem[i]);
           net_stage->ctx_offset[i] = ctx_addr - ctx_start;
           net_stage->dynamic_ctx_offset[i] = ctx_addr - dynamic_ctx_start;
@@ -1362,10 +1339,10 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     }
     fill_tensor_attr(param->input_tensor(), net_stage->input_v, ctx_start,
                      ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
-                     (addr_mode_t)net_ctx->addr_mode);
+                     backend_->tag_reserved_limit());
     fill_tensor_attr(param->output_tensor(), net_stage->output_v, ctx_start,
                      ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
-                     (addr_mode_t)net_ctx->addr_mode);
+                     backend_->tag_reserved_limit());
 
     // setup subnet
     u32 core_num = std::max<u32>(param->core_num(), 1u);
@@ -1683,6 +1660,10 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device, const mem_info_
 
   load_tpu_module(model_ctx);
   load_cpu_module(model_ctx);
+
+  if (mem_info) {
+    dmem_info.clear();
+  }
 
   u32 cur_net_idx = m_net_ctx_v.size();
   for (u32 net_idx = 0; net_idx < load_net_num; net_idx++) {
@@ -2202,6 +2183,17 @@ bool Bmruntime::load_context(const string& ctx_dir)
 
 void Bmruntime::fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc) {
   if (addr != -1 || size == 0) {
+    auto iter = find(dmem_info.begin(), dmem_info.end(), desc);
+    if (iter != dmem_info.end()) {
+      BMRT_ASSERT_INFO(iter->addr == static_cast<uint64_t>(addr) && iter->size == size,
+                       "Error: device memory: %s changed across nets, addr=0x%llx size=0x%llx, prev_addr=0x%llx prev_size=0x%llx",
+                       desc.c_str(),
+                       static_cast<unsigned long long>(addr),
+                       static_cast<unsigned long long>(size),
+                       static_cast<unsigned long long>(iter->addr),
+                       static_cast<unsigned long long>(iter->size));
+      return;
+    }
     device_mem_info_t dmem;
     dmem.addr = addr;
     dmem.desc = desc;
@@ -2222,7 +2214,6 @@ void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, const mem_info_t* mem_i
   // init basic info
   alloc_mem = false;
   bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
-  dmem_info.clear();
   if (mem_info->instruction_mem.addr != -1) {
     // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
     BMRT_ASSERT(mem_info->instruction_mem.number == 1);
@@ -2409,7 +2400,7 @@ void KernelModule::preload_funcs(int core_id, const std::string &backend) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-  if(backend == "BM1688" || backend == "SG2380"){
+  if(backend == "BM1688" || backend == "SG2380" || backend == "BM1684X2"){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }

@@ -57,8 +57,14 @@ static int bm_monitor_thread(void *date)
 			old_state = A53_RESET_STATUS_FALSE;
 		}
 	#endif
-		bm_dump_arm9fw_log(bmdi, count);
 		bmdrv_fetch_attr(bmdi, count, is_setspeed);
+		if (bmdi->status_over_temp || bmdi->status_pcie || bmdi->status_sync_api) {
+			msleep_interruptible(20);
+		} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+			msleep_interruptible(10);
+		} else {
+			bm_dump_arm9fw_log(bmdi, count);
+		}
 		bmdrv_fetch_attr_board_power(bmdi, count);
 #if ((!defined SOC_MODE) && (defined SC7_PRO_HAS_VFS))
 		bmdrv_volt_freq_scaling(bmdi);

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <map>
 #include <numeric>
+// #include <sys/syscall.h>  // debug only: syscall(SYS_gettid) for the disabled per-thread trace logs below
 #include "bmlib_runtime.h"
 #include "bmruntime_common.h"
 #include "bmruntime_context.hpp"
@@ -851,6 +852,12 @@ bool Bmruntime::launch_ir(net_ctx_t* net_ctx, net_stage_t* stage,
   net_info.core_ids = core_list;
   net_info.all_reduce_param = net_ctx->do_allreduce ? &(net_ctx->allreduce_param) : nullptr;
 
+  if (m_flags & BM_RUNTIME_YIELD_TO_KERNEL_TASK) {
+    bm_status_t yield_st = bm_tpu_kernel_task_wait_done(m_handles[devid]);
+    if (BM_SUCCESS != yield_st) {
+      BMRT_LOG(WRONG, "bm_tpu_kernel_task_wait_done failed in launch_ir, status:%d", yield_st);
+    }
+  }
   status = backend_->launcher()->dynamic_subnet(m_handles[devid], net_info);
 
   if (status == BM_SUCCESS) {
@@ -967,8 +974,12 @@ Bmruntime::fill_tpu_net_info(net_ctx_t *net_ctx, net_stage_t *stage,
   net_info.core_commands = std::move(core_command);
   net_info.core_list = core_list;
   net_info.coeff_start_addr = stage->coeff_offset;
+  net_info.io_start_addr = stage->io_start;
+  net_info.io_mem_offset = stage->io_offset;
   net_info.neuron_start_addr.assign(stage->ctx_offset.begin(),
                                     stage->ctx_offset.end());
+  net_info.neuron_size.assign(stage->neuron_size.begin(),
+                              stage->neuron_size.end());
 
   if (backend_->support_dynamic_loading()) {
     net_info.kernel_func_ids = net_ctx->kernel_module_->get_multi_fullnet_func_id(core_list);
@@ -1002,6 +1013,12 @@ bool Bmruntime::launch_static(net_ctx_t* net_ctx, net_stage_t* stage,
         cmd_num[i].gdma = net_info.core_commands[core_idx].cmd_info.at(i).gdma_cmd_num;
       }
 
+    }
+  }
+  if (m_flags & BM_RUNTIME_YIELD_TO_KERNEL_TASK) {
+    bm_status_t yield_st = bm_tpu_kernel_task_wait_done(m_handles[devid]);
+    if (BM_SUCCESS != yield_st) {
+      BMRT_LOG(WRONG, "bm_tpu_kernel_task_wait_done failed in launch_static, status:%d", yield_st);
     }
   }
   bm_status_t status = backend_->launcher()->static_subnet(m_handles[devid], net_info);
@@ -1250,27 +1267,24 @@ void Bmruntime::malloc_net_memory(const net_ctx_t *net_ctx, net_stage_t *stage,
                                   uint32_t core_mask) {
   auto dev_id = net_ctx->device_id;
   // malloc compute memory
-  // uint32_t core_mask = 0;
-  // if (!core_ids.empty()) {
-  //   for (auto &id : core_ids) {
-  //     core_mask |= (1 << id);
-  //   }
-  // } else {
-  //   for (int id = 0; id < stage->core_num; id++) {
-  //     core_mask |= (1 << id);
-  //   }
-  //   if (stage->core_num != backend_->core_num()) {
-  //     // core_mask = -1 means it won't bind to any core at present
-  //     // but it will be bind to core while kernel-launching
-  //     core_mask = -1;
-  //   }
-  // }
+  // unit test for data parallel, inference with multiple cores with same bmodel
+  const char *enable_dp = getenv("BMRT_DP_NUM");
+  int dp_num = 1;
+  if (enable_dp) {
+    dp_num = std::stoi(enable_dp);
+    BMRT_ASSERT_INFO(
+        dp_num * stage->core_num <= backend_->core_num(),
+        "Inference cores number [%d] is larger than the number of cores [%d]",
+        dp_num * stage->core_num, backend_->core_num());
+    if (stage->neuron_mem.empty()) {
+      stage->neuron_size[0] = ALIGN(stage->neuron_size[0], 4096) * dp_num;
+    }
+  }
+
   BMRT_ASSERT_INFO(stage->neuron_size.size() == 1,
                    "Error: only support one neuron memory for now");
   auto mem = MemoryManager::Instance(dev_id)->computeMemory();
-  bool multi_subnet = stage->subnet_num > 1;
-  bool mem_reused = !backend_->instruct_converted() &&
-                    (!multi_subnet || (m_flags & BM_RUNTIME_SHARE_DYNMEM));
+  bool mem_reused = !backend_->instruct_converted();
   std::string name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
   auto compute_context =
       mem->Create(name, stage->neuron_size[0], core_mask, mem_reused);
@@ -1281,14 +1295,29 @@ void Bmruntime::update_net_context(const net_ctx_t *net_ctx, net_stage_t *stage,
                                    uint32_t core_mask) {
   // compute memory also named as neuron memory, maybe changed with dynamic
   // malloc
+  if (stage->neuron_mem.empty() && (m_flags & BM_RUNTIME_NEURON_MEM_IN_PRE_ALLOC)) {
+    // on-demand alloc: neuron_mem not allocated in load stage, allocate now
+    malloc_net_memory(net_ctx, stage, core_mask);
+  }
   BMRT_ASSERT_INFO(stage->neuron_mem.size() == 1,
                    "only support one compute memory");
+#if 0  // debug trace: shared-stage address state on entry (before this core overwrites it)
+  {
+    uint64_t old_addr = stage->neuron_mem.empty() ? 0 :
+        stage->neuron_mem[0].u.device.device_addr;
+    uint64_t old_ctxoff = stage->ctx_offset.empty() ? 0 : stage->ctx_offset[0];
+    BMRT_LOG(INFO,
+      "[dbg][upd-in ] tid=%ld stage=%p core_mask=0x%x flags=0x%x "
+      "addr_mode=%d io_size=%lu subnet_num=%d old_neuron[0]=0x%lx old_ctxoff[0]=0x%lx",
+      (long)syscall(SYS_gettid), (void*)stage, core_mask, m_flags,
+      net_ctx->addr_mode, (unsigned long)stage->io_size, stage->subnet_num,
+      (unsigned long)old_addr, (unsigned long)old_ctxoff);
+  }
+#endif
   if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
     core_mask = 1; // share memory between cores, so set core_mask to 0 when malloc and launch
   }
-  bool mem_reused =
-      !backend_->instruct_converted() &&
-      (stage->subnet_num <= 1 || (m_flags & BM_RUNTIME_SHARE_DYNMEM));
+  bool mem_reused = !backend_->instruct_converted();
   auto dev_id = net_ctx->device_id;
   std::string net_name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
   const auto context = MemoryManager::Instance(dev_id)->computeMemory();
@@ -1353,6 +1382,13 @@ void Bmruntime::update_net_context(const net_ctx_t *net_ctx, net_stage_t *stage,
           bm_mem_from_device(addr, subnet.second.tensor_info.device_mem.size);
     }
   }
+#if 0  // debug trace: shared-stage address state after this core's write
+  BMRT_LOG(INFO,
+    "[dbg][upd-out] tid=%ld stage=%p core_mask=0x%x new_neuron[0]=0x%lx new_ctxoff[0]=0x%lx",
+    (long)syscall(SYS_gettid), (void*)stage, core_mask,
+    (unsigned long)stage->neuron_mem[0].u.device.device_addr,
+    (unsigned long)(stage->ctx_offset.empty() ? 0 : stage->ctx_offset[0]));
+#endif
 }
 
 void Bmruntime::update_base_addrs_for_io_reloc(std::vector<u64>* user_io_addrs,
@@ -1408,6 +1444,9 @@ void Bmruntime::pre_alloc_neuron_multi_cores(
   auto final_core_list =
       refine_core_list(stage, core_list, m_handles[net_ctx->device_id]);
   uint32_t core_mask = get_dyn_core_mask(stage_idx, final_core_list);
+  if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
+    core_mask = 1;
+  }
   malloc_net_memory(net_ctx, stage, core_mask);
   update_net_context(net_ctx, stage, core_mask);
 }
@@ -1503,33 +1542,52 @@ bool Bmruntime::launch_multi_cores(int net_idx,
                           (stage->subnet_num == 1 && stage->subnet_v[0]->subnet_mode == SUBNET_MODE_CPU);
 
   uint64_t core_mask = get_dyn_core_mask(stage_idx, final_core_list);
-  // TODO: refactor
-  // Stages are shared between threads and cores, but each core has its own separate neuron memory for the same stage
+  // Stages are shared between threads and cores, but each core has its own
+  // separate neuron memory for the same stage. Lock per core_mask instead of a
+  // single lock for the whole net: different cores (e.g. 0x1 vs 0x2) take
+  // different mutexes and run in parallel, while two threads on the same core
+  // take the same mutex and serialize (they share the same per-core neuron
+  // buffer). Access to the mutex map is guarded by neuron_mutex_map_guard.
   std::unique_ptr<std::lock_guard<std::mutex>> lock;
   if (backend_->core_num() != stage->core_num) {
-    lock = std::make_unique<std::lock_guard<std::mutex>>(net_ctx->neuron_mutex);
+    std::mutex *core_lock = nullptr;
+    {
+      std::lock_guard<std::mutex> g(net_ctx->neuron_mutex_map_guard);
+      core_lock = &net_ctx->neuron_mutex_by_core[(uint32_t)core_mask];
+    }
+    lock = std::make_unique<std::lock_guard<std::mutex>>(*core_lock);
   }
-  // core_mask = using_thread ? thread_idx : core_mask;
-  update_net_context(net_ctx, stage, core_mask);
+
+  // Run this launch on a private copy of the stage so that update_net_context's
+  // per-core writes (neuron_mem[0]/ctx_offset/subnet_tensor_v/input_v/output_v)
+  // never race a concurrent launch on another core. Heavy read-only members
+  // (subnet_v pointers, net_profile/net_stat) are cheap to copy relative to the
+  // execution time. The compute-memory pool is keyed by (net_name, core_mask)
+  // and internally locked, so the real per-core buffer is still resolved
+  // correctly inside update_net_context.
+  net_stage_t local_stage = *stage;
+  net_stage_t *exec_stage = &local_stage;
+
+  update_net_context(net_ctx, exec_stage, core_mask);
 
   // init output tensors
-  init_output_tensors(net_ctx, stage, output_tensors, user_mem, user_stmode);
+  init_output_tensors(net_ctx, exec_stage, output_tensors, user_mem, user_stmode);
 
   bool ret = true;
-  m_profile->init(net_ctx->net_name, stage->net_profile, stage->net_stat, final_core_list);
+  m_profile->init(net_ctx->net_name, exec_stage->net_profile, exec_stage->net_stat, final_core_list);
 
   if (use_multi_subnet) {
-        ret = launch_multi_subnet(net_ctx, stage, input_tensors, input_num, output_tensors,
+        ret = launch_multi_subnet(net_ctx, exec_stage, input_tensors, input_num, output_tensors,
                                      output_num, final_core_list, core_mask);
   } else {
       m_profile->begin_subnet(net_ctx, 0, 0, SUBNET_MODE_TPU);
       m_profile->set_extra_data(net_ctx->is_dynamic);
       if(net_ctx->is_dynamic) {
           // launch_ir calls bm_thread_sync internally
-          ret = launch_ir(net_ctx, stage, input_tensors, input_num, output_tensors, output_num, final_core_list, core_mask);
+          ret = launch_ir(net_ctx, exec_stage, input_tensors, input_num, output_tensors, output_num, final_core_list, core_mask);
       } else {
           // launch_static does not call bm_thread_sync internally
-          ret = launch_static(net_ctx, stage, input_tensors, input_num, output_tensors, output_num, final_core_list, core_mask);
+          ret = launch_static(net_ctx, exec_stage, input_tensors, input_num, output_tensors, output_num, final_core_list, core_mask);
           // so sync at some cases
           if(m_profile->is_enabled() || save_io){
             sync_cores(m_handles[devid], final_core_list);
@@ -1556,6 +1614,11 @@ bool Bmruntime::launch_multi_cores(int net_idx,
       free_device_mem(devid, output_tensors[idx].device_mem);
     }
   }
+#if 0  // debug trace: total lock-hold duration (~ launch_multi_cores body time)
+  BMRT_LOG(INFO,
+    "[dbg][lock-rel] tid=%ld core_mask=0x%x",
+    (long)syscall(SYS_gettid), (unsigned)core_mask);
+#endif
   return ret;
 }
 static mem_cascade_t *

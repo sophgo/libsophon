@@ -24,7 +24,8 @@ if(${SOC_MODE} EQUAL 1)
                             PCIE_MODE_ENABLE_CPU=${PCIE_MODE_ENABLE_CPU}
                             SOC_LINUX_DIR=${SOC_LINUX_DIR}
                             CLEAN_BUILD=1
-                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/driver)
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/driver
+                    USES_TERMINAL)
 else()
     set(TARGET_PROJECT "sg_pcie_device")
     set(DKMS_NAME "bmsophon")
@@ -32,6 +33,26 @@ endif()
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/debian")
 set(DKMS_CONF_TARGET "dkms.conf")
+
+set(DEB_FW_POSTINST_CMDS
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/cv84x6_firmware0_os.bin /lib/firmware/cv84x6_firmware0_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/cv84x6_firmware1_os.bin /lib/firmware/cv84x6_firmware1_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/cv84x6_firmware2_os.bin /lib/firmware/cv84x6_firmware2_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/cv84x6_firmware3_os.bin /lib/firmware/cv84x6_firmware3_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/cv84x6_firmware_ddr_c2c.bin /lib/firmware/cv84x6_firmware_ddr_c2c.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0_os.bin /lib/firmware/bm1688_firmware0_os.bin" >> postinst
+    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1_os.bin /lib/firmware/bm1688_firmware1_os.bin" >> postinst
+)
+set(DEB_FW_PRERM_CMDS
+    COMMAND echo "rm -f /lib/firmware/cv84x6_firmware0_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/cv84x6_firmware1_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/cv84x6_firmware2_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/cv84x6_firmware3_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/cv84x6_firmware_ddr_c2c.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware0_os.bin" >> prerm
+    COMMAND echo "rm -f /lib/firmware/bm1688_firmware1_os.bin" >> prerm
+)
+
 add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     # setup dkms.conf
     COMMAND rm -f dkms.conf
@@ -51,11 +72,9 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "AUTOINSTALL=\"yes\"" >> dkms.conf
     # setup DEB scripts
     # post-install
-    COMMAND echo "if [ ! -d \"/lib/firmware\" ]; then mkdir -p /lib/firmware; fi" > postinst
-    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0.bin /lib/firmware/bm1688_firmware0.bin" >> postinst
-    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1.bin /lib/firmware/bm1688_firmware1.bin" >> postinst
-    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware0_os.bin /lib/firmware/bm1688_firmware0_os.bin" >> postinst
-    COMMAND echo "ln -sf /opt/sophon/driver-${CPACK_PACKAGE_VERSION}/bm1688_firmware1_os.bin /lib/firmware/bm1688_firmware1_os.bin" >> postinst
+    COMMAND echo "#!/bin/sh" > postinst
+    COMMAND echo "if [ ! -d \"/lib/firmware\" ]; then mkdir -p /lib/firmware; fi" >> postinst
+    ${DEB_FW_POSTINST_CMDS}
     COMMAND echo >> postinst
 
     COMMAND echo "if [ -e \"/usr/share/misc/pci.ids\" ]; then" >> postinst
@@ -89,14 +108,12 @@ add_custom_command(OUTPUT ${DKMS_CONF_TARGET}
     COMMAND echo "    echo \" $devicenum/$pcinum device(s) found, see dmesg for more infomation\"" >> postinst
     COMMAND echo "fi" >> postinst
     # pre-remove
-    COMMAND echo "modprobe -r ${DKMS_NAME}" > prerm
+    COMMAND echo "#!/bin/sh" > prerm
+    COMMAND echo "modprobe -r ${DKMS_NAME}" >> prerm
     COMMAND echo "dkms remove -m ${DKMS_NAME} -v ${PROJECT_VERSION} --all || true" >> prerm
     COMMAND echo "rm -rf /usr/src/${DKMS_NAME}-${PROJECT_VERSION}" >> prerm
     COMMAND echo >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1688_firmware0.bin" >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1688_firmware1.bin" >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1688_firmware0_os.bin" >> prerm
-    COMMAND echo "rm -f /lib/firmware/bm1688_firmware1_os.bin" >> prerm
+    ${DEB_FW_PRERM_CMDS}
     COMMAND echo "devicenum=`ls /dev/ | grep bm-sophon -c`" >> prerm
     COMMAND echo "if [ 0 -ne \"$devicenum\" ]" >> prerm
     COMMAND echo "then" >> prerm
@@ -144,8 +161,11 @@ foreach(file ${firmware_files})
                  COMPONENT libsophon)
 endforeach()
 
-install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware0.bin DESTINATION ./data COMPONENT libsophon)
-install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware1.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/cv84x6_firmware0_os.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/cv84x6_firmware1_os.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/cv84x6_firmware2_os.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/cv84x6_firmware3_os.bin DESTINATION ./data COMPONENT libsophon)
+install(FILES ${CMAKE_SOURCE_DIR}/driver/cv84x6_firmware_ddr_c2c.bin DESTINATION ./data COMPONENT libsophon)
 install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware0_os.bin DESTINATION ./data COMPONENT libsophon)
 install(FILES ${CMAKE_SOURCE_DIR}/driver/bm1688_firmware1_os.bin DESTINATION ./data COMPONENT libsophon)
 

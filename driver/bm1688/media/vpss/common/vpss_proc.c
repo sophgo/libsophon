@@ -4,6 +4,9 @@
 
 #include "base_ctx.h"
 
+struct bm_device_info;
+#include "bm_debug.h"
+
 #include "vpss_debug.h"
 #include "vpss_common.h"
 #include "scaler.h"
@@ -142,43 +145,25 @@ static int vpp_proc_open(struct inode *inode, struct file *file)
 #endif
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops vpss_proc_fops = {
-	.proc_open = vpss_proc_open,
-	.proc_read = seq_read,
-	.proc_write = vpss_proc_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS vpss_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = vpss_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_WRITE = vpss_proc_write,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations vpss_proc_fops = {
-	.owner = THIS_MODULE,
-	.open = vpss_proc_open,
-	.read = seq_read,
-	.write = vpss_proc_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-#endif
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops vpp_proc_fops = {
-	.proc_open = vpp_proc_open,
-	.proc_read = seq_read,
-	.proc_write = vpp_proc_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
+
+static const struct BM_PROC_FILE_OPS vpp_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = vpp_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_WRITE = vpp_proc_write,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations vpp_proc_fops = {
-	.owner = THIS_MODULE,
-	.open = vpp_proc_open,
-	.read = seq_read,
-	.write = vpp_proc_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
-#endif
+
 
 int vpss_proc_init(struct proc_dir_entry *proc_dir, struct vpss_device *dev)
 {

@@ -16,12 +16,11 @@
 #include "bm1682_gmem.h"
 #include "bm1684_gmem.h"
 #include "bm1688_gmem.h"
+#include "84x6_gmem.h"
 #include "bm_debug.h"
 
 int heap_id;
 
-extern void bm_flush_dcache_area(void *addr, size_t size);
-extern void bm_inval_dcache_area(void *addr, size_t size);
 extern u64 bm_ion_get_user_pa(u64 user_addr);
 
 int bmdrv_get_gmem_mode(struct bm_device_info *bmdi)
@@ -42,16 +41,20 @@ int bmdrv_gmem_init(struct bm_device_info *bmdi)
 
 	switch (bmdi->cinfo.chip_id) {
 	case 0x1682:
-		if (bmdrv_bm1682_parse_reserved_mem_info(bmdi))
+		if (bm1682_parse_reserved_mem_info(bmdi))
 			return -EINVAL;
 		break;
 	case 0x1684:
 	case 0x1686:
-		if (bmdrv_bm1684_parse_reserved_mem_info(bmdi))
+		if (bm1684_parse_reserved_mem_info(bmdi))
 			return -EINVAL;
 		break;
-	case 0x1686a200:
-		if (bmdrv_bm1688_parse_reserved_mem_info(bmdi))
+	case BM_CHIP_ID_1688:
+		if (bm1688_parse_reserved_mem_info(bmdi))
+			return -EINVAL;
+		break;
+	case BM_CHIP_ID_84X6:
+		if (bm84x6_parse_reserved_mem_info(bmdi))
 			return -EINVAL;
 		break;
 	default:
@@ -194,24 +197,66 @@ int bmdrv_gmem_map_no_cache(struct bm_device_info *bmdi, u64 addr, u64 size, str
 	return 0;
 }
 
+static bool bmdrv_gmem_addr_valid(struct bm_device_info *bmdi, u64 addr, u64 size)
+{
+	u64 start;
+	u64 end;
+
+	switch (bmdi->cinfo.chip_id) {
+	case BM_CHIP_ID_1688:
+		start = 0x100000000ULL;
+		end = 0x500000000ULL;
+		break;
+	case BM_CHIP_ID_84X6:
+		start = 0x1000000000ULL;
+		end = 0x2000000000ULL;
+		break;
+	default:
+		return true;
+	}
+
+	if (addr < start || addr >= end)
+		return false;
+	if (size > end - addr)
+		return false;
+	if (!pfn_valid(addr >> PAGE_SHIFT))
+		return false;
+	if (size && !pfn_valid((addr + size - 1) >> PAGE_SHIFT))
+		return false;
+
+	return true;
+}
+
 int bmdrv_gmem_flush(struct bm_device_info *bmdi, u64 addr, u64 size)
 {
-	void *va;
+	if (!bmdrv_gmem_addr_valid(bmdi, addr, size)) {
+		pr_err("bmdrv_gmem_flush invalid addr=0x%016llx size=0x%016llx chip=0x%x\n",
+		       addr, size, bmdi->cinfo.chip_id);
+		return -EFAULT;
+	}
 
-	va = phys_to_virt(addr);
-	bm_flush_dcache_area(va, size);
+	if (!bmdi->cinfo.device)
+		return -ENODEV;
 
+	dma_sync_single_for_device(bmdi->cinfo.device, (dma_addr_t)addr,
+				   (size_t)size, DMA_TO_DEVICE);
 	return 0;
 }
 
 
 int bmdrv_gmem_invalidate(struct bm_device_info *bmdi, u64 addr, u64 size)
 {
-	void *va;
+	if (!bmdrv_gmem_addr_valid(bmdi, addr, size)) {
+		pr_err("bmdrv_gmem_invalidate invalid addr=0x%016llx size=0x%016llx chip=0x%x\n",
+		       addr, size, bmdi->cinfo.chip_id);
+		return -EFAULT;
+	}
 
-	va = phys_to_virt(addr);
-	bm_inval_dcache_area(va, size);
+	if (!bmdi->cinfo.device)
+		return -ENODEV;
 
+	dma_sync_single_for_cpu(bmdi->cinfo.device, (dma_addr_t)addr,
+				(size_t)size, DMA_FROM_DEVICE);
 	return 0;
 }
 
