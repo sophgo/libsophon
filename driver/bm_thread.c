@@ -59,7 +59,19 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	return thd_info;
 }
 
-void bmdrv_delete_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info)
+void bmdrv_unbind_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info)
+{
+	struct bm_thread_info *thd_info;
+	int bucket;
+
+	if (bmdi->cinfo.chip_id != BM_CHIP_ID_84X6)
+		return;
+
+	hash_for_each(h_info->api_htable, bucket, thd_info, node)
+		bmdev_thread_unbind_hwq(bmdi, thd_info);
+}
+
+void bmdrv_delete_thread_info(struct bm_handle_info *h_info)
 {
 	struct bm_thread_info *thd_info;
 	int bucket;
@@ -67,8 +79,6 @@ void bmdrv_delete_thread_info(struct bm_device_info *bmdi, struct bm_handle_info
 
 	hash_for_each_safe(h_info->api_htable, bucket, tmp, thd_info, node) {
 		hash_del(&thd_info->node);
-		if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
-			bmdev_thread_unbind_hwq(bmdi, thd_info);
 		kfree(thd_info);
 	}
 }

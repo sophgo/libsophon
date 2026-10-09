@@ -3,10 +3,10 @@
 #include <sys/stat.h>
 #include <algorithm>
 #include "bmruntime.h"
-#include "bm1684x2_profile.h"
+#include "cv84x6_profile.h"
 #include "backend/launcher.hpp"
 
-namespace bm1684x2_profile {
+namespace cv84x6_profile {
 
 #define PROFILE_ENGINE_MCU 0
 #define PROFILE_ENGINE_GDMA 1
@@ -42,7 +42,7 @@ BMProfileDevice::BMProfileDevice(BMProfile* profile)
   enable_bdc = enable;
   enable_arm = (mMode >= 1);
   if (enable) {
-    BMRT_LOG(INFO, "bm1684x2 profile enabled: mode=%d, record_num=0x%zx",
+    BMRT_LOG(INFO, "cv84x6 profile enabled: mode=%d, record_num=0x%zx",
              mMode, mRecordNum);
   }
 }
@@ -84,7 +84,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
     auto handle = profile->get_handle();
     auto& core_list = profile->get_core_list();
     auto phys_cores = profile->get_bmrt()->backend()->core_num();
-    // enable bits follow the tpuv7 AKSV convention consumed by the bm1684x2
+    // enable bits follow the tpuv7 AKSV convention consumed by the cv84x6
     // firmware sg_api_set_profile:
     //   bit PROFILE_ENGINE_TGS (4) -> PMU master enable (TIU+GDMA monitors)
     //   bits 0-1                    -> node-stream mode (1: condensed, 2: detailed)
@@ -126,7 +126,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
             }
         }
     }
-    // Build vParams exactly like tpuv7 setPmuParam, minus SDMA (bm1684x2 has none).
+    // Build vParams exactly like tpuv7 setPmuParam, minus SDMA (cv84x6 has none).
     // Layout consumed by firmware sg_api_set_engine_profile_param:
     //   [0 .. CDMANum-1]                      -> CDMA placeholders (size==0)
     //   [CDMANum + core_idx*2 + 0]            -> core_idx's TIU
@@ -162,7 +162,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
     BMRT_LOG(INFO, "[prof] set_param broadcast: set_func_id=%u vParams=%zu elt=%u "
              "total=%zu", set_func_ids[0], vParams.size(), elt_size,
              vParams.size() * elt_size);
-    bm_status_t ret = dynamic_cast<Launcher_BM1684X2*>(launcher.get())->_bmdnn_set_engine_profile_param_(
+    bm_status_t ret = dynamic_cast<Launcher_CV84X6*>(launcher.get())->_bmdnn_set_engine_profile_param_(
         handle, set_func_ids[0], vParams.data(), vParams.size() * elt_size);
     if (ret != BM_SUCCESS) {
         BMRT_LOG(FATAL, "set engine profile param broadcast failed, ret = %d\n", ret);
@@ -178,7 +178,7 @@ bool BMProfileDevice::begin(net_ctx_t* net_ctx)
     // cores 0/1/2 come back all-zero.
     BMRT_LOG(INFO, "[prof] enable broadcast: enable_func_id=%u enable_bits=0x%x",
              enable_func_ids[0], enable_bits);
-    ret = dynamic_cast<Launcher_BM1684X2*>(launcher.get())->_bmdnn_set_profile_enable_(
+    ret = dynamic_cast<Launcher_CV84X6*>(launcher.get())->_bmdnn_set_profile_enable_(
         handle, enable_func_ids[0], enable_bits);
     if (ret != BM_SUCCESS) {
         BMRT_LOG(FATAL, "enable profile broadcast failed, ret = %d\n", ret);
@@ -303,7 +303,7 @@ std::vector<std::vector<u8>> BMProfileDevice::collect_mcu_allcores(
     BMRT_LOG(INFO, "[prof] collect_mcu_allcores: category=%d phys_cores=%zu "
              "slice_size=%zu", data_category, phys_cores, slice_size);
     while (true) {
-        bm_status_t status = dynamic_cast<Launcher_BM1684X2*>(launcher.get())->_bmdnn_get_profile_data_(
+        bm_status_t status = dynamic_cast<Launcher_CV84X6*>(launcher.get())->_bmdnn_get_profile_data_(
             handle, 0, get_func_ids[0],
             bm_mem_get_device_addr(mcu_all.mem), (unsigned)slice_size,
             (unsigned)byte_offset, data_category);
@@ -359,7 +359,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
     unsigned int pause_bits = 1u << PROFILE_PAUSE;
     BMRT_LOG(INFO, "[prof] disable(pause) broadcast: enable_func_id=%u bits=0x%x",
              enable_func_ids[0], pause_bits);
-    bm_status_t ret = dynamic_cast<Launcher_BM1684X2*>(launcher.get())->_bmdnn_set_profile_enable_(
+    bm_status_t ret = dynamic_cast<Launcher_CV84X6*>(launcher.get())->_bmdnn_set_profile_enable_(
         handle, enable_func_ids[0], pause_bits);
     if (ret != BM_SUCCESS) {
         BMRT_LOG(FATAL, "pause profile broadcast failed, ret = %d\n", ret);
@@ -443,7 +443,7 @@ bool BMProfileDevice::end(net_ctx_t* net_ctx)
     // (d) Full-off broadcast -- mirrors tpuv7 setProfile(false, false).
     BMRT_LOG(INFO, "[prof] disable(off) broadcast: enable_func_id=%u bits=0",
              enable_func_ids[0]);
-    ret = dynamic_cast<Launcher_BM1684X2*>(launcher.get())->_bmdnn_set_profile_enable_(
+    ret = dynamic_cast<Launcher_CV84X6*>(launcher.get())->_bmdnn_set_profile_enable_(
         handle, enable_func_ids[0], 0);
     if (ret != BM_SUCCESS) {
         BMRT_LOG(FATAL, "off profile broadcast failed, ret = %d\n", ret);

@@ -35,6 +35,15 @@
 
 namespace bmruntime {
 
+// Host-view base address of the whole-file buffer passed in by the calling
+// application ("app") under load_bmodel_in_device (model bytes already in
+// device DDR, loaded in place; "in_device mode" below). Used for direct cmd read.
+// Use a file-scope thread_local variable instead of a Bmruntime member to avoid
+// touching include/bmruntime.h (that header is ABI-sensitive and must not change).
+// load_bmodel_in_device sets it before the synchronous load chain and clears it
+// after; thread_local keeps concurrent multi-instance loads from interfering.
+static thread_local void *g_bmodel_host_ptr = nullptr;
+
 static void fill_tensor_attr(
     const bmodel::Tensor* tensor,
     tensor_attr_t* attr,
@@ -106,13 +115,15 @@ void Bmruntime::cmd_convert_and_load(
     std::vector<const bmodel::CmdGroup *> &cmd_groups, u32 core_idx,
     ENGINE_ID engine, std::string descriptor, BinaryFunc get_binary,
     NumFunc get_num, ConversionFunc convert, BmMemory *memory) {
+  // in_device mode is derived from g_bmodel_host_ptr being non-null (set only by in_device load).
+  bool in_device = (g_bmodel_host_ptr != nullptr);
   if (cmd_word_num == 0) {
     return;
   }
   bool support_bd_share = false;
   vector<u64> bdc_start;
   if (engine == ENGINE_BD) {
-    // TODO: only bdc support share, from 1684x2, gdma should support share too
+    // TODO: only bdc support share, from cv84x6, gdma should support share too
     support_bd_share = (m_bdc_fixed) && (!m_profile->is_enabled());
     if (support_bd_share) {
       for (auto cmd_group : cmd_groups) {
@@ -136,7 +147,11 @@ void Bmruntime::cmd_convert_and_load(
       alloc_device_mem(devid, pmem, cmd_word_num, descriptor + "_cmd_mem", 4);
   std::vector<u32> cmd_buf;
   u32 *p_cmd_buf = NULL;
-  if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+  // Under in_device mode the raw cmd is already in the device-DDR buffer passed in
+  // by the app: mmap the convert destination straight into bd_cmd_mem (flushed at
+  // the end), saving the host staging copy + the SOC_CMDBUF_MEM residency.
+  bool direct_device = (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) || in_device;
+  if (direct_device) {
     bm_mem_mmap_device_mem(m_handles[devid], &pmem,
                            (unsigned long long *)&p_cmd_buf);
   } else {
@@ -153,15 +168,26 @@ void Bmruntime::cmd_convert_and_load(
     bm_device_mem_t pmem_cur_cmd_group;
     u64 cmd_buf_cur_cmd_group_addr = 0;
     const auto binary = get_binary(cmd_group);
-    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-      cmd_buf_cur_cmd_group_addr = alloc_device_mem(
-          devid, pmem_cur_cmd_group, binary->size(), "SOC_CMDBUF_MEM", 1);
-      bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
-                             (unsigned long long *)&buffer);
+    // Check in_device first for the src: the raw cmd is already in the app-passed
+    // device DDR (whole-file buffer); read it directly via the host-view offset
+    // (same address expression as read_binary:
+    // bmodel_pointer_ + header + flatbuffers + binary->start()),
+    // no SOC_CMDBUF_MEM alloc, no host new u8[] staging copy.
+    if (in_device) {
+      buffer = (u8 *)g_bmodel_host_ptr + model_ctx->header().header_size +
+               model_ctx->header().flatbuffers_size + binary->start();
     } else {
-      buffer = new u8[binary->size()];
+      // Non-in_device: read raw cmd from the bmodel stream into a temp buffer first
+      if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+        cmd_buf_cur_cmd_group_addr = alloc_device_mem(
+            devid, pmem_cur_cmd_group, binary->size(), "SOC_CMDBUF_MEM", 1);
+        bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
+                               (unsigned long long *)&buffer);
+      } else {
+        buffer = new u8[binary->size()];
+      }
+      model_ctx->read_binary(binary, buffer);
     }
-    model_ctx->read_binary(binary, buffer);
     ConversionParams params = {.dst_cmd = (u8*)p_cmd_buf + cmd_offset,
                                .src_cmd = buffer,
                                .num_cmd = get_num(cmd_group),
@@ -170,7 +196,9 @@ void Bmruntime::cmd_convert_and_load(
                                .stage = stage};
     convert(params);
 
-    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+    if (in_device) {
+      // buffer is a read-only pointer into the app-passed buffer, no free needed
+    } else if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
       bm_mem_unmap_device_mem(m_handles[devid], buffer, binary->size());
     } else {
       delete[] buffer;
@@ -182,7 +210,7 @@ void Bmruntime::cmd_convert_and_load(
                              cmd_buf_addr);
   memory->Init(descriptor, m_handles[devid], pmem, p_cmd_buf,
                m_flags & BM_RUNTIME_CHECK_MEM,
-               m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+               direct_device);
   if (support_bd_share) {
     m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
   }
@@ -2135,7 +2163,10 @@ bool Bmruntime::load_bmodel_in_device(void *p_bmodel, uint64_t dev_addr, size_t 
   }
   std::lock_guard<std::mutex> guard(m_load_mutex);
   m_bmodel_dev_addr = dev_addr;
-  return load_bmodel(&model_ctx, true);
+  g_bmodel_host_ptr = p_bmodel;
+  bool ret = load_bmodel(&model_ctx, true);
+  g_bmodel_host_ptr = nullptr;
+  return ret;
 }
 
 /* Load encrypted bmodel file, which is pre-compiled by bmcompiler */
@@ -2400,7 +2431,7 @@ void KernelModule::preload_funcs(int core_id, const std::string &backend) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-  if(backend == "BM1688" || backend == "SG2380" || backend == "BM1684X2"){
+  if(backend == "BM1688" || backend == "SG2380" || backend == "CV84X6"){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }

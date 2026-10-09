@@ -224,6 +224,7 @@ int bmdrv_software_init(struct bm_device_info *bmdi)
 	u32 core_num = cinfo->tpu_core_num;
 
 	INIT_LIST_HEAD(&bmdi->handle_list);
+	spin_lock_init(&bmdi->handle_lock);
 	bmdrv_sw_register_init(bmdi);
 	mutex_init(&bmdi->clk_reset_mutex);
 	mutex_init(&bmdi->device_mutex);

@@ -55,20 +55,20 @@ static void print_subnet_time(const SUBNET_INFO_T * subnet, int idx, long elapse
   }
 }
 
-// [MLIR-925] Dynamic-subnet submit+sync lock is ON BY DEFAULT, serializing
-// ONLY the DYNAMIC subnet's submit+sync across cores, so two cores never execute
-// a dynamic subnet's shared command buffer concurrently (the device-confirmed
-// hang point). Static subnets keep their per-core parallelism.
-// Set BMRT_DYN_SUBMIT_LOCK_FREE=1 to opt out (e.g. after the firmware base_msgid
-// slot-collision defect is fixed, or for scenarios with no dual-core dynamic
-// conflict and a desire to reclaim dynamic parallelism).
+// [MLIR-925] Dynamic-subnet submit+sync lock is OFF BY DEFAULT, so the dynamic
+// subnet's submit+sync runs in parallel across cores. The firmware base_msgid
+// slot-collision defect (the device-confirmed hang point) is fixed, so the
+// serialization workaround is no longer needed by default.
+// Set BMRT_DYN_SUBMIT_LOCK=1 to opt back in (e.g. when running the pre-fix
+// firmware that still needs the two cores to never execute a dynamic subnet's
+// shared command buffer concurrently).
 static bool sd_dyn_submit_lock_on()
 {
   static int v = -1;
   if (v < 0) {
-    // default: lock ON. BMRT_DYN_SUBMIT_LOCK_FREE=1 -> lock OFF.
-    const char* e = getenv("BMRT_DYN_SUBMIT_LOCK_FREE");
-    v = (e && atoi(e)) ? 0 : 1;
+    // default: lock OFF. BMRT_DYN_SUBMIT_LOCK=1 -> lock ON.
+    const char* e = getenv("BMRT_DYN_SUBMIT_LOCK");
+    v = (e && atoi(e)) ? 1 : 0;
   }
   return v != 0;
 }

@@ -445,9 +445,9 @@ private:
   u32 MAX_API_MSG_SIZE;
 };
 
-class Launcher_BM1684X2 : public Launcher {
+class Launcher_CV84X6 : public Launcher {
 public:
-  Launcher_BM1684X2(addr_t addr_layout) : Launcher(addr_layout) {
+  Launcher_CV84X6(addr_t addr_layout) : Launcher(addr_layout) {
     BM_API_ID_MULTI_FULLNET = 0x0ffffffb;
     BM_API_ID_DYNAMIC_FULLNET = 0x0ffffffc;
     BM_API_ID_SET_PROFILE_ENABLE = 986;

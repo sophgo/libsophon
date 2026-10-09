@@ -1,11 +1,11 @@
-#ifndef BM1684X2_PROFILE_H
-#define BM1684X2_PROFILE_H
+#ifndef CV84X6_PROFILE_H
+#define CV84X6_PROFILE_H
 #include "bmruntime_profile.h"
 
 using namespace bmruntime;
-namespace bm1684x2_profile {
+namespace cv84x6_profile {
 
-// PMU record layout is taken verbatim from the bm1684x2 firmware
+// PMU record layout is taken verbatim from the cv84x6 firmware
 // (TPU1686/bm1684x2/firmware_base/src/firmware/firmware_pmu.c). Keep these
 // structs byte-identical with the firmware so the perf-monitor buffers copied
 // back from device parse correctly.
@@ -83,4 +83,4 @@ private:
 };
 
 }
-#endif // BM1684X2_PROFILE_H
+#endif // CV84X6_PROFILE_H

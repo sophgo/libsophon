@@ -57,6 +57,7 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	pid_t open_pid;
 	struct bm_handle_info *h_info;
 	struct bm_thread_info *thd_info = NULL;
+	unsigned long flags;
 	int i;
 
 	PR_TRACE("bmdev_open\n");
@@ -111,7 +112,9 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->handle_lock, flags);
 	list_add(&h_info->list, &bmdi->handle_list);
+	spin_unlock_irqrestore(&bmdi->handle_lock, flags);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	file->private_data = bmdi;
@@ -161,6 +164,7 @@ static int bmdev_close(struct inode *inode, struct file *file)
 {
 	struct bm_device_info *bmdi = file->private_data;
 	struct bm_handle_info *h_info;
+	unsigned long flags;
 #ifdef SOC_MODE
 	struct bm_handle_info *h_node;
 	int handle_num = 0;
@@ -199,9 +203,12 @@ static int bmdev_close(struct inode *inode, struct file *file)
 #endif
 
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
-	bmdrv_delete_thread_info(bmdi, h_info);
+	bmdrv_unbind_thread_info(bmdi, h_info);
+	spin_lock_irqsave(&bmdi->handle_lock, flags);
 	list_del(&h_info->list);
+	bmdrv_delete_thread_info(h_info);
 	kfree(h_info);
+	spin_unlock_irqrestore(&bmdi->handle_lock, flags);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	file->private_data = NULL;

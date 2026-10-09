@@ -138,7 +138,7 @@ public:
         return this->core_list;
     }
 
-    // Accessors used by the AKSV-style device profile (bm1684x2) to emit the
+    // Accessors used by the AKSV-style device profile (cv84x6) to emit the
     // instruction-descriptor (BLOCK_DES_*) blocks. record_subnet_cmd_info keeps
     // the per-core command base addresses; record_cmd_data caches the command
     // binary keyed by (device addr, core, engine).

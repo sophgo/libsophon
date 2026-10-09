@@ -29,5 +29,7 @@ struct bm_thread_info {
 struct bm_handle_info;
 struct bm_thread_info *bmdrv_find_thread_info(struct bm_handle_info *h_info, pid_t pid);
 struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, pid_t pid);
-void bmdrv_delete_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info);
+void bmdrv_unbind_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info);
+/* Caller holds bmdi->handle_lock. Does not sleep. */
+void bmdrv_delete_thread_info(struct bm_handle_info *h_info);
 #endif

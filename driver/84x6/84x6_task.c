@@ -161,7 +161,7 @@ static void bmdev_handle_hwq_tasklet_func(struct bm_device_info *bmdi,
 {
     struct api_fifo_entry entry;
     struct list_head *handle_list = NULL;
-    unsigned long flags;
+    unsigned long flags, hflags;
     bm_kernel_info *pstBmKernelInfo = bmdi->pstBmKernelInfo;
     int free_count, used_count;
     static unsigned int processing_count = 0;
@@ -197,7 +197,8 @@ static void bmdev_handle_hwq_tasklet_func(struct bm_device_info *bmdi,
                                              entry.api_data,
                                              pst_hw_q_info->filename);
                 }
-                spin_lock_irqsave(&pst_hw_q_info->hwq_spinlock, flags);;
+                spin_lock_irqsave(&pst_hw_q_info->hwq_spinlock, flags);
+                spin_lock_irqsave(&bmdi->handle_lock, hflags);
                 list_for_each(handle_list, &bmdi->handle_list) {
                     if (container_of(handle_list, struct bm_handle_info, list)
                         == entry.h_info)
@@ -224,9 +225,10 @@ static void bmdev_handle_hwq_tasklet_func(struct bm_device_info *bmdi,
                              entry.thd_info->user_pid,
                              entry.thd_api_seq[hwq_idx]);
                 }
+                spin_unlock_irqrestore(&bmdi->handle_lock, hflags);
                 bmdev_shared_mem_free(bmdi, entry.api_data);
 
-                spin_unlock_irqrestore(&pst_hw_q_info->hwq_spinlock, flags);;
+                spin_unlock_irqrestore(&pst_hw_q_info->hwq_spinlock, flags);
             } else {
                 pr_err("tasklet: Failed to pop data\n");
             }

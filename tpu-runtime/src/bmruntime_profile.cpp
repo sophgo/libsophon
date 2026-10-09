@@ -4,7 +4,7 @@
 #include "bm1682_profile.h"
 #include "bm1684_profile.h"
 #include "bm1684x_profile.h"
-#include "bm1684x2_profile.h"
+#include "cv84x6_profile.h"
 #include "bm1688_profile.h"
 #include "cv184x_profile.h"
 #ifndef __linux__
@@ -65,8 +65,8 @@ BMProfile::BMProfile(Bmruntime* p_bmrt): p_bmrt(p_bmrt), enabled(false) {
       device = decltype(device)(new bm1684x_profile::BMProfileDevice(this));
     } else if (arch == "BM1688") {
       device = decltype(device)(new bm1688_profile::BMProfileDevice(this));
-    } else if (arch == "BM1684X2") {
-      device = decltype(device)(new bm1684x2_profile::BMProfileDevice(this));
+    } else if (arch == "CV84X6") {
+      device = decltype(device)(new cv84x6_profile::BMProfileDevice(this));
     } else if (arch == "CV184X") {
       device = decltype(device)(new cv184x_profile::BMProfileDevice(this));
     } else {
@@ -172,7 +172,7 @@ void BMProfile::record_cmd_data(int core_idx, ENGINE_ID engine, const void *cmd_
     BMRT_LOG(INFO, "[prof] record_cmd_data core=%d engine=%d store_addr=0x%llx len=%u",
              core_idx, (int)engine, (unsigned long long)store_addr, cmd_len);
     // Cache the command binary in memory keyed by (addr, core, engine) so the
-    // AKSV-style device profile (bm1684x2) can emit BLOCK_DES_* blocks without
+    // AKSV-style device profile (cv84x6) can emit BLOCK_DES_* blocks without
     // re-reading it from device.
     {
         char key[128] = {0};
@@ -183,9 +183,9 @@ void BMProfile::record_cmd_data(int core_idx, ENGINE_ID engine, const void *cmd_
         BMRT_LOG(INFO, "[prof] cmd_data_map now has %zu entries (key=%s -> %zu bytes)",
                  cmd_data_map.size(), key, slot.size());
     }
-    // The bm1684x2 profile uses the tpuv7 AKSV output layout and does not
+    // The cv84x6 profile uses the tpuv7 AKSV output layout and does not
     // consume these per-command .dat files; skip them for that arch.
-    if (p_bmrt->backend()->name() == "BM1684X2") return;
+    if (p_bmrt->backend()->name() == "CV84X6") return;
     char filename[256] = {0};
     sprintf(filename, "cmd_%llx_%d_%d.dat", store_addr, core_idx, engine);
     auto path = get_save_dir();
@@ -428,7 +428,7 @@ void BMProfile::end_profile(net_ctx_t* net_ctx)
         auto& v_log = bm1682_profile::get_log();
         write_block(BLOCK_FIRMWARE_LOG, v_log.size(), v_log.data());
         v_log.clear();
-    } else if (p_bmrt->backend()->name() == "BM1684X2") {
+    } else if (p_bmrt->backend()->name() == "CV84X6") {
         // tpuv7 AKSV layout: the device profile emits BLOCK_DES_* (13/14) from
         // cmd_infos, so they must survive until device->end() runs.  Skip the
         // legacy BLOCK_CMD (8) write+free, then release cmd_infos afterwards.

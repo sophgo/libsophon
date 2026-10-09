@@ -339,6 +339,8 @@ struct bm_device_info {
 	struct bm_gmem_info gmem_info;
 
 	struct list_head handle_list;
+	/* Same lock for list add/del and the 84x6 completion tasklet. */
+	spinlock_t handle_lock;
 
 	struct bm_memcpy_info memcpy_info;
 

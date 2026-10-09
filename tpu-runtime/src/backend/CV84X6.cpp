@@ -22,7 +22,7 @@ extern "C" bm_status_t tpu_kernel_launch_from_multi_cores(
 }
 #endif
 
-void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
+void Launcher_CV84X6::fill_api_info(const tpu_net_info_t &net_info,
                                       api_info_t &api_info) {
   BMRT_ASSERT_INFO(net_info.neuron_start_addr.size() == 1,
                    "only support one neuron addr");
@@ -178,7 +178,7 @@ void Launcher_BM1684X2::fill_api_info(const tpu_net_info_t &net_info,
 }
 
 
-bm_status_t Launcher_BM1684X2::static_subnet(
+bm_status_t Launcher_CV84X6::static_subnet(
     bm_handle_t handle, const tpu_net_info_t &net_info) {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
 
@@ -264,7 +264,7 @@ bm_status_t Launcher_BM1684X2::static_subnet(
   return status;
 }
 
-bm_status_t Launcher_BM1684X2::dynamic_subnet(
+bm_status_t Launcher_CV84X6::dynamic_subnet(
     bm_handle_t handle, const tpu_dynamic_net_info_t &net_info)
 {
   const auto &inputs = net_info.inputs;
@@ -403,7 +403,7 @@ bm_status_t Launcher_BM1684X2::dynamic_subnet(
 }
 
 bm_status_t
-Launcher_BM1684X2::_bmdnn_set_profile_enable_(bm_handle_t handle,
+Launcher_CV84X6::_bmdnn_set_profile_enable_(bm_handle_t handle,
                                               tpu_kernel_function_t func_id,
                                               unsigned int enable_bits) {
   BMRT_ASSERT_INFO(handle, "handle shouldn't be NULL\n");
@@ -419,7 +419,7 @@ Launcher_BM1684X2::_bmdnn_set_profile_enable_(bm_handle_t handle,
   return status;
 }
 
-bm_status_t Launcher_BM1684X2::_bmdnn_get_profile_data_(
+bm_status_t Launcher_CV84X6::_bmdnn_get_profile_data_(
     bm_handle_t handle, int core, tpu_kernel_function_t func_id,
     unsigned long long output_global_addr, unsigned int output_max_size,
     unsigned int byte_offset,
@@ -470,7 +470,7 @@ bm_status_t Launcher_BM1684X2::_bmdnn_get_profile_data_(
   return status;
 }
 
-bm_status_t Launcher_BM1684X2::_bmdnn_set_engine_profile_param_(
+bm_status_t Launcher_CV84X6::_bmdnn_set_engine_profile_param_(
     bm_handle_t handle, tpu_kernel_function_t func_id,
     const void* args, size_t size) {
   // Pass through the whole packed vParams buffer; broadcast once to all 4

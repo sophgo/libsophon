@@ -303,13 +303,13 @@ public:
 
   virtual bool support_dynamic_loading() const override { return true; }
 };
-class Backend_BM1684X2 : public Backend {
+class Backend_CV84X6 : public Backend {
 public:
-  Backend_BM1684X2() {
-    launcher_ = std::make_unique<Launcher_BM1684X2>(addr_layout());
+  Backend_CV84X6() {
+    launcher_ = std::make_unique<Launcher_CV84X6>(addr_layout());
     core_num_ = 4;
   }
-  virtual ~Backend_BM1684X2() = default;
+  virtual ~Backend_CV84X6() = default;
 
   virtual uint64_t gmem_start_addr() const override { return 0x1000000000ul; }
   virtual addr_t addr_layout() const override {
@@ -318,7 +318,11 @@ public:
                   .tag = tag_t{.start = 40, .len = 5, .mask = (1ull << 5) - 1}};
   }
 
-  virtual std::string name() const override { return "BM1684X2"; }
+  virtual std::string name() const override { return "CV84X6"; }
+  // Bmodels compiled before the rename carry the legacy chip name.
+  virtual bool name_verify(const std::string &model_name) const override {
+    return model_name == name() || model_name == "BM1684X2";
+  }
 
   virtual uint32_t core_num() const { return 4; }
 
@@ -356,7 +360,7 @@ static std::shared_ptr<Backend> register_backend(uint32_t chipip) {
   } else if (chipip == 0x184) {
     return std::make_shared<Backend_CV184X>();
   } else if (chipip == 0x1694 || chipip == 0x16940000 || chipip == 0x16862) {
-    return std::make_shared<Backend_BM1684X2>();
+    return std::make_shared<Backend_CV84X6>();
   } else if (chipip == 0x2260) {
     return std::make_shared<Backend_BM1690>();
   } else if (chipip == 0x2260e) {
