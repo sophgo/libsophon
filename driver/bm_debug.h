@@ -31,23 +31,21 @@ struct bm_arm9fw_log_mem {
 };
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-#define BM_PROC_OWNER    .proc_ioctl
+#define BM_PROC_OWNER(_val)     /* proc_ops has no .owner field */
 #define BM_PROC_OPEN     .proc_open
 #define BM_PROC_READ     .proc_read
 #define BM_PROC_WRITE    .proc_write
 #define BM_PROC_LLSEEK   .proc_lseek
 #define BM_PROC_RELEASE  .proc_release
 #define BM_PROC_FILE_OPS  proc_ops
-#define BM_PROC_MODULE    NULL
 #else
-#define BM_PROC_OWNER    .owner
+#define BM_PROC_OWNER(_val)     .owner = _val,
 #define BM_PROC_OPEN     .open
 #define BM_PROC_READ     .read
 #define BM_PROC_WRITE    .write
 #define BM_PROC_LLSEEK   .llseek
 #define BM_PROC_RELEASE  .release
 #define BM_PROC_FILE_OPS file_operations
-#define BM_PROC_MODULE THIS_MODULE
 #endif
 
 #endif

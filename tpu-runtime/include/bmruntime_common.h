@@ -21,11 +21,18 @@
 #include <vector>
 #include <string.h>
 #include <memory>
+#include <type_traits>
 #include "bmlib_runtime.h"
 #include "bmruntime_interface.h"
 #include "bmruntime_legacy.h"
 
 #define MAX_DEVICE_NUM (32)
+
+#ifdef _WIN32
+#define BMRT_WEAK
+#else
+#define BMRT_WEAK __attribute__((weak))
+#endif
 
 #ifdef DEBUG
 #define BMRT_DEBUG(fmt, ...)                                                      \
@@ -130,7 +137,7 @@ typedef enum {
 #ifdef __linux__
 #define ALIGN(x, a) __ALIGN_MASK(x, (__typeof__(x))(a)-1)
 #else
-#define ALIGN(x, a) __ALIGN_MASK(x, (decltype(x))(a)-1)
+#define ALIGN(x, a) __ALIGN_MASK(x, (std::decay<decltype(x)>::type)(a)-1)
 #endif
 
 #define BMRT_ASSERT_INFO(_cond, fmt, ...)                            \
@@ -313,6 +320,7 @@ typedef enum {
   kTagUsers = 0,
   kTagWeight = 1,
   kTagActivation = 2,
+  kTagIoAlone = 3
 } TagType;
 
 #if defined(__cplusplus)

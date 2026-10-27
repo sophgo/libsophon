@@ -22,7 +22,7 @@
 
 void bm1684_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev);
 void bm1684_map_bar_p2p(struct bm_device_info *bmdi, unsigned long long dst);
-void bm1684_unmap_bar(struct bm_bar_info *bari);
+void bm1684_unmap_bar(struct bm_device_info *bmdi);
 int bm1684_setup_bar_dev_layout(struct bm_device_info *bmdi, BAR_LAYOUT_TYPE type);
 void bm1684_pcie_calculate_cdma_max_payload(struct bm_device_info *bmdi);
 void pci_slider_bar4_config_device_addr(struct bm_bar_info *bari, u32 addr);

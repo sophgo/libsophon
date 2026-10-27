@@ -84,6 +84,8 @@ typedef struct bm_smi_attr {
   int tpu_util;
   int tpu_util0;
   int tpu_util1;
+  int tpu_util2;
+  int tpu_util3;
 
   int board_temp;
   int chip_temp;

@@ -10,6 +10,9 @@
 #define BM_MAX_CHIP_NUM                 1
 #endif
 #define BM_MAX_CORE_NUM			2
+#define BM_MAX_HWQ_NUM			8
+
+
 
 struct bm_card {
 	int card_index;
@@ -30,8 +33,10 @@ struct bm_card {
 
 int bmdrv_card_init(struct bm_device_info *bmdi);
 int bmdrv_card_deinit(struct bm_device_info *bmdi);
+int bm_get_available_card_index(void);
 int bm_get_card_num_from_system(void);
 int bm_get_chip_num_from_system(void);
 int bm_get_card_info(struct bm_card *bmcd);
 struct bm_card *bmdrv_card_get_bm_card(struct bm_device_info *bmdi);
+struct bm_device_info *bmdrv_get_bmdi_by_devid(int dev_index);
 #endif

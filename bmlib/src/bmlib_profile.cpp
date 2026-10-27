@@ -1134,6 +1134,10 @@ bm_status_t bm1688_mcu_deinit(bm_handle_t handle, bmlib_profile_t* profile, FILE
 			if (total_len==0) {
 				total_len = u32_ptr[1];
 			}
+			if (read_len == 0 ||
+			    read_len + sizeof(u32) * 2 > profile->cores[core_id].mcu_buffer.size) {
+				break;
+			}
 			auto data_ptr = (u8*)&u32_ptr[2];
 			data.insert(data.end(), data_ptr, data_ptr + read_len);
 			offset += read_len;
@@ -1246,7 +1250,21 @@ struct bm_arch_profile_info_t {
 std::map<int, bm_arch_profile_info_t> _global_arch_profile_map = {
 	ARCH_ITEM(1684, 0x1684, 1),
 	ARCH_ITEM(1686, 0x1686, 3),
-	ARCH_ITEM(1688, 0x1686a200, 4),
+	ARCH_ITEM(1688, BM_CHIP_ID_1688, 4),
+	{ BM_CHIP_ID_84X6,
+	  {
+		  4,
+		  bm1688_tiu_init,
+		  bm1688_gdma_init,
+		  bm1688_mcu_init,
+		  bm1688_tiu_deinit,
+		  bm1688_gdma_deinit,
+		  bm1688_mcu_deinit,
+		  bm1688_final_init,
+		  bm1688_final_deinit,
+		  (u32)sizeof(BM1688_TPU_PROFILE_FORMAT),
+		  (u32)sizeof(BM1688_GDMA_PROFILE_FORMAT),
+	  } },
 };
 
 
@@ -1309,6 +1327,8 @@ bm_status_t bm_profile_create(bm_handle_t handle, bool force_enable)
 
 	unsigned int core_num = 1;
 	bm_get_tpu_scalar_num(handle, &core_num);
+	if (arch_code == BM_CHIP_ID_84X6)
+		core_num = 1;
 	profile->cores.resize(core_num);
 	profile->dir = "bmprofile_data-" + std::to_string(handle->dev_id);
 	bm_mkdir(profile->dir.c_str(), false);

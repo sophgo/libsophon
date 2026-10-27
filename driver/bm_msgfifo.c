@@ -780,7 +780,10 @@ int bmdev_get_idle_coreid(struct bm_device_info *bmdi)
 #ifndef SOC_MODE
 void bm_msg_request_irq(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.chip_id == 0x1686a200) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return;
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_0, bmdrv_msg_irq_handler_xpu_0);
 		bmdrv_submodule_request_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_1, bmdrv_msg_irq_handler_xpu_1);
 #ifdef PCIE_MODE_ENABLE_CPU
@@ -796,7 +799,10 @@ void bm_msg_request_irq(struct bm_device_info *bmdi)
 
 void bm_msg_free_irq(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.chip_id == 0x1686a200) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return;
+
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_0);
 		bmdrv_submodule_free_irq(bmdi, MSG_IRQ_ID_CHANNEL_XPU_A2_1);
 #ifdef PCIE_MODE_ENABLE_CPU

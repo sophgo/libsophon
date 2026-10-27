@@ -48,7 +48,7 @@ int trigger_vpp(struct bm_device_info *bmdi, unsigned long arg)
 void bm_vpp_request_irq(struct bm_device_info *bmdi)
 {
 	if(NULL == bmdi->vppdrvctx.bm_vpp_request_irq) {
-		printk("bm_vpp_request_irqfailed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
+		printk("bm_vpp_request_irq failed, bmdi->cinfo.chip_id %d\n",bmdi->cinfo.chip_id);
 		return;
 	}
 

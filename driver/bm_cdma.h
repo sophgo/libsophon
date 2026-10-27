@@ -1,6 +1,8 @@
 #ifndef _BM_CDMA_H_
 #define _BM_CDMA_H_
 
+#include <linux/scatterlist.h>
+
 struct bm_device_info;
 struct bm_memcpy_info;
 typedef enum memcpy_dir
@@ -114,6 +116,7 @@ void bmdrv_cdma_irq_handler1(struct bm_device_info *bmdi);
 #include "bm1682_cdma.h"
 #include "bm1684_cdma.h"
 #include "bm1688_cdma.h"
+#include "84x6_cdma.h"
 #include "bm1682_smmu.h"
 #include "bm1684_smmu.h"
 #endif

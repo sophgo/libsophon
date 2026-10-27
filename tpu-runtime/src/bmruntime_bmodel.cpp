@@ -35,6 +35,15 @@
 
 namespace bmruntime {
 
+// Host-view base address of the whole-file buffer passed in by the calling
+// application ("app") under load_bmodel_in_device (model bytes already in
+// device DDR, loaded in place; "in_device mode" below). Used for direct cmd read.
+// Use a file-scope thread_local variable instead of a Bmruntime member to avoid
+// touching include/bmruntime.h (that header is ABI-sensitive and must not change).
+// load_bmodel_in_device sets it before the synchronous load chain and clears it
+// after; thread_local keeps concurrent multi-instance loads from interfering.
+static thread_local void *g_bmodel_host_ptr = nullptr;
+
 static void fill_tensor_attr(
     const bmodel::Tensor* tensor,
     tensor_attr_t* attr,
@@ -43,7 +52,7 @@ static void fill_tensor_attr(
     const std::vector<u64> &ctx_offset,
     uint32_t flags,
     addr_t addr_traits,
-    addr_mode_t io_mode)
+    uint32_t tag_limit)
 {
   attr->shape.num_dims = tensor->shape()->Get(0)->dim()->size();
   for (int i = 0; i < attr->shape.num_dims; i++) {
@@ -52,7 +61,7 @@ static void fill_tensor_attr(
   u64 addr = tensor->device_addr();
   attr->cmd_addr = addr;
   uint32_t tag = (addr >> addr_traits.tag.start) & addr_traits.tag.mask;
-  if (tag <= kTagActivation) {
+  if (tag <= tag_limit) {
     addr += ctx_offset[get_mem_index(ctx_borders, ctx_start, addr)];
     addr &= addr_traits.offset.mask;
   }
@@ -69,7 +78,7 @@ static void fill_tensor_attr(
     const std::vector<u64> &ctx_offset,
     uint32_t flags,
     addr_t addr_traits,
-    addr_mode_t io_mode)
+    uint32_t tag_limit)
 {
   for (u32 i = 0; i < tensors->size(); i++) {
     auto tensor = tensors->Get(i);
@@ -77,7 +86,7 @@ static void fill_tensor_attr(
       continue;
     }
     tensor_attr_t attr;
-    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, io_mode);
+    fill_tensor_attr(tensor, &attr, ctx_start, ctx_borders, ctx_offset, flags, addr_traits, tag_limit);
     tensor_v.push_back(attr);
   }
 }
@@ -106,15 +115,43 @@ void Bmruntime::cmd_convert_and_load(
     std::vector<const bmodel::CmdGroup *> &cmd_groups, u32 core_idx,
     ENGINE_ID engine, std::string descriptor, BinaryFunc get_binary,
     NumFunc get_num, ConversionFunc convert, BmMemory *memory) {
+  // in_device mode is derived from g_bmodel_host_ptr being non-null (set only by in_device load).
+  bool in_device = (g_bmodel_host_ptr != nullptr);
   if (cmd_word_num == 0) {
     return;
   }
+  bool support_bd_share = false;
+  vector<u64> bdc_start;
+  if (engine == ENGINE_BD) {
+    // TODO: only bdc support share, from cv84x6, gdma should support share too
+    support_bd_share = (m_bdc_fixed) && (!m_profile->is_enabled());
+    if (support_bd_share) {
+      for (auto cmd_group : cmd_groups) {
+        if (0 == cmd_group->bdc_num()) {
+          continue;
+        }
+        bdc_start.push_back(cmd_group->binary_bdc()->start());
+      }
+      bm_device_mem_t pmem;
+      bool is_exist = get_bdc_mem(bdc_start, pmem);
+      if (is_exist) {
+        // use the existing bdc memory
+        memory->Init(descriptor, m_handles[devid], pmem);
+        return;
+      }
+    }
+  }
+
   bm_device_mem_t pmem;
   u64 cmd_buf_addr =
       alloc_device_mem(devid, pmem, cmd_word_num, descriptor + "_cmd_mem", 4);
   std::vector<u32> cmd_buf;
   u32 *p_cmd_buf = NULL;
-  if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+  // Under in_device mode the raw cmd is already in the device-DDR buffer passed in
+  // by the app: mmap the convert destination straight into bd_cmd_mem (flushed at
+  // the end), saving the host staging copy + the SOC_CMDBUF_MEM residency.
+  bool direct_device = (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) || in_device;
+  if (direct_device) {
     bm_mem_mmap_device_mem(m_handles[devid], &pmem,
                            (unsigned long long *)&p_cmd_buf);
   } else {
@@ -131,15 +168,26 @@ void Bmruntime::cmd_convert_and_load(
     bm_device_mem_t pmem_cur_cmd_group;
     u64 cmd_buf_cur_cmd_group_addr = 0;
     const auto binary = get_binary(cmd_group);
-    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
-      cmd_buf_cur_cmd_group_addr = alloc_device_mem(
-          devid, pmem_cur_cmd_group, binary->size(), "SOC_CMDBUF_MEM", 1);
-      bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
-                             (unsigned long long *)&buffer);
+    // Check in_device first for the src: the raw cmd is already in the app-passed
+    // device DDR (whole-file buffer); read it directly via the host-view offset
+    // (same address expression as read_binary:
+    // bmodel_pointer_ + header + flatbuffers + binary->start()),
+    // no SOC_CMDBUF_MEM alloc, no host new u8[] staging copy.
+    if (in_device) {
+      buffer = (u8 *)g_bmodel_host_ptr + model_ctx->header().header_size +
+               model_ctx->header().flatbuffers_size + binary->start();
     } else {
-      buffer = new u8[binary->size()];
+      // Non-in_device: read raw cmd from the bmodel stream into a temp buffer first
+      if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+        cmd_buf_cur_cmd_group_addr = alloc_device_mem(
+            devid, pmem_cur_cmd_group, binary->size(), "SOC_CMDBUF_MEM", 1);
+        bm_mem_mmap_device_mem(m_handles[devid], &pmem_cur_cmd_group,
+                               (unsigned long long *)&buffer);
+      } else {
+        buffer = new u8[binary->size()];
+      }
+      model_ctx->read_binary(binary, buffer);
     }
-    model_ctx->read_binary(binary, buffer);
     ConversionParams params = {.dst_cmd = (u8*)p_cmd_buf + cmd_offset,
                                .src_cmd = buffer,
                                .num_cmd = get_num(cmd_group),
@@ -148,7 +196,9 @@ void Bmruntime::cmd_convert_and_load(
                                .stage = stage};
     convert(params);
 
-    if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
+    if (in_device) {
+      // buffer is a read-only pointer into the app-passed buffer, no free needed
+    } else if (m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) {
       bm_mem_unmap_device_mem(m_handles[devid], buffer, binary->size());
     } else {
       delete[] buffer;
@@ -160,7 +210,10 @@ void Bmruntime::cmd_convert_and_load(
                              cmd_buf_addr);
   memory->Init(descriptor, m_handles[devid], pmem, p_cmd_buf,
                m_flags & BM_RUNTIME_CHECK_MEM,
-               m_flags & BM_RUNTIME_SOC_CMDBUF_MEM);
+               direct_device);
+  if (support_bd_share) {
+    m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
+  }
 }
 
 bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
@@ -172,51 +225,6 @@ bool Bmruntime::get_bdc_mem(const vector<u64> &key, bm_device_mem_t &mem) {
   return false;
 }
 
-void Bmruntime::convert_bdc(ModelCtx *model_ctx,
-                            u32 cmd_word_num,
-                            u32 devid,
-                            net_stage_t *stage,
-                            std::vector<const bmodel::CmdGroup *> &cmd_groups,
-                            u32 core_idx) {
-  if (cmd_word_num == 0) {
-    return;
-  }
-  vector<u64> bdc_start;
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    bdc_start.push_back(cmd_group->binary_bdc()->start());
-  }
-  bm_device_mem_t pmem;
-  bool is_exist = get_bdc_mem(bdc_start, pmem);
-  if (is_exist) {
-    // use the existing bdc memory
-    stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-    return;
-  }
-
-  u32 offset = 0;
-  u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "bd_cmd_mem", 4);
-  for (auto cmd_group : cmd_groups) {
-    if (0 == cmd_group->bdc_num()) {
-      continue;
-    }
-    u64 start = cmd_group->binary_bdc()->start();
-    u32 bytes = cmd_group->binary_bdc()->size();
-    u8 *bdc_buffer = new u8[bytes];
-    model_ctx->read_binary(cmd_group->binary_bdc(), bdc_buffer);
-    bm_memcpy_s2d_partial_offset(m_handles[devid], pmem,
-                                 (void *)bdc_buffer, bytes, offset);
-    if (bytes % 128 != 0) {
-      BMRT_LOG(WARNING, "bdc is not 128 bytes aligned");
-    }
-    offset += bytes;
-    delete[] bdc_buffer;
-  }
-  m_bdc_mem_map.insert(std::make_pair(bdc_start, pmem));
-  stage->core_commands[core_idx].bdc_mem.Init("bdc", m_handles[devid], pmem);
-}
 
 bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
                                   const bmodel::NetParameter* param,
@@ -262,22 +270,15 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
       } else {
         cmd_word_num = bdc_total_id * backend_->aligned_cmd_words(ENGINE_BD);
       }
-      bool use_bdc_new = (m_bdc_fixed) && !(m_flags & BM_RUNTIME_SOC_CMDBUF_MEM) && (!m_profile->is_enabled());
 
-      // fix: support check bdc_instruction when use_bdc_new
-      use_bdc_new = false;
-      if (use_bdc_new) {
-        // in fact, bdc no need to convert, just copy to mem for 1684x/1688/...
-        convert_bdc(model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx);
-      } else {
-        cmd_convert_and_load(
+      // ENGINE_BDC
+      cmd_convert_and_load(
             model_ctx, cmd_word_num, devid, stage, cmd_groups, core_idx,
             ENGINE_BD, "bd",
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->binary_bdc(); },
             [](const bmodel::CmdGroup *cmd_group) { return cmd_group->bdc_num(); },
             [&](ConversionParams &params) { return backend_->convert_bdc(params); },
             &stage->core_commands[core_idx].bdc_mem);
-      }
 
       // ENGINE_GDMA
       if (gdma_total_cmd_byte > 0) {
@@ -326,6 +327,24 @@ bool Bmruntime::setup_cmd_context(ModelCtx* model_ctx,
         m_profile->record_cmd_data(core_idx, ENGINE_SDMA, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
         stage->core_commands[core_idx].sdma_mem.Init("sdma", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
     }
+
+    // ENGINE_CDMA: iterate cdma_commands vector (one Binary per CDMA port)
+    auto cdma_commands = core_commands->Get(core_idx)->cdma_commands();
+    if (cdma_commands && cdma_commands->size() > 0) {
+      for (uint32_t i = 0; i < cdma_commands->size() && i < 2; i++) {
+        u32 cdma_cmd_byte = cdma_commands->Get(i)->size();
+        if (cdma_cmd_byte == 0) continue;
+        cmd_word_num = cdma_cmd_byte / sizeof(u32);
+        u64 cmd_buf_addr = alloc_device_mem(devid, pmem, cmd_word_num, "cdma_cmd_mem", 4);
+        std::vector<u32> cmd_buf(cmd_word_num);
+        auto p_cmd_buf = cmd_buf.data();
+        model_ctx->read_binary(cdma_commands->Get(i), (u8 *)p_cmd_buf);
+        m_profile->record_cmd_data(core_idx, ENGINE_CDMA, cmd_buf.data(), cmd_word_num * 4, cmd_buf_addr);
+        BmMemory cdma_entry;
+        cdma_entry.Init("cdma", m_handles[devid], pmem, cmd_buf.data(), m_flags&BM_RUNTIME_CHECK_MEM);
+        stage->core_commands[core_idx].cdma_mem.push_back(std::move(cdma_entry));
+      }
+    }
   }
 
   return true;
@@ -337,7 +356,7 @@ void Bmruntime::trace()
   fprintf(stderr, "*** bmruntime trace: ***\n");
   fprintf(stderr, "============ check coeff =============\n");
   for (int i = 0; i < m_device_num; i++) {
-    err_count += MemoryManager::Instance(i)->coeffMemory()->Check();
+    err_count += MemoryManager::Instance(m_handles[i])->coeffMemory()->Check();
   }
   int net_num = m_net_ctx_v.size();
   for (int i = 0; i < net_num; i++) {
@@ -830,7 +849,7 @@ bool Bmruntime::fill_net_ctx(
   if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
     // allocate memory for core 0, all net use the same memory, and the size is the max neuron size of all stages
     auto dev_id = net_ctx->device_id;
-    auto mem = MemoryManager::Instance(dev_id)->computeMemory();
+    auto mem = MemoryManager::Instance(m_handles[dev_id])->computeMemory();
     auto name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
     auto compute_context =
       mem->Create(name, model_neuron_size, 1, true);
@@ -851,7 +870,8 @@ bool Bmruntime::fill_net_ctx(
 
     stages[stage_idx].neuron_size = stage_sizes;
     stage_ctx_sizes.push_back(std::move(stage_sizes));
-    stages[stage_idx].io_start = stage->io_addr();
+    stages[stage_idx].io_start = stage->io_addr() & backend_->addr_layout().offset.mask;
+    stages[stage_idx].io_offset = 0;
     stages[stage_idx].io_size = stage->io_size();
     stages[stage_idx].core_num = std::max<u32>(stage->core_num(), 1u);
     auto subnet = params->Get(stage_idx)->sub_net();
@@ -863,6 +883,9 @@ bool Bmruntime::fill_net_ctx(
     if (m_flags & BM_RUNTIME_SHARE_DYNMEM) {
       stages[stage_idx].neuron_mem = {model_neuron_mem};
       stages[stage_idx].neuron_size = {model_neuron_size};
+    } else if (m_flags & BM_RUNTIME_NEURON_MEM_IN_PRE_ALLOC) {
+      // delayed alloc: skip neuron_mem DDR allocation in load stage
+      // neuron_mem stays empty, will be allocated in pre_alloc or launch
     } else {
       malloc_net_memory(net_ctx, &stages[stage_idx], core_mask);
     }
@@ -872,7 +895,7 @@ bool Bmruntime::fill_net_ctx(
       stages[stage_idx].coeff_offset = get_coeff_in_device(model_ctx, stage->coeff_mem());
     } else {
       std::string net_name = net_ctx->net_name + "_" + std::to_string((uint64_t)this);
-      stages[stage_idx].coeff_offset = MemoryManager::Instance(devid)->coeffMemory()
+      stages[stage_idx].coeff_offset = MemoryManager::Instance(m_handles[devid])->coeffMemory()
             ->Register(model_ctx, stage->coeff_mem(), net_name, backend_->addr_layout());
     }
 
@@ -1269,7 +1292,7 @@ bool Bmruntime::cascade_net_init(const Net* net, int net_idx, net_ctx_t* net_ctx
       net_ctx->device_id = net->cascade()->device_id() % m_device_num;
       net_ctx->step_id = net->cascade()->step();
       net_ctx->in_cascade = true;
-      auto ret = cascade_insert_net(net_idx, net_ctx, main_name);
+      auto ret = cascade_insert_net(m_net_ctx_v.size(), net_ctx, main_name);
       if (false == ret) {
         return false;
       }
@@ -1321,7 +1344,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
       }
       for (size_t i = 0; i < ctx_sizes.size(); ++i)
       {
-        if (net_stage->neuron_mem[i].size > 0) {
+        if (!net_stage->neuron_mem.empty() && net_stage->neuron_mem[i].size > 0) {
           u64 ctx_addr = bm_mem_get_device_addr_u64(net_stage->neuron_mem[i]);
           net_stage->ctx_offset[i] = ctx_addr - ctx_start;
           net_stage->dynamic_ctx_offset[i] = ctx_addr - dynamic_ctx_start;
@@ -1345,7 +1368,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     net_stage->cpu_mem_size = param->cpu_mem_size();
     net_stage->cpu_addr = nullptr;
 
-    auto coeff_mem = MemoryManager::Instance(devid)->coeffMemory();
+    auto coeff_mem = MemoryManager::Instance(m_handles[devid])->coeffMemory();
     mem_pair_t mem_pair = {
         bm_mem_get_device_addr_u64(coeff_mem->GetCoeffDeviceMem()),
         bm_mem_get_device_size_u64(coeff_mem->GetCoeffDeviceMem())};
@@ -1362,10 +1385,10 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
     }
     fill_tensor_attr(param->input_tensor(), net_stage->input_v, ctx_start,
                      ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
-                     (addr_mode_t)net_ctx->addr_mode);
+                     backend_->tag_reserved_limit());
     fill_tensor_attr(param->output_tensor(), net_stage->output_v, ctx_start,
                      ctx_borders, ctx_offset, m_flags, backend_->addr_layout(),
-                     (addr_mode_t)net_ctx->addr_mode);
+                     backend_->tag_reserved_limit());
 
     // setup subnet
     u32 core_num = std::max<u32>(param->core_num(), 1u);
@@ -1388,6 +1411,7 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
   net_ctx->mem_info_dict.emplace("gdma_cmd_mem", bmem_info.gdma_cmd_mem_size);
   net_ctx->mem_info_dict.emplace("hau_cmd_mem", bmem_info.hau_cmd_mem_size);
   net_ctx->mem_info_dict.emplace("sdma_cmd_mem", bmem_info.sdma_cmd_mem_size);
+  net_ctx->mem_info_dict.emplace("cdma_cmd_mem", bmem_info.cdma_cmd_mem_size);
   net_ctx->mem_info_dict.emplace("neuron_mem", bmem_info.neuron_mem_size);
   net_ctx->mem_info_dict.emplace("coeff_mem", bmem_info.coeff_mem_size);
   net_ctx->mem_info_dict.emplace("dynamic_ir_mem", bmem_info.dynamic_ir_mem_size);
@@ -1402,6 +1426,15 @@ bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, net_ctx_t* net
 bool Bmruntime::load_bmodel_net(ModelCtx* model_ctx, int net_idx, bool in_device, const mem_info_t *mem_info)
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
+
+  if (m_cascade_filter_dev_id >= 0) {
+    if (net->cascade() && net->cascade()->device_id() != m_cascade_filter_dev_id) {
+      BMRT_LOG(INFO, "Filter net[%s] cascade device_id[%d] != filter_dev_id[%d], skip",
+               net->name()->c_str(), net->cascade()->device_id(), m_cascade_filter_dev_id);
+      return true;
+    }
+  }
+
   for (auto each_net : m_net_ctx_v) {
     if (each_net->net_name == net->name()->str()) {
       BMRT_LOG(WARNING, "Warning: Net[%s] exist, does not load again", net->name()->c_str());
@@ -1684,6 +1717,10 @@ bool Bmruntime::load_bmodel(ModelCtx* model_ctx, bool in_device, const mem_info_
   load_tpu_module(model_ctx);
   load_cpu_module(model_ctx);
 
+  if (mem_info) {
+    dmem_info.clear();
+  }
+
   u32 cur_net_idx = m_net_ctx_v.size();
   for (u32 net_idx = 0; net_idx < load_net_num; net_idx++) {
     ret = load_bmodel_net(model_ctx, net_idx, in_device, mem_info);
@@ -1728,7 +1765,7 @@ bool Bmruntime::update_net_coeff(
 {
   auto net = model_ctx->model()->net()->Get(net_idx);
   auto param = net->parameter()->Get(0); // only update stage 0
-  MemoryManager::Instance(0)->coeffMemory()->Update( //default for soc device, only device 0
+  MemoryManager::Instance(m_handles[0])->coeffMemory()->Update( //default for soc device, only device 0
       model_ctx, param->coeff_mem(), mem_idx, weight_idx, file_data, start_position);
   return true;
 }
@@ -2154,7 +2191,10 @@ bool Bmruntime::load_bmodel_in_device(void *p_bmodel, uint64_t dev_addr, size_t 
   }
   std::lock_guard<std::mutex> guard(m_load_mutex);
   m_bmodel_dev_addr = dev_addr;
-  return load_bmodel(&model_ctx, true);
+  g_bmodel_host_ptr = p_bmodel;
+  bool ret = load_bmodel(&model_ctx, true);
+  g_bmodel_host_ptr = nullptr;
+  return ret;
 }
 
 /* Load encrypted bmodel file, which is pre-compiled by bmcompiler */
@@ -2202,6 +2242,17 @@ bool Bmruntime::load_context(const string& ctx_dir)
 
 void Bmruntime::fill_dmem_info(int64_t addr, uint64_t size, const std::string &desc) {
   if (addr != -1 || size == 0) {
+    auto iter = find(dmem_info.begin(), dmem_info.end(), desc);
+    if (iter != dmem_info.end()) {
+      BMRT_ASSERT_INFO(iter->addr == static_cast<uint64_t>(addr) && iter->size == size,
+                       "Error: device memory: %s changed across nets, addr=0x%llx size=0x%llx, prev_addr=0x%llx prev_size=0x%llx",
+                       desc.c_str(),
+                       static_cast<unsigned long long>(addr),
+                       static_cast<unsigned long long>(size),
+                       static_cast<unsigned long long>(iter->addr),
+                       static_cast<unsigned long long>(iter->size));
+      return;
+    }
     device_mem_info_t dmem;
     dmem.addr = addr;
     dmem.desc = desc;
@@ -2217,12 +2268,11 @@ void Bmruntime::set_device_mem_info(ModelCtx* model_ctx, const mem_info_t* mem_i
     return;
   }
   // TODO: refactor
-  auto inst = MemoryManager::Instance(0);
+  auto inst = MemoryManager::Instance(m_handles[0]);
   std::string name = net_name + "_" + std::to_string((uint64_t)this);
   // init basic info
   alloc_mem = false;
   bmodel::bmodel_mem_info_t bmem_info = model_ctx->get_bmodel_mem_info();
-  dmem_info.clear();
   if (mem_info->instruction_mem.addr != -1) {
     // instruction_mem: bdc_cmd + hau_cmd + dynamic_ir
     BMRT_ASSERT(mem_info->instruction_mem.number == 1);
@@ -2409,7 +2459,7 @@ void KernelModule::preload_funcs(int core_id, const std::string &backend) {
 
   _enable_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_profile", core_id);
   _get_profile_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_get_profile_data", core_id);
-  if(backend == "BM1688" || backend == "SG2380"){
+  if(backend == "BM1688" || backend == "SG2380" || backend == "CV84X6"){
     _set_engine_profile_param_func_id[core_id] = tpu_kernel_get_function_from_core(m_handle, _kernel_module, "sg_api_set_engine_profile_param", core_id);
   }
 }

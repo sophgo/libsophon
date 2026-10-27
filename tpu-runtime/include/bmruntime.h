@@ -75,15 +75,18 @@ struct BmMemory {
 struct single_core_command_t {
   vector<int> gdma_id;  // for static
   vector<int> bdc_id;   // for static
+  vector<int> cdma_id;  // for static
   vector<u32> gdma_cmd_byte; // for static
   vector<u32> bdc_cmd_byte; // for static
-
+  vector<u32> cdma_cmd_byte; // for static
   vector<cmd_reloc_entry_t> gdma_reloc_entries;  // for re-locating CMD-io-addr
 
   BmMemory gdma_mem;    // for static
   BmMemory bdc_mem;     // for static
   BmMemory hau_mem;     // for static
   BmMemory sdma_mem;    // for static
+  vector<BmMemory> cdma_mem;  // for static, one BmMemory per CDMA port
+
   u64 gdma_offset;      // for static subnet
   u64 bdc_offset;       // for static subnet
 
@@ -270,6 +273,12 @@ struct net_ctx_t {
   std::unordered_map<string, uint64_t> mem_info_dict;
 
   std::mutex neuron_mutex;                    // to avoid neuron mem used by other thread
+  // Per-core-mask lock: different cores hold different mutexes and run in
+  // parallel; the same core_mask shares the same per-core neuron buffer and is
+  // serialized. Paired with a per-launch local copy of net_stage_t so that a
+  // concurrent cross-core update_net_context no longer races the shared stage.
+  std::map<uint32_t, std::mutex> neuron_mutex_by_core;
+  std::mutex neuron_mutex_map_guard;          // guards lazy insertion into neuron_mutex_by_core
   bool is_dynamic = 0;
   int n_can_change = 0;                           // for dynamic
   int h_w_can_change = 0;                         // for dynamic
@@ -532,12 +541,6 @@ class Bmruntime {
                             std::string descriptor, BinaryFunc get_binary,
                             NumFunc get_num, ConversionFunc convert,
                             BmMemory *memory);
-  void convert_bdc(ModelCtx *model_ctx,
-                   u32 cmd_word_num,
-                   u32 devid,
-                   net_stage_t *stage,
-                   std::vector<const bmodel::CmdGroup *> &cmd_groups,
-                   u32 core_idx);
   const std::shared_ptr<Backend> &backend() const { return backend_; }
 
 protected:
@@ -687,6 +690,7 @@ protected:
   bool using_internal_hidden_tensors; /* internal initlized hidden_tensors device_mem or accept from user parameter when launch */
   bool using_internal_bm_handle; /* internal initlized bm_handle or accept from user parameter */
   int m_devids[MAX_DEVICE_NUM];
+  int m_cascade_filter_dev_id = -1;
   bool using_fast_allreduce;
   bool m_bdc_fixed; // whether bdc is fixed, if false, use bdc legacy
   uint64_t m_bmodel_dev_addr;

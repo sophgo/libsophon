@@ -4,7 +4,7 @@
 #include "bm_common.h"
 #include "bm_msgfifo.h"
 #include "bm1688_card.h"
-
+#include "84x6_card.h"
 
 static int bm_pm_thread(void *date)
 {
@@ -13,7 +13,7 @@ static int bm_pm_thread(void *date)
 
 	msleep(2000);
 
-	while (!kthread_should_stop()) {
+	while (!kthread_should_stop() && bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		mutex_lock(&bmdi->pm_thread_info.pm_mutex);
 		msg0_empty = bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_XPU, 0);
 		msg1_empty = bmdev_msgfifo_empty(bmdi, BM_MSGFIFO_CHANNEL_XPU, 1);

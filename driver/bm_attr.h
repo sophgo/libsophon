@@ -70,14 +70,19 @@ struct bm_chip_attr {
 	u64 npu_busy_time_sum_ms;
 	u64 npu_start_probe_time;
 #define NPU_STAT_WINDOW_WIDTH 50
+#define BM_MAX_TPU_CORE_NUM 4
 	int npu_status[NPU_STAT_WINDOW_WIDTH];
 	int npu_status_idx;
-	// bm1688 core 1
 	atomic_t npu_utilization1;
 	u64 npu_busy_time_sum_ms1;
 	u64 npu_start_probe_time1;
 	int npu_status1[NPU_STAT_WINDOW_WIDTH];
 	int npu_status_idx1;
+	atomic_t npu_util_core[BM_MAX_TPU_CORE_NUM];
+	int npu_status_core[BM_MAX_TPU_CORE_NUM][NPU_STAT_WINDOW_WIDTH];
+	int npu_status_idx_core[BM_MAX_TPU_CORE_NUM];
+	u64 npu_busy_time_sum_core[BM_MAX_TPU_CORE_NUM];
+	u64 npu_start_probe_time_core;
 	struct mutex attr_mutex;
 	atomic_t timer_on;
 	bool fan_control;

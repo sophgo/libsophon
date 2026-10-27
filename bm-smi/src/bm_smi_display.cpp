@@ -127,6 +127,8 @@ static void bm_smi_get_attr(bm_handle_t handle, int bmctl_fd, int dev_id) {
         g_attr[dev_id].tpu_util          = ATTR_FAULT_VALUE;
         g_attr[dev_id].tpu_util0         = ATTR_FAULT_VALUE;
         g_attr[dev_id].tpu_util1         = ATTR_FAULT_VALUE;
+        g_attr[dev_id].tpu_util2         = ATTR_FAULT_VALUE;
+        g_attr[dev_id].tpu_util3         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_temp        = ATTR_FAULT_VALUE;
         g_attr[dev_id].chip_temp         = ATTR_FAULT_VALUE;
         g_attr[dev_id].board_power       = ATTR_FAULT_VALUE;

@@ -123,6 +123,10 @@
 #define BMDEV_PWR_CTRL                _IOR('p', 0x97, unsigned long)
 #define BMDEV_GET_LIB_INFO            _IOWR('p', 0x98, unsigned long)
 
+#define BMDEV_SETUP_C2C               _IOWR('p', 0x99, unsigned long)
+#define BMDEV_SETUP_TOPOLOGY          _IOWR('p', 0x9A, unsigned long)
+#define BMDEV_GET_TOPOLOGY            _IOWR('p', 0x9B, unsigned long)
+
 #define BMDEV_GET_IDLE_COREID        _IOR('p', 0xB0, int)
 #define BMDEV_GET_FW_VERSION         _IOR('p', 0xB1, unsigned long)
 

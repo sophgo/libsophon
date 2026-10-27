@@ -13,7 +13,6 @@
 #include <linux/wait.h>
 #include <net/ipv6.h>
 
-#include "bm1684_reg.h"
 #include "bm_cdma.h"
 #include "bm_common.h"
 #include "bm_io.h"
@@ -22,6 +21,9 @@
 #include "bm_pt.h"
 #include "bm_thread.h"
 #include "bm_timer.h"
+
+#include "84x6_irq.h"
+
 #define HOST_TX_LEN (1 * 1024 * 1024)
 #define HOST_RX_LEN (1 * 1024 * 1024)
 
@@ -46,6 +48,34 @@
 
 #define SHM_SOC_TX_OFFSET SHM_HOST_RX_OFFSET
 #define SHM_SOC_RX_OFFSET SHM_HOST_TX_OFFSET
+
+static const struct chip_eth_cfg eth_cfgs[] = {
+	{ BM_CHIP_ID_1684,   VETH_SHM_START_ADDR_1684,
+	  0xb8, 0x194, 0x198, 0x19c, (1 << 12), 0x4, VETH_IRQ_ID },
+	{ BM_CHIP_ID_1686,   VETH_SHM_START_ADDR_1684X,
+	  0xb8, 0x194, 0x198, 0x19c, (1 << 12), 0x4, VETH_IRQ_ID  },
+	{ BM_CHIP_ID_1688, VETH_SHM_START_ADDR,
+	  0xF8, 0x78, 0xFC, 0x7C, (1 << 12), 0x4, MSG_IRQ_ID_CHANNEL_XPU_A2_0 },
+	{ BM_CHIP_ID_84X6,  VETH_SHM_START_ADDR,
+	  0xD8, 0xF8, 0xDC, 0xFC, (1 << 24), (1 << 31), BM84X6_VETH_IRQ_ID },
+};
+
+const struct chip_eth_cfg *eth_get_cfg(struct bm_device_info *bmdi)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(eth_cfgs); i++) {
+		if (eth_cfgs[i].chip_id == bmdi->cinfo.chip_id)
+			return &eth_cfgs[i];
+	}
+	return NULL;
+}
+
+u32 eth_shm_addr(struct bm_device_info *bmdi)
+{
+	const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
+	return cfg ? cfg->shm_addr : 0;
+}
 
 static int ring_buffer_init(struct net_device *ndev) {
     struct eth_dev_info *  info = *((struct eth_dev_info **)netdev_priv(ndev));
@@ -74,7 +104,10 @@ static int ring_buffer_send(struct net_device *ndev, struct sk_buff *skb) {
         return -ENOMEM;
 
     pt_store_tx(info->ring_buffer);
-    top_reg_write(bmdi, TOP_MISC_GP_REG31_SET_OFFSET, 0x4);
+    {
+        const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
+        top_reg_write(bmdi, cfg->gp_tx_set, cfg->tx_bit);
+    }
 
     return 0;
 }
@@ -113,16 +146,13 @@ exit:
 }
 
 int bm1684_clear_ethirq(struct bm_device_info *bmdi) {
-    u32 irq_status = top_reg_read(bmdi, TOP_MISC_GP_REG30_STS_OFFSET);
+    const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
 
-    if (irq_status & (0x1 << 12)) {
-        u32 value = top_reg_read(bmdi, TOP_MISC_GP_REG30_CLR_OFFSET);
-        value |= (1 << 12);
-        top_reg_write(bmdi, TOP_MISC_GP_REG30_CLR_OFFSET, value);
+    if (top_reg_read(bmdi, cfg->gp_irq_sts) & cfg->irq_bit) {
+        top_reg_write(bmdi, cfg->gp_irq_clr, cfg->irq_bit);
         return 0;
-    } else {
-        return -1;
     }
+    return -1;
 }
 
 void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
@@ -132,10 +162,12 @@ void bmdrv_eth_irq_handler(struct bm_device_info *bmdi) {
     napi_schedule(&eth->napi);
 }
 void bm_eth_request_irq(struct bm_device_info *bmdi) {
-    bmdrv_submodule_request_irq(bmdi, 168, bmdrv_eth_irq_handler);
+    const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
+    bmdrv_submodule_request_irq(bmdi, cfg->irq_id, bmdrv_eth_irq_handler);
 }
 void bm_eth_free_irq(struct bm_device_info *bmdi) {
-    bmdrv_submodule_free_irq(bmdi, 168);
+    const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
+    bmdrv_submodule_free_irq(bmdi, cfg->irq_id);
 }
 static int eth_ndo_open(struct net_device *ndev) {
     struct eth_dev_info *info = *((struct eth_dev_info **)netdev_priv(ndev));
@@ -231,41 +263,28 @@ next:
 static void eth_set_handshake(struct eth_dev_info *info, u32 value) {
     struct bm_device_info *bmdi =
         container_of(info, struct bm_device_info, vir_eth);
-    if (bmdi->cinfo.chip_id == 0x1684)
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_HANDSHAKE_REG, value);
-    else if (bmdi->cinfo.chip_id == 0x1686)
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_HANDSHAKE_REG, value);
-    else if (bmdi->cinfo.chip_id == 0x1686a200)
-        bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_HANDSHAKE_REG, value);
+
+    bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_HANDSHAKE_REG, value);
 }
 static u32 eth_get_handshake(struct eth_dev_info *info) {
     struct bm_device_info *bmdi =
         container_of(info, struct bm_device_info, vir_eth);
-    if (bmdi->cinfo.chip_id == 0x1684)
-        return bm_read32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_HANDSHAKE_REG);
-    else if (bmdi->cinfo.chip_id == 0x1686)
-        return bm_read32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_HANDSHAKE_REG);
-    else if (bmdi->cinfo.chip_id == 0x1686a200)
-        return bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_HANDSHAKE_REG);
-    return -1;
+
+    return bm_read32(bmdi, eth_shm_addr(bmdi) + VETH_HANDSHAKE_REG);
 }
 static void eth_set_a53ipaddress(struct eth_dev_info *info) {
     struct bm_device_info *bmdi =
         container_of(info, struct bm_device_info, vir_eth);
+    u32 shm_addr = eth_shm_addr(bmdi);
 
     pr_info("bmsophon%d dst ip: 192.192.%u.2\n", bmdi->dev_index, bmdi->dev_index);
-    if (bmdi->cinfo.chip_id == 0x1684)
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_IPADDRESS_REG, bmdi->dev_index);
-    else if (bmdi->cinfo.chip_id == 0x1686) {
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, 0xc0c00002);
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, 0xffffff00);
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, 0);
-        bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_RESET_REG, 0);
-    } else if (bmdi->cinfo.chip_id == 0x1686a200) {
-        bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_IPADDRESS_REG, 0xc0c00002);
-        bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_MASK_REG, 0xffffff00);
-        bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_GATE_ADDRESS_REG, 0);
-        bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_RESET_REG, 0);
+    if (bmdi->cinfo.chip_id == BM_CHIP_ID_1684) {
+        bm_write32(bmdi, shm_addr + VETH_IPADDRESS_REG, bmdi->dev_index);
+    } else {
+        bm_write32(bmdi, shm_addr + VETH_IPADDRESS_REG, 0xc0c00002);
+        bm_write32(bmdi, shm_addr + VETH_MASK_REG, 0xffffff00);
+        bm_write32(bmdi, shm_addr + VETH_GATE_ADDRESS_REG, 0);
+        bm_write32(bmdi, shm_addr + VETH_RESET_REG, 0);
     }
 }
 
@@ -397,12 +416,7 @@ int bmdrv_veth_init(struct bm_device_info *bmdi, struct pci_dev *pdev) {
     atomic_set(&veth->carrier_on, 0);
     atomic_set(&veth->buffer_ready, 0);
 
-    if (bmdi->cinfo.chip_id == 0x1684)
-        veth->reg_phy.eth_shm_phy = VETH_SHM_START_ADDR_1684;
-    else if (bmdi->cinfo.chip_id == 0x1686)
-        veth->reg_phy.eth_shm_phy = VETH_SHM_START_ADDR_1684X;
-    else if (bmdi->cinfo.chip_id == 0x1686a200)
-        veth->reg_phy.eth_shm_phy = VETH_SHM_START_ADDR;
+    veth->reg_phy.eth_shm_phy = eth_shm_addr(bmdi);
     veth->index               = bmdi->dev_index;
 
     ret = eth_register_napi(veth);
@@ -420,8 +434,9 @@ void bmdrv_veth_early_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) 
 
 void bmdrv_veth_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev) {
     struct eth_dev_info *veth = &bmdi->vir_eth;
+    const struct chip_eth_cfg *cfg = eth_get_cfg(bmdi);
 
     bm_eth_free_irq(bmdi);
     eth_unregister_napi(veth);
-    top_reg_write(bmdi, TOP_MISC_GP_REG31_CLR_OFFSET, 0x4);
+    top_reg_write(bmdi, cfg->gp_tx_clr, cfg->tx_bit);
 }

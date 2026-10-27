@@ -431,7 +431,7 @@ bool bmrt_get_bmodel_info(ModelCtx* model_ctx, mem_info_t *mem_info) {
   // variable_instruction_mem: gdma_cmd + sdma_cmd
   uint64_t v_instruction_size = bmem_info.gdma_cmd_mem_size;
   v_instruction_size = ALIGN(v_instruction_size, 128) + bmem_info.sdma_cmd_mem_size;
-  // v_instruction_size = ALIGN(v_instruction_size, 128) + bmem_info.cdma_cmd_mem_size;
+  v_instruction_size = ALIGN(v_instruction_size, 128) + bmem_info.cdma_cmd_mem_size;
   memory_init(mem_info->variable_instruction_mem, v_instruction_size, 0);
   // coeff_mem: coeff
   memory_init(mem_info->coeff_mem, bmem_info.coeff_mem_size, 0);

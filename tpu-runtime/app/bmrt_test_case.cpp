@@ -220,9 +220,18 @@ static void thread_entry_bmrt_launch(int thread_id, launch_unit_t *launch_unit)
   int input_num = launch_unit->ref_input_v.size();
   int output_num = launch_unit->ref_output_v.size();
   vector<int> count_v;
+  unsigned long long total_tpu_time = 0;
   for (int loop = 0; loop < LOOP_NUM; loop++) {
     BMRT_LOG(INFO, "launch net[%s] stage[%d] thread[%d] loop[%d] ....", net_name,
              launch_unit->stage_idx, thread_id, loop);
+    bm_profile_t profile_start, profile_end;
+    memset(&profile_start, 0, sizeof(bm_profile_t));
+    memset(&profile_end, 0, sizeof(bm_profile_t));
+    // 84x6 上 loop 0 尚未提交任何 api，内核 thread_info 尚未建立，bm_get_profile 会失败；
+    // 此时累计值必为 0，直接保留 memset 的 0 即可，避免首次调用报错。
+    if (loop > 0) {
+      bm_get_profile(g_bm_handle, &profile_start);
+    }
     #ifdef __linux__
     void *output_datas[output_num];
     #else
@@ -334,6 +343,13 @@ static void thread_entry_bmrt_launch(int thread_id, launch_unit_t *launch_unit)
       }
     }
 
+    bm_get_profile(g_bm_handle, &profile_end);
+    unsigned long long tpu_time =
+        (unsigned long long)(profile_end.tpu_process_time - profile_start.tpu_process_time);
+    total_tpu_time += tpu_time;
+    BMRT_LOG(INFO, "net[%s] stage[%d] thread[%d] loop[%d] tpu time = %llu us",
+             net_name, launch_unit->stage_idx, thread_id, loop, tpu_time);
+
     // compare inference output data with reference data
     result_cmp((int8_t **)output_datas, *launch_unit, count_v);
 
@@ -342,6 +358,9 @@ static void thread_entry_bmrt_launch(int thread_id, launch_unit_t *launch_unit)
       free(output_datas[i]);
     }
   }
+  BMRT_LOG(INFO, "net[%s] stage[%d] thread[%d] avg tpu time = %llu us (total %llu us / %d loops)",
+           net_name, launch_unit->stage_idx, thread_id, total_tpu_time / LOOP_NUM, total_tpu_time,
+           LOOP_NUM);
 }
 
 static bool test_bmrt_get_info(const bm_net_info_t *net_info, const launch_unit_t *launch_unit)

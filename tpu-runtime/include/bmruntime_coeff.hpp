@@ -15,7 +15,9 @@ using DevMemPtr = std::shared_ptr<DevMem>;
 
 class CoeffMemory {
 public:
-  explicit CoeffMemory(bm_handle_t handle) : m_handle(handle) {}
+  explicit CoeffMemory(bm_handle_t handle) : m_handle(handle) {
+    memset(&m_latest_device_mem, 0, sizeof(m_latest_device_mem));
+  }
   ~CoeffMemory() = default;
 
   uint64_t Register(ModelCtx *model_ctx, const CoeffMem *coeff_mem,

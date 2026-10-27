@@ -1221,17 +1221,17 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
     uint64_t net_max_neuron_size = 0;
     std::set<std::vector<uint8_t>> device_check_codes;
     std::set<std::vector<uint8_t>> host_check_codes;
+    info.neuron_mem_size = 0;
     for (size_t net_idx = 0; net_idx < load_net_num; net_idx++) {
       auto net_params = model()->net()->Get(net_idx)->parameter();
 
       assert(net_params && net_params->size() > 0);
 
       auto stage_num = net_params->size();
-      info.neuron_mem_size= 0;
       uint64_t max_neuron_size = 0;
       bool multi_subnet = false;
       for(size_t stage_idx=0; stage_idx < stage_num; stage_idx++){
-        auto param = net_params->Get(0);
+        auto param = net_params->Get(stage_idx);
         auto subnets = param->sub_net();
         uint64_t neuron_size = param->ctx_size();
         if (neuron_size > max_neuron_size) {
@@ -1312,6 +1312,13 @@ bmodel::bmodel_mem_info_t ModelCtx::get_bmodel_mem_info()
                         if (core_cmd->sdma_commands()) {
                           for (unsigned int j = 0; j < core_cmd->sdma_commands()->size(); ++j)
                             info.sdma_cmd_mem_size += core_cmd->sdma_commands()->Get(j)->size();
+                        }
+                      }
+                      if (subnet->core_commands()) {
+                        auto core_cmd = subnet->core_commands()->Get(core_idx);
+                        if (core_cmd->cdma_commands()) {
+                          for (unsigned int j = 0; j < core_cmd->cdma_commands()->size(); ++j)
+                            info.cdma_cmd_mem_size += core_cmd->cdma_commands()->Get(j)->size();
                         }
                       }
                     }

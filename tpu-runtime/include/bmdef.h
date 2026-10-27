@@ -54,6 +54,8 @@ typedef enum bm_runtime_flag_e {
   BM_RUNTIME_SHARE_DYNMEM = 1 << 2,   /*bit2: 0,no share; 1,share dyn mem*/
   BM_RUNTIME_SOC_CMDBUF_MEM = 1 << 3, /*bit3: 0,s2d sys mem for cmdbuf; 1,mmap ddr for cmdbuf, only support soc*/
   BM_RUNTIME_FREE_COEFF = 1 << 4,     /*bit4: 0,keep coeff in memory; 1,free coeff when bmodel is released*/
+  BM_RUNTIME_NEURON_MEM_IN_PRE_ALLOC = 1 << 5, /*bit5: 0,alloc neuron_mem in load_bmodel; 1,alloc in pre_alloc or launch*/
+  BM_RUNTIME_YIELD_TO_KERNEL_TASK = 1 << 6, /*bit6: 0,no yield; 1,wait tpu kernel task done before each subnet api*/
 } bm_runtime_flag_t;
 
 /* flags for addr_mode */

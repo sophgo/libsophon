@@ -252,6 +252,9 @@ signed int vpss_bm_send_frame(struct vpss_device *dev, bm_vpss_cfg *vpss_cfg){
 	case VPSS_SCALE_COEF_BICUBIC_OPENCV:
 		chn_hw_cfg->sc_coef = SC_SCALING_COEF_BICUBIC_OPENCV;
 		break;
+	case VPSS_SCALE_COEF_AREA:
+		chn_hw_cfg->sc_coef = SC_SCALING_COEF_AREA;
+		break;
 	}
 
 	job->dev = dev;

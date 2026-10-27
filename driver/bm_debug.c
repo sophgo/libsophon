@@ -37,7 +37,11 @@ static char debug_node_name[] = "bmsophon";
 extern struct bm_ctrl_info *bmci;
 extern int dev_count;
 extern char release_date[];
-struct proc_dir_entry *bmdi_folder;
+#ifdef SOC_MODE
+extern struct proc_dir_entry *bmdi_folder;
+#else
+struct proc_dir_entry *bmdi_folder = NULL;
+#endif
 
 
 
@@ -217,20 +221,11 @@ static int seq_bmdi_open(struct inode *inode, struct file *file)
 	return single_open(file, bmdi_proc_show, PDE_DATA(inode));
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops bmdi_proc_ops = {
-	.proc_open = seq_bmdi_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS bmdi_proc_ops = {
+	BM_PROC_OPEN = seq_bmdi_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations bmdi_proc_ops = {
-	.owner = THIS_MODULE,
-	.open = seq_bmdi_open,
-	.read = seq_read,
-	.release = single_release,
-};
-#endif
 
 static int lib_proc_show(struct seq_file *m, void *v)
 {
@@ -263,22 +258,13 @@ static int seq_lib_open(struct inode *inode, struct file *file)
 	return single_open(file, lib_proc_show, PDE_DATA(inode));
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops lib_proc_ops = {
-	.proc_open = seq_lib_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS lib_proc_ops = {
+	BM_PROC_OPEN = seq_lib_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations lib_proc_ops = {
-	.owner = THIS_MODULE,
-	.open = seq_lib_open,
-	.read = seq_read,
-	.release = single_release,
-};
-#endif
 
-extern int base_get_core_num(struct bm_device_info *bmdi);
+extern int bm1688_base_get_core_num(struct bm_device_info *bmdi);
 static int api_proc_show(struct seq_file *m, void *v)
 {
 	struct bm_device_info *bmdi = m->private;
@@ -291,7 +277,7 @@ static int api_proc_show(struct seq_file *m, void *v)
 	u64 glob_api_num = 0;
 	u64 sync_api_num = 0;
 
-	core_num = base_get_core_num(bmdi);
+	core_num = bm1688_base_get_core_num(bmdi);
 	for (i = 0; i < core_num; i++) {
 		if (i == 0) {
 			sync_api_num = bmdi->bm_sync_api_seq;
@@ -325,20 +311,11 @@ static int seq_api_open(struct inode *inode, struct file *file)
 	return single_open(file, api_proc_show, PDE_DATA(inode));
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops api_proc_ops = {
-	.proc_open = seq_api_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS api_proc_ops = {
+	BM_PROC_OPEN = seq_api_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations api_proc_ops = {
-	.owner = THIS_MODULE,
-	.open = seq_api_open,
-	.read = seq_read,
-	.release = single_release,
-};
-#endif
 
 static int tiu_gdma_proc_show(struct seq_file *m, void *v)
 {
@@ -352,7 +329,7 @@ static int tiu_gdma_proc_show(struct seq_file *m, void *v)
 	int read_count = 128;
 	int i, j;
 
-	core_num = base_get_core_num(bmdi);
+	core_num = bm1688_base_get_core_num(bmdi);
 	for (i = 0; i < core_num; i++) {
 		for (j = 0; j < read_count; j++) {
 			addr = (i * core_offset) + (j * 4) + *(u32 *)tiu_reg_base_addr;
@@ -384,7 +361,7 @@ static void reg_proc_show(struct bm_device_info *bmdi)
 	int read_count = 128;
 	int i, j;
 
-	core_num = base_get_core_num(bmdi);
+	core_num = bm1688_base_get_core_num(bmdi);
 	for (i = 0; i < core_num; i++) {
 		for (j = 0; j < read_count; j++) {
 			addr = (i * core_offset) + (j * 4) + tiu_reg_base_addr;
@@ -409,20 +386,11 @@ static int seq_reg_open(struct inode *inode, struct file *file)
 	return single_open(file, tiu_gdma_proc_show, PDE_DATA(inode));
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops reg_proc_ops = {
-	.proc_open = seq_reg_open,
-	.proc_read = seq_read,
-	.proc_release = single_release,
+static const struct BM_PROC_FILE_OPS reg_proc_ops = {
+	BM_PROC_OPEN = seq_reg_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations reg_proc_ops = {
-	.owner = THIS_MODULE,
-	.open = seq_reg_open,
-	.read = seq_read,
-	.release = single_release,
-};
-#endif
 
 
 void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi)
@@ -433,10 +401,13 @@ void add_tpu_soc_proc(struct platform_device *pdev, struct bm_device_info *bmdi)
 	struct proc_dir_entry *proc_reg;
 	const char *name;
 
-	name = pdev->dev.of_node->full_name;
-	bmdi_folder = proc_mkdir(name, NULL);
+	name = pdev->dev.of_node ? pdev->dev.of_node->full_name : "bmtpu";
 	if (!bmdi_folder)
+		bmdi_folder = proc_mkdir(name, NULL);
+	if (!bmdi_folder) {
 		dev_err(&pdev->dev, "Error creating bmdi proc folder entry\n");
+		return;
+	}
 
 	proc_bmdi = proc_create_data("bmdi_base_info", 0664, bmdi_folder, &bmdi_proc_ops, bmdi);
 	if (!proc_bmdi)
@@ -481,7 +452,7 @@ static int bmdrv_card_nums_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_card_nums_file_ops = {
-	BM_PROC_OWNER          = BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN           = bmdrv_card_nums_proc_open,
 	BM_PROC_READ           = seq_read,
 	BM_PROC_LLSEEK         = seq_lseek,
@@ -504,7 +475,7 @@ static int bmdrv_chip_nums_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_chip_nums_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_chip_nums_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -558,7 +529,7 @@ static int bmdrv_chipid_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_chipid_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_chipid_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -579,7 +550,7 @@ static int bmdrv_tpuid_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpuid_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpuid_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -600,7 +571,7 @@ static int bmdrv_mode_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_mode_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_mode_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -625,7 +596,7 @@ static int bmdrv_dbdf_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_dbdf_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_dbdf_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -651,7 +622,7 @@ static int bmdrv_status_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_status_file_ops = {
-        BM_PROC_OWNER          = BM_PROC_MODULE,
+        BM_PROC_OWNER(THIS_MODULE)
         BM_PROC_OPEN           = bmdrv_status_proc_open,
         BM_PROC_READ           = seq_read,
         BM_PROC_LLSEEK         = seq_lseek,
@@ -672,7 +643,7 @@ static int bmdrv_tpu_minclk_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_minclk_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_minclk_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -693,7 +664,7 @@ static int bmdrv_tpu_maxclk_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_maxclk_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_maxclk_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -719,7 +690,7 @@ static int bmdrv_tpu_maxboardp_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_maxboardp_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_maxboardp_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -740,7 +711,7 @@ static int bmdrv_ecc_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_ecc_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_ecc_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -783,7 +754,7 @@ static ssize_t bmdrv_dynfreq_proc_write(struct file *file,
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_dynfreq_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_dynfreq_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_WRITE		= bmdrv_dynfreq_proc_write,
@@ -848,7 +819,7 @@ static ssize_t bmdrv_dumpreg_proc_write(struct file *file,
 
 
 static const struct BM_PROC_FILE_OPS bmdrv_dumpreg_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_dumpreg_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_WRITE		= bmdrv_dumpreg_proc_write,
@@ -912,7 +883,7 @@ static ssize_t bmdrv_fan_speed_proc_write(struct file *file,
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_fan_speed_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN = bmdrv_fan_speed_proc_open,
 	BM_PROC_READ = seq_read,
 	BM_PROC_WRITE = bmdrv_fan_speed_proc_write,
@@ -936,7 +907,7 @@ static int bmdrv_pcie_link_speed_proc_open(struct inode *inode, struct file *fil
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcie_link_speed_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcie_link_speed_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -961,7 +932,7 @@ static int bmdrv_pcie_link_width_proc_open(struct inode *inode, struct file *fil
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcie_link_width_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcie_link_width_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -986,7 +957,7 @@ static int bmdrv_pcie_cap_speed_proc_open(struct inode *inode, struct file *file
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcie_cap_speed_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcie_cap_speed_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1011,7 +982,7 @@ static int bmdrv_pcie_cap_width_proc_open(struct inode *inode, struct file *file
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcie_cap_width_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcie_cap_width_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1036,7 +1007,7 @@ static int bmdrv_pcie_region_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcie_region_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcie_region_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1052,7 +1023,7 @@ static int bmdrv_tpu_freq_proc_show(struct seq_file *m, void *v)
 	c_attr = &bmdi->c_attr;
 	mutex_lock(&c_attr->attr_mutex);
 	if (bmdi->cinfo.chip_id == 0x1686a200)
-		vdd_tpu_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+		vdd_tpu_freq = bm1688_clk_get_tpu_freq(bmdi);
 	else
 		vdd_tpu_freq = bmdrv_1684_clk_get_tpu_freq(bmdi);
 	mutex_unlock(&c_attr->attr_mutex);
@@ -1100,7 +1071,7 @@ static ssize_t bmdrv_tpu_freq_proc_write(struct file *file, const char __user *b
 
 	mutex_lock(&bmdi->clk_reset_mutex);
 	if (bmdi->cinfo.chip_id == 0x1686a200)
-		ret = bm1688_bmdrv_clk_set_tpu_target_freq(bmdi, res);
+		ret = bm1688_clk_set_tpu_target_freq(bmdi, res);
 	else
 		ret = bmdrv_clk_set_tpu_target_freq(bmdi, res);
 	mutex_unlock(&bmdi->clk_reset_mutex);
@@ -1121,7 +1092,7 @@ static int bmdrv_tpu_freq_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_freq_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_freq_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1184,7 +1155,7 @@ static int bmdrv_tpu_volt_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_volt_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_volt_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1247,7 +1218,7 @@ static int bmdrv_vddc_volt_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_vddc_volt_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_vddc_volt_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1280,7 +1251,7 @@ static int bmdrv_tpu_cur_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_cur_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_cur_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1311,7 +1282,7 @@ static int bmdrv_tpu_power_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_power_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1343,7 +1314,7 @@ static int bmdrv_vddc_power_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_vddc_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_vddc_power_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1374,7 +1345,7 @@ static int bmdrv_vddphy_power_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_vddphy_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_vddphy_power_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1407,7 +1378,7 @@ static int bmdrv_chip_power_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_chip_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_chip_power_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1429,7 +1400,7 @@ static int bmdrv_firmware_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_firmware_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_firmware_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1460,7 +1431,7 @@ static int bmdrv_board_power_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_board_power_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_board_power_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1495,7 +1466,7 @@ static int bmdrv_chip_temp_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_chip_temp_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_chip_temp_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1526,7 +1497,7 @@ static int bmdrv_board_temp_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_board_temp_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_board_temp_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1566,7 +1537,7 @@ static int bmdrv_board_sn_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_board_sn_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_board_sn_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1592,7 +1563,7 @@ static int bmdrv_mcu_version_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_mcu_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_mcu_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1620,7 +1591,7 @@ static int bmdrv_board_type_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_board_type_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_board_type_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1661,7 +1632,7 @@ static int bmdrv_board_version_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_board_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_board_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1701,7 +1672,7 @@ static int bmdrv_bom_version_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_bom_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_bom_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1740,7 +1711,7 @@ static int bmdrv_pcb_version_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pcb_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pcb_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1799,7 +1770,7 @@ static int bmdrv_boot_loader_version_proc_open(struct inode *inode, struct file 
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_boot_loader_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_boot_loader_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1844,7 +1815,7 @@ static int bmdrv_clk_proc_show(struct seq_file *m, void *v)
 		seq_printf(m, "vpu: N/A\n");
 		seq_printf(m, "jpu: N/A\n");
 		seq_printf(m, "vpp: N/A\n");
-		seq_printf(m, "tpu: %d MHz\n", bm1688_bmdrv_clk_get_tpu_freq(bmdi));
+		seq_printf(m, "tpu: %d MHz\n", bm1688_clk_get_tpu_freq(bmdi));
 		seq_printf(m, "ddr: N/A\n");
 	} else if (bmdi->cinfo.chip_id != 0x1682) {
 		mpll = top_reg_read(bmdi, 0xe8);
@@ -1876,7 +1847,7 @@ static int bmdrv_clk_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_clk_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_clk_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1907,7 +1878,7 @@ static int bmdrv_driver_version_proc_open(struct inode *inode, struct file *file
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_driver_version_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_driver_version_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1946,7 +1917,7 @@ static int bmdrv_versions_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_versions_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_versions_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -1983,7 +1954,7 @@ static int bmdrv_a53_enable_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_a53_enable_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_a53_enable_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2014,7 +1985,7 @@ static int bmdrv_bmcpu_status_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_bmcpu_status_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_bmcpu_status_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2044,7 +2015,7 @@ static int bmdrv_heap_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_heap_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_heap_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2077,7 +2048,7 @@ static int bmdrv_boot_mode_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_boot_mode_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_boot_mode_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2167,7 +2138,7 @@ static int bmdrv_pmu_infos_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_pmu_infos_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_pmu_infos_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2201,7 +2172,7 @@ static int bmdrv_location_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_location_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_location_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2223,7 +2194,7 @@ static int bmdrv_cdma_in_counter_proc_open(struct inode *inode, struct file *fil
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_cdma_in_counter_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_cdma_in_counter_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2244,7 +2215,7 @@ static int bmdrv_cdma_out_counter_proc_open(struct inode *inode, struct file *fi
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_cdma_out_counter_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_cdma_out_counter_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2265,7 +2236,7 @@ static int bmdrv_cdma_in_time_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_cdma_in_time_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_cdma_in_time_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2286,7 +2257,7 @@ static int bmdrv_cdma_out_time_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_cdma_out_time_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_cdma_out_time_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2320,7 +2291,7 @@ static int bmdrv_tpu1_process_time_proc_open(struct inode *inode, struct file *f
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu_process_time_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu_process_time_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2328,7 +2299,7 @@ static const struct BM_PROC_FILE_OPS bmdrv_tpu_process_time_file_ops = {
 };
 
 static const struct BM_PROC_FILE_OPS bmdrv_tpu1_process_time_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_tpu1_process_time_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2349,7 +2320,7 @@ static int bmdrv_sent_api_counter_proc_open(struct inode *inode, struct file *fi
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_sent_api_counter_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_sent_api_counter_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2370,7 +2341,7 @@ static int bmdrv_completed_api_counter_proc_open(struct inode *inode, struct fil
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_completed_api_counter_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_completed_api_counter_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2397,7 +2368,7 @@ static int bmdrv_arm9_cache_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_arm9_cache_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_arm9_cache_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2424,7 +2395,7 @@ static int bmdrv_ddr_config_proc_open(struct inode *inode, struct file *file)
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_ddr_config_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_ddr_config_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2448,7 +2419,7 @@ static int bmdrv_chip_num_on_card_proc_open(struct inode *inode, struct file *fi
 }
 
 static const struct BM_PROC_FILE_OPS bmdrv_chip_num_on_card_file_ops = {
-	BM_PROC_OWNER		= BM_PROC_MODULE,
+	BM_PROC_OWNER(THIS_MODULE)
 	BM_PROC_OPEN		= bmdrv_chip_num_on_card_proc_open,
 	BM_PROC_READ		= seq_read,
 	BM_PROC_LLSEEK		= seq_lseek,
@@ -2711,50 +2682,71 @@ static int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_i
 	u64 host_paddr = bmdi->monitor_thread_info.log_mem[core_id].host_paddr;
 	struct bm_memcpy_info *memcpy_info = &bmdi->memcpy_info;
 	bm_cdma_arg cdma_arg;
+	int available = 0;
+	int chunk = 0;
+	int first = 0;
+	int second = 0;
 
 	if (core_id == 1) {
 		write_p = gp_reg_read_enh(bmdi, GP_REG_FW1_LOG_WP);
 	} else {
 		write_p = gp_reg_read_enh(bmdi, GP_REG_FW0_LOG_WP);
 	}
+
+	/* Defensive: keep pointers within ring range. */
+	if (arm9fw_buffer_size <= 0 || host_size <= 0)
+		return 0;
+	if (read_p >= arm9fw_buffer_size)
+		read_p %= arm9fw_buffer_size;
+	if (write_p >= arm9fw_buffer_size)
+		write_p %= arm9fw_buffer_size;
+
 	PR_TRACE("wp = %d, rp = %d, device_paddr = %llx\n", write_p, read_p, device_paddr);
-	if (write_p < read_p) {
-		size = arm9fw_buffer_size - read_p;
 
-		if (size > host_size) {
-			size =  host_size;
-			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-				 host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
-				return 0;
-			}
-			read_p = read_p + size;
+	/* Compute available bytes in ring (FW writes a ring buffer with WP). */
+	if (write_p >= read_p)
+		available = write_p - read_p;
+	else
+		available = (arm9fw_buffer_size - read_p) + write_p;
 
-		} else {
-			size = arm9fw_buffer_size - read_p;
-			bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-				host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-			if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
-				return 0;
-			}
-			read_p = 0;
-		}
-	} else {
-		size = write_p - read_p;
-		if (size >= host_size)
-			size = host_size;
+	if (available <= 0)
+		goto out;
 
-		bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
-			host_paddr & 0xffffffffff, size, CHIP2HOST, false, false);
-		if (memcpy_info->bm_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
-				pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
+	chunk = available;
+	if (chunk > host_size)
+		chunk = host_size;
+
+	/*
+	 * Never let one DMA cross the ring end; split into [read_p..end) and [0..].
+	 * Host buffer is linear, so second part is written after first.
+	 */
+	first = arm9fw_buffer_size - read_p;
+	if (first > chunk)
+		first = chunk;
+	second = chunk - first;
+
+	bmdev_construct_cdma_arg(&cdma_arg, device_paddr + read_p,
+		host_paddr & 0xffffffffff, first, CHIP2HOST, false, false);
+	if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+		pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
+		return 0;
+	}
+
+	if (second > 0) {
+		bmdev_construct_cdma_arg(&cdma_arg, device_paddr,
+			(host_paddr + first) & 0xffffffffff, second, CHIP2HOST, false, false);
+		if (memcpy_info->bm_dual_cdma_transfer(bmdi, NULL, &cdma_arg, true)) {
+			pr_err("[%s: %d] bm-sophon%d get arm9 log failed\n", __func__, __LINE__, bmdi->dev_index);
 			return 0;
 		}
-		read_p = read_p + size;
-
 	}
+
+	read_p += chunk;
+	if (read_p >= arm9fw_buffer_size)
+		read_p -= arm9fw_buffer_size;
+	size = chunk;
+
+out:
 	// gp_reg_write_enh(bmdi, GP_REG_ARM9FW_LOG_RP, read_p);
 	bmdi->monitor_thread_info.log_mem[core_id].read_size = size;
 	bmdi->monitor_thread_info.log_mem[core_id].read_pos = read_p;
@@ -2763,8 +2755,8 @@ static int bm_get_arm9fw_log_from_device(struct bm_device_info *bmdi, int core_i
 }
 
 #define ARM9FW_LOG_HOST_BUFFER_SIZE (1024 * 512)
-#define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 4)
-#define ARM9FW_LOG_LINE_SIZE 512
+#define ARM9FW_LOG_DEVICE_BUFFER_SIZE (1024 * 1024 * 1)
+#define ARM9FW_LOG_LINE_SIZE 64
 
 static void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 {
@@ -2775,7 +2767,9 @@ static void bm_print_arm9fw_log(struct bm_device_info *bmdi, int core_id)
 
 	for (i = 0; i < size/ARM9FW_LOG_LINE_SIZE; i++) {
 		strncpy(str, p, ARM9FW_LOG_LINE_SIZE - 1);
-		PR_TRACE("bm-sophon%d core_%d: %s", bmdi->dev_index, core_id, str);
+		str[ARM9FW_LOG_LINE_SIZE - 1] = '\0';
+		PR_TRACE("bm-sophon%d core_%d: %.*s",
+		       bmdi->dev_index, core_id, ARM9FW_LOG_LINE_SIZE - 1, str);
 		p += ARM9FW_LOG_LINE_SIZE;
 	}
 	memset(bmdi->monitor_thread_info.log_mem[core_id].host_vaddr, 0, size);
@@ -2808,6 +2802,12 @@ int bm_arm9fw_log_init(struct bm_device_info *bmdi, int core_id)
 	PR_TRACE("host size = 0x%x, device_addr = 0x%llx, device size = 0x%x\n",
 		bmdi->monitor_thread_info.log_mem[core_id].host_size, bmdi->monitor_thread_info.log_mem[core_id].device_paddr,
 		bmdi->monitor_thread_info.log_mem[core_id].device_size);
+
+	if (core_id == 1) {
+		gp_reg_write_enh(bmdi, GP_REG_FW1_LOG_WP, 0);
+	} else {
+		gp_reg_write_enh(bmdi, GP_REG_FW0_LOG_WP, 0);
+	}
 
 	return ret;
 }
@@ -2890,6 +2890,10 @@ int bm_i2c2_need_recovery(struct bm_device_info *bmdi) {
 	u32 i2c2_count_new = 0;
 	int i = 0;
 	u32 i2c_index = 0x2;
+
+	if(bmdi->cinfo.chip_id != BM_CHIP_ID_1684) {
+		return 0;
+	}
 
 	i2c2_count_old = gp_reg_read_enh(bmdi, GP_REG_I2C2_IRQ_COUNT);
 

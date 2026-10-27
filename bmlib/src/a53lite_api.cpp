@@ -25,6 +25,17 @@
 
 #define A53LITE_RUNTIME_LOG_TAG "a53lite_runtime"
 
+static inline int get_arch_code(bm_handle_t handle)
+{
+	(void)handle;
+#ifdef USING_CMODEL
+	int arch_code = handle->bm_dev->chip_id;
+#else
+	int arch_code = handle->misc_info.chipid;
+#endif
+	return arch_code;
+}
+
 bm_status_t a53lite_load_file(bm_handle_t handle,
 							  const char *file_path,
 							  bm_device_mem_t *dev_mem_ptr,
@@ -384,13 +395,21 @@ tpu_kernel_module_t tpu_kernel_load_module_file_to_core(bm_handle_t handle, cons
 	api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
 	api_load_lib.size = file_size;
 	read_md5((unsigned char *)module_file, api_load_lib.md5);
-	// show_md5(api_load_lib.md5);
+	u32 api_size = sizeof(api_load_lib);
 
-	ret = bm_send_api_to_core(handle,
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_LOAD_LIB,
+							  (u8 *)&api_load_lib,
+							  &api_size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_LOAD_LIB,
 							  (u8 *)&api_load_lib,
 							  sizeof(api_load_lib),
 							  core_id);
+	}
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -513,12 +532,21 @@ tpu_kernel_module_t tpu_kernel_load_module_file_key_to_core(bm_handle_t handle, 
 	api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
 	api_load_lib.size = file_size;
 	calc_md5((unsigned char *)key, size, api_load_lib.md5);
-	// show_md5(api_load_lib.md5);
-	ret = bm_send_api_to_core(handle,
+	u32 api_size = sizeof(api_load_lib);
+
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_LOAD_LIB,
+							  (u8 *)&api_load_lib,
+							  &api_size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_LOAD_LIB,
 							  (u8 *)&api_load_lib,
 							  sizeof(api_load_lib),
 							  core_id);
+	}
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -563,6 +591,7 @@ tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const cha
 	bm_device_mem_t dev_mem;
 	char lib_name[LIB_MAX_NAME_LEN];
 	tpu_kernel_module_t p_module;
+	u32 size = sizeof(api_load_lib);
 
 	memset(&api_load_lib, 0, sizeof(api_load_lib));
 
@@ -605,11 +634,20 @@ tpu_kernel_module_t tpu_kernel_load_module_to_core(bm_handle_t handle, const cha
 	api_load_lib.lib_addr = (void *)dev_mem.u.device.device_addr;
 	api_load_lib.size = length;
 
-	ret = bm_send_api_to_core(handle,
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_LOAD_LIB,
+							  (u8 *)&api_load_lib,
+							  &size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_LOAD_LIB,
 							  (u8 *)&api_load_lib,
 							  sizeof(api_load_lib),
 							  core_id);
+	}
+
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -656,6 +694,7 @@ tpu_kernel_function_t tpu_kernel_get_function_from_core(bm_handle_t handle, tpu_
 {
 	a53lite_get_func_t api_get_func;
 	int ret;
+	u32 size = sizeof(api_get_func);
 
 	if (!module)
 	{
@@ -668,11 +707,19 @@ tpu_kernel_function_t tpu_kernel_get_function_from_core(bm_handle_t handle, tpu_
 	strncpy(api_get_func.func_name, function, FUNC_MAX_NAME_LEN);
 	memcpy(api_get_func.md5, module->md5, MD5SUM_LEN);
 	api_get_func.core_id = core_id;
-	ret = bm_send_api_to_core(handle,
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_GET_FUNC,
+							  (u8 *)&api_get_func,
+							  &size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_GET_FUNC,
 							  (u8 *)&api_get_func,
 							  sizeof(api_get_func),
 							  core_id);
+	}
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -717,16 +764,28 @@ typedef int (*f_ptr)(void *, unsigned int);
 bm_status_t tpu_kernel_launch_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)
 {
 	bm_status_t ret = BM_SUCCESS;
-	u8 *buf = (u8 *)malloc(8 + size);
+	u32 final_size = 0;
+	u8 *buf;
+
+	if (BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+				  BMLIB_LOG_ERROR,
+				  "tpu_kernel_launch_from_core not support on 84x6, use tpu_kernel_launch_from_multi_cores\n");
+		return BM_ERR_NOFEATURE;
+	}
+
+	buf = (u8 *)malloc(8 + size);
 	memcpy(buf, &function, 4);
 	memcpy(buf + 4, &size, sizeof(u32));
 	memcpy(buf + 8, args, size);
+	final_size = size + 8;
 
 	ret = bm_send_api_to_core(handle,
-							  BM_API_ID_TPUSCALER_LAUNCH_FUNC,
-							  (u8 *)buf,
-							  8 + size,
-							  core_id);
+						  BM_API_ID_TPUSCALER_LAUNCH_FUNC,
+						  (u8 *)buf,
+						  8 + size,
+						  core_id);
+
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -747,19 +806,78 @@ bm_status_t tpu_kernel_launch(bm_handle_t handle, tpu_kernel_function_t function
 	return tpu_kernel_launch_from_core(handle, function, args, size, 0);
 }
 
-bm_status_t tpu_kernel_launch_async_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)
+bm_status_t tpu_kernel_launch_from_multi_cores(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int group_num, int block_num)
 {
 	bm_status_t ret = BM_SUCCESS;
+#ifdef USING_CMODEL
+	ret = bm_send_api_to_multi_core(
+        handle,
+        BM_API_ID_TPUSCALER_SET_INFO,
+        (u8 *)args,
+        (u32*)&size,
+        group_num,
+        block_num);
+	if (ret != 0)
+	{
+		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+					BMLIB_LOG_ERROR,
+					"launch function api error, ret %d\n",
+					ret);
+		return ret;
+	}
+#endif
+	u32 final_size = 0;
 	u8 *buf = (u8 *)malloc(8 + size);
 	memcpy(buf, &function, 4);
 	memcpy(buf + 4, &size, sizeof(u32));
 	memcpy(buf + 8, args, size);
+	final_size  = size + 8;
 
-	ret = bm_send_api_to_core(handle,
+    ret = bm_send_api_to_multi_core(
+        handle,
+        BM_API_ID_TPUSCALER_LAUNCH_FUNC,
+        (u8 *)buf,
+        &final_size,
+        group_num,
+        block_num);
+    if (ret != 0)
+    {
+        bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+                    BMLIB_LOG_ERROR,
+                    "launch function api error, ret %d\n",
+                    ret);
+        free(buf);
+        return ret;
+    }
+
+    free(buf);
+    return ret;
+}
+
+bm_status_t tpu_kernel_launch_async_from_core(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int core_id)
+{
+	bm_status_t ret = BM_SUCCESS;
+	u32 final_size = 0;
+	u8 *buf = (u8 *)malloc(8 + size);
+	memcpy(buf, &function, 4);
+	memcpy(buf + 4, &size, sizeof(u32));
+	memcpy(buf + 8, args, size);
+	final_size  = size + 8;
+
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_LAUNCH_FUNC,
+							  (u8 *)buf,
+							  &final_size,
+							  1,1);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_LAUNCH_FUNC,
 							  (u8 *)buf,
 							  8 + size,
 							  core_id);
+	}
+
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -806,6 +924,23 @@ bm_status_t tpu_kernel_launch_async_multicores(bm_handle_t handle, tpu_launch_pa
 		}
 	}
 #else
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		for(int i = 0; i < param_num; i++){
+			ret = tpu_kernel_launch_async_from_core(handle,
+												   param_list[i].func_id,
+												   param_list[i].param_data,
+												   param_list[i].param_size,
+												   param_list[i].core_id);
+			if(ret != BM_SUCCESS){
+				bmlib_log(A53LITE_RUNTIME_LOG_TAG,
+						  BMLIB_LOG_ERROR,
+						  "launch function api error, ret %d\n",
+						  ret);
+				return ret;
+			}
+		}
+		return ret;
+	}
 	ret = bm_send_api_multicores(handle, BM_API_ID_TPUSCALER_LAUNCH_FUNC_MULT_CORES, param_list, param_num);
 	if (ret != 0)
 	{
@@ -844,15 +979,24 @@ bm_status_t tpu_kernel_unload_module_from_core(bm_handle_t handle, tpu_kernel_mo
 	bm_profile_unload_module(handle, p_module, core_id);
 	a53lite_load_lib_t api_load_lib;
 	bm_status_t ret = BM_SUCCESS;
+	u32 size = sizeof(api_load_lib);
 
 	memcpy(api_load_lib.md5, p_module->md5, 16);
 	api_load_lib.cur_rec = 0;
 	strncpy((char *)api_load_lib.lib_name, p_module->lib_name, LIB_MAX_NAME_LEN);
-	ret = bm_send_api_to_core(handle,
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_TPUSCALER_UNLOAD_LIB,
+							  (u8 *)&api_load_lib,
+							  &size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_TPUSCALER_UNLOAD_LIB,
 							  (u8 *)&api_load_lib,
 							  sizeof(api_load_lib),
 							  core_id);
+	}
 	if (ret != 0)
 	{
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
@@ -887,12 +1031,20 @@ bm_status_t tpu_kernel_free_module(bm_handle_t handle, tpu_kernel_module_t p_mod
 bm_status_t tpu_kernel_get_fw_version(bm_handle_t handle, int core_id)
 {
 	bm_status_t ret = BM_SUCCESS;
-
-	ret = bm_send_api_to_core(handle,
+	u32 size = 0;
+	if(BM_CHIP_ID_84X6 == get_arch_code(handle)) {
+		ret = bm_send_api_to_multi_core(handle,
+							  BM_API_ID_A53LITE_GET_FW_VERSION,
+							  NULL,
+							  &size,
+							  1,4);
+	} else {
+		ret = bm_send_api_to_core(handle,
 							  BM_API_ID_A53LITE_GET_FW_VERSION,
 							  NULL,
 							  0,
 							  core_id);
+	}
 	if (ret != 0) {
 		bmlib_log(A53LITE_RUNTIME_LOG_TAG,
 				  BMLIB_LOG_ERROR,

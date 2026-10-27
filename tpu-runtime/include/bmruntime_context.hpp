@@ -120,12 +120,20 @@ private:
 
 class MemoryManager {
 public:
-  MemoryManager(int dev_id) {
+  MemoryManager(int dev_id) : m_owns_handle(true) {
     bm_dev_request(&m_handle, dev_id);
     m_compute_mem = std::make_shared<ComputeMemory>(m_handle);
     m_coeff_mem = std::make_shared<CoeffMemory>(m_handle);
   }
-  ~MemoryManager() { bm_dev_free(m_handle); }
+  MemoryManager(bm_handle_t handle) : m_handle(handle), m_owns_handle(false) {
+    m_compute_mem = std::make_shared<ComputeMemory>(m_handle);
+    m_coeff_mem = std::make_shared<CoeffMemory>(m_handle);
+  }
+  ~MemoryManager() {
+    if (m_owns_handle) {
+      bm_dev_free(m_handle);
+    }
+  }
 
   static std::shared_ptr<MemoryManager> Instance(int dev_id) {
     static InstanceArray instances{};
@@ -136,12 +144,23 @@ public:
     return instances[dev_id];
   }
 
+  static std::shared_ptr<MemoryManager> Instance(bm_handle_t handle) {
+    static InstanceArray instances{};
+    static std::array<std::once_flag, MAX_DEVICES> flags{};
+    int dev_id = bm_get_devid(handle);
+    std::call_once(flags[dev_id], [&]() {
+      instances[dev_id] = std::make_shared<MemoryManager>(handle);
+    });
+    return instances[dev_id];
+  }
+
   std::shared_ptr<ComputeMemory> computeMemory() { return m_compute_mem; }
 
   const std::shared_ptr<CoeffMemory> coeffMemory() { return m_coeff_mem; }
 
 private:
   bm_handle_t m_handle;
+  bool m_owns_handle{true};
   // compute memory or neuron memory
   std::shared_ptr<ComputeMemory> m_compute_mem;
 

@@ -3410,6 +3410,50 @@ DECL_EXPORT bm_status_t bm_get_vpp_instant_usage(bm_handle_t handle, int *vpp_us
  *          Other code  Fails.
  */
 DECL_EXPORT bm_status_t bm_get_product_sn(char *product_sn);
+
+DECL_EXPORT bm_status_t tpu_kernel_launch_from_multi_cores(bm_handle_t handle, tpu_kernel_function_t function, void *args, size_t size, int group_num, int block_num);
+
+/**
+ * @name    bm_tpu_kernel_task_begin
+ * @brief   Mark the start of a latency-sensitive tpu kernel task on this
+ *          device. While any task is marked, bmodel inference launched with
+ *          BM_RUNTIME_YIELD_TO_KERNEL_TASK waits for these tasks to finish
+ *          before sending each subnet api, so the kernel task api is always
+ *          queued ahead of the remaining subnets.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_tpu_kernel_task_begin(bm_handle_t handle);
+
+/**
+ * @name    bm_tpu_kernel_task_end
+ * @brief   Mark the end of a tpu kernel task started with
+ *          bm_tpu_kernel_task_begin. Wakes up runtime threads waiting in
+ *          bm_tpu_kernel_task_wait_done.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_tpu_kernel_task_end(bm_handle_t handle);
+
+/**
+ * @name    bm_tpu_kernel_task_wait_done
+ * @brief   Block until no tpu kernel task is pending (every begin has its
+ *          matching end). Called by bmruntime between subnets when
+ *          BM_RUNTIME_YIELD_TO_KERNEL_TASK is set.
+ * @ingroup bmlib_runtime
+ *
+ * @param [in]  handle          The device handle
+ * @retval  BM_SUCCESS  Succeeds.
+ *          Other code  Fails.
+ */
+DECL_EXPORT bm_status_t bm_tpu_kernel_task_wait_done(bm_handle_t handle);
+
 #if defined(__cplusplus)
 }
 #endif

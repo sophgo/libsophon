@@ -2,6 +2,8 @@
 #define _BASE_DEBUG_H_
 
 #include <linux/debugfs.h>
+struct bm_device_info;
+#include "bm_debug.h"
 
 extern u32 base_log_lv;
 

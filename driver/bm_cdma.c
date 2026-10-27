@@ -43,16 +43,20 @@ irqreturn_t bmdrv_irq_handler_cdma(int irq, void *data)
 #ifndef SOC_MODE
 void bm_cdma_request_irq(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		bm1688_dual_cdma_init(bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_dual_cdma_init(bmdi);
 	else
 		bmdrv_submodule_request_irq(bmdi, CDMA_IRQ_ID, bmdrv_cdma_irq_handler0);
 }
 
 void bm_cdma_free_irq(struct bm_device_info *bmdi)
 {
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		bm1688_dual_cdma_remove(bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_dual_cdma_remove(bmdi);
 	else
 		bmdrv_submodule_free_irq(bmdi, CDMA_IRQ_ID);
 }

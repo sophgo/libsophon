@@ -233,8 +233,9 @@ void bm1684_map_bar_p2p(struct bm_device_info *bmdi, unsigned long long dst) {
 	REG_WRITE32(atu_base_addr, 0x918, dst >> 32);
 }
 
-void bm1684_unmap_bar(struct bm_bar_info *bari) {
+void bm1684_unmap_bar(struct bm_device_info *bmdi) {
 	void __iomem *atu_base_addr;
+	struct bm_bar_info *bari = &bmdi->cinfo.bar_info;
 	int i = 0;
 	atu_base_addr = bari->bar0_vaddr + REG_OFFSET_PCIE_iATU;
 	for (i = 0; i < 30; i++) {

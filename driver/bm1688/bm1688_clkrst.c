@@ -182,7 +182,7 @@ static u32 bm1688_tpu_get_best_parent_div(struct bm_device_info *bmdi, u32 targe
 	return min_delta;
 }
 
-int bm1688_bmdev_clk_hwlock_lock(struct bm_device_info* bmdi)
+int bm1688_clk_hwlock_lock(struct bm_device_info* bmdi)
 {
 	u32 timeout_us = bm1688_get_poll_timeout_us(bmdi);
 	u32 elapsed_us = 0;
@@ -199,13 +199,13 @@ int bm1688_bmdev_clk_hwlock_lock(struct bm_device_info* bmdi)
 	return 0;
 }
 
-void bm1688_bmdev_clk_hwlock_unlock(struct bm_device_info* bmdi)
+void bm1688_clk_hwlock_unlock(struct bm_device_info* bmdi)
 {
 	top_reg_write(bmdi, TOP_CLK_LOCK, 0);
 }
 
 static int tpll_ctl_reg = 1 | 2<< 8 | 1 << 12 | 44<< 16;
-int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target)
+int bm1688_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target)
 {
 	int prediv = 0;
 	int divsel = 0;
@@ -268,7 +268,7 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 
 		readback_div = top_reg_read(bmdi, BM1688_DIV_TPU_CLK_TPU_OFF);
 		readback_byp = top_reg_read(bmdi, BM1688_CLK_BYP_0_OFF);
-		actual_mhz = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+		actual_mhz = bm1688_clk_get_tpu_freq(bmdi);
 		pr_info_ratelimited(
 			"bm-sophon%d set tpu clk req=%dMHz parent=%u div=%u target_rate=%uHz delta=%uHz div_reg=0x%08x byp=0x%08x actual=%dMHz\n",
 			bmdi->dev_index, target, best_src_sel, best_div, best_rate_hz,
@@ -330,7 +330,7 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 
 		top_reg_write(bmdi, TOP_TPLL_CTL, new_tpll);
 		readback_tpll = top_reg_read(bmdi, TOP_TPLL_CTL);
-		actual_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+		actual_freq = bm1688_clk_get_tpu_freq(bmdi);
 		pr_info_ratelimited(
 			"bm-sophon%d set tpu freq direct-write done, req=%dMHz actual=%dMHz tpll=0x%08x\n",
 			bmdi->dev_index, target, actual_freq, readback_tpll);
@@ -350,7 +350,7 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 		top_reg_write(bmdi, TOP_CLK_SELECT, val);
 		udelay(1);
 	} else {
-		if (bm1688_bmdev_clk_hwlock_lock(bmdi) != 0)
+		if (bm1688_clk_hwlock_lock(bmdi) != 0)
 		{
 			pr_err("%s: get clk hwlock fail\n", __func__);
 			return -1;
@@ -396,10 +396,10 @@ int bm1688_bmdrv_clk_set_tpu_target_freq(struct bm_device_info *bmdi, int target
 		val |= 1 << 1;
 		top_reg_write(bmdi, TOP_PLL_ENABLE, val);
 
-		bm1688_bmdev_clk_hwlock_unlock(bmdi);
+		bm1688_clk_hwlock_unlock(bmdi);
 	}
 
-	actual_freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+	actual_freq = bm1688_clk_get_tpu_freq(bmdi);
 	pr_info_ratelimited(
 		"bm-sophon%d set tpu freq done, req=%dMHz actual=%dMHz tpll=0x%08x\n",
 		bmdi->dev_index, target, actual_freq, top_reg_read(bmdi, TOP_TPLL_CTL));
@@ -411,16 +411,16 @@ set_freq_out:
 		val = top_reg_read(bmdi, TOP_PLL_ENABLE);
 		val |= 1 << 1;
 		top_reg_write(bmdi, TOP_PLL_ENABLE, val);
-		bm1688_bmdev_clk_hwlock_unlock(bmdi);
+		bm1688_clk_hwlock_unlock(bmdi);
 	}
 	return -ETIMEDOUT;
 }
 
-void bm1688_bmdrv_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int divider_factor)
+void bm1688_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int divider_factor)
 {
 	int val = 0;
 
-	if (bm1688_bmdev_clk_hwlock_lock(bmdi) != 0)
+	if (bm1688_clk_hwlock_lock(bmdi) != 0)
 	{
 		pr_err("%s: get clk hwlock fail\n", __func__);
 		return;
@@ -455,14 +455,14 @@ void bm1688_bmdrv_clk_set_tpu_divider_fpll(struct bm_device_info *bmdi, int divi
 	val |= 1 << BIT_CLK_TPU_ENABLE;
 	top_reg_write(bmdi, TOP_CLK_ENABLE1, val);
 
-	bm1688_bmdev_clk_hwlock_unlock(bmdi);
+	bm1688_clk_hwlock_unlock(bmdi);
 }
 
-void bm1688_bmdrv_clk_set_close(struct bm_device_info *bmdi)
+void bm1688_clk_set_close(struct bm_device_info *bmdi)
 {
 	u32 val = 0;
 
-	if (bm1688_bmdev_clk_hwlock_lock(bmdi) != 0)
+	if (bm1688_clk_hwlock_lock(bmdi) != 0)
 	{
 		pr_err("%s: get clk hwlock fail\n", __func__);
 		return;
@@ -488,10 +488,10 @@ void bm1688_bmdrv_clk_set_close(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 	udelay(1);
 
-	bm1688_bmdev_clk_hwlock_unlock(bmdi);
+	bm1688_clk_hwlock_unlock(bmdi);
 }
 
-int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi)
+int bm1688_clk_get_tpu_freq(struct bm_device_info *bmdi)
 {
 	int prediv = 0;
 	int postdiv = 0;
@@ -538,11 +538,11 @@ int bm1688_bmdrv_clk_get_tpu_freq(struct bm_device_info *bmdi)
 	return fout/1000;
 }
 
-void bm1688_bmdrv_clk_set_tpu_divider(struct bm_device_info *bmdi, int divider_factor)
+void bm1688_clk_set_tpu_divider(struct bm_device_info *bmdi, int divider_factor)
 {
 	int val = 0;
 
-	if (bm1688_bmdev_clk_hwlock_lock(bmdi) != 0)
+	if (bm1688_clk_hwlock_lock(bmdi) != 0)
 	{
 		pr_err("%s: get clk hwlock fail\n", __func__);
 		return;
@@ -577,53 +577,53 @@ void bm1688_bmdrv_clk_set_tpu_divider(struct bm_device_info *bmdi, int divider_f
 	val |= 1 << BIT_CLK_TPU_ENABLE;
 	top_reg_write(bmdi, TOP_CLK_ENABLE1, val);
 
-	bm1688_bmdev_clk_hwlock_unlock(bmdi);
+	bm1688_clk_hwlock_unlock(bmdi);
 }
 
-int bm1688_bmdrv_clk_get_tpu_divider(struct bm_device_info *bmdi)
+int bm1688_clk_get_tpu_divider(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_CLK_DIV0);
 	return (val >> 16) & 0x1f;
 }
 
-int bm1688_bmdev_clk_ioctl_set_tpu_divider(struct bm_device_info* bmdi, unsigned long arg)
+int bm1688_clk_ioctl_set_tpu_divider(struct bm_device_info* bmdi, unsigned long arg)
 {
 	int divider = 0;
 
 	if(get_user(divider, (u64 __user *)arg)) {
-		pr_err("bmdrv: bm1688_bmdev_clk_ioctl_set_tpu_divider get user failed!\n");
+		pr_err("bmdrv: bm1688_clk_ioctl_set_tpu_divider get user failed!\n");
 		return -1;
 	} else {
-		printk("bm1688_bmdrv_clk_set_tpu_divider: divider=%d\n", divider);
-		bm1688_bmdrv_clk_set_tpu_divider(bmdi, divider);
+		printk("bm1688_clk_set_tpu_divider: divider=%d\n", divider);
+		bm1688_clk_set_tpu_divider(bmdi, divider);
 		return 0;
 	}
 }
 
-int bm1688_bmdev_clk_ioctl_set_tpu_freq(struct bm_device_info* bmdi, unsigned long arg)
+int bm1688_clk_ioctl_set_tpu_freq(struct bm_device_info* bmdi, unsigned long arg)
 {
 	int target = 0;
 
 	if(get_user(target, (u64 __user *)arg)) {
-		pr_err("bmdrv: bm1688_bmdev_clk_ioctl_set_tpu_freq get user failed!\n");
+		pr_err("bmdrv: bm1688_clk_ioctl_set_tpu_freq get user failed!\n");
 		return -1;
 	} else {
-		return bm1688_bmdrv_clk_set_tpu_target_freq(bmdi, target);
+		return bm1688_clk_set_tpu_target_freq(bmdi, target);
 	}
 }
 
-int bm1688_bmdev_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned long arg)
+int bm1688_clk_ioctl_get_tpu_freq(struct bm_device_info* bmdi, unsigned long arg)
 {
 	int freq = 0;
 	int ret = 0;
 
-	freq = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+	freq = bm1688_clk_get_tpu_freq(bmdi);
 	ret = put_user(freq, (int __user *)arg);
 	return ret;
 }
 
-void bm1688_bmdrv_clk_enable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_enable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -631,7 +631,7 @@ void bm1688_bmdrv_clk_enable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_devi
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_clk_disable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_disable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -639,7 +639,7 @@ void bm1688_bmdrv_clk_disable_tpu_subsystem_axi_sram_auto_clk_gate(struct bm_dev
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_clk_enable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_enable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -647,7 +647,7 @@ void bm1688_bmdrv_clk_enable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_clk_disable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_disable_tpu_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -655,7 +655,7 @@ void bm1688_bmdrv_clk_disable_tpu_subsystem_fabric_auto_clk_gate(struct bm_devic
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_clk_enable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_enable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -663,7 +663,7 @@ void bm1688_bmdrv_clk_enable_pcie_subsystem_fabric_auto_clk_gate(struct bm_devic
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_clk_disable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
+void bm1688_clk_disable_pcie_subsystem_fabric_auto_clk_gate(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_AUTO_CLK_GATE_EN0);
@@ -671,7 +671,7 @@ void bm1688_bmdrv_clk_disable_pcie_subsystem_fabric_auto_clk_gate(struct bm_devi
 	top_reg_write(bmdi, TOP_AUTO_CLK_GATE_EN0, val);
 }
 
-void bm1688_bmdrv_sw_reset_tpu(struct bm_device_info *bmdi)
+void bm1688_sw_reset_tpu(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_SW_RESET0);
@@ -686,7 +686,7 @@ void bm1688_bmdrv_sw_reset_tpu(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 }
 
-void bm1688_bmdrv_sw_reset_gdma(struct bm_device_info *bmdi)
+void bm1688_sw_reset_gdma(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_SW_RESET0);
@@ -701,7 +701,7 @@ void bm1688_bmdrv_sw_reset_gdma(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 }
 
-void bm1688_bmdrv_sw_reset_tc906b(struct bm_device_info *bmdi)
+void bm1688_sw_reset_tc906b(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_SW_RESET0);
@@ -716,7 +716,7 @@ void bm1688_bmdrv_sw_reset_tc906b(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 }
 
-void bm1688_bmdrv_sw_reset_hau(struct bm_device_info *bmdi)
+void bm1688_sw_reset_hau(struct bm_device_info *bmdi)
 {
 	int val = 0;
 	val = top_reg_read(bmdi, TOP_SW_RESET0);
@@ -729,27 +729,27 @@ void bm1688_bmdrv_sw_reset_hau(struct bm_device_info *bmdi)
 	top_reg_write(bmdi, TOP_SW_RESET0, val);
 }
 
-static void bm1688_bmdrv_clk_set_module_reset(struct bm_device_info* bmdi, BM1688_MODULE_ID module)
+static void bm1688_clk_set_module_reset(struct bm_device_info* bmdi, BM1688_MODULE_ID module)
 {
 	switch (module) {
 	case BM1688_MODULE_TPU:
-		bm1688_bmdrv_sw_reset_tpu(bmdi);
+		bm1688_sw_reset_tpu(bmdi);
 		break;
 	case BM1688_MODULE_GDMA:
-		bm1688_bmdrv_sw_reset_gdma(bmdi);
+		bm1688_sw_reset_gdma(bmdi);
 		break;
 	case BM1688_MODULE_TC906B:
-		bm1688_bmdrv_sw_reset_tc906b(bmdi);
+		bm1688_sw_reset_tc906b(bmdi);
 		break;
 	case BM1688_MODULE_HAU:
-		bm1688_bmdrv_sw_reset_hau(bmdi);
+		bm1688_sw_reset_hau(bmdi);
 		break;
 	default:
 		break;
 	}
 }
 
-int bm1688_bmdev_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigned long arg)
+int bm1688_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigned long arg)
 {
 	BM1688_MODULE_ID module = (BM1688_MODULE_ID)0;
 
@@ -757,8 +757,8 @@ int bm1688_bmdev_clk_ioctl_set_module_reset(struct bm_device_info* bmdi, unsigne
 		pr_err("bmdrv: bmdev_clk_ioctl_set_module get user failed!\n");
 		return -1;
 	} else {
-		printk("bm1688_bmdrv_clk_set_module_reset: module=%d\n", module);
-		bm1688_bmdrv_clk_set_module_reset(bmdi, module);
+		printk("bm1688_clk_set_module_reset: module=%d\n", module);
+		bm1688_clk_set_module_reset(bmdi, module);
 		return 0;
 	}
 }

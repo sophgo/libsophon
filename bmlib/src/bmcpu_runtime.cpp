@@ -794,7 +794,7 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
 				"bmcpu is not enable in misc info, %d\n", misc_info.a53_enable);
 		return BM_NOT_SUPPORTED;
 	}
-	if (misc_info.chipid != 0x1686a200) {
+	if (misc_info.chipid != BM_CHIP_ID_1688) {
 	ret = bm_send_api_ext(handle,
 						BM_API_ID_START_CPU,
 						(const u8 *)&api_start_cpu,
@@ -848,7 +848,7 @@ bm_status_t bmcpu_start_cpu(bm_handle_t handle,
 		return BM_ERR_FAILURE;
 	}
 
-	if (misc_info.chipid == 0x1686a200)
+	if (misc_info.chipid == BM_CHIP_ID_1688)
 		return BM_SUCCESS;
 
 	ret = bm_send_api_ext(handle,

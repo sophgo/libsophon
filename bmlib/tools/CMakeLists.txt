@@ -41,6 +41,10 @@ else()
             COMPONENT libsophon)
     endforeach(src)
 
+    install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_bmlib_tests.sh
+        DESTINATION bin
+        COMPONENT libsophon)
+
     add_subdirectory(a53lite)
 
     if(NOT "${PLATFORM}" STREQUAL "soc")

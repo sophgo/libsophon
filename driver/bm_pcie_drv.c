@@ -32,6 +32,7 @@
 #include "bm1684/bm1684_jpu.h"
 #include "bm1684_clkrst.h"
 #include "bm1688_clkrst.h"
+#include "84x6_clkrst.h"
 #include "bm1684/bm1684_irq.h"
 #include "bm1682/bm1682_irq.h"
 #include "bm1684/bm1684_card.h"
@@ -45,7 +46,17 @@
 #include "bm1688/bm1688_card.h"
 #include "bm1688/bm1688_msgfifo.h"
 #include "bm1688/bm1688_base64.h"
+#include "84x6/84x6_irq.h"
+#include "84x6/84x6_pcie.h"
+#include "84x6/84x6_card.h"
+#include "84x6/84x6_msgfifo.h"
+#include "84x6/84x6_base64.h"
+#include "84x6/84x6_tsh.h"
+#include "84x6/84x6_task.h"
+#include "84x6/84x6_shmem.h"
+#include "84x6/84x6_debug.h"
 //#include "bm1688/ddr/ddr.h"
+//#include "84x6/ddr/ddr.h"
 #include "bm_card.h"
 #include "bm_napi.h"
 #include "sg_comm.h"
@@ -128,9 +139,14 @@ static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *ci
 		if (!cinfo->bar_info.bar0_vaddr) {
 			rc = -ENOMEM;
 			dev_err(&pdev->dev, "iomap for bar0 failed\n");
-			goto err_iomap;
+			goto err_iomap0;
 		}
+	} else {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "bar0 start is 0\n");
+		goto err_iomap0;
 	}
+
 	cinfo->bar_info.bar1_start = pci_resource_start(pdev, 1);
 	if (cinfo->bar_info.bar1_start != 0) {
 		cinfo->bar_info.bar1_len = pci_resource_len(pdev, 1);
@@ -140,7 +156,12 @@ static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *ci
 			dev_err(&pdev->dev, "iomap for bar1 failed\n");
 			goto err_iomap1;
 		}
+	} else {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "bar1 start is 0\n");
+		goto err_iomap1;
 	}
+
 	cinfo->bar_info.bar2_start = pci_resource_start(pdev, 2);
 	if (cinfo->bar_info.bar2_start != 0) {
 		cinfo->bar_info.bar2_len = pci_resource_len(pdev, 2);
@@ -150,7 +171,12 @@ static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *ci
 			dev_err(&pdev->dev, "iomap for bar2 failed\n");
 			goto err_iomap2;
 		}
+	} else {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "bar2 start is 0\n");
+		goto err_iomap2;
 	}
+
 	cinfo->bar_info.bar4_start = pci_resource_start(pdev, 4);
 	if (cinfo->bar_info.bar4_start != 0) {
 		cinfo->bar_info.bar4_len = pci_resource_len(pdev, 4);
@@ -160,7 +186,12 @@ static int bmdrv_pci_init_bar_address(struct pci_dev *pdev, struct chip_info *ci
 			dev_err(&pdev->dev, "iomap for bar4 failed\n");
 			goto err_iomap4;
 		}
+	} else {
+		rc = -ENOMEM;
+		dev_err(&pdev->dev, "bar4 start is 0\n");
+		goto err_iomap4;
 	}
+
 	return 0;
 err_iomap4:
 	pci_iounmap(pdev, cinfo->bar_info.bar2_vaddr);
@@ -168,7 +199,7 @@ err_iomap2:
 	pci_iounmap(pdev, cinfo->bar_info.bar1_vaddr);
 err_iomap1:
 	pci_iounmap(pdev, cinfo->bar_info.bar0_vaddr);
-err_iomap:
+err_iomap0:
 	pci_release_regions(pdev);
 err_request_regions:
 	return rc;
@@ -199,7 +230,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	pci_read_config_word(pdev, PCI_DEVICE_ID, &dev_id);
 	pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &subdev_id);
 	if(subdev_id == 0xa200)
-		device_id = 0x1686a200;
+		device_id = BM_CHIP_ID_1688;
 	else
 		device_id = (u32)dev_id;
 
@@ -312,7 +343,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->dev_info.mcu_version_reg = 0x36;
 		cinfo->tpu_core_num = 1;
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		cinfo->bmdrv_map_bar = bm1688_map_bar;
 		cinfo->bmdrv_unmap_bar = bm1688_unmap_bar;
 		cinfo->bmdrv_setup_bar_dev_layout = bm1688_setup_bar_dev_layout;
@@ -322,6 +353,7 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 		cinfo->bmdrv_stop_arm9 = bm1688_stop_c906;
 
 		cinfo->bm_reg = &bm_reg_bm1688;
+
 		cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
 		cinfo->chip_type = "bm1688";
 #ifdef PLATFORM_PALLADIUM
@@ -345,19 +377,41 @@ static int bmdrv_cinfo_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 
 		cinfo->bmdrv_clear_msgirq_by_core = bm1688_clear_msgirq;
 		cinfo->bmdrv_pending_msgirq_cnt = bm1688_pending_msgirq_cnt;
-
-		//cinfo->dev_info.chip_temp_reg = 0x00;
-		//cinfo->dev_info.board_temp_reg = 0x01;
-		//cinfo->dev_info.board_power_reg = 0x02;
-		//cinfo->dev_info.fan_speed_reg = 0x03;
-		//cinfo->dev_info.vendor_id_reg = 0x10;
-		//cinfo->dev_info.hw_version_reg = 0x14;
-		//cinfo->dev_info.fw_version_reg = 0x18;
-		//cinfo->dev_info.board_name_reg = 0x1c;
-		//cinfo->dev_info.sub_vendor_id_reg = 0x20;
-		//cinfo->dev_info.sn_reg = 0x24;
-		//cinfo->dev_info.mcu_version_reg = 0x36;
 		cinfo->tpu_core_num = 2;
+		break;
+    case BM_CHIP_ID_84X6:
+		cinfo->bmdrv_map_bar = bm84x6_map_bar;
+		cinfo->bmdrv_unmap_bar = bm84x6_unmap_bar;
+		cinfo->bmdrv_setup_bar_dev_layout = bm84x6_setup_bar_dev_layout;
+		cinfo->bmdrv_pcie_calculate_cdma_max_payload = bm84x6_pcie_calculate_cdma_max_payload;
+
+		cinfo->bmdrv_start_arm9 = bm84x6_start_c906;
+		cinfo->bmdrv_stop_arm9 = bm84x6_stop_c906;
+
+		cinfo->bm_reg = &bm_reg_bm84x6;
+		cinfo->share_mem_size = 1 << 12;  /* 4k DWORD, 16kB */
+		cinfo->chip_type = "84x6";
+#ifdef PLATFORM_PALLADIUM
+		cinfo->platform = PALLADIUM;
+#endif
+#ifdef PLATFORM_ASIC
+		cinfo->platform = DEVICE;
+#endif
+#ifdef PLATFORM_FPGA
+		cinfo->platform = FPGA;
+#endif
+
+		cinfo->bmdrv_enable_irq =  bm84x6_enable_intc_irq;
+		cinfo->bmdrv_get_irq_status =  bm84x6_get_irq_status;
+		cinfo->bmdrv_unmaskall_intc_irq = bm84x6_unmaskall_intc_irq;
+		cinfo->bmdrv_clear_cdmairq0 = bm84x6_clear_cdmairq0;
+		cinfo->bmdrv_clear_cdmairq0 = bm84x6_clear_cdmairq1;
+		//cinfo->bmdrv_clear_msgirq = bm1684_clear_msgirq;
+		cinfo->bmdrv_config_iatu_for_function_x = bm84x6_config_iatu_for_function_x;
+
+		cinfo->bmdrv_clear_msgirq_by_core = bm84x6_clear_msgirq;
+		cinfo->bmdrv_pending_msgirq_cnt = bm84x6_pending_msgirq_cnt;
+		cinfo->tpu_core_num = 4;
 		break;
 	default:
 		sprintf(cinfo->dev_name, "%s", "unknown device");
@@ -412,7 +466,8 @@ static int bmdrv_pci_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	cinfo->bmdrv_map_bar(bmdi, pdev);
 
 	io_init(bmdi);
-	cinfo->tpu_core_num = base_get_core_num(bmdi);
+	if (cinfo->chip_id == BM_CHIP_ID_1688)
+		cinfo->tpu_core_num = bm1688_base_get_core_num(bmdi);
 	/* init pci DMA attributes */
 	/* set pci card as DMA master */
 	pci_set_master(pdev);
@@ -454,7 +509,7 @@ static int bmdrv_pci_init(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	return rc;
 
 err_dma:
-	cinfo->bmdrv_unmap_bar(&cinfo->bar_info);
+	cinfo->bmdrv_unmap_bar(bmdi);
 err_bar_layout:
 	bmdrv_pci_release_bar_addr(pdev, cinfo);
 err_init_bar_addr:
@@ -467,7 +522,7 @@ static void bmdrv_pci_deinit(struct bm_device_info *bmdi, struct pci_dev *pdev)
 	struct chip_info *cinfo = &bmdi->cinfo;
 
 	pci_set_drvdata(pdev, NULL);
-	cinfo->bmdrv_unmap_bar(&cinfo->bar_info);
+	cinfo->bmdrv_unmap_bar(bmdi);
 	bmdrv_pci_release_bar_addr(pdev, cinfo);
 	pci_disable_device(pdev);
 }
@@ -556,7 +611,7 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 			bmdrv_clk_set_close(bmdi);
 		}
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		while (retry > 0) {
 			if (top_reg_read(bmdi, BM1688_PCIE_STATUS_OFFSET) & BM1688_PCIE_DDR_INITIALIZED) {
 				pr_info("bm-sophon%d: ddr initialized!\n", bmdi->dev_index);
@@ -579,6 +634,15 @@ static int bmdrv_hardware_init(struct bm_device_info *bmdi)
 		top_reg_write( bmdi, 0x21a0,0);
 		top_reg_write( bmdi, 0x21a4,0);
 		top_reg_write( bmdi, 0x21a8,0);
+		//gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
+		break;
+	case BM_CHIP_ID_84X6:
+		//if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
+		//	vpp_init(bmdi);
+		//	vc_init(bmdi);
+		// 	spacc_init(bmdi);
+		// 	mutex_init(&bmdi->efuse_mutex);
+		 //}
 		//gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, FW_PCIE_MODE);
 		break;
 	default:
@@ -635,8 +699,11 @@ retry1:
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_early_init \n", bmdi->dev_index);
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		pr_info("bm-sophon%d bm1688 bmdrv_hardware_early_init \n", bmdi->dev_index);
+		break;
+	case BM_CHIP_ID_84X6:
+		pr_info("bm-sophon%d 84x6 bmdrv_hardware_early_init \n", bmdi->dev_index);
 		break;
 	default:
 		return -EINVAL;
@@ -682,7 +749,7 @@ static void bmdrv_hardware_deinit(struct bm_device_info *bmdi)
 		}
 		pr_info("bm-sophon%d 1684x bmdrv_hardware_deinit \n", bmdi->dev_index);
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		if (bmdrv_get_gmem_mode(bmdi) != GMEM_TPU_ONLY) {
 #ifdef MEDIA_ENABLE
 			vpp_exit(bmdi);
@@ -704,11 +771,11 @@ static void bmdrv_modules_reset(struct bm_device_info *bmdi)
 		bmdrv_sw_reset_smmu(bmdi);
 		bmdrv_sw_reset_cdma(bmdi);
 		// bmdrv_sw_reset_vpp(bmdi);
-	} else if (bmdi->cinfo.chip_id == 0x1686a200) {
-		// bm1688_bmdrv_sw_reset_tpu(bmdi);
-		// bm1688_bmdrv_sw_reset_gdma(bmdi);
-		// bm1688_bmdrv_sw_reset_tc906b(bmdi);
-		// bm1688_bmdrv_sw_reset_hau(bmdi);
+	} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
+		// bm1688_sw_reset_tpu(bmdi);
+		// bm1688_sw_reset_gdma(bmdi);
+		// bm1688_sw_reset_tc906b(bmdi);
+		// bm1688_sw_reset_hau(bmdi);
 	}
 }
 
@@ -717,8 +784,6 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 	int rc = 0;
 
 	switch (bmdi->cinfo.chip_id) {
-	case 0x1682:
-		break;
 	case 0x1684:
 		bm1684_l2_sram_init(bmdi);
 		if (bmdi->c_attr.bm_set_led_status) {
@@ -729,11 +794,26 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 	case 0x1686:
 		pr_info("bm-sophon%d 1684x bmdrv_chip_specific_init \n", bmdi->dev_index);
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		pr_info("bm-sophon%d bm1688 bmdrv_chip_specific_init \n", bmdi->dev_index);
 		break;
+	case BM_CHIP_ID_84X6:
+		pr_info("bm-sophon%d 84x6 bmdrv_chip_specific_init \n", bmdi->dev_index);
+		rc = tsh_init(bmdi, NULL);
+		if (rc) {
+			pr_warn("bm-sophon%d tsh_init failed, rc=%d, continuing without TSH\n",
+				bmdi->dev_index, rc);
+			/* non-fatal: device may need firmware loaded first */
+			rc = 0;
+		} else {
+			bm84x6_task_init(bmdi, tsh_getmode(bmdi));
+		}
+		bmdev_test_proc_init(bmdi);
+		bmdev_shared_mem_init(bmdi);
+		bmdev_scaler_log_init(bmdi);
+		break;
 	default:
-		rc = -EINVAL;
+		pr_info("bm-sophon%d %x bmdrv_chip_specific_init \n", bmdi->dev_index, bmdi->cinfo.chip_id);
 	}
 	return rc;
 }
@@ -784,12 +864,12 @@ static void bmdrv_set_a53_boot_args(struct bm_device_info *bmdi)
 {
 	u32 flag;
 
-	if (bmdi->cinfo.chip_id == BM1684_DEVICE_ID) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1684) {
 		flag = SKIP_PCIEI;
 		(void)bmdev_memcpy_s2d_internal(bmdi, BOOT_ARGS_REG_1684, (const void *)&flag, sizeof(flag), false);
 		flag = FIP_SRC_SPIF;
 		(void)bmdev_memcpy_s2d_internal(bmdi, FIP_SOURCE_REG_1684, (const void *)&flag, sizeof(flag), false);
-	} else if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
+	} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1684X) {
 		flag = top_reg_read(bmdi, TOP_BOOT_ARGS_REG_1684X);
 		flag &= ~FIP_LOADED;
 		flag |= SKIP_PCIEI;
@@ -805,11 +885,11 @@ static u32 bmdrv_get_a53_boot_args(struct bm_device_info *bmdi)
 {
 	u32 flag;
 
-	if (bmdi->cinfo.chip_id == BM1684_DEVICE_ID) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1684) {
 		if (0 != bmdev_memcpy_d2s_internal(bmdi, &flag, BOOT_ARGS_REG_1684, sizeof(flag), false)) {
 			pr_err("bmdrv: reset bcmcpu read flag 0x%x fail!\n", flag);
 		}
-	} else if (bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
+	} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1684X) {
 		flag = top_reg_read(bmdi, TOP_BOOT_ARGS_REG_1684X);
 	} else {
 		pr_err("%s: %d get chip id 0x%x error\n", __func__, __LINE__, bmdi->cinfo.chip_id);
@@ -915,11 +995,11 @@ int bmdrv_reset_bmcpu(struct bm_device_info *bmdi)
 		return 0;
 	}
 
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		mode = gp_reg_read_enh(bmdi, GP_REG_C906_FW_MODE);
 	else
 		mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
-	if (mode == FW_MIX_MODE && bmdi->cinfo.chip_id == BM1684X_DEVICE_ID) {
+	if (mode == FW_MIX_MODE && bmdi->cinfo.chip_id == BM_CHIP_ID_1684X) {
 		pr_info("bmsophon%d mix mode force reset bmcpu!\n", bmdi->dev_index);
 		bmdrv_fw_unload(bmdi);
 		return bmdrv_force_reset_bmcpu(bmdi);
@@ -1097,14 +1177,16 @@ int bmdrv_alloc_dev_index(struct pci_dev *pdev)
 static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 {
 	int ret;
+	u64 bl1_base = (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) ? BM84X6_BL1_VERSION_BASE : BM1688_BL1_VERSION_BASE;
+	u64 bl2_base = (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) ? BM84X6_BL2_VERSION_BASE : BM1688_BL2_VERSION_BASE;
 
 	bmdi->cinfo.version.bl1_version = kmalloc(BL1_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, BL1_VERSION_BASE, BL1_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl1_version, bl1_base, BL1_VERSION_SIZE, false);
 	if(ret)
 		return -EBUSY;
 
 	bmdi->cinfo.version.bl2_version = kmalloc(BL2_VERSION_SIZE, GFP_KERNEL);
-	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, BL2_VERSION_BASE, BL2_VERSION_SIZE, false);
+	ret = bmdev_memcpy_d2s_internal(bmdi, bmdi->cinfo.version.bl2_version, bl2_base, BL2_VERSION_SIZE, false);
 	if(ret)
 		return -EBUSY;
 
@@ -1113,10 +1195,13 @@ static int bmdrv_get_boot_loader_version(struct bm_device_info *bmdi)
 
 static void bmdrv_record_boot_loader_version(struct bm_device_info *bmdi)
 {
+	u64 bl1_base = (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) ? BM84X6_BL1_VERSION_BASE : BM1688_BL1_VERSION_BASE;
+	u64 bl2_base = (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) ? BM84X6_BL2_VERSION_BASE : BM1688_BL2_VERSION_BASE;
+
 	if(bmdi->cinfo.version.bl1_version[0] == 'v')
-		bmdev_memcpy_s2d_internal(bmdi, BL1_VERSION_BASE, (void *)bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE, false);
+		bmdev_memcpy_s2d_internal(bmdi, bl1_base, (void *)bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE, false);
 	if(bmdi->cinfo.version.bl2_version[0] == 'v')
-		bmdev_memcpy_s2d_internal(bmdi, BL2_VERSION_BASE, (void *)bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE, false);
+		bmdev_memcpy_s2d_internal(bmdi, bl2_base, (void *)bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE, false);
 
 	kfree(bmdi->cinfo.version.bl1_version);
 	kfree(bmdi->cinfo.version.bl2_version);
@@ -1152,6 +1237,8 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	cinfo = &bmdi->cinfo;
 	bmdi->dev_index = dev_index;
+
+	spin_lock_init(&bmdi->irq_lock);
 
 	bmdrv_cinfo_init(bmdi, pdev);
 
@@ -1245,6 +1332,7 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_err(&pdev->dev, "bm_monitor_thread_init failed!\n");
 		goto err_monitor_thread_init;
 	}
+
 	rc = bmdrv_card_init(bmdi);
 	if (rc) {
 		dev_err(&pdev->dev, "bmdrv_card_init failed!\n");
@@ -1265,7 +1353,7 @@ static int bmdrv_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	//	goto err_card_init;
 	//}
 
-	dev_info(cinfo->device, "Card %d(type:%s) probe done\n", bmdi->dev_index,
+	dev_info(cinfo->device, "Chip %d(type:%s) probe done\n", bmdi->dev_index,
 			cinfo->chip_type);
 
 	return 0;
@@ -1280,6 +1368,11 @@ err_ctrl_add_dev:
 	if (dev_count == 0)
 		bmdrv_remove_bmci();
 err_chip_specific:
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+			bmdev_scaler_log_deinit(bmdi);
+			bmdev_shared_mem_exit(bmdi);
+			bmdev_test_proc_exit(bmdi);
+		}
 	bmdrv_disable_attr(bmdi);
 err_enable_attr:
 	bmdrv_free_irq(pdev);
@@ -1357,6 +1450,12 @@ static void bmdrv_pci_remove(struct pci_dev *pdev)
 
 	bmdrv_software_deinit(bmdi);
 
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		bmdev_scaler_log_deinit(bmdi);
+		bmdev_shared_mem_exit(bmdi);
+		bmdev_test_proc_exit(bmdi);
+	}
+
 	bmdrv_pci_deinit(bmdi, pdev);
 
 	kobject_del(&bmdi->kobj);
@@ -1429,6 +1528,7 @@ static void bmdrv_pci_shutdown(struct pci_dev *pdev)
 static struct pci_device_id bmdrv_devices_tbl[] = {
 	{PCI_DEVICE_SUB(SOPHGO_VENDOR_ID, 0x1686, PCI_ANY_ID, 0xA200)},
 	{PCI_DEVICE_SUB(SOPHGO_VENDOR_ID, 0x1688, PCI_ANY_ID, 0xA200)},
+	{PCI_DEVICE(SOPHGO_VENDOR_ID, 0x1694)},
 	{0, 0, 0, 0, 0, 0, 0}
 };
 
@@ -1500,7 +1600,9 @@ static void __exit bmdrv_module_exit(void)
 
 module_init(bmdrv_module_init);
 module_exit(bmdrv_module_exit);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
+MODULE_IMPORT_NS("DMA_BUF");
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
 MODULE_IMPORT_NS(DMA_BUF);
 #endif
 MODULE_LICENSE("GPL");

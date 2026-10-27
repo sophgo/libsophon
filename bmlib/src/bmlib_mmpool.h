@@ -73,9 +73,12 @@ public:
 	~bm_mem_pool();
 	pool_addr_t bm_mem_pool_alloc(pool_size_t size);
 	void bm_mem_pool_free(pool_addr_t addr);
+	void set_gmem_start_addr(u64 start_addr) { _gmem_start_addr = start_addr; }
+	void set_total_size(u64 total_size);
 
 private:
 	u64                  _total_size;
+	u64                  _gmem_start_addr;
 	struct pool_struct   _mem_pool_list[MAX_POOL_COUNT];
 	int                  _mem_pool_count;
 	/* managing allocated chunk */

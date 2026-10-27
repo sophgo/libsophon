@@ -164,7 +164,7 @@ void Launcher_BM1682::fill_api_info(const tpu_net_info_t &net_info,
   p_api = (u64 *)p_api + 1;
   *(u64 *)p_api = net_info.core_commands[0].gdma_cmd_addr;
   p_api = (u64 *)p_api + 1;
-  *(u64 *)p_api = net_info.core_commands[0].cdma_cmd_addr;
+  *(u64 *)p_api = net_info.core_commands[0].cdma_cmd_addrs[0];
   p_api = (u64 *)p_api + 1;
   *(int *)p_api = (int)cmd_info.size();
   for (size_t i = 0; i < cmd_info.size(); i++) {

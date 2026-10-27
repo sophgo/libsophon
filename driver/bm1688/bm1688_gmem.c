@@ -5,7 +5,7 @@
 #include "bm_gmem.h"
 
 #ifndef SOC_MODE
-int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
+int bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 {
 	struct reserved_mem_info *resmem_info = &bmdi->gmem_info.resmem_info;
 	struct chip_info *cinfo =  &bmdi->cinfo;
@@ -101,7 +101,7 @@ int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 }
 #else
 #include <linux/of_address.h>
-int bmdrv_bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
+int bm1688_parse_reserved_mem_info(struct bm_device_info *bmdi)
 {
 	struct platform_device *pdev = bmdi->cinfo.pdev;
 	struct reserved_mem_info *resmem_info = &bmdi->gmem_info.resmem_info;

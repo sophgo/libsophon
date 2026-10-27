@@ -4,6 +4,8 @@
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/version.h>
+struct bm_device_info;
+#include "bm_debug.h"
 #include <generated/compile.h>
 #include <linux/fs.h>
 #include <base_ctx.h>
@@ -612,24 +614,15 @@ static ssize_t venc_proc_write(struct file *file, const char __user *user_buf,
                     cVencDbgNoDataTimeoutPrefix);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops venc_proc_fops = {
-    .proc_open = venc_proc_open,
-    .proc_read = seq_read,
-    .proc_write = venc_proc_write,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS venc_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = venc_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_WRITE = venc_proc_write,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations venc_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = venc_proc_open,
-    .read = seq_read,
-    .write = venc_proc_write,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 int venc_proc_init(struct device *dev)
 {
@@ -737,22 +730,14 @@ static int h265e_proc_open(struct inode *inode, struct file *file)
     return single_open(file, h265e_proc_show, VC_PDE_DATA(inode));
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops h265e_proc_fops = {
-    .proc_open = h265e_proc_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS h265e_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = h265e_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations h265e_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = h265e_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 static int codecinst_proc_show(struct seq_file *m, void *v)
 {
@@ -791,22 +776,14 @@ static int codecinst_proc_open(struct inode *inode, struct file *file)
 
 
 
-#if (KERNEL_VERSION(5, 10, 0) <= LINUX_VERSION_CODE)
-static const struct proc_ops codecinst_proc_fops = {
-    .proc_open = codecinst_proc_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS codecinst_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = codecinst_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations codecinst_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = codecinst_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 
 int codecinst_proc_init(struct device *dev)
@@ -940,22 +917,14 @@ static int h264e_proc_open(struct inode *inode, struct file *file)
     return single_open(file, h264e_proc_show, VC_PDE_DATA(inode));
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops h264e_proc_fops = {
-    .proc_open = h264e_proc_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS h264e_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = h264e_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations h264e_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = h264e_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 int h264e_proc_init(struct device *dev)
 {
@@ -1085,22 +1054,14 @@ static int jpege_proc_open(struct inode *inode, struct file *file)
     return single_open(file, jpege_proc_show, VC_PDE_DATA(inode));
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops jpege_proc_fops = {
-    .proc_open = jpege_proc_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS jpege_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = jpege_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations jpege_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = jpege_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 int jpege_proc_init(struct device *dev)
 {
@@ -1739,22 +1700,14 @@ static int rc_proc_open(struct inode *inode, struct file *file)
     return single_open(file, rc_proc_show, VC_PDE_DATA(inode));
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops rc_proc_fops = {
-    .proc_open = rc_proc_open,
-    .proc_read = seq_read,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS rc_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = rc_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations rc_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = rc_proc_open,
-    .read = seq_read,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 int rc_proc_init(struct device *dev)
 {
@@ -2043,24 +1996,15 @@ static ssize_t vdec_proc_write(struct file *file, const char __user *user_buf,
                     NULL);
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0))
-static const struct proc_ops vdec_proc_fops = {
-    .proc_open = vdec_proc_open,
-    .proc_read = seq_read,
-    .proc_write = vdec_proc_write,
-    .proc_lseek = seq_lseek,
-    .proc_release = single_release,
+static const struct BM_PROC_FILE_OPS vdec_proc_fops = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_OPEN = vdec_proc_open,
+	BM_PROC_READ = seq_read,
+	BM_PROC_WRITE = vdec_proc_write,
+	BM_PROC_LLSEEK = seq_lseek,
+	BM_PROC_RELEASE = single_release,
 };
-#else
-static const struct file_operations vdec_proc_fops = {
-    .owner = THIS_MODULE,
-    .open = vdec_proc_open,
-    .read = seq_read,
-    .write = vdec_proc_write,
-    .llseek = seq_lseek,
-    .release = single_release,
-};
-#endif
+
 
 int vdec_proc_init(struct device *dev)
 {

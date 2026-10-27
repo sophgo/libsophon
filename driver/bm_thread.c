@@ -2,6 +2,7 @@
 #include <linux/device.h>
 #include "bm_common.h"
 #include "bm_thread.h"
+#include "84x6_task.h"
 
 struct bm_thread_info *bmdrv_find_thread_info(struct bm_handle_info *h_info, pid_t pid)
 {
@@ -31,6 +32,7 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	if (!thd_info)
 		return thd_info;
 	thd_info->user_pid = pid;
+	thd_info->q_idx = -1;
 
 	init_completion(&thd_info->msg_done);
 	for (i = 0; i < BM_MAX_CORE_NUM; i++) {
@@ -55,6 +57,18 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	hash_add_rcu(h_info->api_htable, &thd_info->node, pid);
 
 	return thd_info;
+}
+
+void bmdrv_unbind_thread_info(struct bm_device_info *bmdi, struct bm_handle_info *h_info)
+{
+	struct bm_thread_info *thd_info;
+	int bucket;
+
+	if (bmdi->cinfo.chip_id != BM_CHIP_ID_84X6)
+		return;
+
+	hash_for_each(h_info->api_htable, bucket, thd_info, node)
+		bmdev_thread_unbind_hwq(bmdi, thd_info);
 }
 
 void bmdrv_delete_thread_info(struct bm_handle_info *h_info)

@@ -3,7 +3,14 @@
 
 #define LAST_INI_REG_VAL	 0x76125438
 #define C906_0_PARK      0x104000000
-#define C906_1_PARK      0x10c000000   // 128M
+#define C906_1_PARK      0x108000000
+#define BM1688_C906_0_PARK      C906_0_PARK
+#define BM1688_C906_1_PARK      C906_1_PARK
+#define CV84X6_CA55_PCIE_PARK	0x24100000
+#define CV84X6_C906_0_PARK      0x1040000000
+#define CV84X6_C906_1_PARK      0x1050000000   // 256M
+#define CV84X6_C906_2_PARK      0x1060000000
+#define CV84X6_C906_3_PARK      0x1070000000 
 
 struct file;
 
@@ -25,6 +32,23 @@ typedef struct bm_firmware_desc {
 	unsigned int *ddr_fw;
 	int ddrfw_size;		//bytes
 } bm_fw_desc, *pbm_fw_desc;
+
+struct bm_fw_entry {
+	const char *fw_name;
+	u64         park_addr;
+	int       (*post_load)(struct bm_device_info *bmdi);
+	u32         oneshot;    /* bit flag: skip load+post_load if fw_oneshot_mask & this */
+};
+
+#define FW_ONESHOT_C2C  0x1
+
+struct chip_fw_map {
+	u32                    chip_id;
+	const char            *chip_name;
+	struct bm_fw_entry    *fw_entries;
+	int                    fw_count;
+};
+
 
 struct firmware_header{
 	char magic[4]; // 字符串"spfw"，sophon-firmware缩写，如果前四个字符不是这个，就按裸的firmware进行load, 其他信息全用0填充

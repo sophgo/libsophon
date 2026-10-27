@@ -792,7 +792,7 @@ static void vpss_job_finish(struct vpss_job *job)
 		return;
 	}
 
-	if ((job->is_v_tile) && (job->tile_mode & 0xc)) {
+	if ((job->is_v_tile) && (job->tile_mode & SCL_V_TILE_BOTH)) {
 		job->tile_mode &= ~(SCL_TILE_DOWN);
 
 		for (i = 0; i < VPSS_MAX; i++) {

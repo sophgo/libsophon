@@ -56,9 +56,12 @@ bool b_enable_mmap = true;
 bool b_print_subnet_time = false;
 bool b_bmodel_dir = true;
 bool memory_prealloc = false;
+bool b_in_device = false;
+bm_device_mem_u64_t model_dmem;
 string DECRYPT_LIB;
 bool use_runtime_share_mem = false;
 bool check_mem = true;
+int cascade_filter_dev_id = -1;
 vector<bm_shape_t> shapes;
 vector<bm_shape_t> output_shapes;
 vector<int> devices;
@@ -745,7 +748,29 @@ static void load_bmodel(const string &dir, void *p_bmrt)
 {
   string bmodel_path = fix_bmodel_path(dir);
   bool flag = true;
-  if (DECRYPT_LIB.empty()) {
+  if (b_in_device) {
+    std::ifstream bmodel_file(bmodel_path, std::ios::binary);
+    if (!bmodel_file) {
+      BMRT_LOG(FATAL, "Failed to open bmodel file %s", bmodel_path.c_str());
+    }
+    bmodel_file.seekg(0, std::ios::end);
+    size_t bmodel_size = bmodel_file.tellg();
+    bmodel_file.seekg(0, std::ios::beg);
+    bm_handle_t handle = ((Bmruntime *)p_bmrt)->get_bm_handle();
+    auto ret = bm_malloc_device_byte_u64(handle, &model_dmem, bmodel_size);
+    if (ret != BM_SUCCESS) {
+      BMRT_LOG(FATAL, "Failed to malloc device memory for bmodel");
+    }
+    void *bmodel_ptr = nullptr;
+    ret = bm_mem_mmap_device_mem_no_cache_u64(handle, &model_dmem, (unsigned long long *)&bmodel_ptr);
+    if (ret != BM_SUCCESS) {
+      BMRT_LOG(FATAL, "Failed to mmap device memory for bmodel");
+    }
+    bmodel_file.read((char *)bmodel_ptr, bmodel_size);
+    bmodel_file.close();
+    auto paddr = bm_mem_get_device_addr_u64(model_dmem);
+    flag = bmrt_load_bmodel_in_device(p_bmrt, bmodel_ptr,  paddr, bmodel_size);
+  } else if (DECRYPT_LIB.empty()) {
     flag = bmrt_load_bmodel(p_bmrt, bmodel_path.c_str());
   } else {
     flag = load_bmodel_with_decrypt(bmodel_path, p_bmrt);
@@ -884,6 +909,9 @@ void bmrt_test()
     BMRT_LOG(INFO, "device_index=%d, chip_id=%d", i, chipid_);
   }
   bm_handle_t bm_handle = bm_handles[0];
+  if (cascade_filter_dev_id >= 0) {
+    setenv("BMRT_CASCADE_FILTER_DEV_ID", std::to_string(cascade_filter_dev_id).c_str(), 1);
+  }
   auto p_bmrt = bmrt_create_ex(bm_handles.data(), device_num);
   if (use_runtime_share_mem) {
     bmrt_set_flags(p_bmrt, BM_RUNTIME_SHARE_MEM);
@@ -1420,6 +1448,9 @@ void bmrt_test()
   for (int i = 0; i < prealloc_mem_v.size(); ++i) {
     bm_free_device(bm_handle, prealloc_mem_v[i]);
   }
+  if (b_in_device) {
+    bm_free_device_u64(bm_handle, model_dmem);
+  }
   bmrt_destroy(p_bmrt);
   for (int i = 0; i < device_num; i++) {
     bm_dev_free(bm_handles[i]);
@@ -1476,11 +1507,13 @@ void Usage()
       "  --shapes           : Set shapes of the input shapes.\n"
       "  --output_shapes    : Set shapes of the output shapes.\n"
       "  --cascade_device   : Set devices to run for cascade model, e.g. 1,2\n"
+      "  --cascade_filter_dev_id : Filter cascade nets by device_id for multi-process cmodel, e.g. 0 or 1\n"
       "  --core_list        : Set the core id list those will be used to inference\n"
       "                         e.g. 0,1 means using 0,1 core together to infer the multi-core compiled bmodel.\n"
       "                              0:1 means using 0,1 core to infer the single-core compiled bmodel with parallelly mession.\n"
       "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
       "  --decrypt_lib      : Set decrypt_lib path for decrypt bmodel.\n"
+      "  --in_device        : Test bmrt_load_bmodel_in_device api.\n"
 #ifdef DEBUG
       "  --test_case        : Test api case, \n"
       "                       Option:\n"
@@ -1516,6 +1549,7 @@ DEFINE_bool(debug_output, false, "Dump output data and reference data for debug.
 DEFINE_string(shapes, "", "Set shapes of the input shapes.");
 DEFINE_string(output_shapes, "", "Set shapes of the output shapes.");
 DEFINE_string(cascade_device, "", "Set devices to run for cascade model, e.g. 1,2");
+DEFINE_int32(cascade_filter_dev_id, -1, "Filter cascade nets by device_id, only load nets matching this dev_id.");
 DEFINE_bool(mmap, true, "Mmap");
 DEFINE_int32(calculate_times, 1, "Calculate time.");
 DEFINE_string(output_ref, "", "Output_ref");
@@ -1696,6 +1730,8 @@ static void deal_with_options(int argc, char **argv)
                                          {"memory_prealloc", no_argument, &lopt, 19},
                                          {"decrypt_lib", required_argument, &lopt, 20},
                                          {"use_runtime_share_mem", no_argument, &lopt, 21},
+                                         {"in_device", no_argument, &lopt, 22},
+                                         {"cascade_filter_dev_id", required_argument, &lopt, 23},
                                          {0, 0, 0, 0}};
 
   if (argc < 2) {
@@ -1810,6 +1846,12 @@ static void deal_with_options(int argc, char **argv)
           case 21:
             use_runtime_share_mem = true;
             break;
+          case 22:
+            b_in_device = true;
+            break;
+          case 23:
+            cascade_filter_dev_id = atoi(optarg);
+            break;
         }
         break;
       case '?':
@@ -1851,6 +1893,7 @@ static void deal_with_options(int argc, char **argv)
       "                              0,1:2,3 means using 0,1 core and 2,3 core to infer the bmodel parallelly.\n"
       "  --memory_prealloc  : Memory alloc before load bmodel. Do not support multi bmodel. \n"
       "  --decrypt_lib      : Set decrypt_lib path for decrypt bmodel.\n"
+      "  --cascade_filter_dev_id : Filter cascade nets by device_id for multi-process cmodel, e.g. 0 or 1\n"
       "  --use_runtime_share_mem      : Use runtime share mem for multi core cases.\n"
     );
   gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -1891,6 +1934,7 @@ static void deal_with_options(int argc, char **argv)
   if (FLAGS_only_cmp_last) MEM_NUM = 1;
   if (!NEED_CMP) MEM_NUM = 1;
   if (FLAGS_memory_prealloc) memory_prealloc = true;
+  cascade_filter_dev_id = FLAGS_cascade_filter_dev_id;
   gflags::HandleCommandLineHelpFlags();
   read_bmodel_list();
   check_options();

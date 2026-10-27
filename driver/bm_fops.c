@@ -20,6 +20,11 @@
 #include "bm1684_base64.h"
 #include "bm1688_base64.h"
 #include "bm1688_card.h"
+#include "84x6_clkrst.h"
+#include "84x6_base64.h"
+#include "84x6_card.h"
+#include "84x6_task.h"
+#include "84x6_topology.h"
 #include "bm_timer.h"
 #ifndef SOC_MODE
 #include "spi.h"
@@ -52,6 +57,7 @@ static int bmdev_open(struct inode *inode, struct file *file)
 	pid_t open_pid;
 	struct bm_handle_info *h_info;
 	struct bm_thread_info *thd_info = NULL;
+	unsigned long flags;
 	int i;
 
 	PR_TRACE("bmdev_open\n");
@@ -83,7 +89,7 @@ static int bmdev_open(struct inode *inode, struct file *file)
 
 	hash_init(h_info->api_htable);
 	h_info->file = file;
-	h_info->open_pid = open_pid;
+	h_info->open_pid = current->tgid;
 	h_info->gmem_used = 0ULL;
 	for (i = 0; i < BM_MAX_CORE_NUM; i++) {
 		h_info->h_send_api_seq[i] = 0ULL;
@@ -100,10 +106,15 @@ static int bmdev_open(struct inode *inode, struct file *file)
 		mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 		return -ENOMEM;
 	}
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		bmdev_thread_bind_hwq(bmdi, thd_info, -1);
+	}
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
+	spin_lock_irqsave(&bmdi->handle_lock, flags);
 	list_add(&h_info->list, &bmdi->handle_list);
+	spin_unlock_irqrestore(&bmdi->handle_lock, flags);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	file->private_data = bmdi;
@@ -153,6 +164,7 @@ static int bmdev_close(struct inode *inode, struct file *file)
 {
 	struct bm_device_info *bmdi = file->private_data;
 	struct bm_handle_info *h_info;
+	unsigned long flags;
 #ifdef SOC_MODE
 	struct bm_handle_info *h_node;
 	int handle_num = 0;
@@ -174,9 +186,9 @@ static int bmdev_close(struct inode *inode, struct file *file)
 	}
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
-	if (handle_num == 1 && h_info->open_pid == current->pid)
+	if (handle_num == 1 && h_info->open_pid == current->tgid)
 		bmdrv_api_clear_lib(bmdi, file);
-	else if (h_info->open_pid != current->pid)
+	else if (h_info->open_pid != current->tgid)
 		pr_debug("current pid is different from open pid, can not clear lib\n");
 
 	/* invalidate pending APIs in msgfifo */
@@ -191,9 +203,12 @@ static int bmdev_close(struct inode *inode, struct file *file)
 #endif
 
 	mutex_lock(&bmdi->gmem_info.gmem_mutex);
-	bmdrv_delete_thread_info(h_info);
+	bmdrv_unbind_thread_info(bmdi, h_info);
+	spin_lock_irqsave(&bmdi->handle_lock, flags);
 	list_del(&h_info->list);
+	bmdrv_delete_thread_info(h_info);
 	kfree(h_info);
+	spin_unlock_irqrestore(&bmdi->handle_lock, flags);
 	mutex_unlock(&bmdi->gmem_info.gmem_mutex);
 
 	file->private_data = NULL;
@@ -361,7 +376,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				val |= 1;
 				top_reg_write(bmdi, 0x214, val);
 				break;
-			} else if (bmdi->cinfo.chip_id == 0x1686a200) {
+			} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 				val = top_reg_read(bmdi, 0xb0);
 				val |= 0x10;
 				top_reg_write(bmdi, 0xb0, val);
@@ -418,14 +433,14 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		} ip_mask;
 
 		ret = copy_from_user(&ip_mask, (void *)arg, sizeof(struct bm_veth_ip));
-		if (bmdi->cinfo.chip_id == 0x1686a200) {
-			u32 status = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG);
-			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_IPADDRESS_REG, ip_mask.ip);
-			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_MASK_REG, ip_mask.mask);
-			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG, status | 0x1);
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688 || bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+			u32 status = bm_read32(bmdi, eth_shm_addr(bmdi) + VETH_CSR_REG);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_IPADDRESS_REG, ip_mask.ip);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_MASK_REG, ip_mask.mask);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_CSR_REG, status | 0x1);
 		} else {
-			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_IPADDRESS_REG, ip_mask.ip);
-			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_MASK_REG, ip_mask.mask);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_IPADDRESS_REG, ip_mask.ip);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_MASK_REG, ip_mask.mask);
 		}
 		break;
 	}
@@ -435,12 +450,12 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		u32 gate;
 
 		ret = copy_from_user(&gate, (void *)arg, sizeof(u32));
-		if (bmdi->cinfo.chip_id == 0x1686a200) {
-			u32 status = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG);
-			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_GATE_ADDRESS_REG, gate);
-			bm_write32(bmdi, VETH_SHM_START_ADDR + VETH_CSR_REG, status | 0x1);
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688 || bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+			u32 status = bm_read32(bmdi, eth_shm_addr(bmdi) + VETH_CSR_REG);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_GATE_ADDRESS_REG, gate);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_CSR_REG, status | 0x1);
 		} else {
-			bm_write32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_GATE_ADDRESS_REG, gate);
+			bm_write32(bmdi, eth_shm_addr(bmdi) + VETH_GATE_ADDRESS_REG, gate);
 		}
 		break;
 	}
@@ -467,7 +482,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			pr_err("BMDEV_SET_FW_MODE copy_from_user wrong, ret is %d\n", ret);
 			return -EFAULT;
 		}
-		if (bmdi->cinfo.chip_id == 0x1686a200)
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 			gp_reg_write_enh(bmdi, GP_REG_C906_FW_MODE, mode);
 		else
 			gp_reg_write_enh(bmdi, GP_REG_ARM9_FW_MODE, mode);
@@ -477,12 +492,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_GET_VETH_STATE:
 	{
 		unsigned int value;
-		if (bmdi->cinfo.chip_id == 0x1684)
-			value = bm_read32(bmdi, VETH_SHM_START_ADDR_1684 + VETH_A53_STATE_REG);
-		else if (bmdi->cinfo.chip_id == 0x1686)
-			value = bm_read32(bmdi, VETH_SHM_START_ADDR_1684X + VETH_A53_STATE_REG);
-		else if (bmdi->cinfo.chip_id == 0x1686a200)
-			value = bm_read32(bmdi, VETH_SHM_START_ADDR + VETH_A53_STATE_REG);
+
+		value = bm_read32(bmdi, eth_shm_addr(bmdi) + VETH_A53_STATE_REG);
 		ret = copy_to_user((unsigned int __user *)arg, &value, sizeof(value));
 		break;
 	}
@@ -687,6 +698,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 
 	case BMDEV_FORCE_RESET_TPU:
+	if(bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 #ifndef SOC_MODE
 		ret = bm1688_reset_tpu(bmdi);
 		if (!ret)
@@ -696,6 +708,7 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		bmdi->status_sync_api = 0;
 		ret = 0;
 #endif
+	}
 		break;
 
 	case BMDEV_SEND_API:
@@ -1009,12 +1022,6 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_GET_SN:
 		ret = bm_get_device_sn(bmdi, arg);
 		break;
-	case BMDEV_GET_TPU_MINCLK:
-		ret = put_user(bmdi->boot_info.tpu_min_clk,(u32 __user *)arg);
-		break;
-	case BMDEV_GET_TPU_MAXCLK:
-		ret = put_user(bmdi->boot_info.tpu_max_clk,(u32 __user *)arg);
-		break;
 	case BMDEV_SN:
 		ret = bm_burning_info_sn(bmdi, arg);
 		break;
@@ -1028,6 +1035,12 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		ret = bm_burning_info_board_type(bmdi, arg);
 		break;
 #endif
+	case BMDEV_GET_TPU_MINCLK:
+		ret = put_user(bmdi->boot_info.tpu_min_clk, (u32 __user *)arg);
+		break;
+	case BMDEV_GET_TPU_MAXCLK:
+		ret = put_user(bmdi->boot_info.tpu_max_clk, (u32 __user *)arg);
+		break;
 	case BMDEV_GET_STATUS:
 		ret = put_user(bmdi->status,(int __user *)arg);
 		break;
@@ -1049,23 +1062,38 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		case 0x1686:
 			snprintf(board_name, 20, "1684X-SOC");
 			break;
-		case 0x1686a200:
+		case BM_CHIP_ID_1688:
 			snprintf(board_name, 20, "%s", base_get_chip_id(bmdi));
+			break;
+		case BM_CHIP_ID_84X6:
+			snprintf(board_name, 20, "84X6-SOC");
+			break;
+		default:
+			snprintf(board_name, 20, "UNKNOWN-SOC");
 			break;
 		}
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));
 #else
 		char board_type[20];
-		bm1684_get_board_type_by_id(bmdi, board_type, BM1684_BOARD_TYPE(bmdi));
+
 		switch(bmdi->cinfo.chip_id){
 		case 0x1684:
+			bm1684_get_board_type_by_id(bmdi, board_type, BM1684_BOARD_TYPE(bmdi));
 			snprintf(board_name, 25, "1684-%s", board_type);
 			break;
 		case 0x1686:
+			bm1684_get_board_type_by_id(bmdi, board_type, BM1684_BOARD_TYPE(bmdi));
 			snprintf(board_name, 25, "1684X-%s", board_type);
 			break;
-		case 0x1686a200:
+		case BM_CHIP_ID_1688:
 			snprintf(board_name, 25, "%s", base_get_chip_id(bmdi));
+			break;
+		case BM_CHIP_ID_84X6:
+			bm84x6_get_board_type_by_id(bmdi, board_type, BM84X6_BOARD_TYPE(bmdi));
+			snprintf(board_name, 25, "84x6-%s", board_type);
+			break;
+		default:
+			snprintf(board_name, 25, "UNKNOWN");
 			break;
 		}
 		ret = copy_to_user((char __user *)arg, board_name, sizeof(board_name));
@@ -1075,37 +1103,35 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_GET_IDLE_COREID:
 	{
+
+#ifdef SOC_MODE
 		int core_id = bmdev_get_idle_coreid(bmdi);
 
 		ret = copy_to_user((int __user *)arg, &core_id, sizeof(core_id));
+#else
+		ret = 0;
+#endif
 		break;
+
 	}
 
 	case BMDEV_GET_BOARDT:
 	{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
-		u32 board_temp;
-
 		if (c_attr->bm_get_board_temp != NULL)
-			board_temp = c_attr->board_temp;
+		  ret = put_user(c_attr->board_temp, (u32 __user *)arg);
 		else
-			board_temp = ATTR_NOTSUPPORTED_VALUE;
-
-		ret = copy_to_user((u32 __user *)arg, &board_temp, sizeof(u32));
+		  ret = put_user(ATTR_NOTSUPPORTED_VALUE, (u32 __user *)arg);
 		break;
 	}
 
 	case BMDEV_GET_CHIPT:
 	{
 		struct bm_chip_attr *c_attr = &bmdi->c_attr;
-		u32 chip_temp;
-
 		if (c_attr->bm_get_chip_temp != NULL)
-			chip_temp = c_attr->chip_temp;
+		  ret = put_user(c_attr->chip_temp, (u32 __user *)arg);
 		else
-			chip_temp = ATTR_NOTSUPPORTED_VALUE;
-
-		ret = copy_to_user((u32 __user *)arg, &chip_temp, sizeof(u32));
+		  return -EFAULT;
 		break;
 	}
 
@@ -1142,6 +1168,20 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		}
 		break;
 	}
+
+#ifndef SOC_MODE
+	case BMDEV_SETUP_C2C:
+		ret = bm84x6_setup_c2c(bmdi, arg);
+		break;
+
+	case BMDEV_SETUP_TOPOLOGY:
+		ret = bm84x6_setup_topology(bmdi, arg);
+		break;
+
+	case BMDEV_GET_TOPOLOGY:
+		ret = bm84x6_get_topology(bmdi, arg);
+		break;
+#endif
 
 	case BMDEV_GET_DYNFREQ_STATUS:
 	{
@@ -1226,11 +1266,45 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_GET_VERSION:
 		{
 #ifdef SOC_MODE
-			ret = copy_to_user(((struct bootloader_version __user *)arg)->bl1_version, bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE);
-			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl2_version, bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
-			ret |= copy_to_user(((struct bootloader_version __user *)arg)->bl31_version, bmdi->cinfo.version.bl31_version, BL31_VERSION_SIZE);
-			ret |= copy_to_user(((struct bootloader_version __user *)arg)->uboot_version, bmdi->cinfo.version.uboot_version, UBOOT_VERSION_SIZE);
-			ret |= copy_to_user(((struct bootloader_version __user *)arg)->chip_version, bmdi->cinfo.version.chip_version, CHIP_VERSION_SIZE);
+			struct bootloader_version version;
+
+			ret = copy_from_user(&version, (struct bootloader_version __user *)arg,
+					sizeof(struct bootloader_version));
+			if (ret) {
+				pr_err("bm-sophon%d BMDEV_GET_VERSION copy_from_user fail\n",
+						bmdi->dev_index);
+				break;
+			}
+			if (!version.bl1_version || !version.bl2_version ||
+					!version.bl31_version || !version.uboot_version ||
+					!version.chip_version) {
+				pr_err("bm-sophon%d BMDEV_GET_VERSION user buffer is NULL\n",
+						bmdi->dev_index);
+				ret = -EFAULT;
+				break;
+			}
+			if (!bmdi->cinfo.version.bl1_version ||
+					!bmdi->cinfo.version.bl2_version ||
+					!bmdi->cinfo.version.bl31_version ||
+					!bmdi->cinfo.version.uboot_version ||
+					!bmdi->cinfo.version.chip_version) {
+				pr_err("bm-sophon%d BMDEV_GET_VERSION kernel version not ready\n",
+						bmdi->dev_index);
+				ret = -EFAULT;
+				break;
+			}
+			ret = copy_to_user((char __user *)version.bl1_version,
+					bmdi->cinfo.version.bl1_version, BL1_VERSION_SIZE);
+			ret |= copy_to_user((char __user *)version.bl2_version,
+					bmdi->cinfo.version.bl2_version, BL2_VERSION_SIZE);
+			ret |= copy_to_user((char __user *)version.bl31_version,
+					bmdi->cinfo.version.bl31_version, BL31_VERSION_SIZE);
+			ret |= copy_to_user((char __user *)version.uboot_version,
+					bmdi->cinfo.version.uboot_version, UBOOT_VERSION_SIZE);
+			ret |= copy_to_user((int __user *)version.chip_version,
+					bmdi->cinfo.version.chip_version, CHIP_VERSION_SIZE);
+			if (ret)
+				ret = -EFAULT;
 #endif
 			break;
 		}
@@ -1326,21 +1400,26 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
         case BMDEV_GET_BOARDP:
                 {
-                       struct bm_device_info *c_bmdi = bmdi;
-                       struct bm_chip_attr *c_attr = &bmdi->c_attr;
-                       u32 board_power;
+                       struct bm_device_info *c_bmdi;
+                       struct bm_chip_attr *c_attr;
 
-                       if (bmdi->bmcd != NULL && bmdi->bmcd->card_bmdi[0] != NULL) {
-                         c_bmdi = bmdi->bmcd->card_bmdi[0];
-                         c_attr = &c_bmdi->c_attr;
+                       if (bmdi->bmcd != NULL) {
+                         if (bmdi->bmcd->card_bmdi[0] != NULL) {
+                           c_bmdi = bmdi->bmcd->card_bmdi[0];
+                           c_attr = &c_bmdi->c_attr;
+                         } else {
+                           return -EFAULT;
+                         }
+                       } else {
+                         return -EFAULT;
                        }
 
-                       if (c_attr->bm_get_board_power != NULL)
-                         board_power = c_attr->board_power;
-                       else
-                         board_power = ATTR_NOTSUPPORTED_VALUE;
-
-                       ret = copy_to_user((u32 __user *)arg, &board_power, sizeof(u32));
+                       if(c_attr->bm_get_board_power != NULL) {
+                         ret = copy_to_user((u32 __user *)arg, &c_attr->board_power, sizeof(u32));
+                       } else {
+                         u32 not_supported = ATTR_NOTSUPPORTED_VALUE;
+                         ret = copy_to_user((u32 __user *)arg, &not_supported, sizeof(u32));
+                       }
                        break;
                 }
 
@@ -1368,13 +1447,23 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case BMDEV_SET_TPU_FREQ:
 		mutex_lock(&bmdi->clk_reset_mutex);
-		ret = bmdev_clk_ioctl_set_tpu_freq(bmdi, arg);
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+			ret = bm84x6_clk_ioctl_set_tpu_freq(bmdi, arg);
+		else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
+			ret = bm1688_clk_ioctl_set_tpu_freq(bmdi, arg);
+		else
+			ret = bmdev_clk_ioctl_set_tpu_freq(bmdi, arg);
 		mutex_unlock(&bmdi->clk_reset_mutex);
 		break;
 
 	case BMDEV_GET_TPU_FREQ:
 		mutex_lock(&bmdi->clk_reset_mutex);
-		ret = bmdev_clk_ioctl_get_tpu_freq(bmdi, arg);
+		if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+			ret = bm84x6_clk_ioctl_get_tpu_freq(bmdi, arg);
+		else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
+			ret = bm1688_clk_ioctl_get_tpu_freq(bmdi, arg);
+		else
+			ret = bmdev_clk_ioctl_get_tpu_freq(bmdi, arg);
 		mutex_unlock(&bmdi->clk_reset_mutex);
 		break;
 
@@ -1470,7 +1559,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}
 			arg32l = (u32)arg64;
 			arg32h = (u32)((arg64 >> 32) & 0xffffffff);
-			bmdrv_gmem_invalidate(bmdi, ((unsigned long)arg32h)<<6, arg32l);
+			if (bmdrv_gmem_invalidate(bmdi, ((unsigned long)arg32h)<<6, arg32l))
+				return -EFAULT;
 			break;
 		}
 
@@ -1486,7 +1576,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			arg32l = (u32)arg64;
 			arg32h = (u32)((arg64 >> 32) & 0xffffffff);
-			bmdrv_gmem_flush(bmdi, ((unsigned long)arg32h)<<6, arg32l);
+			if (bmdrv_gmem_flush(bmdi, ((unsigned long)arg32h)<<6, arg32l))
+				return -EFAULT;
 			break;
 		}
 	case BMDEV_GMEM_ADDR:
@@ -1513,7 +1604,10 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 #endif
 
 	default:
-		dev_err(bmdi->dev, "*************Invalid ioctl parameter************\n");
+		dev_err(bmdi->dev,
+			"invalid ioctl cmd=0x%x nr=0x%x dir=0x%x comm=%s pid=%d at %s:%d\n",
+			cmd, _IOC_NR(cmd), _IOC_DIR(cmd), current->comm,
+			current->pid, __func__, __LINE__);
 		return -EINVAL;
 	}
 
@@ -1625,7 +1719,9 @@ static long bmdev_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long a
 	}
 
 	default:
-		pr_err("*************Invalid ioctl parameter************\n");
+		pr_err("invalid ioctl cmd=0x%x nr=0x%x dir=0x%x comm=%s pid=%d at %s:%d\n",
+		       cmd, _IOC_NR(cmd), _IOC_DIR(cmd), current->comm,
+		       current->pid, __func__, __LINE__);
 		return -EINVAL;
 	}
 	return ret;

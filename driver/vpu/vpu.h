@@ -261,8 +261,8 @@ extern int bmdev_memcpy_s2d(struct bm_device_info *bmdi, struct file *file,
 		uint64_t dst, void __user *src, int size,
 		bool intr, bm_cdma_iommu_mode cdma_iommu_mode);
 
-extern void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base);
+extern void bm_get_bar_base(struct bm_bar_info *pbar_info, u64 address, u64 *base);
 
-extern void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
+extern void bm_get_bar_offset(struct bm_bar_info *pbar_info, u64 address,
 		void __iomem **bar_vaddr, u32 *offset);
 #endif

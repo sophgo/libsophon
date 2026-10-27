@@ -13,6 +13,11 @@ add_custom_target(kernel_header DEPENDS ${KERNEL_HEADER_FILE})
 file(GLOB_RECURSE srcs src/*.cpp src/*.c)
 add_library(bmrt SHARED ${srcs})
 target_link_libraries(bmrt PUBLIC bmodel bmlib ${CMAKE_DL_LIBS} Threads::Threads)
+# Security hardening flags for Linux (skipped in Debug builds to keep symbols for debugging)
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT WIN32)
+	target_compile_options(bmrt PRIVATE -fstack-protector-strong)
+	set_target_properties(bmrt PROPERTIES LINK_FLAGS "-Wl,-z,relro,-z,now -s -Wl,-z,noexecstack")
+endif()
 target_include_directories(bmrt PUBLIC
     $ENV{THIRDPARTY_DIR}
     $ENV{THIRDPARTY_DIR}/include

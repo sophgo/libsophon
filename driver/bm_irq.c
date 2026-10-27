@@ -4,6 +4,7 @@
 #include <linux/slab.h>
 #include "bm1684_irq.h"
 #include "bm1688_irq.h"
+#include "84x6_irq.h"
 #else
 #include <linux/irqflags.h>
 #include <linux/platform_device.h>
@@ -17,6 +18,7 @@
 #include "bm_common.h"
 #include "bm_fw.h"
 #include "bm_irq.h"
+#include "84x6_task.h"
 #include <linux/delay.h>
 
 #ifndef SOC_MODE
@@ -63,7 +65,8 @@ static void bmdrv_do_irq(struct bm_device_info *bmdi)
 	u32 status[6] = {0};
 	enum arm9_fw_mode mode;
 
-	if (bmdi->cinfo.chip_id == 0x1686a200)
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6
+	|| bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		mode = gp_reg_read_enh(bmdi, GP_REG_C906_FW_MODE);
 	else
 		mode = gp_reg_read_enh(bmdi, GP_REG_ARM9_FW_MODE);
@@ -138,7 +141,9 @@ retry:
 #if SYNC_API_INT_MODE == 1
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686)
 		bm1684_pcie_msi_irq_enable(pdev, bmdi);
-	else if (bmdi->cinfo.chip_id == 0x1686a200)
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_pcie_msi_irq_enable(pdev, bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		bm1688_pcie_msi_irq_enable(pdev, bmdi);
 #endif
 	dev_info(bmdi->cinfo.device, "Requested IRQ NO:%d, MSI state:%s(%d, %d)\n",
@@ -153,8 +158,11 @@ void bmdrv_free_irq(struct pci_dev *pdev)
 
 	if (bmdi->cinfo.chip_id == 0x1684 || bmdi->cinfo.chip_id == 0x1686)
 		bm1684_pcie_msi_irq_disable(bmdi);
-	else if (bmdi->cinfo.chip_id == 0x1686a200)
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		bm84x6_pcie_msi_irq_disable(bmdi);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
 		bm1688_pcie_msi_irq_disable(bmdi);
+
 	free_irq(pdev->irq, bmdi);
 	if (bmdi->cinfo.has_msi)
 		pci_disable_msi(pdev);
@@ -166,7 +174,7 @@ int bmdrv_init_irq(struct platform_device *pdev)
 	struct bm_device_info *bmdi = platform_get_drvdata(pdev);
 	struct chip_info *cinfo = &bmdi->cinfo;
 
-	if (cinfo->chip_id == 0x1686a200) {
+	if (cinfo->chip_id == BM_CHIP_ID_1688) {
 		cinfo->irq_id_cdma0 = irq_of_parse_and_map(pdev->dev.of_node, 0);
 		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma0, NULL, bmdrv_irq_handler_cdma0,
 							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA0", bmdi);
@@ -194,20 +202,29 @@ int bmdrv_init_irq(struct platform_device *pdev)
 		if (ret)
 			return -EINVAL;
 		dev_info(&pdev->dev, "bmdrv: msg1 irq is %d\n", cinfo->irq_id_msg1);
-	} else {
-		cinfo->irq_id_cdma = irq_of_parse_and_map(pdev->dev.of_node, 0);
-		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma, NULL, bmdrv_irq_handler_cdma,
-							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA", bmdi);
-		if (ret)
-			return -EINVAL;
-		dev_info(&pdev->dev, "bmdrv: cdma irq is %d\n", cinfo->irq_id_cdma);
+	} else { // BM_CHIP_ID_84X6
+		
 
-		cinfo->irq_id_msg = irq_of_parse_and_map(pdev->dev.of_node, 1);
-		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_msg, NULL, bmdrv_irq_handler_msg0,
+		cinfo->irq_id_tsh = irq_of_parse_and_map(pdev->dev.of_node, 0);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_tsh, NULL, bmdev_tsh_irq_handler,
 							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "MSG", bmdi);
 		if (ret)
 			return -EINVAL;
-		dev_info(&pdev->dev, "bmdrv: msg irq is %d\n", cinfo->irq_id_msg);
+		dev_info(&pdev->dev, "bmdrv: tsh irq is %d\n", cinfo->irq_id_tsh);
+
+		cinfo->irq_id_cdma0 = irq_of_parse_and_map(pdev->dev.of_node, 1);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma0, NULL, bmdrv_irq_handler_cdma0,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA0", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: cdma0 irq is %d\n", cinfo->irq_id_cdma0);
+
+		cinfo->irq_id_cdma1 = irq_of_parse_and_map(pdev->dev.of_node, 2);
+		ret = devm_request_threaded_irq(&pdev->dev, cinfo->irq_id_cdma1, NULL, bmdrv_irq_handler_cdma1,
+							IRQF_TRIGGER_HIGH | IRQF_ONESHOT, "CDMA1", bmdi);
+		if (ret)
+			return -EINVAL;
+		dev_info(&pdev->dev, "bmdrv: cdma1 irq is %d\n", cinfo->irq_id_cdma1);
 	}
 
 	return 0;
@@ -217,14 +234,15 @@ void bmdrv_free_irq(struct platform_device *pdev)
 {
 	struct bm_device_info *bmdi = platform_get_drvdata(pdev);
 
-	if (bmdi->cinfo.chip_id == 0x1686a200) {
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
 		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma0, bmdi);
 		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma1, bmdi);
 		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg0, bmdi);
 		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg1, bmdi);
 	} else {
-		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma, bmdi);
-		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_msg, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_tsh, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma0, bmdi);
+		devm_free_irq(&pdev->dev, bmdi->cinfo.irq_id_cdma1, bmdi);
 	}
 }
 #endif //SOC_MODE

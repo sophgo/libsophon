@@ -99,6 +99,8 @@ static void bm_smi_get_util(bm_handle_t handle, int bmctl_fd, int dev_id) {
 		g_attr[dev_id].tpu_util          = ATTR_FAULT_VALUE;
 		g_attr[dev_id].tpu_util0         = ATTR_FAULT_VALUE;
 		g_attr[dev_id].tpu_util1         = ATTR_FAULT_VALUE;
+		g_attr[dev_id].tpu_util2         = ATTR_FAULT_VALUE;
+		g_attr[dev_id].tpu_util3         = ATTR_FAULT_VALUE;
 		g_attr[dev_id].card_index        = ATTR_FAULT_VALUE;
 	}
 }
@@ -171,6 +173,26 @@ static void bm_smi_tpu_util1_to_str(int dev_id, char *s) {
 	}
 }
 
+static void bm_smi_tpu_util2_to_str(int dev_id, char *s) {
+	if (g_attr[dev_id].tpu_util2 == ATTR_NOTSUPPORTED_VALUE) {
+		snprintf(s, 6, "%s", " N/A ");
+	} else if (g_attr[dev_id].tpu_util2 == 100) {
+		snprintf(s, 6, "%s", "100% ");
+	} else {
+		snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util2);
+	}
+}
+
+static void bm_smi_tpu_util3_to_str(int dev_id, char *s) {
+	if (g_attr[dev_id].tpu_util3 == ATTR_NOTSUPPORTED_VALUE) {
+		snprintf(s, 6, "%s", " N/A ");
+	} else if (g_attr[dev_id].tpu_util3 == 100) {
+		snprintf(s, 6, "%s", "100% ");
+	} else {
+		snprintf(s, 4, "%d%%", g_attr[dev_id].tpu_util3);
+	}
+}
+
 /* convert api_num to string*/
 static void bm_smi_api_num0_to_str(int dev_id, char *s) {
     if (g_attr[dev_id].card_index == ATTR_NOTSUPPORTED_VALUE) {
@@ -202,7 +224,7 @@ static void bm_smi_display_util(int            dev_id,
 								int            dis_slot,
 								std::ofstream &file,
 								bool           save_file) {
-	char tpu_util_s[2][6];
+	char tpu_util_s[4][6];
     char line_str[BUFFER_LEN]{};
 	char head_str[BUFFER_LEN]{};
     int str_length;
@@ -216,6 +238,8 @@ static void bm_smi_display_util(int            dev_id,
 		core_num = 2;
 	} else if (!strcmp(board_name, "CV186AH-SOC")) {
 		core_num = 1;
+	} else if (!strcmp(board_name, "84X6-SOC") || !strcmp(board_name, "84x6-SOC")) {
+		core_num = 4;
 	} else {
 		printf("illagal board name\n");
 		return;
@@ -223,6 +247,8 @@ static void bm_smi_display_util(int            dev_id,
 
 	bm_smi_tpu_util0_to_str(dev_id, tpu_util_s[0]);
 	bm_smi_tpu_util1_to_str(dev_id, tpu_util_s[1]);
+	bm_smi_tpu_util2_to_str(dev_id, tpu_util_s[2]);
+	bm_smi_tpu_util3_to_str(dev_id, tpu_util_s[3]);
 
 	attr_y = dis_slot * BM_SMI_CORE_UTIL_HEIGHT;
     attr_y -= win_y_offset;
@@ -247,7 +273,6 @@ static void bm_smi_display_util(int            dev_id,
 		}
 		if (attr_y >= 0) {
 			if (move(attr_y + BM_SMI_CORE_UTIL_MEM + i, 0) == OK) {
-				//printf("%s\n", line_str);
 				clrtoeol();
 				attron(COLOR_PAIR(0));
 				printw("%s", line_str);

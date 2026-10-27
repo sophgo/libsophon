@@ -1298,7 +1298,7 @@ static int _jpeg_alloc_frame(JPEG_DEC_HANDLE *pst_handle)
         if (pst_handle->open_param.chromaInterleave == CBCR_SEPARATED)
             pst_handle->frame_buffer.bufCr = pst_handle->frame_buffer.bufCb + chroma_size;
 
-        blk = platform_vb_create_block(pst_handle->soc_idx, pst_handle->external_fb.phys_addr, NULL, VB_STATIC_POOLID, 1);
+        blk = platform_vb_create_block(pst_handle->soc_idx, pst_handle->external_fb.phys_addr, NULL, VB_EXTERNAL_POOLID, 1);
         if (blk == VB_INVALID_HANDLE)
             return JPG_RET_FAILURE;
 

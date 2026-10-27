@@ -7,7 +7,7 @@ void bm1682_map_bar(struct bm_device_info *bmdi, struct pci_dev *pdev)
 {
 }
 
-void bm1682_unmap_bar(struct bm_bar_info *bari)
+void bm1682_unmap_bar(struct bm_device_info *bmdi)
 {
 }
 

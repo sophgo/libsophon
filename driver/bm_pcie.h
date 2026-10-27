@@ -3,6 +3,7 @@
 #include "bm1682_pcie.h"
 #include "bm1684_pcie.h"
 #include "bm1688_pcie.h"
+#include "84x6_pcie.h"
 /*BM1684 PCIe end device info*/
 
 /**
@@ -19,9 +20,9 @@
 /**
  * The device id of PCIe EP device
  */
-#define BM1684_DEVICE_ID	0x1684
-#define BM1682_DEVICE_ID	0x1682
-#define BM1684X_DEVICE_ID	0x1686
+#define BM1684_DEVICE_ID       0x1684
+#define BM1682_DEVICE_ID       0x1682
+#define BM1684X_DEVICE_ID      0x1686
 
 #define BM_PCIE_MAX_CHIP_NUM 128
 
@@ -50,6 +51,14 @@ int bmdrv_pci_bus_scan(struct pci_dev *pdev, struct bm_device_info *bmdi, int cf
 int bmdrv_pcie_get_EP_RC(struct bm_device_info *bmdi);
 int bmdrv_get_chip_num(struct bm_device_info *bmdi);
 int bmdrv_pcie_get_mode(struct bm_device_info *bmdi);
+void bmdrv_modules_request_irq(struct bm_device_info *bmdi);
+void bmdrv_modules_free_irq(struct bm_device_info *bmdi);
+int bmdrv_force_reset_bmcpu(struct bm_device_info *bmdi);
+int bmdrv_reset_bmcpu(struct bm_device_info *bmdi);
+void bmdrv_init_devid_array(void);
+int bmdrv_check_domain_bdf(int domain_bdf);
+void bmdrv_dump_pcie_record(void);
+int bmdrv_alloc_dev_index(struct pci_dev *pdev);
 
 struct bm_pcie_record {
 	int domain_bdf;

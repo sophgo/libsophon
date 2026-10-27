@@ -25,6 +25,8 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/version.h>
+struct bm_device_info;
+#include "bm_debug.h"
 #include <linux/kthread.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
@@ -765,7 +767,6 @@ static ssize_t jpu_proc_info_read(struct file *file, char __user *buf, size_t si
         if (total != 0)
             long_usage_pct = (s_jpu_usage_info.jpu_working_time_in_ms[core_idx] * 100) / total;
 
-        /* use snprintf to avoid overruns if dat buffer smaller than expected */
         snprintf(dat + strlen(dat), 1024,
                 "{\"core id\":%d, \"instance_count\":%d, \"usage(short|long)\":%u%%|%llu%%}\n",
                 core_idx,
@@ -821,16 +822,11 @@ static ssize_t jpu_proc_info_read(struct file *file, char __user *buf, size_t si
     return len;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops jpu_proc_info_operations = {
-    .proc_read  = jpu_proc_info_read,
+static const struct BM_PROC_FILE_OPS jpu_proc_info_operations = {
+	BM_PROC_OWNER(THIS_MODULE)
+	BM_PROC_READ = jpu_proc_info_read,
 };
-#else
-static const struct file_operations jpu_proc_info_operations = {
-    .owner = THIS_MODULE,
-    .read  = jpu_proc_info_read,
-};
-#endif
+
 
 int jpeg_platform_init(struct platform_device *pdev)
 {

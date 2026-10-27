@@ -35,11 +35,19 @@ static int bm_monitor_thread(void *date)
 
 	// set_current_state(TASK_INTERRUPTIBLE);
 	ret = bm_arm9fw_log_init(bmdi, CORE_ID0);
-	if (ret)
+	if (ret) {
+		/* The thread dies here, so clear the pointer: the deinit path
+		 * would otherwise kthread_stop() an already-exited task and
+		 * oops (observed on rmmod for 84x6 PCIe, where the arm9 fw log
+		 * init fails). */
+		bmdi->monitor_thread_info.monitor_task = NULL;
 		return ret;
+	}
 	ret = bm_arm9fw_log_init(bmdi, CORE_ID1);
-	if (ret)
+	if (ret) {
+		bmdi->monitor_thread_info.monitor_task = NULL;
 		return ret;
+	}
 
 
 	while (!kthread_should_stop()) {//every loop is about (10 + 10 + 10)ms
@@ -60,6 +68,8 @@ static int bm_monitor_thread(void *date)
 		bmdrv_fetch_attr(bmdi, count, is_setspeed);
 		if (bmdi->status_over_temp || bmdi->status_pcie || bmdi->status_sync_api) {
 			msleep_interruptible(20);
+		} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+			msleep_interruptible(10);
 		} else {
 			bm_dump_arm9fw_log(bmdi, count);
 		}

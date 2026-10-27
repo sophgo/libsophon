@@ -10,7 +10,68 @@ int main(int argc, char **argv) {
 #include "bmruntime_cpp.h"
 #include "bmruntime_interface.h"
 #include "cnpy.h"
+#include <cmath>
+#include <sys/time.h>
+#include "tpu_fp16.hpp"
 #include <getopt.h>
+
+// ---------------------------------------------------------------------------
+// fp32 <-> bf16 / fp16 conversions.
+//
+// The on-disk npz input is usually fp32, while the bmodel may take bf16/fp16
+// tensors; conversely bf16/fp16 outputs are stored back as fp32 so the result
+// is directly comparable with the fp32 reference. The semantics mirror
+// tpu-mlir/python/utils/lowering.py used by python/tools/model_runner.py:
+//   * fp32 -> bf16 : truncate the low 16 bits (lowering.fp32_to_bf16)
+//   * fp32 -> fp16 : round to nearest even (numpy float16 cast)
+//   * bf16 -> fp32 : place the bits in the high 16 (lowering.bf16_to_fp32)
+//   * fp16 -> fp32 : ieee half to single (numpy float32 cast)
+// ---------------------------------------------------------------------------
+static inline uint16_t fp32_to_bf16_bits(float v) {
+  tpu::fp32 f;
+  f.fval = v;
+  return (uint16_t)(f.bits >> 16);
+}
+
+static inline float bf16_bits_to_fp32(uint16_t b) {
+  tpu::fp32 f;
+  f.bits = (uint32_t)b << 16;
+  return f.fval;
+}
+
+static inline uint16_t fp32_to_fp16_bits(float v) {
+  return tpu::to<tpu::fp16>(v).bits;
+}
+
+static inline float fp16_bits_to_fp32(uint16_t h) {
+  tpu::fp16 v;
+  v.bits = h;
+  return tpu::to<float>(v);
+}
+
+// ---------------------------------------------------------------------------
+// timing helpers (mirror app/bmrt_test.cpp)
+// ---------------------------------------------------------------------------
+#ifdef __linux__
+typedef struct timeval bmrt_time_t;
+static inline void bmrt_gettime(bmrt_time_t &val) {
+  gettimeofday(&val, NULL);
+}
+static inline long bmrt_interval(const bmrt_time_t &start,
+                                const bmrt_time_t &end) {
+  return (end.tv_sec - start.tv_sec) * 1000000 + end.tv_usec - start.tv_usec;
+}
+#else
+typedef struct timespec bmrt_time_t;
+static inline void bmrt_gettime(bmrt_time_t &val) {
+  bmrt_clock_gettime(0, &val);
+}
+static inline long bmrt_interval(const bmrt_time_t &start,
+                                const bmrt_time_t &end) {
+  return (end.tv_sec - start.tv_sec) * 1000000 +
+         (end.tv_nsec - start.tv_nsec) / 1000;
+}
+#endif
 
 static std::string in_file;
 static std::string model_file;
@@ -123,12 +184,30 @@ static void add_array(cnpy::npz_t &map, std::string name, bm_handle_t bm_handle,
     bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
   } break;
-  case BM_UINT16:
-  case BM_FLOAT16:
-  case BM_BFLOAT16: {
+  case BM_UINT16: {
     std::vector<uint16_t> data(count);
     bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
     cnpy::npz_add_array(map, name, data.data(), shape);
+  } break;
+  case BM_FLOAT16: {
+    // save as fp32 so it is directly comparable with the fp32 reference
+    std::vector<uint16_t> data(count);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
+    std::vector<float> fdata(count);
+    for (size_t i = 0; i < count; i++) {
+      fdata[i] = fp16_bits_to_fp32(data[i]);
+    }
+    cnpy::npz_add_array(map, name, fdata.data(), shape);
+  } break;
+  case BM_BFLOAT16: {
+    // save as fp32 so it is directly comparable with the fp32 reference
+    std::vector<uint16_t> data(count);
+    bm_memcpy_d2s_partial(bm_handle, data.data(), dst.device_mem, real_bytes);
+    std::vector<float> fdata(count);
+    for (size_t i = 0; i < count; i++) {
+      fdata[i] = bf16_bits_to_fp32(data[i]);
+    }
+    cnpy::npz_add_array(map, name, fdata.data(), shape);
   } break;
   case BM_INT16: {
     std::vector<int16_t> data(count);
@@ -151,25 +230,49 @@ static void add_array(cnpy::npz_t &map, std::string name, bm_handle_t bm_handle,
   }
 }
 
-void readTensor(cnpy::npz_t &map, const std::string &name, uint8_t *data,
-                size_t bytes, bm_shape_t &shape) {
+size_t readTensor(cnpy::npz_t &map, const std::string &name, uint8_t *data,
+                  size_t bytes, bm_shape_t &shape, bm_data_type_t dtype) {
   auto it = map.find(name.c_str());
   if (it == map.end()) {
     BMRT_LOG(FATAL, "failed to find tensor %s\n", name.c_str());
     exit(-1);
   }
   auto arr = it->second;
-  if (arr.num_bytes() > bytes) {
-    BMRT_LOG(FATAL, "size is too large for tensor %s\n", name.c_str());
-    exit(-1);
-  }
   if (arr.shape.size() > 0) {
     shape.num_dims = arr.shape.size();
     for (int i = 0; i < shape.num_dims; ++i) {
       shape.dims[i] = arr.shape[i];
     }
   }
+  // The npz input is frequently stored as fp32 while the bmodel takes bf16/fp16.
+  // Convert element-wise in that case; otherwise copy the raw bytes verbatim.
+  bool is_fp32 = (arr.type == 'f' && arr.word_size == sizeof(float));
+  if (is_fp32 && (dtype == BM_BFLOAT16 || dtype == BM_FLOAT16)) {
+    size_t nvals = arr.num_vals;
+    size_t real_bytes = nvals * sizeof(uint16_t);
+    if (real_bytes > bytes) {
+      BMRT_LOG(FATAL, "size is too large for tensor %s\n", name.c_str());
+      exit(-1);
+    }
+    const float *src = arr.data<float>();
+    uint16_t *dst = reinterpret_cast<uint16_t *>(data);
+    if (dtype == BM_BFLOAT16) {
+      for (size_t i = 0; i < nvals; i++) {
+        dst[i] = fp32_to_bf16_bits(src[i]);
+      }
+    } else {
+      for (size_t i = 0; i < nvals; i++) {
+        dst[i] = fp32_to_fp16_bits(src[i]);
+      }
+    }
+    return real_bytes;
+  }
+  if (arr.num_bytes() > bytes) {
+    BMRT_LOG(FATAL, "size is too large for tensor %s\n", name.c_str());
+    exit(-1);
+  }
   memcpy(data, arr.data_holder->data(), arr.num_bytes());
+  return arr.num_bytes();
 }
 
 int main(int argc, char **argv) {
@@ -227,33 +330,56 @@ int main(int argc, char **argv) {
     int devid = net_info->input_loc_devices[i];
     uint8_t *buffer = new uint8_t[net_info->max_input_bytes[i]];
     auto real_shape = stage.input_shapes[i];
-    readTensor(npz_in, net_info->input_names[i], buffer,
-               net_info->max_input_bytes[i], real_shape);
-    bmrt_tensor_ex(&input_tensors[i], p_bmrt, devid,
-                  net_info->input_dtypes[i], real_shape);
-    bm_memcpy_s2d(bm_handles[devid], input_tensors[i].device_mem, buffer);
+    size_t real_bytes = readTensor(npz_in, net_info->input_names[i], buffer,
+                                   net_info->max_input_bytes[i], real_shape,
+                                   net_info->input_dtypes[i]);
+    if (!bmrt_tensor_ex(&input_tensors[i], p_bmrt, devid,
+                        net_info->input_dtypes[i], real_shape)) {
+      BMRT_LOG(FATAL, "alloc input tensor[%d] failed", i);
+      exit(-1);
+    }
+    // copy only the bytes actually read/converted, which may be smaller than
+    // device_mem.size when the npz input is smaller than the static shape
+    bm_memcpy_s2d_partial(bm_handles[devid], input_tensors[i].device_mem, buffer,
+                          real_bytes);
     delete[] buffer;
   }
   for (int i = 0; i < net_info->output_num; i++) {
-    bmrt_tensor_ex(&output_tensors[i], p_bmrt, net_info->output_loc_devices[i],
-                  net_info->output_dtypes[i], stage.output_shapes[i]);
+    if (!bmrt_tensor_ex(&output_tensors[i], p_bmrt,
+                        net_info->output_loc_devices[i],
+                        net_info->output_dtypes[i], stage.output_shapes[i])) {
+      BMRT_LOG(FATAL, "alloc output tensor[%d] failed", i);
+      exit(-1);
+    }
   }
+  bmrt_time_t t3, t_launch, t_sync;
+  bmrt_gettime(t3);
   bool ret = bmrt_launch_tensor_ex(p_bmrt, net_names[0], input_tensors.data(),
                                    net_info->input_num, output_tensors.data(),
                                    net_info->output_num, true, false);
+  bmrt_gettime(t_launch);
   if (ret == true) {
     status = bm_thread_sync(bm_handles[0]);
   }
+  bmrt_gettime(t_sync);
   if (ret == false || BM_SUCCESS != status) {
     BMRT_LOG(FATAL, "Neuron network '%s' inference failed", net_names[0]);
     exit(-1);
   }
+  // launch is async; launch func time covers submitting the workload, sync time
+  // covers the actual NPU execution (wait until done).
+  long launch_time_us = bmrt_interval(t3, t_launch);
+  long sync_time_us = bmrt_interval(t_launch, t_sync);
+  printf("net[%s], launch func time %ld us, sync time %ld us, total %ld us\n",
+          net_names[0], launch_time_us, sync_time_us,
+          launch_time_us + sync_time_us);
   for (int i = 0; i < net_info->output_num; i++) {
     int devid = net_info->output_loc_devices[i];
     add_array(npz_out, net_info->output_names[i], bm_handles[devid],
               output_tensors[i]);
   }
   cnpy::npz_save_all(out_file, npz_out);
+  free(net_names);
   bmrt_destroy(p_bmrt);
   for (int i = 0; i < device_num; i++) {
     bm_dev_free(bm_handles[i]);

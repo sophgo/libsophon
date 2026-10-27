@@ -1,5 +1,6 @@
 #include "bmruntime.h"
 #include <sstream>
+#include <cstdlib>
 #ifdef __linux__
 #include <sys/time.h>
 #endif
@@ -52,6 +53,30 @@ static void print_subnet_time(const SUBNET_INFO_T * subnet, int idx, long elapse
   } else {
     BMRT_LOG(INFO, "subnet[%d]: npu, time %ld us", idx, elapsed);
   }
+}
+
+// [MLIR-925] Dynamic-subnet submit+sync lock is OFF BY DEFAULT, so the dynamic
+// subnet's submit+sync runs in parallel across cores. The firmware base_msgid
+// slot-collision defect (the device-confirmed hang point) is fixed, so the
+// serialization workaround is no longer needed by default.
+// Set BMRT_DYN_SUBMIT_LOCK=1 to opt back in (e.g. when running the pre-fix
+// firmware that still needs the two cores to never execute a dynamic subnet's
+// shared command buffer concurrently).
+static bool sd_dyn_submit_lock_on()
+{
+  static int v = -1;
+  if (v < 0) {
+    // default: lock OFF. BMRT_DYN_SUBMIT_LOCK=1 -> lock ON.
+    const char* e = getenv("BMRT_DYN_SUBMIT_LOCK");
+    v = (e && atoi(e)) ? 1 : 0;
+  }
+  return v != 0;
+}
+
+static std::mutex& sd_dyn_submit_mutex()
+{
+  static std::mutex m;
+  return m;
 }
 
 
@@ -305,10 +330,16 @@ bool Bmruntime::launch_tpu_ir_subnet(net_ctx_t* net_ctx, net_stage_t* stage, con
   net_info.core_ids = core_list;
   net_info.all_reduce_param = net_ctx->do_allreduce ? &(net_ctx->allreduce_param) : nullptr;
 
+  std::unique_ptr<std::lock_guard<std::mutex>> sd_dyn_guard;
+  if (sd_dyn_submit_lock_on())
+    sd_dyn_guard = std::make_unique<std::lock_guard<std::mutex>>(sd_dyn_submit_mutex());
+
   status = backend_->launcher()->dynamic_subnet(m_handles[devid], net_info);
   if (status == BM_SUCCESS) {
     sync_cores(m_handles[devid], core_list);
   }
+
+  sd_dyn_guard.reset();  // release after submit+sync (the protected hang window)
 
   if (output_num == 0) {
     return BM_SUCCESS == status;
@@ -435,7 +466,7 @@ void Bmruntime::fill_tpu_cmd_info(std::vector<tpu_cmd_info_t> &cmd_info,
     info.bdc_cmd_byte_size = core_commands[core_idx].bdc_cmd_byte[group_idx];
     info.gdma_cmd_byte_size = core_commands[core_idx].gdma_cmd_byte[group_idx];
     cmd_info.push_back(std::move(info));
-  }
+  }   // to do for cdma_id
 }
 /* TODO : refactor by launch_static */
 bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const SUBNET_INFO_T* subnet,
@@ -466,7 +497,17 @@ bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const 
     core_command[core_idx].gdma_cmd_addr =
         stage->core_commands[core_idx].gdma_mem.addr +
         subnet->tpu_info.core_commands[core_idx].gdma_offset;
-    core_command[core_idx].cdma_cmd_addr = 0;
+    memset(core_command[core_idx].cdma_cmd_addrs, 0,
+           sizeof(core_command[core_idx].cdma_cmd_addrs));
+    memset(core_command[core_idx].cdma_cmd_nums, 0,
+           sizeof(core_command[core_idx].cdma_cmd_nums));
+    for (size_t i = 0; i < stage->core_commands[core_idx].cdma_mem.size() &&
+                      i < 2; i++) {
+      core_command[core_idx].cdma_cmd_addrs[i] =
+          stage->core_commands[core_idx].cdma_mem[i].addr;
+      core_command[core_idx].cdma_cmd_nums[i] =
+          stage->core_commands[core_idx].cdma_mem[i].dword_len;
+    }
     core_command[core_idx].hau_cmd_addr =
         stage->core_commands[core_idx].hau_mem.addr;
     core_command[core_idx].sdma_cmd_addr =
@@ -483,6 +524,8 @@ bool Bmruntime::launch_tpu_subnet(net_ctx_t* net_ctx, net_stage_t* stage, const 
   net_info.core_commands = std::move(core_command);
   net_info.core_list = core_list;
   net_info.coeff_start_addr = stage->coeff_offset;
+  net_info.io_start_addr = stage->io_start;
+  net_info.io_mem_offset = stage->io_offset;
   net_info.do_allreduce = net_ctx->do_allreduce;
   net_info.addr_mode = net_ctx->addr_mode;
   net_info.neuron_start_addr.assign(stage->ctx_offset.begin(), stage->ctx_offset.end());
@@ -966,6 +1009,13 @@ bool Bmruntime::launch_multi_subnet(
             }
 
             m_profile->set_extra_data(subnet->tpu_info.is_dynamic);
+            if (m_flags & BM_RUNTIME_YIELD_TO_KERNEL_TASK) {
+                bm_status_t yield_st = bm_tpu_kernel_task_wait_done(m_handles[devid]);
+                if (BM_SUCCESS != yield_st) {
+                    BMRT_LOG(WRONG, "bm_tpu_kernel_task_wait_done failed, subnet_id:%d, status:%d",
+                             subnet->id, yield_st);
+                }
+            }
             if (subnet->tpu_info.is_dynamic) {
                 ret = launch_tpu_ir_subnet(net_ctx, stage, subnet,
                                      subnet_input_tensors, subnet_input_elem_nums, subnet_input_num,

@@ -1,9 +1,8 @@
 #include "bm_common.h"
 #include "bm_io.h"
-#include "bm1688/bm1688_pcie.h"
 
 #ifdef SOC_MODE
-void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
+void bm_get_bar_offset(struct bm_bar_info *pbar_info, u64 address,
 		void __iomem **bar_vaddr, u32 *offset)
 {
 	/* Choose bar the address belongs to, and compute the offset on bar */
@@ -24,11 +23,15 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 		*bar_vaddr = pbar_info->bar0_vaddr;
 		*offset = address - pbar_info->bar0_dev_start;
 	} else {
-		pr_err("%s invalid address = 0x%x\n", __func__, address);
+		*bar_vaddr = NULL;
+		*offset = 0;
+		pr_err("%s invalid address = 0x%llx\n", __func__, address);
 	}
 }
 #else
-void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
+#include "bm1688/bm1688_pcie.h"
+#include "84x6/84x6_pcie.h"
+void bm_get_bar_offset(struct bm_bar_info *pbar_info, u64 address,
 		void __iomem **bar_vaddr, u32 *offset)
 {
 	u16 index;
@@ -50,6 +53,8 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 		*bar_vaddr = pbar_info->bar1_vaddr;
 		*offset = address - pbar_info->bar1_dev_start;
 	} else {
+		*bar_vaddr = NULL;
+		*offset = 0;
 		for(index=0; index<PCIE_BAR1_PART_MAX; index++) {
 			u64 start = pbar_info->bar1_part_info[index].dev_start;
 			u64 end = pbar_info->bar1_part_info[index].dev_start +  pbar_info->bar1_part_info[index].len;
@@ -69,16 +74,37 @@ void bm_get_bar_offset(struct bm_bar_info *pbar_info, u32 address,
 			}
 		}
 	}
-	if (!bar_vaddr) {
-		pr_err("%s invalid address value = 0x%x\n", __func__, address);
-		bm1688_pci_slider_bar4_config_device_addr(pbar_info, address);
-		*bar_vaddr = pbar_info->bar4_vaddr;
-		*offset = address & 0xfffff;
+	if (!*bar_vaddr) {
+		/* report each 4K page only once: monitor-thread polling of unmapped
+		 * registers (e.g. VPU/JPU clk regs on 84x6) would otherwise flood dmesg
+		 */
+		static u64 seen_pages[64];
+		static u32 seen_count;
+		u64 page = address & ~0xfffULL;
+		u32 i;
+		bool seen = false;
+
+		for (i = 0; i < seen_count && i < ARRAY_SIZE(seen_pages); i++) {
+			if (seen_pages[i] == page) {
+				seen = true;
+				break;
+			}
+		}
+		if (!seen) {
+			pr_err("%s invalid address value = 0x%llx\n", __func__, address);
+			if (seen_count < ARRAY_SIZE(seen_pages))
+				seen_pages[seen_count++] = page;
+		}
+		//TBD: slide bar4 for invalid address access
+		//bm1688_pci_slider_bar4_config_device_addr(pbar_info, address);
+		//bm84x6_pci_slider_bar4_config_device_addr(pbar_info, address);
+		//*bar_vaddr = pbar_info->bar4_vaddr;
+		//*offset = address & 0xfffff;
 	}
 	//pr_info("bar addr = 0x%p, offset = 0x%x, address 0x%x\n", *bar_vaddr, *offset, address);
 }
 
-void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base)
+void bm_get_bar_base(struct bm_bar_info *pbar_info, u64 address, u64 *base)
 {
 	u16 index;
 	/* Choose bar the address belongs to, and compute the offset on bar */
@@ -107,7 +133,7 @@ void bm_get_bar_base(struct bm_bar_info *pbar_info, u32 address, u64 *base)
 }
 #endif
 
-void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address)
+void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u64 address)
 {
 	u32 offset = 0;
 	void __iomem *bar_vaddr = NULL;
@@ -117,7 +143,7 @@ void __iomem *bm_get_devmem_vaddr(struct bm_device_info *bmdi, u32 address)
 	return bar_vaddr + offset;
 }
 
-u32 bm_read32(struct bm_device_info *bmdi, u32 address)
+u32 bm_read32(struct bm_device_info *bmdi, u64 address)
 {
 	u32 offset = 0;
 	void __iomem *bar_vaddr = NULL;
@@ -131,7 +157,7 @@ u32 bm_read32(struct bm_device_info *bmdi, u32 address)
 	}
 }
 
-u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data)
+u32 bm_write32(struct bm_device_info *bmdi, u64 address, u32 data)
 {
 	u32 offset = 0;
 	void __iomem *bar_vaddr = NULL;
@@ -146,29 +172,29 @@ u32 bm_write32(struct bm_device_info *bmdi, u32 address, u32 data)
 	}
 }
 
-u8 bm_read8(struct bm_device_info *bmdi, u32 address)
+u8 bm_read8(struct bm_device_info *bmdi, u64 address)
 {
 	return ioread8(bm_get_devmem_vaddr(bmdi, address));
 }
 
-u32 bm_write8(struct bm_device_info *bmdi, u32 address, u8 data)
+u32 bm_write8(struct bm_device_info *bmdi, u64 address, u8 data)
 {
 	iowrite8(data, bm_get_devmem_vaddr(bmdi, address));
 	return 0;
 }
 
-u16 bm_read16(struct bm_device_info *bmdi, u32 address)
+u16 bm_read16(struct bm_device_info *bmdi, u64 address)
 {
 	return ioread16(bm_get_devmem_vaddr(bmdi, address));
 }
 
-u32 bm_write16(struct bm_device_info *bmdi, u32 address, u16 data)
+u32 bm_write16(struct bm_device_info *bmdi, u64 address, u16 data)
 {
 	iowrite16(data, bm_get_devmem_vaddr(bmdi, address));
 	return 0;
 }
 
-u64 bm_read64(struct bm_device_info *bmdi, u32 address)
+u64 bm_read64(struct bm_device_info *bmdi, u64 address)
 {
 	u64 temp = 0;
 
@@ -177,14 +203,14 @@ u64 bm_read64(struct bm_device_info *bmdi, u32 address)
 	return temp;
 }
 
-u64 bm_write64(struct bm_device_info *bmdi, u32 address, u64 data)
+u64 bm_write64(struct bm_device_info *bmdi, u64 address, u64 data)
 {
 	bm_write32(bmdi, address, data & 0xFFFFFFFF);
 	bm_write32(bmdi, address + 4, data >> 32);
 	return 0;
 }
 
-static void bm_reg_init_vaddr(struct bm_device_info *bmdi, u32 address, void __iomem **reg_base_vaddr)
+static void bm_reg_init_vaddr(struct bm_device_info *bmdi, u64 address, void __iomem **reg_base_vaddr)
 {
 	u32 offset = 0;
 	struct bm_bar_info *pbar_info = &bmdi->cinfo.bar_info;
@@ -195,7 +221,7 @@ static void bm_reg_init_vaddr(struct bm_device_info *bmdi, u32 address, void __i
 	}
 	bm_get_bar_offset(pbar_info, address, reg_base_vaddr, &offset);
 	*reg_base_vaddr += offset;
-	PR_TRACE("device address = 0x%x, vaddr = 0x%p\n", address, *reg_base_vaddr);
+	PR_TRACE("device address = 0x%llx, vaddr = 0x%p\n", address, *reg_base_vaddr);
 }
 
 /* Define register operation as a generic marco. it provide
@@ -248,14 +274,18 @@ u32 shmem_reg_read(struct bm_device_info *bmdi, u32 reg_offset, u32 channel)
 			(bmdi->cinfo.share_mem_size / BM_MSGFIFO_CHANNEL_NUM) * 4 + reg_offset);
 }
 
-void top_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
-{
-	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr + reg_offset);
-}
-
 u32 top_reg_read(struct bm_device_info *bmdi, u32 reg_offset)
 {
+	if (!bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr)
+		return 0;
 	return ioread32(bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr + reg_offset);
+}
+
+void top_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
+{
+	if (!bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr)
+		return;
+	iowrite32(val, bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr + reg_offset);
 }
 
 void gp_reg_write(struct bm_device_info *bmdi, u32 reg_offset, u32 val)
@@ -546,6 +576,16 @@ void io_init(struct bm_device_info *bmdi)
 {
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->shmem_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.shmem_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->top_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr);
+#ifdef SOC_MODE
+	if (!bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr &&
+	    bmdi->cinfo.bm_reg->top_base_addr) {
+		bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr =
+			ioremap(bmdi->cinfo.bm_reg->top_base_addr, 0x5000);
+		if (!bmdi->cinfo.bar_info.io_bar_vaddr.top_bar_vaddr)
+			pr_err("ioremap top_base_addr 0x%x failed\n",
+			       bmdi->cinfo.bm_reg->top_base_addr);
+	}
+#endif
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->gp_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.gp_bar_vaddr);
 	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->pwm_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.pwm_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->cdma_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.cdma_bar_vaddr);
@@ -566,7 +606,16 @@ void io_init(struct bm_device_info *bmdi)
 	// bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->efuse_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.efuse_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->otp_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.otp_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->thermal_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr);
-#ifndef SOC_MODE
+#ifdef SOC_MODE
+	if (!bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr &&
+	    bmdi->cinfo.bm_reg->thermal_base_addr) {
+		bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr =
+			ioremap(bmdi->cinfo.bm_reg->thermal_base_addr, 0x1000);
+		if (!bmdi->cinfo.bar_info.io_bar_vaddr.thermal_bar_vaddr)
+			pr_err("ioremap thermal_base_addr 0x%x failed\n",
+			       bmdi->cinfo.bm_reg->thermal_base_addr);
+	}
+#else
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->dev_info_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.dev_info_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->i2c_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.i2c_bar_vaddr);
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->ddr_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.ddr_bar_vaddr);
@@ -576,6 +625,32 @@ void io_init(struct bm_device_info *bmdi)
 	bm_reg_init_vaddr(bmdi, bmdi->cinfo.bm_reg->hwthermal_base_addr, &bmdi->cinfo.bar_info.io_bar_vaddr.hwthermal_bar_vaddr);
 #endif
 }
+
+void gp_reg_write_idx(struct bm_device_info *bmdi, u32 idx, u32 data, int core_id)
+{
+	if(bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		gp_reg_write(bmdi, (idx + core_id * GP_REG_84X6_MAX_COUNT) * 4, data);
+	} else if(bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
+		gp_reg_write(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4, data);
+	} else {
+		pr_err("invalid chip id:%x\n", bmdi->cinfo.chip_id);
+	}
+	
+}
+
+u32 gp_reg_read_idx(struct bm_device_info *bmdi, u32 idx, int core_id)
+{
+	if(bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		return gp_reg_read(bmdi, (idx + core_id * GP_REG_84X6_MAX_COUNT) * 4);
+	} else if(bmdi->cinfo.chip_id == BM_CHIP_ID_1688) {
+		return gp_reg_read(bmdi, (idx + core_id * GP_REG_TPU1_OFFSET) * 4);
+	} else {
+		pr_err("invalid chip id:%x\n", bmdi->cinfo.chip_id);
+		return -EINVAL;
+	}
+	
+}
+
 
 int bm_get_reg(struct bm_device_info *bmdi, struct bm_reg *reg)
 {

@@ -13,6 +13,7 @@
 #include "bm_wdt.h"
 #include "bm1684_card.h"
 #include "bm1688_clkrst.h"
+#include "84x6_clkrst.h"
 #ifndef SOC_MODE
 #include "bm_card.h"
 #endif
@@ -168,12 +169,34 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 	pattr->mem_used = pattr->mem_total - (int)(bmdrv_gmem_avail_size(bmdi)/1024/1024);
 	bmdrv_heap_mem_used(bmdi, &pattr->stat);
 
-	if ((bmdi->cinfo.chip_id == 0x1686a200) && (bmdi->cinfo.tpu_core_num == 2)) {
+	if ((bmdi->cinfo.chip_id == BM_CHIP_ID_1688) && (bmdi->cinfo.tpu_core_num == 2)) {
 		pattr->tpu_util = (c_attr->bm_get_npu_util(bmdi) + c_attr->bm_get_npu_util1(bmdi)) / 2;
 		pattr->tpu_util0 = c_attr->bm_get_npu_util(bmdi);
 		pattr->tpu_util1 = c_attr->bm_get_npu_util1(bmdi);
+		pattr->tpu_util2 = ATTR_NOTSUPPORTED_VALUE;
+		pattr->tpu_util3 = ATTR_NOTSUPPORTED_VALUE;
+	} else if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		int timer_on = atomic_read(&c_attr->timer_on);
+
+		if (timer_on) {
+			pattr->tpu_util = atomic_read(&c_attr->npu_utilization);
+			pattr->tpu_util0 = atomic_read(&c_attr->npu_util_core[0]);
+			pattr->tpu_util1 = atomic_read(&c_attr->npu_util_core[1]);
+			pattr->tpu_util2 = atomic_read(&c_attr->npu_util_core[2]);
+			pattr->tpu_util3 = atomic_read(&c_attr->npu_util_core[3]);
+		} else {
+			pattr->tpu_util = ATTR_NOTSUPPORTED_VALUE;
+			pattr->tpu_util0 = ATTR_NOTSUPPORTED_VALUE;
+			pattr->tpu_util1 = ATTR_NOTSUPPORTED_VALUE;
+			pattr->tpu_util2 = ATTR_NOTSUPPORTED_VALUE;
+			pattr->tpu_util3 = ATTR_NOTSUPPORTED_VALUE;
+		}
 	} else {
 		pattr->tpu_util = c_attr->bm_get_npu_util(bmdi);
+		pattr->tpu_util0 = ATTR_NOTSUPPORTED_VALUE;
+		pattr->tpu_util1 = ATTR_NOTSUPPORTED_VALUE;
+		pattr->tpu_util2 = ATTR_NOTSUPPORTED_VALUE;
+		pattr->tpu_util3 = ATTR_NOTSUPPORTED_VALUE;
 	}
 
 	if (c_attr->bm_get_chip_temp != NULL) {
@@ -230,7 +253,13 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			BM1684_BOARD_TYPE(bmdi));
 	}
 #else
-	strncpy(pattr->board_type, "SOC", 3);
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		strncpy(pattr->board_type, "84X6", sizeof(pattr->board_type) - 1);
+	else if (bmdi->cinfo.chip_id == BM_CHIP_ID_1688)
+		strncpy(pattr->board_type, "1688", sizeof(pattr->board_type) - 1);
+	else
+		strncpy(pattr->board_type, "SOC", 3);
+	pattr->board_type[sizeof(pattr->board_type) - 1] = '\0';
 #endif
 #ifndef SOC_MODE
 	if (bmdi->cinfo.chip_id != 0x1682) {
@@ -291,7 +320,7 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 		}
 		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		if (pattr->chip_mode == 0) {
 			pattr->tpu_min_clock = bmdi->boot_info.tpu_min_clk;
 			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
@@ -299,7 +328,32 @@ static int bmctl_get_smi_attr(struct bm_ctrl_info *bmci, struct bm_smi_attr *pat
 			pattr->tpu_min_clock = 25;
 			pattr->tpu_max_clock = 1000;
 		}
-		pattr->tpu_current_clock = bm1688_bmdrv_clk_get_tpu_freq(bmdi);
+#ifdef SOC_MODE
+		pattr->tpu_current_clock = c_attr->tpu_current_clock;
+#else
+		pattr->tpu_current_clock = bm1688_clk_get_tpu_freq(bmdi);
+#endif
+
+		pattr->npu_mem_used = pattr->stat.heap_stat[0].mem_used;
+		pattr->npu_mem_total = pattr->stat.heap_stat[0].mem_total;
+		pattr->vpp_mem_used = pattr->stat.heap_stat[1].mem_used;
+		pattr->vpp_mem_total = pattr->stat.heap_stat[1].mem_total;
+
+		if(P_SHOW)pr_err("pattr->tpu_current_clock = 0x%x\n", pattr->tpu_current_clock);
+		break;
+    case BM_CHIP_ID_84X6:
+		if (pattr->chip_mode == 0) {
+			pattr->tpu_min_clock = bmdi->boot_info.tpu_min_clk;
+			pattr->tpu_max_clock = bmdi->boot_info.tpu_max_clk;
+		} else {
+			pattr->tpu_min_clock = 25;
+			pattr->tpu_max_clock = 1000;
+		}
+#ifdef SOC_MODE
+		pattr->tpu_current_clock = c_attr->tpu_current_clock;
+#else
+		pattr->tpu_current_clock = bm84x6_clk_get_tpu_freq(bmdi);
+#endif
 
 		pattr->npu_mem_used = pattr->stat.heap_stat[0].mem_used;
 		pattr->npu_mem_total = pattr->stat.heap_stat[0].mem_total;

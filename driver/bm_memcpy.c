@@ -26,6 +26,7 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	init_completion(&memcpy_info->cdma_done);
 	init_completion(&memcpy_info->cdma_done0);
 	init_completion(&memcpy_info->cdma_done1);
+	mutex_init(&memcpy_info->cdma_mutex);
 	mutex_init(&memcpy_info->cdma_mutex0);
 	mutex_init(&memcpy_info->cdma_mutex1);
 	mutex_init(&memcpy_info->p2p_mutex);
@@ -34,7 +35,6 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 	if (ret < 0)
 		return ret;
 
-	pr_err("stagemem_s2d 1 vaddr:%p\n", memcpy_info->stagemem_s2d.v_addr);
 	ret = bmdrv_stagemem_init(bmdi, &memcpy_info->stagemem_d2s, true);
 	if (ret < 0) {
 		bmdrv_stagemem_release(bmdi, &bmdi->memcpy_info.stagemem_s2d);
@@ -53,9 +53,13 @@ int bmdrv_memcpy_init(struct bm_device_info *bmdi)
 		memcpy_info->bm_disable_smmu_transfer = bm1684_disable_smmu_transfer;
 		memcpy_info->bm_enable_smmu_transfer = bm1684_enable_smmu_transfer;
 		break;
-	case 0x1686a200:
+	case BM_CHIP_ID_1688:
 		memcpy_info->bm_cdma_transfer = bm1688_cdma_transfer;
 		memcpy_info->bm_dual_cdma_transfer = bm1688_dual_cdma_transfer;
+		break;
+	case BM_CHIP_ID_84X6:
+		memcpy_info->bm_cdma_transfer = bm84x6_cdma_transfer;
+		memcpy_info->bm_dual_cdma_transfer = bm84x6_cdma_transfer;
 		break;
 	default:
 		return -EINVAL;
@@ -248,20 +252,17 @@ int bmdrv_stagemem_alloc(struct bm_device_info *bmdi, u64 size, dma_addr_t *ppad
 
 int bmdev_mmap(struct file *file, struct vm_area_struct *vma)
 {
-#ifdef SOC_MODE
-	u64 flag = vma->vm_pgoff & 0x1000000;
-#endif
 	struct bm_device_info *bmdi = file->private_data;
+#ifdef SOC_MODE
+	u64 cache_flag_mask = (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) ? (1ULL << 28) : (1ULL << 24);
+	u64 flag = vma->vm_pgoff & cache_flag_mask;
 
-#ifndef SOC_MODE
+	vma->vm_pgoff = vma->vm_pgoff & ~cache_flag_mask;
+#else
 	u64 vpu_vmem_addr = 0, vpu_vmem_size = 0;
 
 	vpu_vmem_addr = bmdi->vpudrvctx.s_video_memory.base;
 	vpu_vmem_size = bmdi->vpudrvctx.s_video_memory.size;
-#endif
-
-#ifdef SOC_MODE
-	vma->vm_pgoff = vma->vm_pgoff & 0xffffff;
 #endif
 
 	if (vma->vm_pgoff != 0) {
@@ -602,7 +603,7 @@ int bmdrv_compare_fw_stage(struct bm_device_info *bmdi, u64 src, u32 size, const
 		p = (unsigned int *)v_addr;
 		for (i = 0; i < size_step/sizeof(u32); i++) {
 			if (p[i] != firmware[cur_addr_inc/sizeof(u32) + i]) {
-				pr_info("compare fw fail, host = 0x%x, chip = 0x%x, index = %d\n", p[i], firmware[cur_addr_inc + i], cur_addr_inc + i);
+				pr_info("compare fw fail, host = 0x%x, chip = 0x%x, index = %d\n", p[i], firmware[cur_addr_inc/sizeof(u32) + i], (int)(cur_addr_inc/sizeof(u32) + i));
 				return -EFAULT;
 			}
 		}
