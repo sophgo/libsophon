@@ -35,6 +35,7 @@ struct bm_thread_info *bmdrv_create_thread_info(struct bm_handle_info *h_info, p
 	thd_info->q_idx = -1;
 
 	init_completion(&thd_info->msg_done);
+	atomic_set(&thd_info->api_inflight, 0);
 	for (i = 0; i < BM_MAX_CORE_NUM; i++) {
 		thd_info->last_api_seq[i] = 0;
 		thd_info->cpl_api_seq[i] = 0;

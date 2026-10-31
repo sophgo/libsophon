@@ -17,8 +17,13 @@
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
 #include <linux/jiffies.h>
+#include <linux/interrupt.h>
+#ifdef SOC_MODE
+#include <linux/of_irq.h>
+#endif
 
 #include "84x6_task.h"
+#include "84x6_debug.h"
 #include "84x6_shmem.h"
 #include "84x6_tsh.h"
 
@@ -117,15 +122,36 @@ static DEFINE_SPINLOCK(kernel_fifo_lock);
 extern int test_wakeup_consumer_thread(void *data);
 extern struct proc_dir_entry *bmdi_folder;
 
-#define SHM_SIZE 0x400000
-#define SHM_BASE_ADDR (0x1080000000UL)  /* after 4x256M scalar parks */
+#define SHM_MSG_RESERVE_SIZE 0x400000
 #define SHM_LOG_MEM_SIZE (0x200000)
 #define NUM_CORES 4
 #define SHM_VERSION_BUFFER_SIZE 128
+#define MBOX_DEPTH 8
 
+static u64 scaler_log_phys(struct bm_device_info *bmdi, int core_id)
+{
+    phys_addr_t base = bmdev_shmem_base_addr(bmdi);
 
-#define SHM_LOG_BASE_ADDR(core_id) \
-    (SHM_BASE_ADDR + SHM_SIZE + (core_id) * SHM_LOG_MEM_SIZE)
+    if (!base)
+        return 0;
+    return (u64)base + SHM_MSG_RESERVE_SIZE + (u64)core_id * SHM_LOG_MEM_SIZE;
+}
+
+void bmdev_set_scaler_log_low(struct bm_device_info *bmdi)
+{
+    phys_addr_t base;
+    u32 low;
+    int i;
+
+    if (!bmdi)
+        return;
+    base = bmdev_shmem_base_addr(bmdi);
+    if (!base)
+        return;
+    low = (u32)((u64)base + SHM_MSG_RESERVE_SIZE);
+    for (i = 0; i < bmdi->cinfo.tpu_core_num; i++)
+        gp_reg_write_idx(bmdi, GP_REG_84X6_FW_STATUS, low, i);
+}
 
 struct shared_scaler_info {
     volatile uint32_t log_enable;
@@ -148,6 +174,12 @@ struct shared_scaler_info {
     volatile uint64_t timestamp;
     volatile uint32_t seq_num;
     volatile uint32_t dropped_logs;
+    volatile uint32_t mbox_seq;
+    volatile uint32_t mbox_ack;
+    volatile uint32_t mbox_rsvd0;
+    volatile uint32_t mbox_rsvd1;
+    volatile uint64_t mbox_info;
+    volatile uint64_t mbox_slot[MBOX_DEPTH];
     char version_buffer[SHM_VERSION_BUFFER_SIZE];
     char buffer[0];
 };
@@ -421,8 +453,6 @@ int bmdev_scaler_log_init(struct bm_device_info *bmdi)
     int i, ret = 0;
 
 #ifndef SOC_MODE
-    /* PCIe: scaler log lives in device DDR (0x1080000000+), which has no
-     * host BAR window; the whole log region is 8MB > bar1 4MB. Skip. */
     pr_info("Multi-Core Log Driver skipped on PCIe mode\n");
     return 0;
 #endif
@@ -432,7 +462,13 @@ int bmdev_scaler_log_init(struct bm_device_info *bmdi)
     memset(cores, 0, sizeof(cores));
 
     for (i = 0; i < bmdi->cinfo.tpu_core_num; i++) {
-        uint64_t addr = SHM_LOG_BASE_ADDR(i);
+        uint64_t addr = scaler_log_phys(bmdi, i);
+
+        if (!addr) {
+            printk(KERN_ERR "Core %d: scaler log phys addr unavailable\n", i);
+            ret = -ENODEV;
+            goto error_cleanup;
+        }
 
         cores[i].vaddr = ioremap(addr, SHM_LOG_MEM_SIZE);
         if (!cores[i].vaddr) {
@@ -469,6 +505,7 @@ int bmdev_scaler_log_init(struct bm_device_info *bmdi)
 
     printk(KERN_INFO "Multi-Core Log Driver Initialized for %d cores\n",
            bmdi->cinfo.tpu_core_num);
+    bmdev_mbox_start(bmdi);
     return 0;
 
   error_cleanup:
@@ -491,6 +528,7 @@ void bmdev_scaler_log_deinit(struct bm_device_info *bmdi)
     /* scaler proc file is reclaimed when bmdev_test_proc_exit removes
      * the per-chip proc directory tree — no separate remove_proc_entry here */
 
+    bmdev_mbox_stop();
     stop_log_threads(bmdi);
 
     for (i = 0; i < bmdi->cinfo.tpu_core_num; i++) {
@@ -509,6 +547,390 @@ u32 bmdev_get_scaler_using_flag(int core_id)
 	if (!cores[core_id].buffer)
 		return 0;
 	return READ_ONCE(cores[core_id].buffer->using_flag);
+}
+
+#define MBOX_Q 64
+
+struct mbox_job {
+	u32 seq[NUM_CORES];
+	u32 phy_offset;
+	u32 block_num;
+	u8 start;
+	u8 ncores;
+	u8 group_idx;
+	u8 group_num;
+	u8 finished;
+};
+
+#define MBOX_GP_REG47_STS 0xdc
+#define MBOX_GP_REG47_CLR 0xfc
+#define MBOX_GP_BIT 1
+#define MBOX_GP_SPI 213
+
+static struct task_struct *mbox_thread;
+static int mbox_irq;
+static struct bm_device_info *mbox_bmdi;
+static DEFINE_SPINLOCK(mbox_lock);
+static struct mbox_job mbox_q[NUM_HWQS][MBOX_Q];
+static unsigned int mbox_h[NUM_HWQS];
+static unsigned int mbox_t[NUM_HWQS];
+static unsigned int mbox_n[NUM_HWQS];
+
+static u64 mbox_pack(u32 phy_offset, u32 block_num, u32 group_num,
+		     u32 group_idx, u32 start, int hwq)
+{
+	u64 v = 0;
+
+	v |= 2ULL;
+	v |= ((u64)((phy_offset & 0xFFFFFC00) >> 10) & 0x3fffff) << 2;
+	v |= ((u64)(group_idx & 0x1f)) << 34;
+	v |= ((u64)(hwq & 0x7)) << 39;
+	v |= ((u64)(block_num & 0x1f)) << 43;
+	v |= ((u64)(group_num & 0x1f)) << 48;
+	v |= ((u64)(block_num & 0x1f)) << 53;
+	v |= ((u64)(start & 0x1f)) << 58;
+	return v;
+}
+
+static int mbox_ring_full(int core)
+{
+	struct shared_scaler_info *b;
+	u32 seq, ack;
+
+	if (core < 0 || core >= NUM_CORES)
+		return 1;
+	b = cores[core].buffer;
+	if (!b)
+		return 1;
+	seq = READ_ONCE(b->mbox_seq);
+	ack = READ_ONCE(b->mbox_ack);
+	return (seq - ack) >= MBOX_DEPTH;
+}
+
+static int mbox_range_overlap(int a, int na, int b, int nb)
+{
+	return a < (b + nb) && b < (a + na);
+}
+
+static int mbox_queue_blocked(int start, int need)
+{
+	int hwq, n;
+
+	for (hwq = 0; hwq < NUM_HWQS; hwq++) {
+		unsigned int idx = mbox_h[hwq];
+
+		for (n = 0; n < (int)mbox_n[hwq]; n++) {
+			struct mbox_job *job = &mbox_q[hwq][idx];
+
+			if (!job->finished &&
+			    mbox_range_overlap(start, need, job->start, job->ncores) &&
+			    (job->start != start || job->ncores != need ||
+			     job->group_idx < job->group_num))
+				return 1;
+			idx = (idx + 1) % MBOX_Q;
+		}
+	}
+	return 0;
+}
+
+static int mbox_claim(int nmax, int need, int *start)
+{
+	int s, i;
+
+	if (need < 1 || need > nmax)
+		return -EINVAL;
+	for (s = 0; s <= nmax - need; s++) {
+		int blocked = 0;
+
+		if (mbox_queue_blocked(s, need))
+			blocked = 1;
+		for (i = 0; i < need && !blocked; i++) {
+			if (mbox_ring_full(s + i))
+				blocked = 1;
+		}
+		if (!blocked) {
+			*start = s;
+			return 0;
+		}
+	}
+	return -EAGAIN;
+}
+
+static int mbox_job_acked(struct mbox_job *job)
+{
+	int i;
+
+	for (i = 0; i < job->ncores; i++) {
+		struct shared_scaler_info *b = cores[job->start + i].buffer;
+		u32 ack;
+
+		if (!b)
+			return 0;
+		ack = READ_ONCE(b->mbox_ack);
+		if ((s32)(ack - job->seq[i]) <= 0)
+			return 0;
+	}
+	return 1;
+}
+
+static void mbox_post_group(struct mbox_job *job, int hwq)
+{
+	u64 info;
+	int i;
+
+	info = mbox_pack(job->phy_offset, job->block_num, job->group_num,
+			 job->group_idx, job->start, hwq);
+	for (i = 0; i < job->ncores; i++) {
+		struct shared_scaler_info *b = cores[job->start + i].buffer;
+		u32 tail;
+
+		tail = READ_ONCE(b->mbox_seq);
+		job->seq[i] = tail;
+		WRITE_ONCE(b->mbox_slot[tail % MBOX_DEPTH], info);
+		wmb();
+		WRITE_ONCE(b->mbox_seq, tail + 1);
+	}
+}
+
+static void mbox_drain(struct bm_device_info *bmdi)
+{
+	int hwq;
+
+	for (hwq = 0; hwq < NUM_HWQS; hwq++) {
+		int ncomplete = 0;
+		unsigned int idx, n;
+		unsigned long flags;
+
+		spin_lock_irqsave(&mbox_lock, flags);
+		idx = mbox_h[hwq];
+		for (n = 0; n < mbox_n[hwq]; n++) {
+			struct mbox_job *job = &mbox_q[hwq][idx];
+
+			if (!job->finished && mbox_job_acked(job)) {
+				if (job->group_idx < job->group_num) {
+					int full = 0;
+					int c;
+
+					for (c = 0; c < job->ncores; c++) {
+						if (mbox_ring_full(job->start + c))
+							full = 1;
+					}
+					if (!full) {
+						job->group_idx++;
+						mbox_post_group(job, hwq);
+					}
+				} else {
+					job->finished = 1;
+				}
+			}
+			idx = (idx + 1) % MBOX_Q;
+		}
+		while (mbox_n[hwq] && mbox_q[hwq][mbox_h[hwq]].finished) {
+			mbox_h[hwq] = (mbox_h[hwq] + 1) % MBOX_Q;
+			mbox_n[hwq]--;
+			ncomplete++;
+		}
+		spin_unlock_irqrestore(&mbox_lock, flags);
+		while (ncomplete--)
+			bmdev_mbox_complete_hwq(bmdi, hwq);
+	}
+}
+
+static int mbox_thread_fn(void *data)
+{
+	struct bm_device_info *bmdi = data;
+
+	while (!kthread_should_stop()) {
+		mbox_drain(bmdi);
+		if (READ_ONCE(mbox_irq) > 0)
+			usleep_range(2000, 4000);
+		else
+			usleep_range(100, 200);
+	}
+	return 0;
+}
+
+#ifdef SOC_MODE
+static irqreturn_t mbox_gp_thread(int irq, void *data)
+{
+	struct bm_device_info *bmdi = data;
+	int i;
+
+	(void)irq;
+	for (i = 0; i < 4; i++) {
+		mbox_drain(bmdi);
+		top_reg_write(bmdi, MBOX_GP_REG47_CLR, MBOX_GP_BIT);
+		mbox_drain(bmdi);
+		if (!(top_reg_read(bmdi, MBOX_GP_REG47_STS) & MBOX_GP_BIT))
+			break;
+	}
+	return IRQ_HANDLED;
+}
+
+static int mbox_map_gp_irq(struct bm_device_info *bmdi)
+{
+	struct device_node *np;
+	struct device_node *parent;
+	struct of_phandle_args oirq;
+	int virq;
+
+	if (!bmdi->cinfo.pdev)
+		return -ENODEV;
+	np = bmdi->cinfo.pdev->dev.of_node;
+	if (!np)
+		return -ENODEV;
+	parent = of_irq_find_parent(np);
+	if (!parent)
+		return -ENODEV;
+	oirq.np = parent;
+	oirq.args_count = 3;
+	oirq.args[0] = 0;
+	oirq.args[1] = MBOX_GP_SPI;
+	oirq.args[2] = IRQ_TYPE_LEVEL_HIGH;
+	virq = irq_create_of_mapping(&oirq);
+	of_node_put(parent);
+	if (!virq)
+		return -EINVAL;
+	return virq;
+}
+#endif
+
+int bmdev_mbox_ready(void)
+{
+	return (mbox_irq > 0 || mbox_thread) && cores[0].buffer;
+}
+
+void bmdev_mbox_start(struct bm_device_info *bmdi)
+{
+	int i;
+
+	if (mbox_irq > 0 || mbox_thread)
+		return;
+	for (i = 0; i < NUM_CORES && i < bmdi->cinfo.tpu_core_num; i++) {
+		if (!cores[i].buffer)
+			return;
+		WRITE_ONCE(cores[i].buffer->mbox_seq, 0);
+		WRITE_ONCE(cores[i].buffer->mbox_ack, 0);
+		WRITE_ONCE(cores[i].buffer->mbox_info, 0);
+		{
+			int s;
+
+			for (s = 0; s < MBOX_DEPTH; s++)
+				WRITE_ONCE(cores[i].buffer->mbox_slot[s], 0);
+		}
+	}
+	memset(mbox_h, 0, sizeof(mbox_h));
+	memset(mbox_t, 0, sizeof(mbox_t));
+	memset(mbox_n, 0, sizeof(mbox_n));
+	mbox_bmdi = bmdi;
+	bmdev_mbox_take_completion(1);
+#ifdef SOC_MODE
+	{
+		int virq, ret;
+
+		top_reg_write(bmdi, MBOX_GP_REG47_CLR, MBOX_GP_BIT);
+		virq = mbox_map_gp_irq(bmdi);
+		if (virq > 0) {
+			irq_set_irq_type(virq, IRQ_TYPE_LEVEL_HIGH);
+			ret = request_threaded_irq(virq, NULL, mbox_gp_thread,
+						   IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
+						   "mbox", bmdi);
+			if (!ret) {
+				mbox_irq = virq;
+				pr_info("mbox gp irq %d\n", virq);
+			} else {
+				pr_err("mbox gp irq request %d failed %d\n", virq, ret);
+			}
+		} else {
+			pr_err("mbox gp irq map failed %d\n", virq);
+		}
+	}
+#endif
+	mbox_thread = kthread_run(mbox_thread_fn, bmdi, "bm_mbox");
+	if (IS_ERR(mbox_thread)) {
+		pr_err("mbox thread start failed\n");
+		mbox_thread = NULL;
+		if (mbox_irq <= 0)
+			bmdev_mbox_take_completion(0);
+	}
+}
+
+void bmdev_mbox_stop(void)
+{
+	if (mbox_irq > 0) {
+		free_irq(mbox_irq, mbox_bmdi);
+		mbox_irq = 0;
+	}
+	if (mbox_thread) {
+		kthread_stop(mbox_thread);
+		mbox_thread = NULL;
+	}
+	bmdev_mbox_take_completion(0);
+}
+
+int bmdev_mbox_submit(struct bm_device_info *bmdi, int hwq_idx, u32 phy_offset,
+		      u32 block_num, u32 group_num, u64 *info_out)
+{
+	int need = (int)block_num + 1;
+	int nmax;
+	int start = 0;
+	u64 info;
+	unsigned long flags;
+	unsigned long timeout;
+	unsigned int ms;
+
+	if (!bmdi || hwq_idx < 0 || hwq_idx >= NUM_HWQS)
+		return -EINVAL;
+	if (group_num > 0x1f)
+		return -EINVAL;
+	if (!bmdev_mbox_ready())
+		return -ENODEV;
+	nmax = bmdi->cinfo.tpu_core_num;
+	if (nmax > NUM_CORES)
+		nmax = NUM_CORES;
+	if (need < 1 || need > nmax)
+		return -EINVAL;
+	ms = bmdi->cinfo.delay_ms ? bmdi->cinfo.delay_ms : 20000;
+	timeout = jiffies + msecs_to_jiffies(ms);
+	for (;;) {
+		int ret;
+
+		spin_lock_irqsave(&mbox_lock, flags);
+		if (mbox_n[hwq_idx] >= MBOX_Q) {
+			spin_unlock_irqrestore(&mbox_lock, flags);
+			ret = -EAGAIN;
+		} else {
+			ret = mbox_claim(nmax, need, &start);
+			if (!ret) {
+				struct mbox_job *job = &mbox_q[hwq_idx][mbox_t[hwq_idx]];
+
+				job->phy_offset = phy_offset;
+				job->block_num = block_num;
+				job->start = (u8)start;
+				job->ncores = (u8)need;
+				job->group_idx = 0;
+				job->group_num = (u8)group_num;
+				job->finished = 0;
+				mbox_post_group(job, hwq_idx);
+				info = mbox_pack(phy_offset, block_num, group_num,
+						 0, start, hwq_idx);
+				mbox_t[hwq_idx] = (mbox_t[hwq_idx] + 1) % MBOX_Q;
+				mbox_n[hwq_idx]++;
+				if (info_out)
+					*info_out = info;
+			}
+			spin_unlock_irqrestore(&mbox_lock, flags);
+		}
+		if (!ret)
+			return 0;
+		if (ret != -EAGAIN)
+			return ret;
+		if (time_after(jiffies, timeout)) {
+			pr_err("mbox submit timeout hwq %d need %d\n", hwq_idx, need);
+			return -ETIMEDOUT;
+		}
+		usleep_range(200, 400);
+	}
 }
 
 static int dump_tscalar_pc(struct seq_file *m, int argc, char **argv)

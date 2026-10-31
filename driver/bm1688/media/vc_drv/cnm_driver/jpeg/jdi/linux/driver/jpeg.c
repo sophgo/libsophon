@@ -227,17 +227,22 @@ extern void jpu_core_cleanup_resources(void);
 uint32_t jpu_get_extension_address(int core_idx)
 {
     uint32_t origin_value = 0;
+    uint32_t ret = 0;
     int shift = 0;
 
     shift = (core_idx%MAX_NUM_JPU_CORE_CHIP + 1) * 4;
+    mutex_lock(&s_jpu_lock);
     origin_value = platform_readl(core_idx/MAX_NUM_JPU_CORE_CHIP, JPEG_TOP_REG, virt_top_addr);
-    return ((origin_value >> shift) & 0xf);
+    ret = ((origin_value >> shift) & 0xf);
+    mutex_unlock(&s_jpu_lock);
+    return ret;
 }
 
 void jpu_set_extension_address(int core_idx, uint32_t addr)
 {
     uint32_t origin_value = 0;
     uint32_t bit_mask = 0;
+    uint32_t new_value = 0;
     int shift = 0;
     int soc_idx = core_idx/MAX_NUM_JPU_CORE_CHIP;
 
@@ -265,8 +270,11 @@ void jpu_set_extension_address(int core_idx, uint32_t addr)
             return;
     }
 
+    mutex_lock(&s_jpu_lock);
     origin_value = platform_readl(soc_idx, JPEG_TOP_REG, virt_top_addr);
-    platform_writel(soc_idx, JPEG_TOP_REG, virt_top_addr, (origin_value & bit_mask) | ((addr & 0xf) << shift));
+    new_value = (origin_value & bit_mask) | ((addr & 0xf) << shift);
+    platform_writel(soc_idx, JPEG_TOP_REG, virt_top_addr, new_value);
+    mutex_unlock(&s_jpu_lock);
     return;
 }
 

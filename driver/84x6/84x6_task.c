@@ -22,6 +22,7 @@
 #endif
 #endif
 #include "84x6_task.h"
+#include "84x6_debug.h"
 #include "../bm_api.h"
 #include "84x6_shmem.h"
 #ifndef SOC_MODE
@@ -212,9 +213,12 @@ static void bmdev_handle_hwq_tasklet_func(struct bm_device_info *bmdi,
                 pr_debug("idx:%d api_id:%x thd_api_seq:%llu\n", hwq_idx,
                          entry.api_id, entry.thd_api_seq[0]);
                 if (entry.thd_info && entry.h_info) {
-                    entry.thd_info->cpl_api_seq[0] = entry.thd_api_seq[0];
+                    if (entry.thd_api_seq[0] > entry.thd_info->cpl_api_seq[0])
+                        entry.thd_info->cpl_api_seq[0] = entry.thd_api_seq[0];
                     entry.h_info->h_cpl_api_seq[0] =
                         entry.thd_info->cpl_api_seq[0];
+                    atomic_dec(&entry.thd_info->api_inflight);
+                    atomic_dec(&entry.h_info->h_api_inflight);
                 }
                 bmdev_post_api_process(bmdi, entry);
                 if (entry.h_info)
@@ -240,6 +244,64 @@ static void bmdev_handle_hwq_tasklet_func(struct bm_device_info *bmdi,
     pr_debug("tasklet completed\n");
 }
 
+static int mbox_owns_completion;
+
+void bmdev_mbox_take_completion(int on)
+{
+    mbox_owns_completion = on ? 1 : 0;
+}
+
+void bmdev_mbox_complete_hwq(struct bm_device_info *bmdi, int hwq_idx)
+{
+    struct api_fifo_entry entry;
+    struct list_head *handle_list = NULL;
+    unsigned long flags, hflags;
+    bm_kernel_info *pstBmKernelInfo;
+    bm_hw_q_info *pst_hw_q_info;
+
+    if (!bmdi)
+        return;
+    pstBmKernelInfo = bmdi->pstBmKernelInfo;
+    if (!pstBmKernelInfo || hwq_idx < 0 || hwq_idx >= NUM_HWQS)
+        return;
+    pst_hw_q_info = &pstBmKernelInfo->hw_q_info[hwq_idx];
+    if (bmdev_pop_kernel_kfifo(bmdi, hwq_idx, &entry)) {
+        pr_err("mbox complete pop fail hwq %d\n", hwq_idx);
+        return;
+    }
+    if (DUMP_84X6_FIFO) {
+        bmdev_shmem_phys_to_file(pstBmKernelInfo->bmdi, entry.api_data,
+                                 pst_hw_q_info->filename);
+    }
+    spin_lock_irqsave(&pst_hw_q_info->hwq_spinlock, flags);
+    spin_lock_irqsave(&bmdi->handle_lock, hflags);
+    list_for_each(handle_list, &bmdi->handle_list) {
+        if (container_of(handle_list, struct bm_handle_info, list) == entry.h_info)
+            break;
+    }
+    if (handle_list == &bmdi->handle_list) {
+        entry.thd_info = NULL;
+        entry.h_info = NULL;
+        pr_err("mbox complete handle missing\n");
+    }
+    if (entry.thd_info && entry.h_info) {
+        if (entry.thd_api_seq[0] > entry.thd_info->cpl_api_seq[0])
+            entry.thd_info->cpl_api_seq[0] = entry.thd_api_seq[0];
+        entry.h_info->h_cpl_api_seq[0] = entry.thd_info->cpl_api_seq[0];
+        atomic_dec(&entry.thd_info->api_inflight);
+        atomic_dec(&entry.h_info->h_api_inflight);
+    }
+    bmdev_post_api_process(bmdi, entry);
+    if (entry.h_info)
+        wake_up_all(&entry.h_info->h_msg_done);
+    if (entry.thd_info)
+        complete(&entry.thd_info->msg_done);
+    spin_unlock_irqrestore(&bmdi->handle_lock, hflags);
+    bmdev_shared_mem_free(bmdi, entry.api_data);
+    spin_unlock_irqrestore(&pst_hw_q_info->hwq_spinlock, flags);
+    bmdev_wakeup_waiting_task(bmdi, hwq_idx);
+}
+
 static void bmdev_tsh_irq_tasklet_handle(unsigned long data)
 {
 
@@ -255,6 +317,9 @@ static void bmdev_tsh_irq_tasklet_handle(unsigned long data)
         pr_err("Invalid bmdi in tasklet\n");
         return;
     }
+
+    if (mbox_owns_completion)
+        return;
 
     pr_debug("TSH tasklet started. Polling all %d HWQs.\n", NUM_HWQS);
 
@@ -374,6 +439,8 @@ int bm84x6_task_deinit(struct bm_device_info *bmdi)
     int i;
     bm_hw_q_info *pst_hw_q_info;
     bm_kernel_info *pstBmKernelInfo = bmdi->pstBmKernelInfo;
+
+    bmdev_mbox_stop();
 
     if (!pstBmKernelInfo) {
         pr_debug("Kernel info pointer is NULL, already deinitialized\n");

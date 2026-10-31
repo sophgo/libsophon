@@ -119,6 +119,9 @@ unsigned long jdi_read_register(int core_idx, unsigned long addr);
 
 size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int endian);
 size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int endian);
+size_t jdi_write_memory_soc(int soc_idx, unsigned long addr, unsigned char *data, size_t len, int endian);
+size_t jdi_read_memory_soc(int soc_idx, unsigned long addr, unsigned char *data, size_t len, int endian);
+void jdi_set_current_soc_idx(int soc_idx);
 
 int jdi_lock(void);
 void jdi_unlock(void);

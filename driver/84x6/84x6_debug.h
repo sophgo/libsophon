@@ -9,9 +9,16 @@ void bmdev_test_proc_exit(struct bm_device_info *bmdi);
 
 int bmdev_test_proc_init(struct bm_device_info *bmdi);
 
+void bmdev_set_scaler_log_low(struct bm_device_info *bmdi);
 int bmdev_scaler_log_init(struct bm_device_info *bmdi);
 
 void bmdev_scaler_log_deinit(struct bm_device_info *bmdi);
+
+int bmdev_mbox_ready(void);
+int bmdev_mbox_submit(struct bm_device_info *bmdi, int hwq_idx, u32 phy_offset,
+		      u32 block_num, u32 group_num, u64 *info_out);
+void bmdev_mbox_start(struct bm_device_info *bmdi);
+void bmdev_mbox_stop(void);
 
 u32 bmdev_get_scaler_using_flag(int core_id);
 

@@ -95,6 +95,7 @@ static int bmdev_open(struct inode *inode, struct file *file)
 		h_info->h_send_api_seq[i] = 0ULL;
 		h_info->h_cpl_api_seq[i] = 0ULL;
 	}
+	atomic_set(&h_info->h_api_inflight, 0);
 	init_waitqueue_head(&h_info->h_msg_done);
 	mutex_init(&h_info->h_api_seq_mutex);
 
@@ -741,7 +742,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_THREAD_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_thread_sync_api(bmdi, file, arg);
-			bmdi->status_sync_api = ret;
+			if (bmdi->cinfo.chip_id != BM_CHIP_ID_84X6)
+				bmdi->status_sync_api = ret;
 		} else {
 			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
@@ -755,7 +757,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_HANDLE_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_handle_sync_api(bmdi, file, arg);
-			bmdi->status_sync_api = ret;
+			if (bmdi->cinfo.chip_id != BM_CHIP_ID_84X6)
+				bmdi->status_sync_api = ret;
 		} else {
 			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;
@@ -765,7 +768,8 @@ static long bm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case BMDEV_DEVICE_SYNC_API:
 		if (bmdi->status_sync_api == 0) {
 			ret = bmdrv_device_sync_api(bmdi);
-			bmdi->status_sync_api = ret;
+			if (bmdi->cinfo.chip_id != BM_CHIP_ID_84X6)
+				bmdi->status_sync_api = ret;
 		} else {
 			pr_err("bm-sophon%d: TPU SYS hang\n",bmdi->dev_index);
 			ret = -EBUSY;

@@ -799,6 +799,8 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 		break;
 	case BM_CHIP_ID_84X6:
 		pr_info("bm-sophon%d 84x6 bmdrv_chip_specific_init \n", bmdi->dev_index);
+		bmdev_shared_mem_init(bmdi);
+		bmdev_set_scaler_log_low(bmdi);
 		rc = tsh_init(bmdi, NULL);
 		if (rc) {
 			pr_warn("bm-sophon%d tsh_init failed, rc=%d, continuing without TSH\n",
@@ -809,7 +811,6 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 			bm84x6_task_init(bmdi, tsh_getmode(bmdi));
 		}
 		bmdev_test_proc_init(bmdi);
-		bmdev_shared_mem_init(bmdi);
 		bmdev_scaler_log_init(bmdi);
 		break;
 	default:

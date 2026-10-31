@@ -1,5 +1,6 @@
 #ifndef _BM_THREAD_H_
 #define _BM_THREAD_H_
+#include <linux/atomic.h>
 #include <linux/completion.h>
 #include <linux/spinlock.h>
 #include <linux/hashtable.h>
@@ -13,6 +14,7 @@ struct bm_thread_info {
 
 	/* api record infomation */
 	struct completion msg_done;
+	atomic_t api_inflight;
 	u64 last_api_seq[BM_MAX_CORE_NUM];
 	u64 cpl_api_seq[BM_MAX_CORE_NUM];
 	u64 last_hwq_seq[BM_MAX_CORE_NUM];

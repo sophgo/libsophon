@@ -78,11 +78,12 @@ typedef struct  {
     Int32                   task_num;
     Int32                   clock_state[MAX_NUM_JPU_CORE];
     jpudrv_buffer_t         jdb_register[MAX_NUM_JPU_CORE];
-    jpudrv_buffer_pool_t    jpu_buffer_pool[MAX_JPU_BUFFER_POOL];
+    jpudrv_buffer_pool_t    jpu_buffer_pool[MAX_NUM_SOPHON_SOC][MAX_JPU_BUFFER_POOL];
     Int32                   jpu_buffer_pool_count;
 } jdi_info_t;
 
 static jdi_info_t *s_jdi_info;
+static int g_jdi_last_soc_idx = 0;
 
 static Int32 swap_endian(BYTE* data, size_t len, Uint32 endian);
 
@@ -147,7 +148,7 @@ int jdi_init(void)
         return -1;
     }
 
-    memset(jdi->jpu_buffer_pool, 0x00, sizeof(jpudrv_buffer_pool_t)*MAX_JPU_BUFFER_POOL);
+    memset(jdi->jpu_buffer_pool, 0x00, sizeof(jpudrv_buffer_pool_t)*MAX_NUM_SOPHON_SOC*MAX_JPU_BUFFER_POOL);
 
     if (!jdi_get_instance_pool()) {
         JLOG(ERR, "[JDI] fail to create instance pool for saving context \n");
@@ -331,9 +332,20 @@ unsigned long jdi_read_register(int core_idx, unsigned long addr)
 
 size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int endian)
 {
+    return jdi_write_memory_soc(g_jdi_last_soc_idx, addr, data, len, endian);
+}
+
+void jdi_set_current_soc_idx(int soc_idx)
+{
+    g_jdi_last_soc_idx = soc_idx;
+}
+
+size_t jdi_write_memory_soc(int soc_idx, unsigned long addr, unsigned char *data, size_t len, int endian)
+{
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb;
     Uint32          i;
+    int s, s_lo, s_hi;
 #ifdef PLATFORM_SOC
     unsigned long offset;
 #endif
@@ -345,16 +357,26 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
 
     memset(&jdb, 0x00, sizeof(jpudrv_buffer_t));
 
+    if (soc_idx >= 0 && soc_idx < MAX_NUM_SOPHON_SOC) {
+        s_lo = soc_idx; s_hi = soc_idx;
+    } else {
+        s_lo = 0; s_hi = MAX_NUM_SOPHON_SOC - 1;
+    }
+
     jdi_lock();
-    for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
-    {
-        if (jdi->jpu_buffer_pool[i].inuse == 1)
+    for (s = s_lo; s <= s_hi; s++) {
+        for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
         {
-            jdb = jdi->jpu_buffer_pool[i].jdb;
-            if (addr >= jdb.phys_addr && addr < (jdb.phys_addr + jdb.size)) {
-                break;
+            if (jdi->jpu_buffer_pool[s][i].inuse == 1)
+            {
+                jdb = jdi->jpu_buffer_pool[s][i].jdb;
+                if (addr >= jdb.phys_addr && addr < (jdb.phys_addr + jdb.size)) {
+                    break;
+                }
             }
         }
+        if (i != MAX_JPU_BUFFER_POOL)
+            break;
     }
     jdi_unlock();
 
@@ -391,9 +413,15 @@ size_t jdi_write_memory(unsigned long addr, unsigned char *data, size_t len, int
 
 size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int endian)
 {
+    return jdi_read_memory_soc(g_jdi_last_soc_idx, addr, data, len, endian);
+}
+
+size_t jdi_read_memory_soc(int soc_idx, unsigned long addr, unsigned char *data, size_t len, int endian)
+{
     jdi_info_t *jdi;
     jpudrv_buffer_t jdb;
     int i;
+    int s, s_lo, s_hi;
 #ifdef PLATFORM_SOC
     unsigned long offset;
 #endif
@@ -405,15 +433,25 @@ size_t jdi_read_memory(unsigned long addr, unsigned char *data, size_t len, int 
 
     memset(&jdb, 0x00, sizeof(jpudrv_buffer_t));
 
+    if (soc_idx >= 0 && soc_idx < MAX_NUM_SOPHON_SOC) {
+        s_lo = soc_idx; s_hi = soc_idx;
+    } else {
+        s_lo = 0; s_hi = MAX_NUM_SOPHON_SOC - 1;
+    }
+
     jdi_lock();
-    for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
-    {
-        if (jdi->jpu_buffer_pool[i].inuse == 1)
+    for (s = s_lo; s <= s_hi; s++) {
+        for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
         {
-            jdb = jdi->jpu_buffer_pool[i].jdb;
-            if (addr >= jdb.phys_addr && addr < (jdb.phys_addr + jdb.size))
-                break;
+            if (jdi->jpu_buffer_pool[s][i].inuse == 1)
+            {
+                jdb = jdi->jpu_buffer_pool[s][i].jdb;
+                if (addr >= jdb.phys_addr && addr < (jdb.phys_addr + jdb.size))
+                    break;
+            }
         }
+        if (i != MAX_JPU_BUFFER_POOL)
+            break;
     }
     jdi_unlock();
 
@@ -446,11 +484,15 @@ int jdi_insert_external_memory(jpu_buffer_t *vb)
 {
     jdi_info_t *jdi;
     int i;
+    int soc_idx = vb->soc_idx;
     jpudrv_buffer_t jdb;
 
     jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
+        return -1;
+
+    if (soc_idx < 0 || soc_idx >= MAX_NUM_SOPHON_SOC)
         return -1;
 
     memset(&jdb, 0x00, sizeof(jpudrv_buffer_t));
@@ -460,15 +502,16 @@ int jdi_insert_external_memory(jpu_buffer_t *vb)
     jdb.base = vb->base;
     jdb.virt_addr = vb->virt_addr;
     jdb.is_cached = vb->is_cached;  // external memory must be invalidate/flush
+    jdb.soc_idx = soc_idx;
 
     jdi_lock();
     for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
     {
-        if (jdi->jpu_buffer_pool[i].inuse == 0)
+        if (jdi->jpu_buffer_pool[soc_idx][i].inuse == 0)
         {
-            jdi->jpu_buffer_pool[i].jdb = jdb;
+            jdi->jpu_buffer_pool[soc_idx][i].jdb = jdb;
             jdi->jpu_buffer_pool_count++;
-            jdi->jpu_buffer_pool[i].inuse = 1;
+            jdi->jpu_buffer_pool[soc_idx][i].inuse = 1;
             break;
         }
     }
@@ -483,12 +526,16 @@ void jdi_remove_external_memory(jpu_buffer_t *vb)
 {
     jdi_info_t *jdi;
     int i;
+    int soc_idx = vb->soc_idx;
     jpudrv_buffer_t jdb;
 
 
     jdi = s_jdi_info;
 
     if(!vb || !jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
+        return;
+
+    if (soc_idx < 0 || soc_idx >= MAX_NUM_SOPHON_SOC)
         return;
 
     if (vb->size == 0)
@@ -498,10 +545,10 @@ void jdi_remove_external_memory(jpu_buffer_t *vb)
 
     jdi_lock();
     for (i=0; i<MAX_JPU_BUFFER_POOL; i++) {
-        if (jdi->jpu_buffer_pool[i].jdb.phys_addr == vb->phys_addr) {
-            jdi->jpu_buffer_pool[i].inuse = 0;
+        if (jdi->jpu_buffer_pool[soc_idx][i].jdb.phys_addr == vb->phys_addr) {
+            jdi->jpu_buffer_pool[soc_idx][i].inuse = 0;
             jdi->jpu_buffer_pool_count--;
-            jdb = jdi->jpu_buffer_pool[i].jdb;
+            jdb = jdi->jpu_buffer_pool[soc_idx][i].jdb;
             break;
         }
     }
@@ -521,11 +568,15 @@ int jdi_allocate_dma_memory(jpu_buffer_t *vb)
 {
     jdi_info_t *jdi;
     int i;
+    int soc_idx = vb->soc_idx;
     jpudrv_buffer_t jdb;
 
     jdi = s_jdi_info;
 
     if(!jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
+        return -1;
+
+    if (soc_idx < 0 || soc_idx >= MAX_NUM_SOPHON_SOC)
         return -1;
 
     memset(&jdb, 0x00, sizeof(jpudrv_buffer_t));
@@ -550,11 +601,11 @@ int jdi_allocate_dma_memory(jpu_buffer_t *vb)
     jdi_lock();
     for (i=0; i<MAX_JPU_BUFFER_POOL; i++)
     {
-        if (jdi->jpu_buffer_pool[i].inuse == 0)
+        if (jdi->jpu_buffer_pool[soc_idx][i].inuse == 0)
         {
-            jdi->jpu_buffer_pool[i].jdb = jdb;
+            jdi->jpu_buffer_pool[soc_idx][i].jdb = jdb;
             jdi->jpu_buffer_pool_count++;
-            jdi->jpu_buffer_pool[i].inuse = 1;
+            jdi->jpu_buffer_pool[soc_idx][i].inuse = 1;
             break;
         }
     }
@@ -568,12 +619,16 @@ void jdi_free_dma_memory(jpu_buffer_t *vb)
 {
     jdi_info_t *jdi;
     int i;
+    int soc_idx = vb->soc_idx;
     jpudrv_buffer_t jdb;
 
 
     jdi = s_jdi_info;
 
     if(!vb || !jdi || jdi->jpu_fd==-1 || jdi->jpu_fd == 0x00)
+        return;
+
+    if (soc_idx < 0 || soc_idx >= MAX_NUM_SOPHON_SOC)
         return;
 
     if (vb->size == 0)
@@ -583,10 +638,10 @@ void jdi_free_dma_memory(jpu_buffer_t *vb)
 
     jdi_lock();
     for (i=0; i<MAX_JPU_BUFFER_POOL; i++) {
-        if (jdi->jpu_buffer_pool[i].jdb.phys_addr == vb->phys_addr) {
-            jdi->jpu_buffer_pool[i].inuse = 0;
+        if (jdi->jpu_buffer_pool[soc_idx][i].jdb.phys_addr == vb->phys_addr) {
+            jdi->jpu_buffer_pool[soc_idx][i].inuse = 0;
             jdi->jpu_buffer_pool_count--;
-            jdb = jdi->jpu_buffer_pool[i].jdb;
+            jdb = jdi->jpu_buffer_pool[soc_idx][i].jdb;
             break;
         }
     }

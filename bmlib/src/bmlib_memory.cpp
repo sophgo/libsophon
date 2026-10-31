@@ -2431,6 +2431,18 @@ bm_status_t bm_mem_unmap_device_mem_u64(bm_handle_t handle, void *vmem, u64 size
 	return BM_SUCCESS;
 }
 
+static void mbox_wait_copy(bm_handle_t handle)
+{
+	unsigned int chipid = 0;
+
+	if (handle == nullptr)
+		return;
+	if (bm_get_chipid(handle, &chipid) != BM_SUCCESS)
+		return;
+	if (chipid == BM_CHIP_ID_84X6)
+		bm_thread_sync(handle);
+}
+
 bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src)
 {
 #ifdef USING_CMODEL
@@ -2441,6 +2453,7 @@ bm_status_t bm_memcpy_s2d(bm_handle_t handle, bm_device_mem_t dst, void *src)
 			"handle is nullptr %s: %s: %d\n", __FILE__, __func__, __LINE__);
 		return BM_ERR_DEVNOTREADY;
 	}
+	mbox_wait_copy(handle);
 
 	if (!bm_device_mem_range_valid(handle, dst)) {
 		return BM_ERR_PARAM;
@@ -3193,6 +3206,7 @@ bm_status_t bm_memcpy_d2s(bm_handle_t handle, void *dst, bm_device_mem_t src)
 			__LINE__);
 		return BM_ERR_DEVNOTREADY;
 	}
+	mbox_wait_copy(handle);
 
 	if (!bm_device_mem_range_valid(handle, src)) {
 		return BM_ERR_PARAM;
@@ -3811,9 +3825,6 @@ bm_status_t bm_memcpy_d2d_with_core(bm_handle_t handle, bm_device_mem_t dst,
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy", core_id);
 		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_t), 1, 1);
-		if (BM_SUCCESS == ret) {
-			ret = bm_sync_api_from_core(handle, core_id);
-		}
 	} else if (bm_is_dynamic_loading(handle)) {
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy", core_id);
@@ -3907,9 +3918,6 @@ bm_status_t bm_memcpy_d2d_stride_with_core(bm_handle_t     handle,
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_wstride", core_id);
 		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_wstride_t), 1, 1);
-		if (BM_SUCCESS == ret) {
-			ret = bm_sync_api_from_core(handle, core_id);
-		}
 	} else if (bm_is_dynamic_loading(handle)) {
 		bm_init_basic_func_id(handle);
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_wstride", core_id);
@@ -3962,9 +3970,6 @@ bm_status_t bm_memcpy_d2d_byte_with_core(bm_handle_t handle, bm_device_mem_t dst
 		}
 		f_id = bm_get_basic_func_id(handle, "sg_api_memcpy_byte", core_id);
 		ret = tpu_kernel_launch_from_multi_cores(handle, f_id, (void *)(&api), sizeof(bm_api_memcpy_byte_t), 1, 1);
-		if (BM_SUCCESS == ret) {
-			ret = bm_sync_api_from_core(handle, core_id);
-		}
 	} else if (bm_is_dynamic_loading(handle)) {
 		ret = bm_init_basic_func_id(handle);
 		if (ret != BM_SUCCESS) {

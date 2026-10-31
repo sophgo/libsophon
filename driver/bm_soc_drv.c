@@ -319,10 +319,11 @@ static int bmdrv_chip_specific_init(struct bm_device_info *bmdi)
 	case 0x1686:
 		break;
 	case BM_CHIP_ID_84X6:
+		bmdev_shared_mem_init(bmdi);
+		bmdev_set_scaler_log_low(bmdi);
 		tsh_init(bmdi, NULL);
 		bm84x6_task_init(bmdi, tsh_getmode(bmdi));
 		bmdev_test_proc_init(bmdi);
-		bmdev_shared_mem_init(bmdi);
 		bmdev_scaler_log_init(bmdi);
 		break;
 	case BM_CHIP_ID_1688:

@@ -12,6 +12,7 @@
 
 int bmdev_shared_mem_init(struct bm_device_info *bmdi);
 void bmdev_shared_mem_exit(struct bm_device_info *bmdi);
+phys_addr_t bmdev_shmem_base_addr(struct bm_device_info *bmdi);
 //alloc mem first,get phyaddr by bmdev_shared_mem_get_phys_addr
 int bmdev_shared_mem_alloc(struct bm_device_info *bmdi, size_t size);
 void bmdev_shared_mem_free(struct bm_device_info *bmdi, int handle);

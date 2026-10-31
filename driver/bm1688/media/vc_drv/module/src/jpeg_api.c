@@ -988,7 +988,7 @@ static int _process_stream_buffer_full(drv_jpg_handle handle)
 
     if(pst_handle->stream_buffer_ex.stream_len) {
 #ifdef PLATFORM_SOC
-        jdi_read_memory(pst_handle->stream_buffer_ex.buffer.phys_addr,
+        jdi_read_memory_soc(pst_handle->soc_idx, pst_handle->stream_buffer_ex.buffer.phys_addr,
                         (unsigned char *)stream_buffer.virt_addr,
                         pst_handle->stream_buffer_ex.stream_len,
                         pst_handle->open_param.streamEndian);
@@ -1003,7 +1003,7 @@ static int _process_stream_buffer_full(drv_jpg_handle handle)
     JPU_GetExtAddr(pst_handle->core_idx, &ex_addr);
     rd_ptr |= (PhysicalAddress)(ex_addr) << 32;
 #ifdef PLATFORM_SOC
-    jdi_read_memory(rd_ptr,
+    jdi_read_memory_soc(pst_handle->soc_idx, rd_ptr,
                     (unsigned char *)(stream_buffer.virt_addr + pst_handle->stream_buffer_ex.stream_len),
                     stream_size,
                     pst_handle->open_param.streamEndian);
@@ -1047,6 +1047,7 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
     }
 
     pst_handle = (JPEG_ENC_HANDLE *)handle;
+    jdi_set_current_soc_idx(pst_handle->soc_idx);
 
     enc_timeout = (timeout > 0) ? timeout : JPU_INTERRUPT_TIMEOUT_MS;
 
@@ -1081,7 +1082,7 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
 #endif
             JPU_EncGiveCommand(pst_handle->handle, ENC_JPG_GET_HEADER, &pst_handle->header_param);
 #ifndef PLATFORM_SOC
-            jdi_write_memory(pst_handle->header_buffer.phys_addr, pst_handle->header_param.pParaSet, pst_handle->header_param.size, pst_handle->open_param.streamEndian);
+            jdi_write_memory_soc(pst_handle->soc_idx, pst_handle->header_buffer.phys_addr, pst_handle->header_param.pParaSet, pst_handle->header_param.size, pst_handle->open_param.streamEndian);
             vfree(pst_handle->header_param.pParaSet);
 #endif
             JLOG(INFO, "JPU_EncGiveCommand[ENC_JPG_GET_HEADER] header size=%d\n", pst_handle->header_param.size);
@@ -1160,7 +1161,7 @@ int jpeg_enc_send_frame(drv_jpg_handle handle, DRVFRAMEBUF *data, int timeout)
 
     if(pst_handle->stream_buffer_ex.stream_len) {
 #ifdef PLATFORM_SOC
-        jdi_read_memory(pst_handle->stream_buffer.phys_addr,
+        jdi_read_memory_soc(pst_handle->soc_idx, pst_handle->stream_buffer.phys_addr,
                     (unsigned char *)(pst_handle->stream_buffer_ex.buffer.virt_addr + pst_handle->stream_buffer_ex.stream_len),
                     pst_handle->output_info.bitstreamSize,
                     pst_handle->open_param.streamEndian);
@@ -1426,6 +1427,7 @@ int jpeg_dec_send_stream(drv_jpg_handle handle, void *data, int length, int time
     }
 
     pst_handle = (JPEG_DEC_HANDLE *)handle;
+    jdi_set_current_soc_idx(pst_handle->soc_idx);
 
     dec_timeout = (timeout > 0) ? timeout : JPU_INTERRUPT_TIMEOUT_MS;
 
@@ -1448,7 +1450,7 @@ int jpeg_dec_send_stream(drv_jpg_handle handle, void *data, int length, int time
         return ret;
     }
 
-    ret = jdi_write_memory(pst_handle->stream_buffer.phys_addr, data, length, pst_handle->open_param.streamEndian);
+    ret = jdi_write_memory_soc(pst_handle->soc_idx, pst_handle->stream_buffer.phys_addr, data, length, pst_handle->open_param.streamEndian);
     if (ret != length) {
         JLOG(ERR, "jdi_write_memory failed [%d < %d]\n", ret, length);
         JPU_ReleaseCore(pst_handle->core_idx);

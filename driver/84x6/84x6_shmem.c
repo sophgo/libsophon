@@ -60,6 +60,15 @@ static inline struct bmtpu_shm_region *get_shm_region(struct bm_device_info
     return (struct bmtpu_shm_region *)bmdi->pvShmemInfo;
 }
 
+phys_addr_t bmdev_shmem_base_addr(struct bm_device_info *bmdi)
+{
+    struct bmtpu_shm_region *shm_region = get_shm_region(bmdi);
+
+    if (!shm_region || !shm_region->bmdev_initialized)
+        return 0;
+    return shm_region->base_addr;
+}
+
 int bmdev_get_shm_addr_from_dts(struct bm_device_info *bmdi)
 {
     struct device *dev = bmdi->cinfo.device;

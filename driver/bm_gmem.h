@@ -1,5 +1,6 @@
 #ifndef _BM_GMEM_H_
 #define _BM_GMEM_H_
+#include <linux/atomic.h>
 #include "bm_bgm.h"
 
 #define BM_MEM_ADDR_NULL (0xfffffffff)
@@ -19,6 +20,7 @@ struct bm_handle_info {
 	u64 gmem_used;
 	u64 h_send_api_seq[BM_MAX_CORE_NUM];
 	u64 h_cpl_api_seq[BM_MAX_CORE_NUM];
+	atomic_t h_api_inflight;
 	struct mutex h_api_seq_mutex;
 	wait_queue_head_t h_msg_done;
 	int f_owner;

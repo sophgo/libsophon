@@ -186,6 +186,9 @@ static int bmdev_debug_tpusys(struct bm_device_info *bmdi, int core_id)
 	int previous_pc, current_pc;
 	int previous_status, current_status;
 
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return 0;
+
 	previous_pc = bdc_reg_read(bmdi, retire_pc_offset);
 	for (i = 0; i < threshold; i++) {
 		current_pc = bdc_reg_read(bmdi, retire_pc_offset);
@@ -850,13 +853,35 @@ static int ksend_api(struct bm_device_info *bmdi, struct file *file, unsigned ch
 			mutex_unlock(&apinfo->api_mutex);
 			return -EBUSY;
 		}
+		atomic_inc(&thd_info->api_inflight);
+		atomic_inc(&h_info->h_api_inflight);
 		phy_offset = bm84x6_shmem_get_offset(bmdi, mem_handle);
 		bmdev_copy_to_shmem(bmdi, phy_addr, &api_header, (bm_api_t *)&bm_api, NULL, false);
 		pr_debug("send packet group:%d block:%d  q_idx:%d offset:%lx\n",
                                                 group_num, block_num, hwq_bind_idx, phy_offset);
 		hwq_packet = (phy_offset & 0xFFFFFC00)| ((group_num & 0x1f)<<5) | (block_num & 0x1f);
 
-		if(TSH_BYPASS_MODE != tsh_getmode(bmdi)) {
+		if (bmdev_mbox_ready()) {
+			u64 mbox_info = 0;
+
+			ret = bmdev_mbox_submit(bmdi, hwq_bind_idx, (u32)phy_offset,
+						block_num, group_num, &mbox_info);
+			if (ret) {
+				struct api_fifo_entry drop;
+
+				if (!bmdev_pop_kernel_kfifo(bmdi, hwq_bind_idx, &drop)) {
+					atomic_dec(&thd_info->api_inflight);
+					atomic_dec(&h_info->h_api_inflight);
+				}
+				bmdev_shared_mem_free(bmdi, mem_handle);
+				thd_info->last_api_seq[core_id]--;
+				kfree(api_entry);
+				mutex_unlock(&apinfo->api_mutex);
+				return -EBUSY;
+			}
+			bmdev_kernel_fifo_record(bmdi, api_header.api_id, api_header.api_seq,
+						 hwq_bind_idx, 0, mbox_info, true);
+		} else if(TSH_BYPASS_MODE != tsh_getmode(bmdi)) {
 			tsh_write_hwq(bmdi, hwq_bind_idx, hwq_packet);
 			bmdev_kernel_fifo_record(bmdi, api_header.api_id, api_header.api_seq,
 						 hwq_bind_idx, hwq_packet, 0, false);
@@ -1305,6 +1330,8 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 					pr_err("<%s,%d> ret=%d, phy_addr:0x%lx.\n", __FUNCTION__, __LINE__, ret, phy_addr);
 					goto out_bmdrv_send_api;
 				}
+				atomic_inc(&thd_info->api_inflight);
+				atomic_inc(&h_info->h_api_inflight);
 				phy_offset = bm84x6_shmem_get_offset(bmdi, mem_handle);
 				//workaroud for sync mode when the kernel only needs 3 blocks
 				api_header.api_handle = 0;
@@ -1320,7 +1347,29 @@ int bmdrv_send_api(struct bm_device_info *bmdi, struct file *file, unsigned long
 						bm_api.api_id, group_num, block_num, hwq_bind_idx, phy_offset);
 				hwq_packet = (phy_offset & 0xFFFFFC00)| ((group_num & 0x1f)<<5) | (block_num & 0x1f);
 
-				if(TSH_BYPASS_MODE != tsh_getmode(bmdi)) {
+				if (bmdev_mbox_ready()) {
+					u64 mbox_info = 0;
+
+					ret = bmdev_mbox_submit(bmdi, hwq_bind_idx,
+								(u32)phy_offset, block_num,
+								group_num, &mbox_info);
+					if (ret) {
+						struct api_fifo_entry drop;
+
+						if (!bmdev_pop_kernel_kfifo(bmdi, hwq_bind_idx, &drop)) {
+							atomic_dec(&thd_info->api_inflight);
+							atomic_dec(&h_info->h_api_inflight);
+						}
+						bmdev_shared_mem_free(bmdi, mem_handle);
+						thd_info->last_api_seq[core_id]--;
+						kfree(api_entry);
+						ret = -EBUSY;
+						goto out_bmdrv_send_api;
+					}
+					bmdev_kernel_fifo_record(bmdi, api_header.api_id,
+								 api_header.api_seq, hwq_bind_idx,
+								 0, mbox_info, true);
+				} else if(TSH_BYPASS_MODE != tsh_getmode(bmdi)) {
 					tsh_write_hwq(bmdi, hwq_bind_idx, hwq_packet);
 					bmdev_kernel_fifo_record(bmdi, api_header.api_id,
 								 api_header.api_seq, hwq_bind_idx,
@@ -1459,18 +1508,26 @@ int bmdrv_thread_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		return 0;
 	}
 	ret = 1;
-	while ((thd_info->cpl_api_seq[core_id] != thd_info->last_api_seq[core_id]) && (ret != 0)) {
-		PR_TRACE("bm-sophon%d bmdrv: %d core_id: %d sync api, last is %llu -- cpl is %llu\n",
-				bmdi->dev_index, api_pid, core_id, thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
-		ret = wait_for_completion_timeout(&thd_info->msg_done, msecs_to_jiffies(timeout_ms));
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6) {
+		while (atomic_read(&thd_info->api_inflight) > 0 && ret != 0)
+			ret = wait_for_completion_timeout(&thd_info->msg_done, msecs_to_jiffies(timeout_ms));
+	} else {
+		while ((thd_info->cpl_api_seq[core_id] != thd_info->last_api_seq[core_id]) && (ret != 0)) {
+			PR_TRACE("bm-sophon%d bmdrv: %d core_id: %d sync api, last is %llu -- cpl is %llu\n",
+					bmdi->dev_index, api_pid, core_id, thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
+			ret = wait_for_completion_timeout(&thd_info->msg_done, msecs_to_jiffies(timeout_ms));
+		}
 	}
 
 	if (ret)
 		return 0;
 
-	pr_err("bm-sophon%d %s, wait api timeout, wait %dms, core_id=%d\n",
-		 bmdi->dev_index, __func__, timeout_ms, core_id);
-	//bmdev_dump_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
+	pr_err("bm-sophon%d %s, wait api timeout, wait %dms, core_id=%d, inflight=%d, last=%llu, cpl=%llu\n",
+		 bmdi->dev_index, __func__, timeout_ms, core_id,
+		 atomic_read(&thd_info->api_inflight),
+		 thd_info->last_api_seq[core_id], thd_info->cpl_api_seq[core_id]);
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return -ETIMEDOUT;
 	if (bmdev_debug_tpusys(bmdi, core_id))
 		return -EBUSY;
 	else
@@ -1512,11 +1569,17 @@ int bmdrv_handle_sync_api(struct bm_device_info *bmdi, struct file *file, unsign
 		timeout_ms *= PALLADIUM_CLK_RATIO;
 #endif
 
-	ret = wait_event_timeout(h_info->h_msg_done, (h_info->h_cpl_api_seq[core_id] >= handle_send_api_seq), msecs_to_jiffies(timeout_ms));
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		ret = wait_event_timeout(h_info->h_msg_done, atomic_read(&h_info->h_api_inflight) == 0, msecs_to_jiffies(timeout_ms));
+	else
+		ret = wait_event_timeout(h_info->h_msg_done, (h_info->h_cpl_api_seq[core_id] >= handle_send_api_seq), msecs_to_jiffies(timeout_ms));
 
 	if (ret)
 		return 0;
-	pr_err("bm-sophon%d %s, wait api timeout\n", bmdi->dev_index, __func__);
+	pr_err("bm-sophon%d %s, wait api timeout, inflight=%d\n", bmdi->dev_index, __func__,
+		atomic_read(&h_info->h_api_inflight));
+	if (bmdi->cinfo.chip_id == BM_CHIP_ID_84X6)
+		return -ETIMEDOUT;
 	//bmdev_dump_msgfifo(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 	bmdev_dump_reg(bmdi, BM_MSGFIFO_CHANNEL_XPU, core_id);
 #ifdef PCIE_MODE_ENABLE_CPU

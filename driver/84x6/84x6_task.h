@@ -51,6 +51,8 @@ int bmdev_pop_kernel_kfifo(struct bm_device_info *bmdi, int idx,
 int bmdev_kernel_kfifo_free_count(struct bm_device_info *bmdi, int idx);
 int bm84x6_task_init(struct bm_device_info *bmdi, en_tsh_mode mode);
 int bm84x6_task_deinit(struct bm_device_info *bmdi);
+void bmdev_mbox_complete_hwq(struct bm_device_info *bmdi, int hwq_idx);
+void bmdev_mbox_take_completion(int on);
 irqreturn_t bmdev_tsh_irq_handler(int irq, void *data);
 
 
